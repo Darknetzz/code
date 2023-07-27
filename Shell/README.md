@@ -1,2 +1,6 @@
 Files in this folder:
-  - csvToSQL.bash
+
+| File          | Description |
+| ------------- | ----------- |
+| csvToSQL.bash | This is a script that imports huge CSV files to any SQL database with ease. |
+
