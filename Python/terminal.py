@@ -6,9 +6,9 @@ packages = [
 ]
 
 for p in packages:
-    globals()[p] = imp.importer_import(p)
+    globals()[p] = imp.importer_import_new(p)
 
-tk = imp.importer_import("tkinter")
+tk = imp.importer_import_new("tkinter")
 
 
 # import tkinter as tk
