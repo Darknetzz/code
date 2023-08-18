@@ -1,4 +1,7 @@
-import utils.importer as imp
+try:
+    import utils.importer as imp
+except:
+    exit("You need the utils.importer for this script to function. You can find it here: https://github.com/Darknetzz/code/tree/main/Python/utils")
 
 packages = [
     "os", "getpass", "socket", "shutil", "shlex",

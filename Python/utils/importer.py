@@ -4,26 +4,46 @@ except Exception as e:
     print(e)
     exit("Something is seriously wrong with your Python installation... Bye.")
 
+def importer_import_new(importName: str|list, pipName: str|list=None, verbose: bool=False):
+    if pipName == None:
+        pipName = importName
+
+    def vprint(txt):
+        if verbose == True:
+            print(txt)
+
+    try:
+        globals()[importName] = __import__(importName)
+        vprint(f"[OK] - {importName}")
+        return globals()[importName]
+    except Exception as e:
+        vprint(e)
+        vprint(f"[WARNING] You are missing a package required to run this script: {importName} - attempting to install...")
+
+        install = subprocess.check_call([sys.executable, "-m", "pip", "install", pipName])
+
+        if install == 0:
+            vprint(f"[SUCCESS] Package {importName} sucessfully installed!")
+            return __import__(importName)
+        else:
+            print(f"Unable to install required package with importName {importName} and pipName {pipName}.")
+            print(f"You can attempt to manually install this package by doing \"pip install {pipName}\"")
+            return False
+        
 
 # ---------------------------------------------------------------------------- #
 #                           Import required packages                           #
 # ---------------------------------------------------------------------------- #
-def importer_import(package: str, silent: bool=True):
-    """
-    USAGE: Define a variable and call this function with package you want to install
-    EXAMPLE:
-        ff = importer_import('ffmpeg')
-    IS EQUAL TO:
-        import ffmpeg as ff
-
-    Or you can add it to the global scope, for example in a for loop:
+# ──────────────────────────────── DEPRECATED ──────────────────────────────── #
+# This function is 'replaced' by importer_import_new to support packages with differing
+# import names and pip install names. It is highly recommended you use that one instead!
+def importer_import(package: str, silent: bool=True, ignoreDeprecated: bool=False):
+    print(f"""
+          [WARNING - DEPRECATED]
+          Function importer_import from {__file__} is deprecated.
+          You can still use it, but it is recommended that you use importer_import_new function instead.
+          For more information, see https://github.com/Darknetzz/code/tree/main/Python/utils""") if ignoreDeprecated == False else None
     
-    import utils.importer as imp
-    packages = ["os", "time", "random"]
-    for p in packages:
-        globals()[p] = imp.importer_import(p):
-    tk = imp.importer_import("tkinter")
-    """
     def vprint(txt):
         if silent != True:
             print(txt)
