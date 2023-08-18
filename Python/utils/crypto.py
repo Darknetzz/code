@@ -29,5 +29,3 @@ class darkCrypt:
 
         fernet = Fernet(key)
         return fernet.encrypt(secret).decode()
-
-# test123
