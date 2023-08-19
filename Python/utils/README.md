@@ -8,11 +8,11 @@ I use some of this code personally in my projects.
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-== USAGE EXAMPLES ==
+== USAGE EXAMPLES
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-=== GENERAL ===
+=== GENERAL
 
 import utils as UTILS
 
@@ -28,7 +28,7 @@ coolText     = style.style('This text will look super cool, I promise!', 'primar
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-=== CRYPTO ===
+=== CRYPTO
 import utils as UTILS
 crypto = UTILS.crypto.darkCrypt()
 secret = crypto.secret_decrypt(cfg["secretFile"], cfg["keyFile"])
@@ -39,7 +39,7 @@ secret = crypto.secret_decrypt('encryptedSecret', 'unencryptedKey') # <-- This m
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-=== IMPORTER ===
+=== IMPORTER
 
 USAGE: Define a variable and call this function with package you want to install
 EXAMPLE:
