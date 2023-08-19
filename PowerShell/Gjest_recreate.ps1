@@ -25,5 +25,3 @@ Remove-Item "C:\Users\$user" -Recurse -Force
 net user $user /add /active:yes
 net localgroup users $user /delete
 net localgroup Administrators $user /add
-
-# test
