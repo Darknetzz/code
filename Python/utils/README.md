@@ -35,9 +35,13 @@ coolText     = style.style('This text will look super cool, I promise!', 'primar
 crypto = UTILS.crypto.darkCrypt()`
 
 `secret = crypto.secret_decrypt(cfg["secretFile"], cfg["keyFile"])`
+
 OR
+
 `secret = crypto.secret_decrypt('encryptedSecret', cfg["keyFile"])`
+
 OR
+
 `secret = crypto.secret_decrypt('encryptedSecret', 'unencryptedKey')` # <-- This method is UNSAFE, obviously
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
@@ -45,11 +49,17 @@ OR
 ### IMPORTER
 
 USAGE: Define a variable and call this function with package you want to install
+
+
 EXAMPLE: `ff = importer_import_new('ffmpeg')`
+
 IS EQUAL TO: `import ffmpeg as ff`
 
+
 EXAMPLE: `importer.importer_import_new('git', 'gitpython')`
+
 IS EQUAL TO: `import git` (and pip install the required gitpython if it isn't installed)
+
 
 Or you can add it to the global scope, for example in a for loop:
 
