@@ -5,15 +5,33 @@
 # ──────────────────────────────────────────────────────────────────────────── #
 function Set-RegValue($path, $valueName, $valueData) {
     try{  
-        Get-ItemProperty -Path $path -Name $valueName -ErrorAction Stop
+        $getValue = Get-ItemPropertyValue -Path $path -Name $valueName -ErrorAction Stop
+        if ($getValue -eq $valueData) {
+            Write-Output "[SKIPPING] Registry key $valueName already $valueData"
+            Return
+        }
     }  
     catch [System.Management.Automation.ItemNotFoundException] {  
         New-Item -Path $path -Force  
-        New-ItemProperty -Path $path -Name $ValueName -Value $ValueData -Force -PropertyType Dword
+        New-ItemProperty -Path $path -Name $ValueName -Value $ValueData -Force
+        Write-Output "[CREATED] Registry key $valueName created with value $valueData"
     }  
-    catch {  
-        New-ItemProperty -Path $path -Name $ValueName -Value $ValueData -Type String -Force -PropertyType Dword
-    }  
+    catch {
+        New-ItemProperty -Path $path -Name $ValueName -Value $ValueData -Type String -Force
+        Write-Output "[CREATED] Registry key $valueName created with value $valueData"
+    }
+}
+
+function Remove-File($path, $file) {
+    try {
+        Get-ItemProperty -Path "$path\$file" -Name $valueName -ErrorAction Stop
+        Remove-Item -Path "$path\$file"
+        Write-Output "[DELETED] $file"
+    }
+    catch {
+        Write-Output "[SKIPPING] $file doesn't exist"
+        Return
+    }
 }
 
 # ──────────────────────────────────────────────────────────────────────────── #
@@ -21,41 +39,66 @@ function Set-RegValue($path, $valueName, $valueData) {
 # ──────────────────────────────────────────────────────────────────────────── #
 $user = $Env:UserName
 $userFolder = "C:\Users\$user"
-$taskBarFolder = "$userFolder\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-$regPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-
-$values = "ShowTaskViewButton", "TaskbarDa", "TaskbarMn", "TaskbarAl", "HideFileExt"
 
 # ──────────────────────────────────────────────────────────────────────────── #
 #                             Registry keys to edit                            #
 # ──────────────────────────────────────────────────────────────────────────── #
+# Create a hashtable with registry paths as keys and lists of key-value pairs as values
+# Create a hashtable with registry paths as keys and lists of key-value pairs as values
 $registryKeys = @{
-    ShowTaskViewButton = 0
-    TaskbarDa          = 0
-    TaskbarMn          = 0
-    TaskbarAl          = 0
-    HideFileExt        = 0
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" = @{
+        "ShowTaskViewButton" = "0"
+        "TaskbarDa" = "0"
+        "TaskbarMn" = "0"
+        "TaskbarAl" = "0"
+        "HideFileExt" = "0"
+    }
+    "HKLM:\Software\Policies\Microsoft\Windows\OOBE" = @{
+        "DisablePrivacyExperience" = "1"
+    }
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Search" = @{
+        "SearchboxTaskbarMode" = "0"
+    }
 }
+
 
 # ──────────────────────────────────────────────────────────────────────────── #
 #                                Files to delete                               #
 # ──────────────────────────────────────────────────────────────────────────── #
-$filesToDelete = 
-"$taskBarFolder\Microsoft Edge.lnk",
-"$taskBarFolder\Microsoft Edge.lnk"
-
-foreach ($valueName in $values) {
-    Set-RegValue($regPath, $valueName, "0")
+$filesToDelete = @{
+    "$userFolder\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar" = @(
+        "Microsoft Edge.lnk"
+    )
 }
 
-Remove-Item /f "$userFolder\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Microsoft Edge.lnk"
+# ──────────────────────────────────────────────────────────────────────────── #
+#                                   Iterators                                  #
+# ──────────────────────────────────────────────────────────────────────────── #
+# Iterate through the keys and values
+foreach ($key in $registryKeys.Keys) {
+    Write-Host "=== [$key] ==="
+    $keyValuePairs = $registryKeys[$key]
+    foreach ($subKey in $keyValuePairs.Keys) {
+        $value = $keyValuePairs[$subKey]
+        Set-RegValue "$key" "$subKey" "$value"
+    }
+    Write-Output ""
+}
+
+foreach ($filePath in $filesToDelete.Keys) {
+    Write-Output "=== [$filePath] ==="
+
+    $files = $filesToDelete[$filePath]
+    foreach ($file in $files) {
+        Remove-File "$filePath" "$file"
+    }
+    Write-Output ""
+}
 
 # REG LOAD HKLM\Default C:\Users\$user\NTUSER.DAT
-
-# Removes search from the Taskbar
-reg.exe add "HKLM\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" /v SearchboxTaskbarMode /t REG_DWORD /d 0 /f
  
 taskkill /f /im explorer.exe
 
 Start-Process explorer.exe
-pause
+
+# update
