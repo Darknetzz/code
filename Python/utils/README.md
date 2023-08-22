@@ -6,6 +6,10 @@
 This code is probably not well written or secure in any way.
 I use some of this code personally in my projects.
 
+[//]: # (START FILES TABLE)
+
+[//]: # (END FILES TABLE)
+
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ## USAGE EXAMPLES

@@ -1,6 +1,4 @@
-Files in this folder:
+# PHP\UTILS
+[//]: # (START FILES TABLE)
 
-| File             | Description |
-| ---------------- | ----------- |
-| utils/crypto.php |             |
-| utils/rand.php   |             |
+[//]: # (END FILES TABLE)
