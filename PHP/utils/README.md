@@ -4,6 +4,3 @@
 [//]: # (END FILES TABLE)
 
 test1234as
-asd
-sad
-ww
