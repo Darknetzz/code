@@ -1,5 +1,10 @@
+# This file is really of no use to the public, but I like to have it readily available to myself.
+
+# Remote execute:
+# iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Darknetzz/code/main/PowerShell/mount_NAS3.ps1'))
+
 $mountPoints = @{
-    "Z" = "\\fileshare.local\share"
+    "Z" = "\\ubuntu02.dark.net\share"
     "Y" = "\\10.0.2.56\data"
 }
 
