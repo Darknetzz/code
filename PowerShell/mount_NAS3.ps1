@@ -17,7 +17,7 @@ foreach ($mp in $iterator) {
         Write-Output "$uncPath already mapped.";
     } else {
         $cmd = net use, ${letter}:, "$uncPath", /persistent:yes /yes;
-        Write-Output "Mounting $uncPath to $letter with command $cmd";
+        Write-Output "Mounting $uncPath to $letter";
         & pwsh.exe -Command $cmd
     }
 }
