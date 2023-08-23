@@ -18,7 +18,7 @@ foreach ($mp in $iterator) {
     } else {
         $cmd = net use, ${letter}:, "$uncPath", /persistent:yes /yes;
         Write-Output "Mounting $uncPath to $letter";
-        & pwsh.exe -Command $cmd
+        & pwsh.exe -Command "$cmd"
     }
 }
 
