@@ -1,7 +1,19 @@
-net use * /delete /yes;
+$mountPoints = @{
+    "Z" = "\\fileshare.local\share"
+    "Y" = "\\10.0.2.56\data"
+}
 
-net use z: "\\10.0.1.23\Share" /persistent:yes /yes; # nas3
-net use y: "\\10.0.2.56\data" /persistent:yes /yes;  # ubuntu02
+$iterator = $mountPoints.getEnumerator();
+
+foreach ($mp in $iterator) {
+    $letter  = $mp.Name;
+    $uncPath = $mp.Value;
+    If (Get-PSDrive | Where-Object DisplayRoot -EQ $uncPath) { 
+        Write-Output "$uncPath already mapped.";
+    } else {
+        Write-Output "Mounting $uncPath to $letter";
+        net use $letter: "$uncPath" /persistent:yes /yes;
+    }
+}
 
 net use;
-pause;
