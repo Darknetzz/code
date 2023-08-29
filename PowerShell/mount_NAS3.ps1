@@ -1,6 +1,6 @@
 $mountPoints = @{
-    "Z" = "\\ubuntu02.dark.net\share"
-    "Y" = "\\10.0.2.56\data"
+    "Z" = "\\NAS3.dark.net\Share"
+    "Y" = "\\ubuntu02.dark.net\data"
 }
 
 $iterator = $mountPoints.getEnumerator();
