@@ -16,7 +16,7 @@ foreach ($mp in $iterator) {
     If (Get-PSDrive | Where-Object DisplayRoot -EQ $uncPath) { 
         Write-Output "$uncPath already mapped.";
     } else {
-        $cmd = net use ${letter}: ${uncPath} /persistent:yes /yes;
+        $cmd = "net use ${letter}: ${uncPath} /persistent:yes /yes;"
         Write-Output "Mounting $uncPath to $letter";
         & pwsh.exe -Command "$cmd"
     }
