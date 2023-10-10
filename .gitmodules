@@ -1,0 +1,3 @@
+[submodule "PHP/php-utils"]
+	path = PHP/php-utils
+	url = https://github.com/Darknetzz/php-utils.git
