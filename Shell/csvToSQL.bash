@@ -9,6 +9,7 @@ pythonBin=$(which python3)                      # python binary
 chunk_size=100000                               # how many rows to import per iteration
 pipBin="$pythonBin -m pip"                      # python pip binary
 connectionConfigFile="$SCRIPT_DIR/sqlcon.bash"  # sql configuration file
+createConfigFile=0                              # create config file?
 connector="mysql+mysqlconnector"                # type of sql connector
 verbose="--verbose"                             # the flag or empty if non-verbose
 additionalFlags="--no-create $verbose --insert --blanks"    # csvsql command line parameters
@@ -248,12 +249,14 @@ else
     read -r -i "root" -p "Username [default root]: " username
     read -r -i "" -s -p "Password [default blank]: " password
     
-    touch "$connectionConfigFile"
-    echo "host='$host'" > "$connectionConfigFile"
-    echo "db='$database'" > "$connectionConfigFile"
-    echo "username='$username'" > "$connectionConfigFile"
-    echo "password='$password'" > "$connectionConfigFile"
-    echo
+    if ["$createConfigFile" !== 0]; then
+        touch "$connectionConfigFile"
+        echo "host='$host'" > "$connectionConfigFile"
+        echo "db='$database'" > "$connectionConfigFile"
+        echo "username='$username'" > "$connectionConfigFile"
+        echo "password='$password'" > "$connectionConfigFile"
+        echo
+    fi
 fi
 
 connectionString="$connector://$username:$password@$host/$db"
@@ -268,6 +271,7 @@ else
     succ "Connection established!"
 fi
 
+# TODO: You also need to check for database presence
 exists_query=$(printf 'SHOW TABLES LIKE "%s"' "$tableName")
 exists_check=$(MYSQL_PWD="$password" mysql -u "$username" -e "$exists_query" "$db")
 # empty_query=$(printf 'SELECT COUNT(*) as records FROM %s' "$tableName")
