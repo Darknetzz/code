@@ -4,10 +4,12 @@
 # pwsh.exe -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Darknetzz/code/main/PowerShell/mount_drives.ps1'));"
 
 $mountPoints = @{
+    "X" = "\\NAS1.dark.net\Data"
+    "Y" = "\\NAS2.dark.net\Data"
     "Z" = "\\NAS3.dark.net\Share"
-    "H" = "\\ha.dark.net\config"
-    "Y" = "\\ubuntu02.dark.net\data"
-    "K" = "\\ubuntu01.dark.net\data"
+    "G" = "\\ha.dark.net\config"
+    "H" = "\\ubuntu01.dark.net\data"
+    "I" = "\\ubuntu02.dark.net\data"
 }
 
 $iterator = $mountPoints.getEnumerator();
