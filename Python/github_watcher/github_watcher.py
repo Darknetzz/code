@@ -15,6 +15,8 @@ repos = {
     'Windows Terminal'         : 'https://github.com/microsoft/terminal/',
     'Spiderfoot'               : 'https://github.com/smicallef/spiderfoot/',
     'PHPMyAdmin'               : 'https://github.com/phpmyadmin/phpmyadmin',
+    'DokuWiki'                 : 'https://github.com/dokuwiki/dokuwiki',
+    'Pi-Hole'                  : 'https://github.com/pi-hole/pi-hole/',
 }
 
 # Fetch from file to see if updated
