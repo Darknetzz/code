@@ -29,12 +29,14 @@ repos = {
 
 # Fetch from file to see if updated
 current = {}
+filepath= os.path.dirname(__file__)
 file    = os.path.basename(__file__.split('.')[0])+'.json'
-if os.path.isfile(file):
-    with open(file, 'r') as fcontents:
+fullpath= os.path.join(f"{filepath}/{file}")
+if os.path.isfile(fullpath):
+    with open(fullpath, 'r') as fcontents:
         current = json.load(fcontents)
 
-console.print(f"Checking file {file}")
+console.print(f"Checking file {fullpath}")
 
 headers = ['Name', 'Current tag', 'Last tag', 'Date', 'New']
 rows    = []
@@ -93,6 +95,6 @@ if save.lower() != 'y' and save != '':
     console.print("Exiting...")
     exit()
     
-with open(file, 'w+') as fcontents:
+with open(fullpath, 'w+') as fcontents:
     fcontents.write(json.dumps(toadd))
     console.print("File saved!")
