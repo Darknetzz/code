@@ -5,9 +5,7 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.style import Style
 
-console = Console()
-
-base_style = Style.parse("cyan")
+console = Console(style = Style.parse("cyan"))
 
 # Github repos to watch
 repos = {
