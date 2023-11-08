@@ -1,6 +1,14 @@
 import requests, tabulate, json, os, sys
 from bs4 import BeautifulSoup
 
+
+from rich.console import Console
+from rich.style import Style
+
+console = Console()
+
+base_style = Style.parse("cyan")
+
 # Github repos to watch
 repos = {
     'Grocy'                    : 'https://github.com/grocy/grocy',
@@ -26,7 +34,7 @@ if os.path.isfile(file):
     with open(file, 'r') as fcontents:
         current = json.load(fcontents)
 
-print(f"Checking file {file}")
+console.print(f"Checking file {file}")
 
 headers = ['Name', 'Current tag', 'Last tag', 'Date', 'New']
 rows    = []
@@ -39,13 +47,13 @@ for repo in repos:
     name    = url.split('/')[-1]
     latest  = url+'/releases/latest'
     
-    print(f"Fetching {name}...")
+    console.print(f"Fetching {name}...")
     req     = requests.get(latest)
     tag     = req.url.split('/')[-1]
     
     # No releases for this repo
     if tag == "releases":
-        print(f"[WARNING] {name} has no release.")
+        console.print(f"[WARNING] {name} has no release.")
         tag         = ""
         lasttag     = ""
         new         = ""
@@ -68,23 +76,23 @@ for repo in repos:
         soup = BeautifulSoup(req.content, "html.parser")
         date = soup.find('relative-time').get_text()
     except Exception as e:
-        print(f"[WARNING] No date for {name}.")
+        console.print(f"[WARNING] No date for {name}.")
         date = ""
     
     # Append to table
     rows.append([repo, tag, lasttag, date, new])
     
-print('\n\n'+tabulate.tabulate(rows, headers=headers))
+console.print('\n\n'+tabulate.tabulate(rows, headers=headers))
 
 if changes != True:
-    print("No new releases, exiting...")
+    console.print("No new releases, exiting...")
     exit()
     
 save = input(f"Save these tags to {file}? [Y/n]")
 if save.lower() != 'y' and save != '':
-    print("Exiting...")
+    console.print("Exiting...")
     exit()
     
 with open(file, 'w+') as fcontents:
     fcontents.write(json.dumps(toadd))
-    print("File saved!")
+    console.print("File saved!")
