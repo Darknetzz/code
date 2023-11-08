@@ -4,7 +4,7 @@ echo "Type FQDN of domain controller: "
 read DC
 echo "Username to join with (default: Administrator): "
 read USER
-if [[ "$USER" -neq "" ]]
+if [[ "$USER" -ne "" ]]
 then
     USER="-U $USER"
 else
