@@ -23,7 +23,9 @@ repos = {
     'Spiderfoot'                    : 'https://github.com/smicallef/spiderfoot/',
     'PHPMyAdmin'                    : 'https://github.com/phpmyadmin/phpmyadmin',
     'DokuWiki'                      : 'https://github.com/dokuwiki/dokuwiki',
-    'Pi-Hole'                       : 'https://github.com/pi-hole/pi-hole/',
+    'Pi-Hole DNS'                   : 'https://github.com/pi-hole/pi-hole/',
+    'Pi-Hole FTL'                   : 'https://github.com/pi-hole/FTL/',
+    'Pi-Hole Web'                   : 'https://github.com/pi-hole/web',
     'Bootstrap'                     : 'https://github.com/twbs/bootstrap',
     'Obsidian.md'                   : 'https://github.com/obsidianmd/obsidian-releases',
 }
@@ -47,8 +49,18 @@ changes = False
 for repo in repos:
     # Fetch latest release for this repo
     url     = repos[repo]
+    
+    # Remove trailing slash if any
+    if url[-1] == '/':
+        url = url[0:-1]
+        
+    # Get last segment of URL
     name    = url.split('/')[-1]
     latest  = url+'/releases/latest'
+    
+    if not name:
+        print(f"[WARN] Name empty for {repo} @ {url}, skipping...")
+        continue
     
     console.print(f"Fetching {name}...")
     req     = requests.get(latest)
