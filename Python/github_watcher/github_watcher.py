@@ -24,6 +24,7 @@ repos = {
     'DokuWiki'                 : 'https://github.com/dokuwiki/dokuwiki',
     'Pi-Hole'                  : 'https://github.com/pi-hole/pi-hole/',
     'Bootstrap'                : 'https://github.com/twbs/bootstrap',
+    'Obsidian.md'              : 'https://github.com/obsidianmd/obsidian-releases',
 }
 
 # Fetch from file to see if updated
