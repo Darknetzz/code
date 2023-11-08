@@ -6,9 +6,11 @@ echo "Username to join with (default: Administrator): "
 read USER
 if [[ "$USER" -ne "" ]]
 then
-    USER="-U ${USER}"
+    JOIN="$(sudo realm join -v -U $USER $DC)"
+else
+    JOIN="$(sudo realm join -v $DC)"
 fi
-sudo realm join "$USER" "$DC"
+$($JOIN)
 echo "Enable automatic creation of home directories? [Y/n]"
 read HD
 if [[ "$HD" -eq "Y" ]] || [[ "$HD" -eq "" ]]
