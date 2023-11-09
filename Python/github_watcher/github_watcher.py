@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 
 from rich.console import Console
 from rich.style import Style
+from rich.table import Table
 
 console = Console()
 
@@ -58,8 +59,9 @@ headers = ['Name', 'Current tag', 'Last tag', 'Date', 'New']
 rows    = []
 toadd   = {}
 changes = False
+count   = len(repos)
 
-for repo in repos:
+for i, repo in enumerate(repos):
     # Fetch latest release for this repo
     url     = repos[repo]
     
@@ -75,7 +77,7 @@ for repo in repos:
         warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
-    info(f"Fetching {name}...")
+    info(f"({repo}/{count}) Fetching {name}...")
     req     = requests.get(latest)
     tag     = f"{req.url.split('/')[-1]}"
     
@@ -115,8 +117,18 @@ for repo in repos:
         f"{date}",
         f"{new}",
     ])
+
+print('\n\n')
+
+table = Table(title="GitHub Repo Overview")
+
+for header in headers:
+    table.add_column(header)
     
-print('\n\n'+tabulate.tabulate(rows, headers=headers))
+for row in rows:
+    table.add_row(row)
+    
+print(table)
 
 if changes != True:
     info("No new releases, exiting...")
