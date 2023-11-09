@@ -1,11 +1,23 @@
-import requests, tabulate, json, os, sys
+import requests, json, os, sys
 from bs4 import BeautifulSoup
 
 
 from rich.console import Console
 from rich.style import Style
 
-console = Console(style = Style.parse("cyan"))
+console = Console()
+
+def print(txt):
+    return console.print(txt)
+
+def warn(txt):
+    print(f"[bold red][WARNING][/bold red] {txt}")
+    
+def succ(txt):
+    print(f"[bold green][OK][/bold green] {txt}")
+    
+def info(txt):
+    print(f"[cyan][INFO][/cyan] {txt}")
 
 # Github repos to watch
 repos = {
@@ -28,6 +40,7 @@ repos = {
     'Pi-Hole Web'                   : 'https://github.com/pi-hole/web',
     'Bootstrap'                     : 'https://github.com/twbs/bootstrap',
     'Obsidian.md'                   : 'https://github.com/obsidianmd/obsidian-releases',
+    'OPNSense Core'                 : 'https://github.com/opnsense/core',
 }
 
 # Fetch from file to see if updated
@@ -39,7 +52,7 @@ if os.path.isfile(fullpath):
     with open(fullpath, 'r') as fcontents:
         current = json.load(fcontents)
 
-console.print(f"Checking file {fullpath}")
+info(f"Checking file {fullpath}")
 
 headers = ['Name', 'Current tag', 'Last tag', 'Date', 'New']
 rows    = []
@@ -59,18 +72,18 @@ for repo in repos:
     latest  = url+'/releases/latest'
     
     if not name:
-        print(f"[WARN] Name empty for {repo} @ {url}, skipping...")
+        warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
-    console.print(f"Fetching {name}...")
+    info(f"Fetching {name}...")
     req     = requests.get(latest)
-    tag     = req.url.split('/')[-1]
+    tag     = f"{req.url.split('/')[-1]}"
     
     # No releases for this repo
     if tag == "releases":
-        console.print(f"[WARNING] {name} has no release.")
-        tag         = ""
-        lasttag     = ""
+        warn(f"{name} has no release.")
+        tag         = "[grey]None[/grey]"
+        lasttag     = "[grey]None[/grey]"
         new         = ""
         toadd[repo] = ""
     else:
@@ -80,10 +93,10 @@ for repo in repos:
         toadd[repo] = tag
         
         if repo in current:
-            lasttag = current[repo]
+            lasttag = f"{current[repo]}"
         
         if lasttag != tag:
-            new     = "NEW"
+            new     = "[bold green]NEW[/bold green]"
             changes = True
     
     # Init soup
@@ -91,23 +104,29 @@ for repo in repos:
         soup = BeautifulSoup(req.content, "html.parser")
         date = soup.find('relative-time').get_text()
     except Exception as e:
-        console.print(f"[WARNING] No date for {name}.")
+        warn(f"No date for {name}.")
         date = ""
     
     # Append to table
-    rows.append([repo, tag, lasttag, date, new])
+    rows.append([
+        f"[link={url}]{repo}[/link]",
+        f"{tag}",
+        f"{lasttag}",
+        f"{date}",
+        f"{new}",
+    ])
     
-console.print('\n\n'+tabulate.tabulate(rows, headers=headers))
+print('\n\n'+tabulate.tabulate(rows, headers=headers))
 
 if changes != True:
-    console.print("No new releases, exiting...")
+    info("No new releases, exiting...")
     exit()
     
 save = input(f"Save these tags to {file}? [Y/n]")
 if save.lower() != 'y' and save != '':
-    console.print("Exiting...")
+    info("Exiting...")
     exit()
     
 with open(fullpath, 'w+') as fcontents:
     fcontents.write(json.dumps(toadd))
-    console.print("File saved!")
+    succ("File saved!")
