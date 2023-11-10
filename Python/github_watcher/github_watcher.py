@@ -42,6 +42,9 @@ repos = {
     'Bootstrap'                     : 'https://github.com/twbs/bootstrap',
     'Obsidian.md'                   : 'https://github.com/obsidianmd/obsidian-releases',
     'OPNSense Core'                 : 'https://github.com/opnsense/core',
+    'Apache2'                       : 'https://github.com/apache/httpd',
+    'Nginx'                         : 'https://github.com/nginx/nginx',
+    
 }
 
 # Fetch from file to see if updated
@@ -77,7 +80,7 @@ for i, repo in enumerate(repos):
         warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
-    info(f"({repo}/{count}) Fetching {name}...")
+    info(f"({i}/{count}) Fetching {name}...")
     req     = requests.get(latest)
     tag     = f"{req.url.split('/')[-1]}"
     
@@ -100,6 +103,7 @@ for i, repo in enumerate(repos):
         if lasttag != tag:
             new     = "[bold green]NEW[/bold green]"
             changes = True
+            succ("Changes detected for {repo}!")
     
     # Init soup
     try:
