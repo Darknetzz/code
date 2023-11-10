@@ -5,11 +5,12 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.style import Style
 from rich.table import Table
+from rich import print
 
 console = Console()
 
-def print(txt):
-    return console.print(txt)
+# def print(txt):
+#     return console.print(txt)
 
 def warn(txt):
     print(f"[bold red][WARNING][/bold red] {txt}")
@@ -67,6 +68,8 @@ count   = len(repos)
 for i, repo in enumerate(repos):
     # Fetch latest release for this repo
     url     = repos[repo]
+    counter = f"({i}/{count})"
+    print(counter, end=' ')
     
     # Remove trailing slash if any
     if url[-1] == '/':
@@ -80,7 +83,6 @@ for i, repo in enumerate(repos):
         warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
-    info(f"({i}/{count}) Fetching {name}...")
     req     = requests.get(latest)
     tag     = f"{req.url.split('/')[-1]}"
     
@@ -99,11 +101,13 @@ for i, repo in enumerate(repos):
         
         if repo in current:
             lasttag = f"{current[repo]}"
+            print(f"Fetching {name}...")
+            
         
         if lasttag != tag:
             new     = "[bold green]NEW[/bold green]"
             changes = True
-            succ("Changes detected for {repo}!")
+            succ(f"Changes detected for {repo}!")
     
     # Init soup
     try:
@@ -130,7 +134,8 @@ for header in headers:
     table.add_column(header)
     
 for row in rows:
-    table.add_row(row)
+    for val in row:
+        table.add_row(val)
     
 print(table)
 
