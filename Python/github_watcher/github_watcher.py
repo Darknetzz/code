@@ -92,7 +92,7 @@ for i, repo in enumerate(repos):
         tag         = "[grey]None[/grey]"
         lasttag     = "[grey]None[/grey]"
         new         = ""
-        toadd[repo] = ""
+        toadd[repo] = tag
     else:
         # Check with file
         lasttag     = "None"
@@ -118,13 +118,15 @@ for i, repo in enumerate(repos):
         date = ""
     
     # Append to table
-    rows.append([
+    values = [
         f"[link={url}]{repo}[/link]",
         f"{tag}",
         f"{lasttag}",
         f"{date}",
         f"{new}",
-    ])
+    ]
+    values = list(map(str.strip, values))
+    rows.append(values)
 
 print('\n\n')
 
@@ -134,8 +136,7 @@ for header in headers:
     table.add_column(header)
     
 for row in rows:
-    for val in row:
-        table.add_row(val)
+        table.add_row(*row)
     
 print(table)
 
