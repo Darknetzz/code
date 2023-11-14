@@ -47,6 +47,7 @@ repos = {
     'Nginx'                         : 'https://github.com/nginx/nginx',
     'Quasar RAT'                    : 'https://github.com/quasar/Quasar',
     'Explorer Patcher'              : 'https://github.com/valinet/ExplorerPatcher/',
+    'VSCode'                        : 'https://github.com/microsoft/vscode',
 }
 
 # Fetch from file to see if updated
