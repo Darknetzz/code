@@ -25,17 +25,21 @@ def fetch(url):
     req = requests.get(url)
     return req
     
-def find(content, search):
+def find(content, search: str):
     # Init soup
     try:
         soup = BeautifulSoup(content, "html.parser")
-        res  = soup.find(search).get_text()
+        res  = soup.find(string=search)
+        
+        # No results
+        if not res:
+            print(f"No results for {search}")
+            return
+        
+        res = res.get_text()
         return res
-        # date = soup.find('relative-time').get_text()
     except Exception as e:
-        # warn(f"No date for {name}.")
-        print(f"Did not find {search}")
-        return ""
+        exit(f"find: Exception {e}")
 
 # Github repos to watch
 repos = {
@@ -111,9 +115,9 @@ for i, repo in enumerate(repos):
     
     # No releases for this repo, check tags
     if tag == "releases":
-        req = requests.get(latestTag)
+        req = requests.get(latestTagUrl)
         tag = find(req.content, "a[class='Link--primary Link']")
-        exit(req.content)
+        exit(tag)
     
     # No tag for this repo
     if not tag:
@@ -137,6 +141,7 @@ for i, repo in enumerate(repos):
             succ(f"Changes detected for {repo}!")
 
         # NOTE: Shorten code, put common variables here
+        # (variables that are the same regardless of conditions)
         toadd[repo] = tag
         
         # NOTE: SOUP HERE
