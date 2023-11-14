@@ -21,6 +21,10 @@ def succ(txt):
 def info(txt):
     print(f"[cyan][INFO][/cyan] {txt}")
     
+def fetch(url):
+    req = requests.get(url)
+    return req
+    
 def find(content, search):
     # Init soup
     try:
@@ -30,6 +34,7 @@ def find(content, search):
         # date = soup.find('relative-time').get_text()
     except Exception as e:
         # warn(f"No date for {name}.")
+        print(f"Did not find {search}")
         return ""
 
 # Github repos to watch
@@ -92,22 +97,23 @@ for i, repo in enumerate(repos):
         url = url[0:-1]
         
     # Get last segment of URL
-    name        = url.split('/')[-1]
-    latest      = url+'/releases/latest'
-    latestTag   = url+'/tags'
+    name         = url.split('/')[-1]
+    latestUrl    = url+'/releases/latest'
+    latestTagUrl = url+'/tags'
     
     if not name:
         warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
     # Get latest release
-    req     = requests.get(latest)
+    req     = fetch(latestUrl)
     tag     = f"{req.url.split('/')[-1]}"
     
     # No releases for this repo, check tags
     if tag == "releases":
         req = requests.get(latestTag)
         tag = find(req.content, "a[class='Link--primary Link']")
+        exit(req.content)
     
     # No tag for this repo
     if not tag:
