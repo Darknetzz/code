@@ -108,17 +108,15 @@ for i, repo in enumerate(repos):
         tag = find(req.content, "a[class='Link--primary Link']")
     
     # No releases for this repo
-    if tag == "releases":
-        info(f"{name} has no release.")
+    if not tag:
+        warn(f"Found no release or tag for {name}")
         tag         = "None"
         lasttag     = "None"
         new         = ""
-        toadd[repo] = tag
     else:
         # Check with file
         lasttag     = "None"
         new         = ""
-        toadd[repo] = tag
         
         if repo in current:
             lasttag = f"{current[repo]}"
@@ -129,9 +127,12 @@ for i, repo in enumerate(repos):
             new     = "[bold green]NEW[/bold green]"
             changes = True
             succ(f"Changes detected for {repo}!")
-    
-    # NOTE: SOUP HERE
-    date = find(req.content, "relative-time")
+
+        # NOTE: Shorten code, put common variables here
+        toadd[repo] = tag
+        
+        # NOTE: SOUP HERE
+        date = find(req.content, "relative-time")
     
     # Append to table
     values = [
