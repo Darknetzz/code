@@ -89,9 +89,10 @@ for i, repo in enumerate(repos):
     
     # No releases for this repo
     if tag == "releases":
-        warn(f"{name} has no release.")
-        tag         = "[grey]None[/grey]"
-        lasttag     = "[grey]None[/grey]"
+        info(f"{name} has no release.")
+        # TODO: Check if it has tags
+        tag         = "None"
+        lasttag     = "None"
         new         = ""
         toadd[repo] = tag
     else:
@@ -115,7 +116,7 @@ for i, repo in enumerate(repos):
         soup = BeautifulSoup(req.content, "html.parser")
         date = soup.find('relative-time').get_text()
     except Exception as e:
-        warn(f"No date for {name}.")
+        # warn(f"No date for {name}.")
         date = ""
     
     # Append to table
