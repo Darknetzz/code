@@ -60,6 +60,8 @@ repos = {
     'Explorer Patcher'              : 'https://github.com/valinet/ExplorerPatcher/',
     'VSCode'                        : 'https://github.com/microsoft/vscode',
     'Flipper Zero RougeMaster FW'   : 'https://github.com/RogueMaster/flipperzero-firmware-wPlugins',
+    'Ventoy'                        : 'https://github.com/ventoy/Ventoy',
+    'SnipeIT Asset Management'      : 'https://github.com/snipe/snipe-it',
 }
 
 # Fetch from file to see if updated
