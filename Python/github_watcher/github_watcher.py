@@ -45,6 +45,8 @@ repos = {
     'OPNSense Core'                 : 'https://github.com/opnsense/core',
     'Apache2'                       : 'https://github.com/apache/httpd',
     'Nginx'                         : 'https://github.com/nginx/nginx',
+    'Quasar RAT'                    : 'https://github.com/quasar/Quasar',
+    'Explorer Patcher'              : 'https://github.com/valinet/ExplorerPatcher/',
 }
 
 # Fetch from file to see if updated
