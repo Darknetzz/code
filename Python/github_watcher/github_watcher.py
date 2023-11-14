@@ -20,6 +20,17 @@ def succ(txt):
     
 def info(txt):
     print(f"[cyan][INFO][/cyan] {txt}")
+    
+def find(content, search):
+    # Init soup
+    try:
+        soup = BeautifulSoup(content, "html.parser")
+        res  = soup.find(search).get_text()
+        return res
+        # date = soup.find('relative-time').get_text()
+    except Exception as e:
+        # warn(f"No date for {name}.")
+        return ""
 
 # Github repos to watch
 repos = {
@@ -48,6 +59,7 @@ repos = {
     'Quasar RAT'                    : 'https://github.com/quasar/Quasar',
     'Explorer Patcher'              : 'https://github.com/valinet/ExplorerPatcher/',
     'VSCode'                        : 'https://github.com/microsoft/vscode',
+    'Flipper Zero RougeMaster FW'   : 'https://github.com/RogueMaster/flipperzero-firmware-wPlugins',
 }
 
 # Fetch from file to see if updated
@@ -78,20 +90,26 @@ for i, repo in enumerate(repos):
         url = url[0:-1]
         
     # Get last segment of URL
-    name    = url.split('/')[-1]
-    latest  = url+'/releases/latest'
+    name        = url.split('/')[-1]
+    latest      = url+'/releases/latest'
+    latestTag   = url+'/tags'
     
     if not name:
         warn(f"Name empty for {repo} @ {url}, skipping...")
         continue
     
+    # Get latest release
     req     = requests.get(latest)
     tag     = f"{req.url.split('/')[-1]}"
+    
+    if tag == "releases":
+        # TODO: Check if it has tags
+        req = requests.get(latestTag)
+        tag = find(req.content, "a[class='Link--primary Link']")
     
     # No releases for this repo
     if tag == "releases":
         info(f"{name} has no release.")
-        # TODO: Check if it has tags
         tag         = "None"
         lasttag     = "None"
         new         = ""
@@ -112,13 +130,8 @@ for i, repo in enumerate(repos):
             changes = True
             succ(f"Changes detected for {repo}!")
     
-    # Init soup
-    try:
-        soup = BeautifulSoup(req.content, "html.parser")
-        date = soup.find('relative-time').get_text()
-    except Exception as e:
-        # warn(f"No date for {name}.")
-        date = ""
+    # NOTE: SOUP HERE
+    date = find(req.content, "relative-time")
     
     # Append to table
     values = [
