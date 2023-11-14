@@ -102,12 +102,12 @@ for i, repo in enumerate(repos):
     req     = requests.get(latest)
     tag     = f"{req.url.split('/')[-1]}"
     
+    # No releases for this repo, check tags
     if tag == "releases":
-        # TODO: Check if it has tags
         req = requests.get(latestTag)
         tag = find(req.content, "a[class='Link--primary Link']")
     
-    # No releases for this repo
+    # No tag for this repo
     if not tag:
         warn(f"Found no release or tag for {name}")
         tag         = "None"
