@@ -75,6 +75,9 @@ def github_watcher(stream=False):
         repos = {
             'Grocy'                         : 'https://github.com/grocy/grocy',
             'wallpanel.xyz'                 : 'https://github.com/TheTimeWalker/wallpanel-android',
+            'Home Assistant: Core'          : 'https://github.com/home-assistant/core',
+            'Home Assistant: Supervisor'    : 'https://github.com/home-assistant/supervisor',
+            'Home Assistant: OS'            : 'https://github.com/home-assistant/operating-system',
             'Home Assistant: Variables'     : 'https://github.com/snarky-snark/home-assistant-variables',
             'Home Assistant: Birthdays'     : 'https://github.com/Miicroo/ha-birthdays',
             'Home Assistant: browser-mod'   : 'https://github.com/thomasloven/hass-browser_mod',
@@ -101,7 +104,7 @@ def github_watcher(stream=False):
             'Flipper Zero RougeMaster FW'   : 'https://github.com/RogueMaster/flipperzero-firmware-wPlugins',
             'Ventoy'                        : 'https://github.com/ventoy/Ventoy',
             'SnipeIT Asset Management'      : 'https://github.com/snipe/snipe-it',
-            'Pterodactyl Panel': 'https://github.com/pterodactyl/panel'
+            'Pterodactyl Panel'             : 'https://github.com/pterodactyl/panel',
         }
 
         # Fetch from file to see if updated
