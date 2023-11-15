@@ -33,7 +33,7 @@ def github_watcher(stream=False):
                exit(f"Error in write_output: {e}")
            
         def log(txt: str):
-           console.log(txt)
+           console.print(txt)
            write_output()
            
         def warn(txt: str):
@@ -199,7 +199,7 @@ def github_watcher(stream=False):
         for row in rows:
                 table.add_row(*row)
 
-        log(table)
+        console.print(table)
 
         if changes != True:
             info("No new releases, exiting...")
