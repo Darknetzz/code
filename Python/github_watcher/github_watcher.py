@@ -101,6 +101,7 @@ def github_watcher(stream=False):
             'Flipper Zero RougeMaster FW'   : 'https://github.com/RogueMaster/flipperzero-firmware-wPlugins',
             'Ventoy'                        : 'https://github.com/ventoy/Ventoy',
             'SnipeIT Asset Management'      : 'https://github.com/snipe/snipe-it',
+            'Pterodactyl Panel': 'https://github.com/pterodactyl/panel'
         }
 
         # Fetch from file to see if updated
@@ -191,24 +192,24 @@ def github_watcher(stream=False):
         log('\n\n')
 
         table = Table(title="GitHub Repo Overview")
-    
+
         for header in headers:
             table.add_column(header)
-    
+
         for row in rows:
                 table.add_row(*row)
-    
+
         log(table)
-    
+
         if changes != True:
             info("No new releases, exiting...")
             return
-    
+
         save = input(f"Save these tags to {file}? [Y/n]")
         if save.lower() != 'y' and save != '':
             info("Exiting...")
             return
-    
+
         with open(fullpath, 'w+') as fcontents:
            fcontents.write(json.dumps(toadd))
            succ("File saved!")
