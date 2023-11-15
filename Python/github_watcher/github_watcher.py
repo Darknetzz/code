@@ -2,14 +2,14 @@ def github_watcher():
     import requests, json, os, time
     from bs4 import BeautifulSoup
 
-
     from rich.console import Console
     from rich.style import Style
     from rich.table import Table
     from rich import print
+    import rich
 
     print("Initializing rich console...")
-    console = Console()
+    console = Console(record=True)
     console.log(f"Initializing github_watcher...")
 
     outputfile = "templates/output.html"
@@ -18,26 +18,33 @@ def github_watcher():
     with open(outputfile, "w+") as f:
         f.write("")
     
-    def write_output(content):
+    # Write to outputfile
+    def write_output():
         with open(outputfile, "a") as f:
-            f.write(content+'\n')
+            # UnicodeEncodeError: 'charmap' codec can't encode character '\u280b' in position 313: character maps to <undefined>
+            html = str(console.export_html(inline_styles=True))#.encode(errors="ignore")
+            f.write(f"{html}\n")
         
-    def log(txt):
-        write_output(txt)
+    def log(txt: str):
         console.log(txt)
+        write_output()
         
-    def warn(txt):
+    def warn(txt: str):
         log(f"[bold red][WARNING][/bold red] {txt}")
 
-    def succ(txt):
+    def succ(txt: str):
         log(f"[bold green][OK][/bold green] {txt}")
 
-    def info(txt):
+    def info(txt: str):
         log(f"[cyan][INFO][/cyan] {txt}")
 
-    def fetch(url):
+    def fetch(url: str):
         req = requests.get(url)
         return req
+        return {
+            'content': req.content.decode(errors='ignore'),
+            'url':     req.url
+        }
 
     def find(req: requests.Response, tagname: str, attributes: dict = {}):
         # Init soup
@@ -131,7 +138,7 @@ def github_watcher():
 
             # No releases for this repo, check tags
             if tag == "releases":
-                req = requests.get(latestTagUrl)
+                req = fetch(latestTagUrl)
                 tag = find(req, "a", {"class" : "Link--primary Link"})
 
             # No tag for this repo
