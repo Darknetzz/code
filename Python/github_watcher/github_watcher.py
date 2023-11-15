@@ -10,19 +10,30 @@ def github_watcher():
 
     print("Initializing rich console...")
     console = Console()
-    console.log(f"Initializing {__name__}...")
+    console.log(f"Initializing github_watcher...")
 
-    # def print(txt):
-    #     return console.print(txt)
+    outputfile = "templates/output.html"
 
+    # Empty output file
+    with open(outputfile, "w+") as f:
+        f.write("")
+    
+    def write_output(content):
+        with open(outputfile, "a") as f:
+            f.write(content+'\n')
+        
+    def log(txt):
+        write_output(txt)
+        console.log(txt)
+        
     def warn(txt):
-        console.log(f"[bold red][WARNING][/bold red] {txt}")
+        log(f"[bold red][WARNING][/bold red] {txt}")
 
     def succ(txt):
-        console.log(f"[bold green][OK][/bold green] {txt}")
+        log(f"[bold green][OK][/bold green] {txt}")
 
     def info(txt):
-        console.log(f"[cyan][INFO][/cyan] {txt}")
+        log(f"[cyan][INFO][/cyan] {txt}")
 
     def fetch(url):
         req = requests.get(url)
@@ -163,7 +174,7 @@ def github_watcher():
             rows.append(values)
             time.sleep(0.5)
 
-    print('\n\n')
+    log('\n\n')
 
     table = Table(title="GitHub Repo Overview")
 
@@ -173,7 +184,7 @@ def github_watcher():
     for row in rows:
             table.add_row(*row)
 
-    print(table)
+    log(table)
 
     if changes != True:
         info("No new releases, exiting...")
