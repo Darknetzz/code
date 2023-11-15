@@ -1,4 +1,4 @@
-def github_watcher():
+def github_watcher(stream=False):
     import requests, json, os, time, sys
     from bs4 import BeautifulSoup
 
@@ -10,28 +10,28 @@ def github_watcher():
 
     print("Initializing rich console...")
 
+    complete    = False
     outputfile  = "templates/output.html"
-    with open(outputfile, "w+") as f:
-       console     = Console(record=True, file=f)
-       output      = Console()
-                   
+    
+    with open(outputfile, "w+", encoding="UTF-8") as f:
+       console     = Console(record=True)
        console.log(f"Initializing github_watcher...")
 
        # Empty output file
        # with open(outputfile, "w+", encoding='UTF-8') as f:
        #     f.write("")
        
+       def stream(output: str):
+           yield output
+       
        # Write to console as well
        def write_output():
-           output.print(console.export_text())
            return
            try:
-               with open(outputfile, "w+", encoding='UTF-8') as f:
-                   # UnicodeEncodeError: 'charmap' codec can't encode character '\u280b' in position 313: character maps to <undefined>
-                   html = console.export_html(inline_styles=True, clear=False)#.encode(errors="ignore")
-                   console.save_html()
-                   # html = html.encode(errors='ignore').decode(errors='ignore')
-                   f.write(f"{str(html)}\n")
+                # UnicodeEncodeError: 'charmap' codec can't encode character '\u280b' in position 313: character maps to <undefined>
+                html = console.export_html(inline_styles=True, clear=False)#.encode(errors="ignore")
+                console.save_html()
+                f.write(f"{str(html)}\n")
            except Exception as e:
                exit(f"Error in write_output: {e}")
            
