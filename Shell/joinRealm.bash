@@ -17,3 +17,14 @@ if [[ "$HD" -eq "Y" ]] || [[ "$HD" -eq "" ]]
 then
     sudo pam-auth-update --enable mkhomedir
 fi
+
+# We should edit /etc/sudoers.d here, not the main sudoers file.
+# https://askubuntu.com/questions/455211/how-to-add-domain-admins-to-sudoers
+echo "Add domain admins to sudoers file?"
+read ADS
+if [[ "$ADS" -eq "Y" ]] || [[ "$ADS" -eq "" ]]
+then
+    LINE="# Add domain admins to sudoers
+    \"%MYDOMAIN\Domain Admins\" ALL=(ALL) ALL"
+    echo "$LINE" > /etc/sudoers.d/DomainAdmins
+fi
