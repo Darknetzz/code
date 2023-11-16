@@ -18,8 +18,10 @@ def github_watcher(stream=False):
         console.log(f"Initializing github_watcher...")
 
         def stream(output: str):
-            if complete == False:
+            if complete == False and stream == True:
                 yield output
+            else:
+                return output
        
        # Write to console as well
         def write_output():
@@ -164,6 +166,7 @@ def github_watcher(stream=False):
                    lasttag     = "None"
                    new         = ""
 
+                    
                    if repo in current:
                        lasttag = f"{current[repo]}"
                        info(f"{counter} Fetching {name}...")
