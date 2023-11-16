@@ -105,6 +105,7 @@ def github_watcher(stream=False):
             'Ventoy'                        : 'https://github.com/ventoy/Ventoy',
             'SnipeIT Asset Management'      : 'https://github.com/snipe/snipe-it',
             'Pterodactyl Panel'             : 'https://github.com/pterodactyl/panel',
+            'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
         }
 
         # Fetch from file to see if updated
