@@ -222,5 +222,10 @@ def github_watcher(stream=False):
            succ("File saved!")
         
 if __name__ == "__main__":
-    print("Starting github_watcher...")
-    github_watcher()
+    try:
+        print("Starting github_watcher...")
+        github_watcher()
+    except KeyboardInterrupt:
+        print("Exiting...")
+    except Exception as e:
+        print(f"Oh no! Something went wrong: {e}")
