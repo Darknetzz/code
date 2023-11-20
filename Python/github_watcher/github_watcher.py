@@ -89,6 +89,7 @@ def github_watcher(stream=False):
             'Python Flask'                  : 'https://github.com/pallets/flask',
             'Python Rich'                   : 'https://github.com/Textualize/rich',
             'Windows Terminal'              : 'https://github.com/microsoft/terminal/',
+            'PowerShell 7'                  : 'https://github.com/PowerShell/PowerShell',
             'Spiderfoot'                    : 'https://github.com/smicallef/spiderfoot/',
             'PHPMyAdmin'                    : 'https://github.com/phpmyadmin/phpmyadmin',
             'DokuWiki'                      : 'https://github.com/dokuwiki/dokuwiki',
@@ -109,6 +110,9 @@ def github_watcher(stream=False):
             'Pterodactyl Panel'             : 'https://github.com/pterodactyl/panel',
             'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
         }
+        
+        # Check for duplicates
+        duplicates = [key for key, values in repos.items() if len(values) > 1]
 
         # Fetch from file to see if updated
         current = {}
