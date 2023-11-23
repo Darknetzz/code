@@ -110,6 +110,7 @@ def github_watcher(stream=False):
             'SnipeIT Asset Management'      : 'https://github.com/snipe/snipe-it',
             'Pterodactyl Panel'             : 'https://github.com/pterodactyl/panel',
             'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
+            'Microsoft-Activation-Scripts'  : 'https://github.com/massgravel/Microsoft-Activation-Scripts',
         }
         
         # Check for duplicates
