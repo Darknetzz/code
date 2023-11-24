@@ -8,6 +8,9 @@ def github_watcher(stream=False):
     # from rich import print
     import rich
 
+    cwd = os.path.dirname(__file__)
+    print(f"Changing cwd to {cwd}")
+    os.chdir(cwd)
     print("Initializing rich console...")
 
     complete    = False
@@ -120,9 +123,8 @@ def github_watcher(stream=False):
 
         # Fetch from file to see if updated
         current = {}
-        filepath= os.path.dirname(__file__)
         file    = os.path.basename(__file__.split('.')[0])+'.json'
-        fullpath= os.path.join(f"{filepath}/{file}")
+        fullpath= os.path.join(f"{cwd}/{file}")
         if os.path.isfile(fullpath):
             with open(fullpath, 'r') as fcontents:
                 current = json.load(fcontents)
