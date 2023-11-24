@@ -97,6 +97,7 @@ def github_watcher(stream=False):
             'Pi-Hole FTL'                   : 'https://github.com/pi-hole/FTL/',
             'Pi-Hole Web'                   : 'https://github.com/pi-hole/web',
             'Bootstrap'                     : 'https://github.com/twbs/bootstrap',
+            'Bootstrap-Icons'               : 'https://github.com/twbs/icons',
             'jQuery'                        : 'https://github.com/jquery/jquery',
             'Obsidian.md'                   : 'https://github.com/obsidianmd/obsidian-releases',
             'OPNSense Core'                 : 'https://github.com/opnsense/core',
