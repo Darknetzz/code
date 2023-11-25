@@ -149,6 +149,7 @@ def github_watcher(stream=False):
 
                # Get last segment of URL
                name         = url.split('/')[-1]
+               author       = url.split('/')[-2]
                latestUrl    = url+'/releases/latest'
                latestTagUrl = url+'/tags'
 
@@ -167,7 +168,7 @@ def github_watcher(stream=False):
 
                # No tag for this repo
                if not tag:
-                   warn(f"Found no release or tag for {name}")
+                   warn(f"Found no release or tag for {author}/{name}")
                    tag         = "None"
                    lasttag     = "None"
                    new         = ""
@@ -179,13 +180,15 @@ def github_watcher(stream=False):
                     
                    if repo in current:
                        lasttag = f"{current[repo]}"
-                       info(f"{counter} Fetching {name}...")
 
 
                    if lasttag != tag:
                        new     = "[bold green]NEW[/bold green]"
                        changes = True
                        succ(f"Changes detected for {repo}!")
+                   else:
+                       info(f"{counter} [{author}/{name}] Fetching...")
+                        
 
                    # NOTE: Shorten code, put common variables here
                    # (variables that are the same regardless of conditions)
