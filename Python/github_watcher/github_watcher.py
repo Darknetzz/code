@@ -42,13 +42,13 @@ def github_watcher(stream=False):
            write_output()
            
         def warn(txt: str):
-           log(f"[bold red][WARNING][/bold red] {txt}")
+           log(f"[bold red]{txt}[/bold red]")
 
         def succ(txt: str):
-           log(f"[bold green][OK][/bold green] {txt}")
+           log(f"[bold green]{txt}[/bold green]")
 
         def info(txt: str):
-           log(f"[cyan][INFO][/cyan] {txt}")
+           log(f"[cyan]{txt}[/cyan]")
 
         def fetch(url: str):
            req = requests.get(url)
@@ -152,6 +152,7 @@ def github_watcher(stream=False):
                author       = url.split('/')[-2]
                latestUrl    = url+'/releases/latest'
                latestTagUrl = url+'/tags'
+               repoInfo     = f"[{author}/{repo}]"
 
                if not name:
                    warn(f"{counter} Name empty for {repo} @ {url}, skipping...")
@@ -181,13 +182,12 @@ def github_watcher(stream=False):
                    if repo in current:
                        lasttag = f"{current[repo]}"
 
-
                    if lasttag != tag:
                        new     = "[bold green]NEW[/bold green]"
                        changes = True
-                       succ(f"Changes detected for {repo}!")
+                       succ(f"{counter} Changes detected for {repo}!")
                    else:
-                       info(f"{counter} [{author}/{name}] Fetching...")
+                       info(f"{counter} No changes {repo}")
                         
 
                    # NOTE: Shorten code, put common variables here
