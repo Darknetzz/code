@@ -5,6 +5,7 @@ def github_watcher(stream=False):
     from rich.console import Console
     from rich.style import Style
     from rich.table import Table
+    from rich.columns import Columns
     # from rich import print
     import rich
 
@@ -169,7 +170,7 @@ def github_watcher(stream=False):
 
                # No tag for this repo
                if not tag:
-                   warn(f"Found no release or tag for {author}/{name}")
+                   warn(f"Found no release or tag for {repo}")
                    tag         = "None"
                    lasttag     = "None"
                    new         = ""
@@ -185,10 +186,13 @@ def github_watcher(stream=False):
                    if lasttag != tag:
                        new     = "[bold green]NEW[/bold green]"
                        changes = True
-                       succ(f"{counter} Changes detected for {repo}!")
+                       echo    = {counter, repo, "Changes detected!"}
+                       columns = Columns(echo, equal=True, expand=True)
                    else:
-                       info(f"{counter} No changes {repo}")
-                        
+                       echo    = {counter, repo, "No changes"}
+                    #    info(f"{counter} {repo} - No changes")
+                       columns = Columns(echo, equal=True, expand=True)
+                   console.print(columns)
 
                    # NOTE: Shorten code, put common variables here
                    # (variables that are the same regardless of conditions)
