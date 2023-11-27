@@ -87,15 +87,20 @@ def github_watcher(stream=False):
             'Home Assistant: Variables'     : 'https://github.com/snarky-snark/home-assistant-variables',
             'Home Assistant: Birthdays'     : 'https://github.com/Miicroo/ha-birthdays',
             'Home Assistant: browser-mod'   : 'https://github.com/thomasloven/hass-browser_mod',
+            'Apache2'                       : 'https://github.com/apache/httpd',
+            'Nginx'                         : 'https://github.com/nginx/nginx',
+            'PHP'                           : 'https://github.com/php/php-src',
             'php-api'                       : 'https://github.com/Darknetzz/php-api',
             'php-rand'                      : 'https://github.com/Darknetzz/php-rand',
-            'JS.Wiki'                       : 'https://github.com/Requarks/wiki',
+            'PHPMailer'                     : 'https://github.com/PHPMailer/PHPMailer',
+            'PHPMyAdmin'                    : 'https://github.com/phpmyadmin/phpmyadmin',
+            'Windows Terminal'              : 'https://github.com/microsoft/terminal/',
+            'Python'                        : 'https://github.com/python/cpython',
             'Python Flask'                  : 'https://github.com/pallets/flask',
             'Python Rich'                   : 'https://github.com/Textualize/rich',
-            'Windows Terminal'              : 'https://github.com/microsoft/terminal/',
             'PowerShell 7'                  : 'https://github.com/PowerShell/PowerShell',
+            'JS.Wiki'                       : 'https://github.com/Requarks/wiki',
             'Spiderfoot'                    : 'https://github.com/smicallef/spiderfoot/',
-            'PHPMyAdmin'                    : 'https://github.com/phpmyadmin/phpmyadmin',
             'DokuWiki'                      : 'https://github.com/dokuwiki/dokuwiki',
             'Pi-Hole DNS'                   : 'https://github.com/pi-hole/pi-hole/',
             'Pi-Hole FTL'                   : 'https://github.com/pi-hole/FTL/',
@@ -105,8 +110,6 @@ def github_watcher(stream=False):
             'jQuery'                        : 'https://github.com/jquery/jquery',
             'Obsidian.md'                   : 'https://github.com/obsidianmd/obsidian-releases',
             'OPNSense Core'                 : 'https://github.com/opnsense/core',
-            'Apache2'                       : 'https://github.com/apache/httpd',
-            'Nginx'                         : 'https://github.com/nginx/nginx',
             'Quasar RAT'                    : 'https://github.com/quasar/Quasar',
             'Explorer Patcher'              : 'https://github.com/valinet/ExplorerPatcher/',
             'VSCode'                        : 'https://github.com/microsoft/vscode',
@@ -117,7 +120,6 @@ def github_watcher(stream=False):
             'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
             'Microsoft-Activation-Scripts'  : 'https://github.com/massgravel/Microsoft-Activation-Scripts',
             'Canonical Subiquity'           : 'https://github.com/canonical/subiquity',
-            'PHPMailer'                     : 'https://github.com/PHPMailer/PHPMailer',
         }
         
         # Check for duplicates
@@ -187,11 +189,9 @@ def github_watcher(stream=False):
                     if lasttag != tag:
                         new     = "[bold green]NEW[/bold green]"
                         changes = True
-                        echo    = {counter, f"[{repo}]", "Changes detected!"}
-                        columns = Columns(echo, equal=True, expand=False)
+                        echo    = [counter, f"[{repo}]", "Changes detected!"]
                     else:
-                        echo    = {counter, f"[{repo}]", "No changes"}
-                        #    info(f"{counter} {repo} - No changes")
+                        echo    = [counter, f"[{repo}]", "No changes"]
                     columns = Columns(echo, equal=True, expand=False)
                     console.print(columns)
 
