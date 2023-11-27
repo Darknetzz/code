@@ -26,56 +26,56 @@ def github_watcher(stream=False):
                 yield output
             else:
                 return output
-       
-       # Write to console as well
+    
+    # Write to console as well
         def write_output():
-           return
-           try:
+            return
+            try:
                 # UnicodeEncodeError: 'charmap' codec can't encode character '\u280b' in position 313: character maps to <undefined>
                 html = console.export_html(inline_styles=True, clear=False)#.encode(errors="ignore")
                 console.save_html()
                 f.write(f"{str(html)}\n")
-           except Exception as e:
-               exit(f"Error in write_output: {e}")
-           
+            except Exception as e:
+                exit(f"Error in write_output: {e}")
+        
         def log(txt: str):
-           console.print(txt)
-           write_output()
-           
+            console.print(txt)
+            write_output()
+        
         def warn(txt: str):
-           log(f"[bold red]{txt}[/bold red]")
+            log(f"[bold red]{txt}[/bold red]")
 
         def succ(txt: str):
-           log(f"[bold green]{txt}[/bold green]")
+            log(f"[bold green]{txt}[/bold green]")
 
         def info(txt: str):
-           log(f"[cyan]{txt}[/cyan]")
+            log(f"[cyan]{txt}[/cyan]")
 
         def fetch(url: str):
-           req = requests.get(url)
-           return req
-           return {
-               'content': req.content.decode(errors='ignore'),
-               'url':     req.url
-           }
+            req = requests.get(url)
+            return req
+            return {
+                'content': req.content.decode(errors='ignore'),
+                'url':     req.url
+            }
 
         def find(req: requests.Response, tagname: str, attributes: dict = {}):
-           # Init soup
-           try:
-               soup = BeautifulSoup(req.content, "html.parser")
-               res  = soup.find(name=tagname, attrs=attributes)
+            # Init soup
+            try:
+                soup = BeautifulSoup(req.content, "html.parser")
+                res  = soup.find(name=tagname, attrs=attributes)
 
-               # No results
-               if not res:
-                   # warn(f"No results for tag {tagname} with attributes {attributes} in {req.url}")
-                   return False
+                # No results
+                if not res:
+                    # warn(f"No results for tag {tagname} with attributes {attributes} in {req.url}")
+                    return False
 
-               res = res.get_text(strip=True)
-               # succ(f"Found {res} in {req.url}")
-               return res
-           except Exception as e:
-               # warn(f"find: Exception {e}")
-               return False
+                res = res.get_text(strip=True)
+                # succ(f"Found {res} in {req.url}")
+                return res
+            except Exception as e:
+                # warn(f"find: Exception {e}")
+                return False
 
         # Github repos to watch
         repos = {
@@ -140,79 +140,79 @@ def github_watcher(stream=False):
         count   = len(repos)
 
         with console.status("[bold]Fetching repos...") as status:
-           for i, repo in enumerate(repos):
-               # Fetch latest release for this repo
-               url     = repos[repo]
-               counter = f"({i}/{count})"
+            for i, repo in enumerate(repos):
+                # Fetch latest release for this repo
+                url     = repos[repo]
+                counter = f"({i}/{count})"
 
-               # Remove trailing slash if any
-               if url[-1] == '/':
-                   url = url[0:-1]
+                # Remove trailing slash if any
+                if url[-1] == '/':
+                    url = url[0:-1]
 
-               # Get last segment of URL
-               name         = url.split('/')[-1]
-               author       = url.split('/')[-2]
-               latestUrl    = url+'/releases/latest'
-               latestTagUrl = url+'/tags'
-               repoInfo     = f"[{author}/{repo}]"
+                # Get last segment of URL
+                name         = url.split('/')[-1]
+                author       = url.split('/')[-2]
+                latestUrl    = url+'/releases/latest'
+                latestTagUrl = url+'/tags'
+                repoInfo     = f"[{author}/{repo}]"
 
-               if not name:
-                   warn(f"{counter} Name empty for {repo} @ {url}, skipping...")
-                   continue
-               
-               # Get latest release
-               req     = fetch(latestUrl)
-               tag     = f"{req.url.split('/')[-1]}"
+                if not name:
+                    warn(f"{counter} Name empty for {repo} @ {url}, skipping...")
+                    continue
+                
+                # Get latest release
+                req     = fetch(latestUrl)
+                tag     = f"{req.url.split('/')[-1]}"
 
-               # No releases for this repo, check tags
-               if tag == "releases":
-                   req = fetch(latestTagUrl)
-                   tag = find(req, "a", {"class" : "Link--primary Link"})
+                # No releases for this repo, check tags
+                if tag == "releases":
+                    req = fetch(latestTagUrl)
+                    tag = find(req, "a", {"class" : "Link--primary Link"})
 
-               # No tag for this repo
-               if not tag:
-                   warn(f"Found no release or tag for {repo}")
-                   tag         = "None"
-                   lasttag     = "None"
-                   new         = ""
-               else:
-                   # Check with file
-                   lasttag     = "None"
-                   new         = ""
+                # No tag for this repo
+                if not tag:
+                    warn(f"Found no release or tag for {repo}")
+                    tag         = "None"
+                    lasttag     = "None"
+                    new         = ""
+                else:
+                    # Check with file
+                    lasttag     = "None"
+                    new         = ""
 
-                    
-                   if repo in current:
-                       lasttag = f"{current[repo]}"
+                        
+                    if repo in current:
+                        lasttag = f"{current[repo]}"
 
-                   if lasttag != tag:
-                       new     = "[bold green]NEW[/bold green]"
-                       changes = True
-                       echo    = {counter, repo, "Changes detected!"}
-                       columns = Columns(echo, equal=True, expand=True)
-                   else:
-                       echo    = {counter, repo, "No changes"}
-                    #    info(f"{counter} {repo} - No changes")
-                       columns = Columns(echo, equal=True, expand=True)
-                   console.print(columns)
+                    if lasttag != tag:
+                        new     = "[bold green]NEW[/bold green]"
+                        changes = True
+                        echo    = {counter, f"[{repo}]", "Changes detected!"}
+                        columns = Columns(echo, equal=True, expand=False)
+                    else:
+                        echo    = {counter, f"[{repo}]", "No changes"}
+                        #    info(f"{counter} {repo} - No changes")
+                    columns = Columns(echo, equal=True, expand=False)
+                    console.print(columns)
 
-                   # NOTE: Shorten code, put common variables here
-                   # (variables that are the same regardless of conditions)
-                   toadd[repo] = tag
+                    # NOTE: Shorten code, put common variables here
+                    # (variables that are the same regardless of conditions)
+                    toadd[repo] = tag
 
-                   # Find date (this should be the same regardless of release/tag)
-                   date = find(req, "relative-time")
+                    # Find date (this should be the same regardless of release/tag)
+                    date = find(req, "relative-time")
 
-               # Append to table
-               values = [
-                   f"[link={url}]{repo}[/link]",
-                   f"{tag}",
-                   f"{lasttag}",
-                   f"{date}",
-                   f"{new}",
-               ]
-               values = list(map(str.strip, values))
-               rows.append(values)
-               time.sleep(0.5)
+                # Append to table
+                values = [
+                    f"[link={url}]{repo}[/link]",
+                    f"{tag}",
+                    f"{lasttag}",
+                    f"{date}",
+                    f"{new}",
+                ]
+                values = list(map(str.strip, values))
+                rows.append(values)
+                time.sleep(0.5)
 
         log('\n\n')
 
@@ -222,7 +222,7 @@ def github_watcher(stream=False):
             table.add_column(header)
 
         for row in rows:
-                table.add_row(*row)
+            table.add_row(*row)
 
         console.print(table)
 
@@ -236,9 +236,9 @@ def github_watcher(stream=False):
             return
 
         with open(fullpath, 'w+') as fcontents:
-           fcontents.write(json.dumps(toadd))
-           succ("File saved!")
-        
+            fcontents.write(json.dumps(toadd))
+            succ("File saved!")
+         
 if __name__ == "__main__":
     try:
         print("Starting github_watcher...")
