@@ -117,6 +117,7 @@ def github_watcher(stream=False):
             'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
             'Microsoft-Activation-Scripts'  : 'https://github.com/massgravel/Microsoft-Activation-Scripts',
             'Canonical Subiquity'           : 'https://github.com/canonical/subiquity',
+            'PHPMailer'                     : 'https://github.com/PHPMailer/PHPMailer',
         }
         
         # Check for duplicates
