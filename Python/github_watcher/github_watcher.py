@@ -120,6 +120,7 @@ def github_watcher(stream=False):
             'Pterodactyl Wings'             : 'https://github.com/pterodactyl/wings',
             'Microsoft-Activation-Scripts'  : 'https://github.com/massgravel/Microsoft-Activation-Scripts',
             'Canonical Subiquity'           : 'https://github.com/canonical/subiquity',
+            'ShareX Screenshot Util'        : 'https://github.com/ShareX/ShareX',
         }
         
         # Check for duplicates
