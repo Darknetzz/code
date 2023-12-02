@@ -121,6 +121,7 @@ def github_watcher(stream=False):
             'Microsoft-Activation-Scripts'  : 'https://github.com/massgravel/Microsoft-Activation-Scripts',
             'Canonical Subiquity'           : 'https://github.com/canonical/subiquity',
             'ShareX Screenshot Util'        : 'https://github.com/ShareX/ShareX',
+            'Handbrake'                     : 'https://github.com/HandBrake/HandBrake',
         }
         
         # Check for duplicates
