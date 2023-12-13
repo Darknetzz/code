@@ -122,6 +122,7 @@ def github_watcher(stream=False):
             'Canonical Subiquity'           : 'https://github.com/canonical/subiquity',
             'ShareX Screenshot Util'        : 'https://github.com/ShareX/ShareX',
             'Handbrake'                     : 'https://github.com/HandBrake/HandBrake',
+            'ADB scrcpy'                    : 'https://github.com/Genymobile/scrcpy/',
         }
         
         # Check for duplicates
