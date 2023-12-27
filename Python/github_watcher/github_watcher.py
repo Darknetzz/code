@@ -176,7 +176,7 @@ def github_watcher(stream=False):
 
                 # No tag for this repo
                 if not tag:
-                    warn(f"Found no release or tag for {repo}")
+                    warn(f"{counter} - Found no release or tag for {repo}")
                     tag         = "None"
                     lasttag     = "None"
                     new         = ""
@@ -192,11 +192,13 @@ def github_watcher(stream=False):
                     if lasttag != tag:
                         new     = "[bold green]NEW[/bold green]"
                         changes = True
-                        echo    = [counter, f"[{repo}]", "Changes detected!"]
+                        # echo    = [counter, f"[{repo}]", "Changes detected!"]
+                        console.print(f"{counter} - Changes detected for {repo}!")
                     else:
-                        echo    = [counter, f"[{repo}]", "No changes"]
-                    columns = Columns(echo, equal=True, expand=False)
-                    console.print(columns)
+                        # echo    = [counter, f"[{repo}]", "No changes"]
+                        console.print(f"{counter} - No changes for {repo}")
+                    # columns = Columns(echo, equal=True, expand=False)
+                    # console.print(columns)
 
                     # NOTE: Shorten code, put common variables here
                     # (variables that are the same regardless of conditions)
