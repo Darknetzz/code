@@ -7,9 +7,9 @@ $mountPoints = @{
     "X" = "\\NAS1.dark.net\Data"
     "Y" = "\\NAS2.dark.net\Data"
     "Z" = "\\NAS3.dark.net\Share"
-    "G" = "\\ha.dark.net\config"
-    "H" = "\\ubuntu01.dark.net\data"
-    "I" = "\\ubuntu02.dark.net\data"
+    # "G" = "\\ha.dark.net\config"
+    # "H" = "\\ubuntu01.dark.net\data"
+    # "I" = "\\ubuntu02.dark.net\data"
 }
 
 $iterator = $mountPoints.getEnumerator();
