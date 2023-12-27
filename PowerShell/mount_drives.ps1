@@ -20,9 +20,10 @@ foreach ($mp in $iterator) {
     If (Get-PSDrive | Where-Object DisplayRoot -EQ $uncPath) { 
         Write-Output "$uncPath already mapped.";
     } else {
-        $cmd = "net use ${letter}: ${uncPath} /persistent:yes /yes /user:kriss;"
+        $cmd = "net use ${letter}: ${uncPath} /persistent:yes /yes /user:$env:USERNAME"
+
         Write-Output "Mounting $uncPath to $letter";
-        & pwsh.exe -Command "$cmd"
+        Start-Process -FilePath "pwsh.exe" -ArgumentList "-Command", "$cmd" -Wait -Timeout 10
     }
 }
 
