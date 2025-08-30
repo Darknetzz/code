@@ -22,13 +22,10 @@
 
 #>
 function getCredentials($credentialName = "DARK.NET") {
-    
-    do {
-        $credential = Get-Credential -ErrorAction SilentlyContinue -UserName $credentialName
-        if ($credential -ne $null) { break; }
+    $credential = Get-Credential -ErrorAction SilentlyContinue -UserName $credentialName
+    if ($credential -eq $null) {
         $credential = Get-Credential -ErrorAction SilentlyContinue -UserName $env:USERNAME
-    } while ($False)
-
+    }
     return $credential
 }
 
