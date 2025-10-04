@@ -1,6 +1,7 @@
 def github_watcher(stream=False):
     import requests, json, os, time, sys
     from bs4 import BeautifulSoup
+    from pathlib import Path
 
     from rich.console import Console
     from rich.style import Style
@@ -8,14 +9,15 @@ def github_watcher(stream=False):
     # from rich import print
     import rich
 
+
     print("Initializing rich console...")
 
     complete    = False
     outputfile  = os.path.dirname(__file__) + os.sep + "templates" + os.sep + "output.html"
 
     if not os.path.isfile(outputfile):
-        print(f"Output file {outputfile} does not exist.")
-        exit(1)
+        print(f"Output file {outputfile} does not exist, creating...")
+        Path(outputfile).touch(exist_ok=True)
 
     with open(outputfile, "w+", encoding="UTF-8") as f:
         console     = Console(record=True)
