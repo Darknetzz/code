@@ -1,0 +1,6 @@
+english_words
+essential_generators
+rich
+pygame
+cryptography
+mysql
