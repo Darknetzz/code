@@ -4,3 +4,5 @@ rich
 pygame
 cryptography
 mysql
+requests
+bs4

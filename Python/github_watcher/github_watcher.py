@@ -11,8 +11,12 @@ def github_watcher(stream=False):
     print("Initializing rich console...")
 
     complete    = False
-    outputfile  = "templates/output.html"
-    
+    outputfile  = os.path.dirname(__file__) + os.sep + "templates" + os.sep + "output.html"
+
+    if not os.path.isfile(outputfile):
+        print(f"Output file {outputfile} does not exist.")
+        exit(1)
+
     with open(outputfile, "w+", encoding="UTF-8") as f:
         console     = Console(record=True)
         console.log(f"Initializing github_watcher...")
