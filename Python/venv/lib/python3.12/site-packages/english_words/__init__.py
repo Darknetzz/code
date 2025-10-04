@@ -1,0 +1,64 @@
+"""Contains the main function to generate word sets.
+
+The package readme provides documentation for this package and the main
+function.
+"""
+
+from collections.abc import Iterable
+from importlib import resources
+import pickle
+from english_words.constants import ALPHA, LOWER, PROCESSED_DATA_DIR
+from english_words.util import get_data_file_name
+
+
+def get_english_words_set(
+    sources: Iterable[str], alpha: bool = False, lower: bool = False
+) -> set[str]:
+    """Get a set of English words by combining word lists.
+
+    Args:
+        sources: An iterable of word list identifiers.
+        alpha: A flag specifying that non-alphanumeric are removed from
+          words.
+        lower: A flag specifying that upper-case letters are converted
+          to lower-case
+
+    Returns:
+        A set of drawn from the provided word lists, adjusted according
+        to the provided options.
+    """
+    # Ensure sources is non-empty
+    if not sources:
+        raise ValueError("No word list sources were provided")
+
+    # Set up a list to dump all the sets in
+    sets_list = []
+
+    # Put the options into a tuple. These *critically* need to be in
+    # alphabetic order
+    options = []
+
+    if alpha:
+        options.append(ALPHA)
+
+    if lower:
+        options.append(LOWER)
+
+    # Get sets to combine
+    for source in sources:
+        data_file_name = get_data_file_name(source, options)
+
+        try:
+            pickle_bytes = (
+                resources.files(__package__)
+                .joinpath(PROCESSED_DATA_DIR, data_file_name)
+                .read_bytes()
+            )
+            sets_list.append(pickle.loads(pickle_bytes))
+        except FileNotFoundError as e:
+            raise ValueError(
+                f"{source} is not a valid word list identifier"
+            ) from e
+
+    # Combine the sets and return the results
+    return set.union(*sets_list)
