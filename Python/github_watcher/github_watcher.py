@@ -17,6 +17,9 @@ import re
 #                                                                         #
 # ─────────────────────────────────────────────────────────────────────── #
 def github_watcher(stream=False):
+    import requests, json, os, time, sys
+    from bs4 import BeautifulSoup
+    from pathlib import Path
 
     # ─────────────────────────────────────────────────────────────────────── #
     #                                Variables                                #
@@ -29,6 +32,19 @@ def github_watcher(stream=False):
     headers      = ['#', 'Repo', 'Current release', 'Date', 'Current tag', 'Date'] # , 'Last tag', 'Last release']
     rows         = []
     toadd        = {}
+
+    print("Initializing rich console...")
+
+    complete    = False
+    outputfile  = os.path.dirname(__file__) + os.sep + "templates" + os.sep + "output.html"
+
+    if not os.path.isfile(outputfile):
+        print(f"Output file {outputfile} does not exist, creating...")
+        Path(outputfile).touch(exist_ok=True)
+
+    with open(outputfile, "w+", encoding="UTF-8") as f:
+        console     = Console(record=True)
+        console.log(f"Initializing github_watcher...")
 
     # JSON files
     versionsFile = "github_watcher.json"
