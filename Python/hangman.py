@@ -1,4 +1,4 @@
-from english_words import english_words_lower_alpha_set
+from english_words import get_english_words_set
 import random, string, os
 
 os.system('cls' if os.name == 'nt' else 'clear')
@@ -14,20 +14,23 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-print(f"""
+hangman_logo = f"""
 {bcolors.OKGREEN}
  _   _                                         
 | | | |                                        
 | |_| | __ _ _ __   __ _ _ __ ___   __ _ _ __  
-|  _  |/ _` | '_ \ / _` | '_ ` _ \ / _` | '_ \ 
+|  _  |/ _` | '_ \\ / _` | '_ ` _ \\ / _` | '_ \\ 
 | | | | (_| | | | | (_| | | | | | | (_| | | | |
-\_| |_/\__,_|_| |_|\__, |_| |_| |_|\__,_|_| |_|
+\\_| |_/\\__,_|_| |_|\\__, |_| |_| |_|\\__,_|_| |_|
                     __/ |                      
                    |___/                       
 ____________________________________________________
 {bcolors.ENDC}
-""")
+"""
 
+print(hangman_logo)
+
+english_words_lower_alpha_set = get_english_words_set(["web2"], alpha=True, lower=True)
 dict = list(english_words_lower_alpha_set)
 
 pref_len = input("Select length of word (blank for random): ")
@@ -92,16 +95,7 @@ while lives > 0 and all_guessed == False:
 
 
     print(f"""
-{bcolors.OKGREEN}
- _   _                                         
-| | | |                                        
-| |_| | __ _ _ __   __ _ _ __ ___   __ _ _ __  
-|  _  |/ _` | '_ \ / _` | '_ ` _ \ / _` | '_ \ 
-| | | | (_| | | | | (_| | | | | | | (_| | | | |
-\_| |_/\__,_|_| |_|\__, |_| |_| |_|\__,_|_| |_|
-                    __/ |                      
-                   |___/                       
-{bcolors.ENDC}
+{hangman_logo}
 ____________________________________________________
 
 The word is {word_len} characters long, randomly picked from a dictionary with {len(dict)} words.
