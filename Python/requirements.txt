@@ -7,3 +7,4 @@ mysql
 requests
 bs4
 pyperclip
+numba
