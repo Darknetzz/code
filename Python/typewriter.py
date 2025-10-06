@@ -1,6 +1,7 @@
 import sys
 import random
-from english_words import english_words_set
+# from english_words import english_words_set
+from english_words import get_english_words_set
 from time import sleep
 from essential_generators import DocumentGenerator
 
