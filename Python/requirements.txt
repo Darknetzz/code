@@ -6,3 +6,4 @@ cryptography
 mysql
 requests
 bs4
+pyperclip
