@@ -1,0 +1,2 @@
+Version: 1.11.1
+Arguments: ['C:\\Miniconda\\envs\\test\\Lib\\site-packages\\delvewheel\\__main__.py', 'repair', '--analyze-existing', '-w', 'dist', 'wheel_temp/llvmlite-0.45.1-cp313-cp313-win_amd64.whl']
