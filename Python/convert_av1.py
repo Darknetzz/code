@@ -6,6 +6,7 @@ r"""
 # python convert_av1.py "C:\Videos\Input" "C:\Videos\Output" --bitrate 8M
 # python convert_av1.py "C:\Videos\Input" --bitrate 8M
 # python convert_av1.py "C:\Videos\video.mp4" --bitrate 8M
+# python convert_av1.py "C:\Videos\video.mp4" --bitrate 8M --delete-original
 """
 
 import os
@@ -19,7 +20,22 @@ def check_ffmpeg():
         print("Error: ffmpeg is not found in your system PATH.")
         sys.exit(1)
 
-def convert_single_file(input_path, output_dir=None, bitrate="5M"):
+def maybe_delete_original(original_path, auto_delete=False):
+    try:
+        if auto_delete:
+            os.remove(original_path)
+            print(f"Deleted original: {original_path}")
+            return
+        resp = input(f"Delete original file?\n{original_path}\n[y/N]: ").strip().lower()
+        if resp in ("y", "yes"):
+            os.remove(original_path)
+            print("Original deleted.")
+        else:
+            print("Kept original.")
+    except Exception as e:
+        print(f"Warning: Could not delete {original_path}: {e}")
+
+def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_original=False):
     filename = os.path.basename(input_path)
     
     if output_dir is None:
@@ -42,13 +58,17 @@ def convert_single_file(input_path, output_dir=None, bitrate="5M"):
     print(f"Converting: {filename}")
     subprocess.run(command, check=True)
 
-def convert_videos(input_path, output_dir=None, bitrate="5M"):
+    # Only attempt deletion if conversion command succeeded
+    if os.path.exists(output_path):
+        maybe_delete_original(input_path, auto_delete=delete_original)
+
+def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(".mp4"):
             print(f"Error: {input_path} is not an MP4 file.")
             sys.exit(1)
-        convert_single_file(input_path, output_dir, bitrate)
+        convert_single_file(input_path, output_dir, bitrate, delete_original)
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
@@ -76,6 +96,9 @@ def convert_videos(input_path, output_dir=None, bitrate="5M"):
 
                 print(f"Converting: {filename}")
                 subprocess.run(command, check=True)
+
+                if os.path.exists(output_path):
+                    maybe_delete_original(file_path, auto_delete=delete_original)
     else:
         print(f"Error: {input_path} is neither a valid file nor directory.")
         sys.exit(1)
@@ -87,11 +110,13 @@ def main():
     parser.add_argument("input_path", help="Path to input file or directory containing .mp4 files")
     parser.add_argument("output_dir", nargs="?", default=None, help="Path to output directory for converted files (optional)")
     parser.add_argument("--bitrate", default="5M", help="Target video bitrate (default: 5M)")
+    parser.add_argument("--delete-original", "-d", action="store_true",
+                        help="Delete original files after successful conversion without prompting")
 
     args = parser.parse_args()
 
     check_ffmpeg()
-    convert_videos(args.input_path, args.output_dir, args.bitrate)
+    convert_videos(args.input_path, args.output_dir, args.bitrate, args.delete_original)
 
 if __name__ == "__main__":
     main()
