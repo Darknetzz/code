@@ -26,14 +26,19 @@ def maybe_delete_original(original_path, auto_delete=False):
             os.remove(original_path)
             print(f"Deleted original: {original_path}")
             return
-        resp = input(f"Delete original file?\n{original_path}\n[y/N]: ").strip().lower()
+        resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             print("Original deleted.")
+        elif resp in ("a", "all"):
+            os.remove(original_path)
+            print("Original deleted.")
+            return True  # Signal to enable auto_delete for remaining files
         else:
             print("Kept original.")
     except Exception as e:
         print(f"Warning: Could not delete {original_path}: {e}")
+    return False
 
 def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_original=False):
     filename = os.path.basename(input_path)
@@ -78,6 +83,10 @@ def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=Fa
         for filename in os.listdir(input_path):
             if filename.lower().endswith(".mp4"):
                 file_path = os.path.join(input_path, filename)
+                file_size = os.path.getsize(file_path)
+                if file_size == 0:
+                    print(f"Skipping zero-byte file: {filename}")
+                    continue
                 
                 if output_dir == input_path:
                     output_name = os.path.splitext(filename)[0] + "-AV1.mkv"
@@ -96,6 +105,8 @@ def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=Fa
 
                 print(f"Converting: {filename}")
                 subprocess.run(command, check=True)
+                new_file_size = os.path.getsize(output_path)
+                print(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB")
 
                 if os.path.exists(output_path):
                     maybe_delete_original(file_path, auto_delete=delete_original)
@@ -111,7 +122,8 @@ def main():
     parser.add_argument("output_dir", nargs="?", default=None, help="Path to output directory for converted files (optional)")
     parser.add_argument("--bitrate", default="5M", help="Target video bitrate (default: 5M)")
     parser.add_argument("--delete-original", "-d", action="store_true",
-                        help="Delete original files after successful conversion without prompting")
+                        help="Delete original files after successful conversion without prompting",
+                        default=False)
 
     args = parser.parse_args()
 
