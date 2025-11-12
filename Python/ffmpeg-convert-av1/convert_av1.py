@@ -157,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description="Batch convert MP4s to AV1 using AMD GPU.")
     parser.add_argument("input_path", help="Path to input file or directory containing .mp4 files")
     parser.add_argument("output_dir", nargs="?", default=None, help="Path to output directory for converted files (optional)")
-    parser.add_argument("--bitrate", default="5M", help="Target video bitrate (default: 5M)")
+    parser.add_argument("--bitrate", default=None, help="Target video bitrate (default: same as source)")
     parser.add_argument("--delete-original", "-d", action="store_true",
                         help="Delete original files after successful conversion without prompting",
                         default=False)
