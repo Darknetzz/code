@@ -99,17 +99,24 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     command = [
         "ffmpeg",
         "-i", input_path,
+        "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p,scale=in_range=limited:out_range=limited",
         "-c:v", "av1_amf",
         "-usage", "transcoding",
-        "-quality", "balanced",
+        "-quality", "speed",
         "-rc", "vbr_peak",
-        "-c:a", "copy"
+        "-qp", "40",
+        "-c:a", "libopus",
+        "-b:a", "64k",
+        "-ac", "1",
+        output_path
     ]
 
     if bitrate is not None:
         command.extend(["-b:v", bitrate])
     else:
         command.extend(["-qp", "28"])
+
+    command.append(output_path)
 
     cprint(f"Command: {' '.join(command)}", "info")
 
