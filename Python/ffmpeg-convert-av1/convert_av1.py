@@ -14,30 +14,56 @@ import subprocess
 import argparse
 import shutil
 import sys
+from rich.console import Console
+
+console = Console()
+
+def cprint(message, type="", style="bold green", **kwargs):
+
+    prefix = ""
+    style  = ""
+    type   = type.lower()
+
+    if type == "error":
+        style = "red"
+        prefix = "❌"
+    elif type == "warning":
+        style = "yellow"
+        prefix = "⚠️"
+    elif type == "info":
+        style = "blue"
+        prefix = "ℹ️"
+    elif type == "success":
+        style = "green"
+        prefix = "✅"
+
+    message = f"{prefix}  {message}"
+
+    console.print(message, style=style, **kwargs)
 
 def check_ffmpeg():
     if shutil.which("ffmpeg") is None:
-        print("Error: ffmpeg is not found in your system PATH.")
+        cprint("ffmpeg is not found in your system PATH.", "error")
         sys.exit(1)
 
 def maybe_delete_original(original_path, auto_delete=False):
     try:
         if auto_delete:
             os.remove(original_path)
-            print(f"Deleted original: {original_path}")
+            cprint(f"Deleted original: {original_path}")
             return
         resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
-            print("Original deleted.")
+            cprint("Original deleted.", "success")
         elif resp in ("a", "all"):
             os.remove(original_path)
-            print("Original deleted.")
+            cprint("Original deleted.", "success")
             return True  # Signal to enable auto_delete for remaining files
         else:
-            print("Kept original.")
+            cprint("Kept original.", "info")
     except Exception as e:
-        print(f"Warning: Could not delete {original_path}: {e}")
+        cprint(f"Could not delete {original_path}: {e}", "warning")
     return False
 
 def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_original=False):
@@ -52,6 +78,12 @@ def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_origin
     
     output_path = os.path.join(output_dir, output_name)
 
+    # Check file size before conversion
+    file_size = os.path.getsize(input_path)
+    if file_size == 0:
+        cprint(f"Skipping zero-byte file: {filename}", "warning")
+        return
+
     command = [
         "ffmpeg",
         "-i", input_path,
@@ -60,18 +92,26 @@ def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_origin
         output_path
     ]
 
-    print(f"Converting: {filename}")
+    cprint(f"Converting: {filename}", "info")
     subprocess.run(command, check=True)
 
-    # Only attempt deletion if conversion command succeeded
+    # Only attempt deletion if conversion succeeded
     if os.path.exists(output_path):
-        maybe_delete_original(input_path, auto_delete=delete_original)
+        new_file_size = os.path.getsize(output_path)
+        cprint(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
+        
+        if file_size <= new_file_size:
+            cprint(f"Converted file is not smaller than original for {filename}. Keeping original.", "warning")
+        else:
+            maybe_delete_original(input_path, auto_delete=delete_original)
+    else:
+        cprint(f"Conversion failed for {filename}. Output file '{output_path}' does not exist.", "error")
 
 def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(".mp4"):
-            print(f"Error: {input_path} is not an MP4 file.")
+            cprint(f"File '{input_path}' is not an MP4 file.", "error")
             sys.exit(1)
         convert_single_file(input_path, output_dir, bitrate, delete_original)
     elif os.path.isdir(input_path):
@@ -83,38 +123,12 @@ def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=Fa
         for filename in os.listdir(input_path):
             if filename.lower().endswith(".mp4"):
                 file_path = os.path.join(input_path, filename)
-                file_size = os.path.getsize(file_path)
-                if file_size == 0:
-                    print(f"Skipping zero-byte file: {filename}")
-                    continue
-                
-                if output_dir == input_path:
-                    output_name = os.path.splitext(filename)[0] + "-AV1.mkv"
-                else:
-                    output_name = os.path.splitext(filename)[0] + "_av1.mkv"
-                
-                output_path = os.path.join(output_dir, output_name)
-
-                command = [
-                    "ffmpeg",
-                    "-i", file_path,
-                    "-c:v", "av1_amf",
-                    "-b:v", bitrate,
-                    output_path
-                ]
-
-                print(f"Converting: {filename}")
-                subprocess.run(command, check=True)
-                new_file_size = os.path.getsize(output_path)
-                print(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB")
-
-                if os.path.exists(output_path):
-                    maybe_delete_original(file_path, auto_delete=delete_original)
+                convert_single_file(file_path, output_dir, bitrate, delete_original)
     else:
-        print(f"Error: {input_path} is neither a valid file nor directory.")
+        cprint(f"{input_path} is neither a valid file nor directory.", "error")
         sys.exit(1)
 
-    print("✅ All conversions complete.")
+    cprint("All conversions complete.", "success")
 
 def main():
     parser = argparse.ArgumentParser(description="Batch convert MP4s to AV1 using AMD GPU.")
