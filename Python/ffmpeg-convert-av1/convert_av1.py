@@ -18,6 +18,9 @@ from rich.console import Console
 
 console = Console()
 
+# ============================================================================ #
+#                               FUNCTION: cprint                               #
+# ============================================================================ #
 def cprint(message, type="", style="bold green", **kwargs):
 
     prefix = ""
@@ -41,11 +44,17 @@ def cprint(message, type="", style="bold green", **kwargs):
 
     console.print(message, style=style, **kwargs)
 
+# ============================================================================ #
+#                            FUNCTION: check_ffmpeg                            #
+# ============================================================================ #
 def check_ffmpeg():
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found in your system PATH.", "error")
         sys.exit(1)
 
+# ============================================================================ #
+#                        FUNCTION: maybe_delete_original                       #
+# ============================================================================ #
 def maybe_delete_original(original_path, auto_delete=False):
     try:
         if auto_delete:
@@ -66,7 +75,10 @@ def maybe_delete_original(original_path, auto_delete=False):
         cprint(f"Could not delete {original_path}: {e}", "warning")
     return False
 
-def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_original=False):
+# ============================================================================ #
+#                         FUNCTION: convert_single_file                        #
+# ============================================================================ #
+def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False):
     filename = os.path.basename(input_path)
     
     if output_dir is None:
@@ -87,10 +99,15 @@ def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_origin
     command = [
         "ffmpeg",
         "-i", input_path,
-        "-c:v", "av1_amf",
-        "-b:v", bitrate,
-        output_path
+        "-c:v", "av1_amf"
     ]
+    
+    if bitrate is not None:
+        command.extend(["-b:v", bitrate])
+    
+    command.append(output_path)
+
+    cprint(f"Command: {' '.join(command)}", "info")
 
     cprint(f"Converting: {filename}", "info")
     subprocess.run(command, check=True)
@@ -107,7 +124,10 @@ def convert_single_file(input_path, output_dir=None, bitrate="5M", delete_origin
     else:
         cprint(f"Conversion failed for {filename}. Output file '{output_path}' does not exist.", "error")
 
-def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=False):
+# ============================================================================ #
+#                           FUNCTION: convert_videos                           #
+# ============================================================================ #
+def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(".mp4"):
@@ -130,6 +150,9 @@ def convert_videos(input_path, output_dir=None, bitrate="5M", delete_original=Fa
 
     cprint("All conversions complete.", "success")
 
+# ============================================================================ #
+#                                FUNCTION: main                                #
+# ============================================================================ #
 def main():
     parser = argparse.ArgumentParser(description="Batch convert MP4s to AV1 using AMD GPU.")
     parser.add_argument("input_path", help="Path to input file or directory containing .mp4 files")
