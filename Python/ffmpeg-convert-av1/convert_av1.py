@@ -76,6 +76,33 @@ def maybe_delete_original(original_path, auto_delete=False):
     return False
 
 # ============================================================================ #
+#                         FUNCTION: get_video_bitrate                          #
+# ============================================================================ #
+def get_video_bitrate(video_path):
+    """Get video bitrate in bits/s using ffprobe."""
+    try:
+        command = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=bit_rate",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path
+        ]
+        cprint(f"Probing for bitrate: {' '.join(command)}", "info")
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        bitrate = result.stdout.strip()
+        if bitrate.isdigit():
+            return int(bitrate)
+        # Handle cases where bitrate is 'N/A' for non-video files or streams
+        cprint(f"Could not determine bitrate for {os.path.basename(video_path)} (bitrate: {bitrate}).", "warning")
+        return None
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        cprint(f"Could not get bitrate for {os.path.basename(video_path)}: {e}", "warning")
+        return None
+
+
+# ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
 def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
@@ -123,21 +150,56 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         "-ac", "2",              # Stereo audio
     ]
 
-    # Add rate control parameters
+    # --- Rate Control Logic ---
+    # This section determines the bitrate for the output file.
+    # If the user specifies a bitrate, we use that. Otherwise, we calculate
+    # a new bitrate that is 60% of the original file's bitrate to ensure
+    # the output file is smaller.
+
+    final_bitrate = 0
     if bitrate:
-        # Variable Bitrate (VBR) mode to target a specific bitrate
+        # User-specified bitrate (e.g., "8M" or "8000k")
+        cprint(f"Using user-specified bitrate: {bitrate}", "info")
+        # We need to convert bitrate string like "8M" to an integer for calculation
+        if isinstance(bitrate, str):
+            try:
+                if bitrate.lower().endswith('k'):
+                    final_bitrate = int(bitrate[:-1]) * 1000
+                elif bitrate.lower().endswith('m'):
+                    final_bitrate = int(bitrate[:-1]) * 1000000
+                else:
+                    final_bitrate = int(bitrate)
+            except ValueError:
+                cprint(f"Invalid bitrate format: {bitrate}", "error")
+                final_bitrate = 0
+        else:
+            final_bitrate = bitrate
+
+    else:
+        # Dynamically set bitrate to 60% of original
+        original_bitrate = get_video_bitrate(input_path)
+        if original_bitrate and original_bitrate > 0:
+            final_bitrate = int(original_bitrate * 0.6)
+            cprint(f"Original bitrate: {original_bitrate / 1000:.0f}k, Target bitrate: {final_bitrate / 1000:.0f}k", "info")
+
+    if final_bitrate > 0:
+        # Use constrained VBR (vbr_peak) for reliable bitrate targeting
+        max_bitrate = int(final_bitrate * 1.75)
+        buf_size = int(final_bitrate * 1.75)
         command.extend([
-            "-rc", "vbr",
-            "-b:v", bitrate
+            "-rc", "vbr_peak",
+            "-b:v", str(final_bitrate),
+            "-maxrate", str(max_bitrate),
+            "-bufsize", str(buf_size)
         ])
     else:
-        # Constant QP (CQP) mode for consistent quality (lower QP = higher quality)
-        # A value around 28 is a good starting point.
+        # Fallback to a higher QP value if bitrate can't be determined
+        cprint("Falling back to Constant QP (32) due to missing bitrate info.", "warning")
         command.extend([
             "-rc", "cqp",
-            "-qp_i", "28",
-            "-qp_p", "28",
-            "-qp_b", "28",
+            "-qp_i", "32",
+            "-qp_p", "32",
+            "-qp_b", "32",
         ])
 
     command.append(output_path)
