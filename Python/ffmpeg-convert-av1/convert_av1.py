@@ -184,10 +184,10 @@ def main():
     parser.add_argument("input_path", help="Path to input file or directory containing .mp4 files")
     parser.add_argument("output_dir", nargs="?", default=None, help="Path to output directory for converted files (optional)")
     parser.add_argument("--bitrate", default=None, help="Target video bitrate (default: same as source)")
-    parser.add_argument("--delete-original", "-d", action="store_true",
+    parser.add_argument("-d", "--delete-original", action="store_true",
                         help="Delete original files after successful conversion without prompting",
                         default=False)
-    parser.add_argument("--overwrite", "-o", action="store_true",
+    parser.add_argument("-o", "--overwrite", action="store_true",
                         help="Force overwrite destination file",
                         default=False)
 
