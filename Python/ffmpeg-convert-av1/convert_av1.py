@@ -111,25 +111,34 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         cprint(f"Skipping zero-byte file: {filename}", "warning")
         return
 
+    # Base command arguments
     command = [
         "ffmpeg",
         "-i", input_path,
         "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p,scale=in_range=limited:out_range=limited",
         "-c:v", "av1_amf",
-        "-usage", "transcoding",
-        "-quality", "speed",
-        "-rc", "vbr_peak",
-        "-qp", "40",
+        "-quality", "balanced",  # Use balanced for better compression than speed
         "-c:a", "libopus",
-        "-b:a", "64k",
-        "-ac", "1",
-        output_path
+        "-b:a", "128k",          # Slightly better audio quality
+        "-ac", "2",              # Stereo audio
     ]
 
-    if bitrate is not None:
-        command.extend(["-b:v", bitrate])
+    # Add rate control parameters
+    if bitrate:
+        # Variable Bitrate (VBR) mode to target a specific bitrate
+        command.extend([
+            "-rc", "vbr",
+            "-b:v", bitrate
+        ])
     else:
-        command.extend(["-qp", "28"])
+        # Constant QP (CQP) mode for consistent quality (lower QP = higher quality)
+        # A value around 28 is a good starting point.
+        command.extend([
+            "-rc", "cqp",
+            "-qp_i", "28",
+            "-qp_p", "28",
+            "-qp_b", "28",
+        ])
 
     command.append(output_path)
 
