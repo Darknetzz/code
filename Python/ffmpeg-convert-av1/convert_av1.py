@@ -78,7 +78,7 @@ def maybe_delete_original(original_path, auto_delete=False):
 # ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
-def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False):
+def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     filename = os.path.basename(input_path)
     
     if output_dir is None:
@@ -89,6 +89,21 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         output_name = os.path.splitext(filename)[0] + "_av1.mkv"
     
     output_path = os.path.join(output_dir, output_name)
+
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        if overwrite:
+            cprint(f"Overwriting existing file: {output_path}", "warning")
+            os.remove(output_path)
+        else:
+            resp = input(f"Output file already exists: {output_path}\nDo you want to delete it and proceed? [y/N]: ").strip().lower()
+            if resp in ("y", "yes"):
+                cprint(f"Deleting existing file: {output_path}", "warning")
+                os.remove(output_path)
+            else:
+                cprint(f"Skipping conversion for {filename}.", "info")
+                return
+
+            
 
     # Check file size before conversion
     file_size = os.path.getsize(input_path)
@@ -138,13 +153,13 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
 # ============================================================================ #
 #                           FUNCTION: convert_videos                           #
 # ============================================================================ #
-def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False):
+def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(".mp4"):
             cprint(f"File '{input_path}' is not an MP4 file.", "error")
             sys.exit(1)
-        convert_single_file(input_path, output_dir, bitrate, delete_original)
+        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
@@ -154,7 +169,7 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
         for filename in os.listdir(input_path):
             if filename.lower().endswith(".mp4"):
                 file_path = os.path.join(input_path, filename)
-                convert_single_file(file_path, output_dir, bitrate, delete_original)
+                convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
     else:
         cprint(f"{input_path} is neither a valid file nor directory.", "error")
         sys.exit(1)
@@ -172,11 +187,14 @@ def main():
     parser.add_argument("--delete-original", "-d", action="store_true",
                         help="Delete original files after successful conversion without prompting",
                         default=False)
+    parser.add_argument("--overwrite", "-o", action="store_true",
+                        help="Force overwrite destination file",
+                        default=False)
 
     args = parser.parse_args()
 
     check_ffmpeg()
-    convert_videos(args.input_path, args.output_dir, args.bitrate, args.delete_original)
+    convert_videos(args.input_path, args.output_dir, args.bitrate, args.delete_original, args.overwrite)
 
 if __name__ == "__main__":
     main()
