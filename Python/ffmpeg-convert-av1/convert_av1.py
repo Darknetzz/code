@@ -11,12 +11,14 @@ r"""
 
 import os
 import subprocess
-import argparse
 import shutil
 import sys
+from typing import Optional
 from rich.console import Console
+import typer
 
 console = Console()
+app = typer.Typer()
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -50,7 +52,7 @@ def cprint(message, type="", style="bold green", **kwargs):
 def check_ffmpeg():
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found in your system PATH.", "error")
-        sys.exit(1)
+        raise typer.Exit(code=1)
 
 # ============================================================================ #
 #                        FUNCTION: maybe_delete_original                       #
@@ -109,7 +111,6 @@ def get_video_bitrate(video_path):
 # ============================================================================ #
 def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     filename = os.path.basename(input_path)
-    enable_auto_delete = False
     
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
@@ -234,7 +235,7 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(".mp4"):
             cprint(f"File '{input_path}' is not an MP4 file.", "error")
-            sys.exit(1)
+            raise typer.Exit(code=1)
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
     elif os.path.isdir(input_path):
         if output_dir is None:
@@ -251,29 +252,26 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
                     delete_original = True
     else:
         cprint(f"{input_path} is neither a valid file nor directory.", "error")
-        sys.exit(1)
+        raise typer.Exit(code=1)
 
     cprint("All conversions complete.", "success")
 
 # ============================================================================ #
 #                                FUNCTION: main                                #
 # ============================================================================ #
-def main():
-    parser = argparse.ArgumentParser(description="Batch convert MP4s to AV1 using AMD GPU.")
-    parser.add_argument("input_path", help="Path to input file or directory containing .mp4 files")
-    parser.add_argument("output_dir", nargs="?", default=None, help="Path to output directory for converted files (optional)")
-    parser.add_argument("--bitrate", default=None, help="Target video bitrate (default: same as source)")
-    parser.add_argument("-d", "--delete-original", action="store_true",
-                        help="Delete original files after successful conversion without prompting",
-                        default=False)
-    parser.add_argument("-o", "--overwrite", action="store_true",
-                        help="Force overwrite destination file",
-                        default=False)
-
-    args = parser.parse_args()
-
+@app.command()
+def main(
+    input_path: str = typer.Argument(..., help="Path to input file or directory containing .mp4 files"),
+    output_dir: Optional[str] = typer.Argument(None, help="Path to output directory for converted files (optional)"),
+    bitrate: Optional[str] = typer.Option(None, help="Target video bitrate (default: same as source)"),
+    delete_original: bool = typer.Option(False, "-d", "--delete-original", 
+                                         help="Delete original files after successful conversion without prompting"),
+    overwrite: bool = typer.Option(False, "-o", "--overwrite", 
+                                   help="Force overwrite destination file")
+):
+    """Batch convert MP4s to AV1 using AMD GPU."""
     check_ffmpeg()
-    convert_videos(args.input_path, args.output_dir, args.bitrate, args.delete_original, args.overwrite)
+    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
 
 if __name__ == "__main__":
-    main()
+    app()
