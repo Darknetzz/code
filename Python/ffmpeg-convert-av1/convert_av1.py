@@ -60,17 +60,19 @@ def maybe_delete_original(original_path, auto_delete=False):
         if auto_delete:
             os.remove(original_path)
             cprint(f"Deleted original: {original_path}")
-            return
+            return False
         resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
+            return False
         elif resp in ("a", "all"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
-            return True  # Signal to enable auto_delete for remaining files
+            return True  # Signal to enable auto-delete for remaining files
         else:
             cprint("Kept original.", "info")
+            return False
     except Exception as e:
         cprint(f"Could not delete {original_path}: {e}", "warning")
     return False
@@ -107,6 +109,7 @@ def get_video_bitrate(video_path):
 # ============================================================================ #
 def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     filename = os.path.basename(input_path)
+    enable_auto_delete = False
     
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
@@ -217,7 +220,9 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         if file_size <= new_file_size:
             cprint(f"Converted file is not smaller than original for {filename}. Keeping original.", "warning")
         else:
-            maybe_delete_original(input_path, auto_delete=delete_original)
+            enable_auto = maybe_delete_original(input_path, auto_delete=delete_original)
+            if enable_auto:
+                delete_original = True
     else:
         cprint(f"Conversion failed for {filename}. Output file '{output_path}' does not exist.", "error")
 
@@ -240,7 +245,10 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
         for filename in os.listdir(input_path):
             if filename.lower().endswith(".mp4"):
                 file_path = os.path.join(input_path, filename)
-                convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
+                # Pass delete_original by reference through function calls
+                result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
+                if result:
+                    delete_original = True
     else:
         cprint(f"{input_path} is neither a valid file nor directory.", "error")
         sys.exit(1)
