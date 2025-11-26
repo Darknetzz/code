@@ -62,7 +62,7 @@ def maybe_delete_original(original_path, auto_delete=False):
         if auto_delete:
             os.remove(original_path)
             cprint(f"Deleted original: {original_path}")
-            return False
+            return True
         resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
@@ -71,6 +71,7 @@ def maybe_delete_original(original_path, auto_delete=False):
         elif resp in ("a", "all"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
+            cprint("Auto-delete enabled for remaining files.", "info")
             return True  # Signal to enable auto-delete for remaining files
         else:
             cprint("Kept original.", "info")
