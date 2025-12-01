@@ -13,8 +13,9 @@ import typer
 console = Console()
 app = typer.Typer()
 
-# Global flag for Hardware Codec
-HARDWARE_CODEC_TYPE = None 
+# Store detected encoder info
+# Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu"}
+ACTIVE_ENCODER = None
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -46,10 +47,8 @@ def cprint(message, type="", style="bold green", **kwargs):
 def get_input_bitrate(file_path):
     """
     Returns the bitrate of the video stream in bits/s.
-    Tries metadata first, calculates from size/duration if metadata fails.
     """
     try:
-        # Method 1: Ask FFprobe for stream bitrate
         cmd = [
             "ffprobe", "-v", "error", 
             "-select_streams", "v:0",
@@ -62,7 +61,7 @@ def get_input_bitrate(file_path):
         if val.isdigit():
             return int(val)
         
-        # Method 2: Calculate from file size and duration (Fallback)
+        # Fallback: Calculate from duration/size
         cmd_dur = [
             "ffprobe", "-v", "error", 
             "-show_entries", "format=duration",
@@ -74,8 +73,6 @@ def get_input_bitrate(file_path):
         size = os.path.getsize(file_path)
         
         if duration > 0:
-            # size (bytes) * 8 / duration (sec) = bits/sec
-            # Multiply by 0.9 to account for audio/container overhead roughly
             return int((size * 8 / duration) * 0.9)
             
     except Exception as e:
@@ -84,11 +81,14 @@ def get_input_bitrate(file_path):
     return None
 
 # ============================================================================ #
-#                       FUNCTION: check_hardware_encoder                       #
+#                       FUNCTION: check_encoder_support                        #
 # ============================================================================ #
-def check_hardware_encoder(encoder_name):
+def check_encoder_support(encoder_name):
+    """
+    Checks if a specific FFmpeg encoder is usable (drivers installed).
+    """
     try:
-        # Use 720p test to satisfy RDNA3 requirement
+        # Use 720p test to satisfy RDNA3 and newer NVENC requirements
         cmd = [
             "ffmpeg", "-v", "quiet", "-f", "lavfi",
             "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
@@ -102,21 +102,38 @@ def check_hardware_encoder(encoder_name):
 #                            FUNCTION: check_ffmpeg                            #
 # ============================================================================ #
 def check_ffmpeg():
-    global HARDWARE_CODEC_TYPE
+    global ACTIVE_ENCODER
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found.", "error")
         raise typer.Exit(code=1)
     
-    cprint("Detecting Hardware Encoder Support...", "info")
-    if check_hardware_encoder("av1_amf"):
-        HARDWARE_CODEC_TYPE = "av1"
-        cprint("Hardware Found: AMD AV1 (`av1_amf`). Using RX 7000+ Engine.", "success")
-    elif check_hardware_encoder("hevc_amf"):
-        HARDWARE_CODEC_TYPE = "hevc"
-        cprint("Hardware Found: AMD HEVC (`hevc_amf`). Fallback mode.", "success")
-    else:
-        HARDWARE_CODEC_TYPE = None
-        cprint("No AMD Hardware. Using CPU (`libsvtav1`).", "warning")
+    cprint("Detecting Best Available Encoder...", "info")
+    
+    # --- PRIORITY 1: AV1 HARDWARE (RTX 40-series / RX 7000-series) ---
+    if check_encoder_support("av1_nvenc"):
+        ACTIVE_ENCODER = {"encoder": "av1_nvenc", "codec": "av1", "hw_type": "nvidia"}
+        cprint("Hardware Found: NVIDIA AV1 (`av1_nvenc`).", "success")
+        return
+        
+    if check_encoder_support("av1_amf"):
+        ACTIVE_ENCODER = {"encoder": "av1_amf", "codec": "av1", "hw_type": "amd"}
+        cprint("Hardware Found: AMD AV1 (`av1_amf`).", "success")
+        return
+
+    # --- PRIORITY 2: HEVC HARDWARE (GTX 900+ / RX 5000+) ---
+    if check_encoder_support("hevc_nvenc"):
+        ACTIVE_ENCODER = {"encoder": "hevc_nvenc", "codec": "hevc", "hw_type": "nvidia"}
+        cprint("Hardware Found: NVIDIA HEVC (`hevc_nvenc`).", "success")
+        return
+
+    if check_encoder_support("hevc_amf"):
+        ACTIVE_ENCODER = {"encoder": "hevc_amf", "codec": "hevc", "hw_type": "amd"}
+        cprint("Hardware Found: AMD HEVC (`hevc_amf`).", "success")
+        return
+
+    # --- PRIORITY 3: CPU FALLBACK ---
+    ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+    cprint("No Hardware Encoder detected. Using CPU (`libsvtav1`).", "warning")
 
 # ============================================================================ #
 #                          FUNCTION: needs_transcoding                         #
@@ -127,12 +144,20 @@ def needs_transcoding(file_path):
         result = subprocess.run(cmd, capture_output=True, text=True)
         data = json.loads(result.stdout)
 
+        target_codec = ACTIVE_ENCODER["codec"]
+
         for stream in data.get('streams', []):
             if stream.get('codec_type') == 'video':
-                codec = stream.get('codec_name')
-                if HARDWARE_CODEC_TYPE == "av1" and codec == 'av1': return False
-                if HARDWARE_CODEC_TYPE == "hevc" and codec in ['hevc', 'h265']: return False
-                return True
+                current_codec = stream.get('codec_name')
+                
+                # Logic: If we are targeting AV1, skip if already AV1.
+                # If targeting HEVC, skip if already HEVC (or AV1, which is better).
+                if target_codec == "av1" and current_codec == "av1": 
+                    return False
+                if target_codec == "hevc" and current_codec in ['hevc', 'h265', 'av1']: 
+                    return False
+                
+                return True # Needs update
         return False
     except Exception:
         return False
@@ -171,11 +196,12 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
 
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
-        suffix = "-AV1.mkv" if HARDWARE_CODEC_TYPE != "hevc" else "-HEVC.mkv"
+        # Naming suffix
+        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     else:
         os.makedirs(output_dir, exist_ok=True)
-        suffix = "_av1.mkv" if HARDWARE_CODEC_TYPE != "hevc" else "_hevc.mkv"
+        suffix = f"_{ACTIVE_ENCODER['codec']}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     
     output_path = os.path.join(output_dir, output_name)
@@ -188,24 +214,22 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
     if bitrate:
-        # User manual override
         if isinstance(bitrate, str) and bitrate.lower().endswith('m'):
              target_bitrate_int = int(bitrate[:-1]) * 1000000
         else:
              target_bitrate_int = int(bitrate)
     else:
-        # AUTO-REDUCTION MODE
         input_bitrate = get_input_bitrate(input_path)
         if input_bitrate:
-            # Force 50% reduction
-            target_bitrate_int = int(input_bitrate * 0.5)
-            cprint(f"Source: {input_bitrate/1000000:.2f} Mbps -> Target (50%): {target_bitrate_int/1000000:.2f} Mbps", "info")
+            target_bitrate_int = int(input_bitrate * 0.5) # Force 50%
+            cprint(f"Source: {input_bitrate/1000000:.2f}M -> Target: {target_bitrate_int/1000000:.2f}M", "info")
         else:
-            cprint("Could not detect input bitrate. Fallback to default low bitrate (2M).", "warning")
-            target_bitrate_int = 2000000 # 2Mbps fallback
+            cprint("Bitrate unknown. Using 2M fallback.", "warning")
+            target_bitrate_int = 2000000
 
     # --- BUILD COMMAND ---
-    pix_fmt = "nv12" if HARDWARE_CODEC_TYPE else "yuv420p"
+    # Hardware Encoders (NVENC/AMF) prefer 'nv12'. CPU prefers 'yuv420p'.
+    pix_fmt = "yuv420p" if ACTIVE_ENCODER["hw_type"] == "cpu" else "nv12"
     
     command = [
         "ffmpeg", "-y", "-i", input_path,
@@ -213,35 +237,50 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         "-movflags", "+faststart",
     ]
 
-    # VBR Settings for Hardware
-    # To enforce size, we use -b:v (Target) and -maxrate (Peak)
-    # Hardware encoders respect these flags better than CQP for sizing.
+    # --- ENCODER SPECIFIC SETTINGS ---
+    encoder_name = ACTIVE_ENCODER["encoder"]
+    hw_type = ACTIVE_ENCODER["hw_type"]
+    codec = ACTIVE_ENCODER["codec"]
+
+    command.extend(["-c:v", encoder_name])
+
+    # Universal Metadata
+    command.extend(["-metadata", "major_brand=mp42", "-metadata", "compatible_brands=mp42av01iso2mp41"])
+    if codec == "hevc":
+        command.extend(["-tag:v", "hvc1"])
+
+    # Rate Control: 50% Reduction Strategy (VBR)
+    # We use typical flags: -b:v (target), -maxrate (peak), -bufsize
     bitrate_args = [
         "-b:v", str(target_bitrate_int),
-        "-maxrate", str(int(target_bitrate_int * 1.2)), # Allow small peaks
+        "-maxrate", str(int(target_bitrate_int * 1.2)),
         "-bufsize", str(int(target_bitrate_int * 2))
     ]
 
-    if HARDWARE_CODEC_TYPE == "av1":
-        command.extend(["-c:v", "av1_amf", "-usage", "transcoding", "-quality", "balanced", "-profile:v", "main"])
+    # Apply Vendor Specific Flags
+    if hw_type == "nvidia":
+        # NVIDIA (NVENC)
+        # -preset p7: Slowest/Best Quality (Hardware is fast enough to afford this)
+        # -rc vbr: Explicitly set VBR mode
+        command.extend(["-preset", "p7", "-rc", "vbr"])
         command.extend(bitrate_args)
         
-    elif HARDWARE_CODEC_TYPE == "hevc":
-        command.extend(["-c:v", "hevc_amf", "-usage", "transcoding", "-quality", "balanced", "-tag:v", "hvc1"])
+    elif hw_type == "amd":
+        # AMD (AMF)
+        # -usage transcoding: Optimization for transcoding workloads
+        # -quality balanced: AMF defaults
+        command.extend(["-usage", "transcoding", "-quality", "balanced", "-profile:v", "main"])
         command.extend(bitrate_args)
         
     else:
-        # CPU Fallback
-        command.extend(["-c:v", "libsvtav1", "-preset", "8", "-g", "240"])
-        # SVT-AV1 prefers CRF, but for forced sizing we can use VBR too. 
-        # But to be safe on CPU, let's map bitrate to a CRF estimate or use VBR.
-        # Let's stick to VBR to guarantee the 50% cut.
+        # CPU (SVT-AV1)
+        command.extend(["-preset", "8", "-g", "240"])
         command.extend(bitrate_args)
 
     # Audio: 64k Opus
     command.extend(["-c:a", "libopus", "-b:a", "64k", "-ac", "2", temp_output])
 
-    cprint(f"Converting: {filename}", "info")
+    cprint(f"Converting: {filename} using {encoder_name}", "info")
     result = subprocess.run(command, check=False)
 
     if result.returncode == 0:
@@ -291,7 +330,7 @@ def main(
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite")
 ):
-    """Force 50% size reduction on AV1/HEVC Hardware."""
+    """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
     check_ffmpeg()
     convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
 
