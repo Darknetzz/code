@@ -122,33 +122,6 @@ def maybe_delete_original(original_path, auto_delete=False):
     return False
 
 # ============================================================================ #
-#                         FUNCTION: get_video_bitrate                          #
-# ============================================================================ #
-def get_video_bitrate(video_path):
-    """Get video bitrate in bits/s using ffprobe."""
-    try:
-        command = [
-            "ffprobe",
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=bit_rate",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path
-        ]
-        cprint(f"Probing for bitrate: {' '.join(command)}", "info")
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        bitrate = result.stdout.strip()
-        if bitrate.isdigit():
-            return int(bitrate)
-        # Handle cases where bitrate is 'N/A' for non-video files or streams
-        cprint(f"Could not determine bitrate for {os.path.basename(video_path)} (bitrate: {bitrate}).", "warning")
-        return None
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        cprint(f"Could not get bitrate for {os.path.basename(video_path)}: {e}", "warning")
-        return None
-
-
-# ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
 def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
@@ -157,13 +130,13 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     if not input_path.lower().endswith(".mp4") and not input_path.lower().endswith(".mkv"):
         cprint(f"File '{input_path}' is not an MP4 or MKV file, skipping...", "info")
         return
-        # raise typer.Exit(code=1)
 
     # Check if transcoding is needed
     if not needs_transcoding(input_path):
         cprint(f"Skipping conversion for {filename} because it is already of AV1 format.", "info")
         return
 
+    # Determine Output Paths
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
         output_name = os.path.splitext(filename)[0] + "-AV1.mkv"
@@ -172,21 +145,18 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         output_name = os.path.splitext(filename)[0] + "_av1.mkv"
     
     output_path = os.path.join(output_dir, output_name)
+    temp_output = f"{output_path}.temp.mkv"  # <--- Atomic Swap Temp File
 
+    # Check if final output already exists (Safety Check)
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if overwrite:
             cprint(f"Overwriting existing file: {output_path}", "warning")
-            os.remove(output_path)
+            # We don't delete here; atomic swap will replace it at the end.
         else:
             resp = input(f"Output file already exists: {output_path}\nDo you want to delete it and proceed? [y/N]: ").strip().lower()
-            if resp in ("y", "yes"):
-                cprint(f"Deleting existing file: {output_path}", "warning")
-                os.remove(output_path)
-            else:
+            if not resp in ("y", "yes"):
                 cprint(f"Skipping conversion for {filename}.", "info")
                 return
-
-            
 
     # Check file size before conversion
     file_size = os.path.getsize(input_path)
@@ -194,20 +164,10 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         cprint(f"Skipping zero-byte file: {filename}", "warning")
         return
 
-    # Base command arguments
-    # command = [
-    #     "ffmpeg",
-    #     "-i", input_path,
-    #     "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p,scale=in_range=limited:out_range=limited",
-    #     "-c:v", "av1_amf",
-    #     "-quality", "balanced",  # Use balanced for better compression than speed
-    #     "-c:a", "libopus",
-    #     "-b:a", "128k",          # Slightly better audio quality
-    #     "-ac", "2",              # Stereo audio
-    # ]
-    # NOTE: New updated command
+    # Base command arguments (Hardware Agnostic / Apple Compatible)
     command = [
         "ffmpeg",
+        "-y", # Overwrite the TEMP file if it exists (leftover from crash)
         "-i", input_path,
         
         # --- VIDEO FILTERS ---
@@ -218,11 +178,9 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         # --- VIDEO ENCODER (CPU) ---
         "-c:v", "libsvtav1",
         "-preset", "6",       # 6 is the sweet spot. 4 is slow/best, 8 is fast.
-        "-crf", "26",         # 26 is visually transparent for 1080p. Go to 30 for smaller files.
         "-g", "240",          # Keyframe interval (10s at 24fps). Good for seeking.
         
-        # --- COMPATIBILITY FLAGS (The "Reddit" magic) ---
-        # Essential for playback on Apple devices and Web browsers
+        # --- COMPATIBILITY FLAGS ---
         "-movflags", "+faststart",
         "-metadata", "major_brand=mp42",
         "-metadata", "compatible_brands=mp42av01iso2mp41",
@@ -230,83 +188,79 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         # --- AUDIO ENCODER ---
         "-c:a", "libopus",
         "-b:a", "128k",       # 128k Opus ~= 256k MP3. Plenty for stereo.
-        "-ac", "2",           # Force Stereo (Downmix 5.1 if needed)
-        
-        output_path
+        "-ac", "2",           # Force Stereo
     ]
 
     # --- Rate Control Logic ---
-    # This section determines the bitrate for the output file.
-    # If the user specifies a bitrate, we use that. Otherwise, we calculate
-    # a new bitrate that is 60% of the original file's bitrate to ensure
-    # the output file is smaller.
-
-    final_bitrate = 0
+    target_bitrate_int = 0
+    
     if bitrate:
-        # User-specified bitrate (e.g., "8M" or "8000k")
+        # User explicitly requested a bitrate -> Use VBR Mode
         cprint(f"Using user-specified bitrate: {bitrate}", "info")
-        # We need to convert bitrate string like "8M" to an integer for calculation
         if isinstance(bitrate, str):
             try:
                 if bitrate.lower().endswith('k'):
-                    final_bitrate = int(bitrate[:-1]) * 1000
+                    target_bitrate_int = int(bitrate[:-1]) * 1000
                 elif bitrate.lower().endswith('m'):
-                    final_bitrate = int(bitrate[:-1]) * 1000000
+                    target_bitrate_int = int(bitrate[:-1]) * 1000000
                 else:
-                    final_bitrate = int(bitrate)
+                    target_bitrate_int = int(bitrate)
             except ValueError:
-                cprint(f"Invalid bitrate format: {bitrate}", "error")
-                final_bitrate = 0
+                cprint(f"Invalid bitrate format: {bitrate}. Falling back to CRF.", "error")
+                target_bitrate_int = 0
         else:
-            final_bitrate = bitrate
+            target_bitrate_int = bitrate
 
-    else:
-        # Dynamically set bitrate to 60% of original
-        original_bitrate = get_video_bitrate(input_path)
-        if original_bitrate and original_bitrate > 0:
-            final_bitrate = int(original_bitrate * 0.6)
-            cprint(f"Original bitrate: {original_bitrate / 1000:.0f}k, Target bitrate: {final_bitrate / 1000:.0f}k", "info")
-
-    if final_bitrate > 0:
-        # Use constrained VBR (vbr_peak) for reliable bitrate targeting
-        max_bitrate = int(final_bitrate * 1.75)
-        buf_size = int(final_bitrate * 1.75)
+    if target_bitrate_int > 0:
+        # VBR Mode (Constrained Bitrate)
+        max_rate = int(target_bitrate_int * 1.5)
+        buf_size = int(target_bitrate_int * 2)
         command.extend([
-            "-rc", "vbr_peak",
-            "-b:v", str(final_bitrate),
-            "-maxrate", str(max_bitrate),
+            "-b:v", str(target_bitrate_int),
+            "-maxrate", str(max_rate),
             "-bufsize", str(buf_size)
         ])
     else:
-        # Fallback to a higher QP value if bitrate can't be determined
-        cprint("Falling back to Constant QP (32) due to missing bitrate info.", "warning")
-        command.extend([
-            "-rc", "cqp",
-            "-qp_i", "32",
-            "-qp_p", "32",
-            "-qp_b", "32",
-        ])
+        # CRF Mode (Quality Based) - Default
+        # Replaces old "60% of original" logic which is unreliable
+        cprint("No bitrate specified. Using CRF 26 (High Quality / Balanced).", "info")
+        command.extend(["-crf", "26"])
 
-    command.append(output_path)
+    # Write to TEMP path first
+    command.append(temp_output)
 
     cprint(f"Command: {' '.join(command)}", "info")
-
     cprint(f"Converting: {filename}", "info")
-    subprocess.run(command, check=True)
+    
+    # Run FFmpeg (check=False so we can handle errors manually)
+    result = subprocess.run(command, check=False)
 
-    # Only attempt deletion if conversion succeeded
-    if os.path.exists(output_path):
-        new_file_size = os.path.getsize(output_path)
-        cprint(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
-        
-        if file_size <= new_file_size:
-            cprint(f"Converted file is not smaller than original for {filename}. Keeping original.", "warning")
-        else:
-            enable_auto = maybe_delete_original(input_path, auto_delete=delete_original)
-            if enable_auto:
-                delete_original = True
+    if result.returncode == 0:
+        # SUCCESS: Perform Atomic Swap
+        try:
+            if os.path.exists(temp_output):
+                os.replace(temp_output, output_path)
+                
+                new_file_size = os.path.getsize(output_path)
+                cprint(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
+                
+                if file_size <= new_file_size:
+                    cprint(f"Converted file is not smaller than original for {filename}. Keeping original.", "warning")
+                else:
+                    enable_auto = maybe_delete_original(input_path, auto_delete=delete_original)
+                    if enable_auto:
+                        delete_original = True
+            else:
+                cprint(f"Error: FFmpeg reported success, but temp file {temp_output} is missing!", "error")
+        except OSError as e:
+            cprint(f"Error swapping temp file to final path: {e}", "error")
     else:
-        cprint(f"Conversion failed for {filename}. Output file '{output_path}' does not exist.", "error")
+        # FAILURE: Clean up temp file
+        cprint(f"Conversion failed for {filename} (Error code: {result.returncode})", "error")
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+
+    return delete_original
 
 # ============================================================================ #
 #                           FUNCTION: convert_videos                           #
@@ -324,9 +278,11 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
         for filename in os.listdir(input_path):
             if filename.lower().endswith(".mp4") or filename.lower().endswith(".mkv"):
                 file_path = os.path.join(input_path, filename)
-                # Pass delete_original by reference through function calls
-                result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
-                if result:
+                # Pass delete_original by reference through function calls logic
+                result_delete_flag = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
+                
+                # If user selected "All" in the prompt, update the flag for future loops
+                if isinstance(result_delete_flag, bool) and result_delete_flag:
                     delete_original = True
     else:
         cprint(f"{input_path} is neither a valid file nor directory.", "error")
@@ -341,13 +297,13 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
 def main(
     input_path: str = typer.Argument(..., help="Path to input file or directory containing .mp4 files"),
     output_dir: Optional[str] = typer.Argument(None, help="Path to output directory for converted files (optional)"),
-    bitrate: Optional[str] = typer.Option(None, help="Target video bitrate (default: same as source)"),
+    bitrate: Optional[str] = typer.Option(None, help="Target video bitrate (default: CRF 26)"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original", 
                                          help="Delete original files after successful conversion without prompting"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite", 
                                    help="Force overwrite destination file")
 ):
-    """Batch convert MP4s to AV1 using AMD GPU."""
+    """Batch convert MP4s to AV1 using libsvtav1 (CPU)."""
     check_ffmpeg()
     convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
 
