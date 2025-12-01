@@ -2,7 +2,7 @@
 #                                convert_av1.py                                #
 # ============================================================================ #
 # usage:
-# python convert_av1.py "C:\Videos\Input" "C:\Videos\Output" --bitrate 8M
+# python convert_av1.py "C:\Videos\Input" "C:\Videos\Output"
 # python convert_av1.py "C:\Videos\video.mp4" --delete-original
 
 import os, subprocess, shutil, sys, json
@@ -13,8 +13,9 @@ import typer
 console = Console()
 app = typer.Typer()
 
-# Global flag to cache detection result so we don't check every single file
-HAS_AMD_GPU = False
+# Global flag to store which HARDWARE codec is available
+# Values: "av1", "hevc", or None (CPU)
+HARDWARE_CODEC_TYPE = None 
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -43,19 +44,17 @@ def cprint(message, type="", style="bold green", **kwargs):
 # ============================================================================ #
 #                       FUNCTION: check_hardware_encoder                       #
 # ============================================================================ #
-def check_hardware_encoder(encoder_name="av1_amf"):
+def check_hardware_encoder(encoder_name):
     """
     Checks if a specific FFmpeg encoder is available and working.
-    Returns True if the encoder is usable.
     """
     try:
-        # We try to encode 1 frame of black video to null. 
-        # If this succeeds, the hardware is present and drivers are working.
+        # We use 1280x720 because many GPUs fail to initialize on tiny (64x64) resolutions
         cmd = [
             "ffmpeg",
             "-v", "quiet",
             "-f", "lavfi",
-            "-i", "color=c=black:s=64x64:d=0.01",
+            "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
             "-c:v", encoder_name,
             "-f", "null",
             "-"
@@ -69,19 +68,29 @@ def check_hardware_encoder(encoder_name="av1_amf"):
 #                            FUNCTION: check_ffmpeg                            #
 # ============================================================================ #
 def check_ffmpeg():
+    global HARDWARE_CODEC_TYPE
+    
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found in your system PATH.", "error")
         raise typer.Exit(code=1)
     
-    # Check for AMD GPU availability once at startup
-    global HAS_AMD_GPU
-    cprint("Checking for AMD GPU (av1_amf)...", "info")
+    cprint("Detecting Hardware Encoder Support...", "info")
+    
+    # 1. Try AV1 GPU (Best/Newest) - RX 7000+ Series
     if check_hardware_encoder("av1_amf"):
-        HAS_AMD_GPU = True
-        cprint("AMD GPU Detected! Using 'av1_amf' for hardware acceleration.", "success")
+        HARDWARE_CODEC_TYPE = "av1"
+        cprint("Hardware Found: AMD AV1 (`av1_amf`). Using RX 7000+ Engine.", "success")
+        
+    # 2. Try HEVC GPU (Fast & Compatible) - RX 6000/5000 Series
+    elif check_hardware_encoder("hevc_amf"):
+        HARDWARE_CODEC_TYPE = "hevc"
+        cprint("Hardware Found: AMD HEVC/H.265 (`hevc_amf`).", "success")
+        cprint("Note: AV1 hardware encode failed, using HEVC fallback.", "info")
+        
+    # 3. Fallback to CPU
     else:
-        HAS_AMD_GPU = False
-        cprint("No AMD GPU detected (or av1_amf unavailable). Falling back to CPU 'libsvtav1'.", "warning")
+        HARDWARE_CODEC_TYPE = None
+        cprint("No AMD Hardware Encoder detected. Falling back to CPU (`libsvtav1`).", "warning")
 
 # ============================================================================ #
 #                          FUNCTION: needs_transcoding                         #
@@ -102,9 +111,19 @@ def needs_transcoding(file_path):
         for stream in data.get('streams', []):
             if stream.get('codec_type') == 'video':
                 codec = stream.get('codec_name')
-                if codec == 'av1':
-                    print(f"Skipping {file_path}: Already AV1.")
-                    return False
+                
+                # If we are targeting AV1, skip if already AV1
+                if HARDWARE_CODEC_TYPE == "av1" or HARDWARE_CODEC_TYPE is None:
+                    if codec == 'av1':
+                        print(f"Skipping {file_path}: Already AV1.")
+                        return False
+                        
+                # If we are targeting HEVC, skip if already HEVC
+                if HARDWARE_CODEC_TYPE == "hevc":
+                    if codec in ['hevc', 'h265']:
+                        print(f"Skipping {file_path}: Already HEVC/H.265.")
+                        return False
+                        
                 return True
 
         print(f"Skipping {file_path}: No video stream found.")
@@ -150,15 +169,17 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         return
 
     if not needs_transcoding(input_path):
-        cprint(f"Skipping conversion for {filename} because it is already of AV1 format.", "info")
         return
 
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
-        output_name = os.path.splitext(filename)[0] + "-AV1.mkv"
+        # Naming convention based on codec
+        suffix = "-AV1.mkv" if HARDWARE_CODEC_TYPE != "hevc" else "-HEVC.mkv"
+        output_name = os.path.splitext(filename)[0] + suffix
     else:
         os.makedirs(output_dir, exist_ok=True)
-        output_name = os.path.splitext(filename)[0] + "_av1.mkv"
+        suffix = "_av1.mkv" if HARDWARE_CODEC_TYPE != "hevc" else "_hevc.mkv"
+        output_name = os.path.splitext(filename)[0] + suffix
     
     output_path = os.path.join(output_dir, output_name)
     temp_output = f"{output_path}.temp.mkv"
@@ -178,38 +199,53 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         return
 
     # ------------------------------------------------------------------------ #
-    #                       BUILDING THE COMMAND DYNAMICALLY                   #
+    #                       BUILDING THE COMMAND                               #
     # ------------------------------------------------------------------------ #
+    
+    # DETERMINE PIXEL FORMAT
+    # AMD AMF (GPU) requires 'nv12'
+    # SVT-AV1 (CPU) works best with 'yuv420p'
+    pix_fmt = "nv12" if HARDWARE_CODEC_TYPE else "yuv420p"
     
     command = [
         "ffmpeg",
         "-y",
         "-i", input_path,
-        "-vf", "scale='min(1920,iw)':-2:force_original_aspect_ratio=decrease,format=yuv420p",
-        # Apple / Web Compatibility Flags
+        "-vf", f"scale='min(1920,iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
         "-movflags", "+faststart",
-        "-metadata", "major_brand=mp42",
-        "-metadata", "compatible_brands=mp42av01iso2mp41",
     ]
 
-    # --- Video Encoder Selection (The Fork) ---
-    if HAS_AMD_GPU:
-        # GPU PATH (Fast & Small)
+    # --- Codec Selection & Metadata ---
+    if HARDWARE_CODEC_TYPE == "av1":
+        # === TIER 1: AV1 GPU (RX 7000+) ===
         command.extend([
             "-c:v", "av1_amf",
             "-usage", "transcoding",
             "-quality", "balanced",
             "-profile:v", "main",
+            "-metadata", "major_brand=mp42",
+            "-metadata", "compatible_brands=mp42av01iso2mp41",
+        ])
+    elif HARDWARE_CODEC_TYPE == "hevc":
+        # === TIER 2: HEVC GPU (RX 6000/5000) ===
+        command.extend([
+            "-c:v", "hevc_amf",
+            "-usage", "transcoding",
+            "-quality", "balanced",
+            "-profile:v", "main",
+            "-tag:v", "hvc1", 
         ])
     else:
-        # CPU PATH (Compatible & Small)
+        # === TIER 3: AV1 CPU (Universal) ===
         command.extend([
             "-c:v", "libsvtav1",
-            "-preset", "8", # Faster preset for mass archiving
+            "-preset", "8",
             "-g", "240",
+            "-metadata", "major_brand=mp42",
+            "-metadata", "compatible_brands=mp42av01iso2mp41",
         ])
 
-    # --- Rate Control Logic (Bitrate vs Quality) ---
+    # --- Rate Control (Max Compression Strategy) ---
     target_bitrate_int = 0
     if bitrate:
         cprint(f"Using user-specified bitrate: {bitrate}", "info")
@@ -222,13 +258,12 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
                 else:
                     target_bitrate_int = int(bitrate)
             except ValueError:
-                cprint(f"Invalid bitrate format. Falling back to default quality.", "error")
                 target_bitrate_int = 0
         else:
             target_bitrate_int = bitrate
 
     if target_bitrate_int > 0:
-        # VBR Mode (Target Bitrate)
+        # User defined bitrate
         max_rate = int(target_bitrate_int * 1.5)
         buf_size = int(target_bitrate_int * 2)
         command.extend([
@@ -237,23 +272,23 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
             "-bufsize", str(buf_size)
         ])
     else:
-        # MAX COMPRESSION MODE (CRF/QP 45)
-        # We pushed these values way up to prioritize small file size over quality.
-        if HAS_AMD_GPU:
-            cprint("GPU Mode: Using CQP 45 (Aggressive Compression)", "info")
-            command.extend([
-                "-rc", "cqp", 
-                "-qp_i", "45", 
-                "-qp_p", "45",
-            ])
+        # MAX COMPRESSION AUTO-SETTINGS (CQP 45)
+        if HARDWARE_CODEC_TYPE == "av1":
+            cprint("GPU AV1 Mode: Using CQP 45 (Aggressive)", "info")
+            command.extend(["-rc", "cqp", "-qp_i", "45", "-qp_p", "45"])
+            
+        elif HARDWARE_CODEC_TYPE == "hevc":
+            cprint("GPU HEVC Mode: Using CQP 35 (Aggressive)", "info")
+            command.extend(["-rc", "cqp", "-qp_i", "35", "-qp_p", "35"])
+            
         else:
-            cprint("CPU Mode: Using CRF 45 (Aggressive Compression)", "info")
+            cprint("CPU AV1 Mode: Using CRF 45 (Aggressive)", "info")
             command.extend(["-crf", "45"])
 
     # --- Audio Encoder (Reduced to 64k for size) ---
     command.extend([
         "-c:a", "libopus",
-        "-b:a", "64k", # 64k is "good enough" and saves space
+        "-b:a", "64k",
         "-ac", "2",
         temp_output 
     ])
@@ -271,17 +306,17 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
                 cprint(f"Converted {filename}: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
                 
                 if file_size <= new_file_size:
-                    cprint(f"Converted file is not smaller than original for {filename}. Keeping original.", "warning")
+                    cprint(f"Warning: Output is larger or same size.", "warning")
                 else:
                     enable_auto = maybe_delete_original(input_path, auto_delete=delete_original)
                     if enable_auto:
                         delete_original = True
             else:
-                cprint(f"Error: FFmpeg success, but temp file missing!", "error")
+                cprint(f"Error: Temp file missing!", "error")
         except OSError as e:
             cprint(f"Error swapping files: {e}", "error")
     else:
-        cprint(f"Conversion failed for {filename} (Error: {result.returncode})", "error")
+        cprint(f"Conversion failed (Error: {result.returncode})", "error")
         if os.path.exists(temp_output):
             os.remove(temp_output)
 
@@ -303,7 +338,6 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
             if filename.lower().endswith((".mp4", ".mkv")):
                 file_path = os.path.join(input_path, filename)
                 result_delete_flag = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
-                
                 if isinstance(result_delete_flag, bool) and result_delete_flag:
                     delete_original = True
     else:
@@ -322,7 +356,7 @@ def main(
     delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Delete original files after success"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Force overwrite destination")
 ):
-    """Batch convert MP4s to AV1 (Auto-detects AMD GPU vs CPU)."""
+    """Batch convert video to optimized formats (Auto-detects AV1/HEVC Hardware)."""
     check_ffmpeg()
     convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
 
