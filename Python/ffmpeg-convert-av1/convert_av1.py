@@ -9,10 +9,7 @@ r"""
 # python convert_av1.py "C:\Videos\video.mp4" --bitrate 8M --delete-original
 """
 
-import os
-import subprocess
-import shutil
-import sys
+import os, subprocess, shutil, sys, json
 from typing import Optional
 from rich.console import Console
 import typer
@@ -53,6 +50,50 @@ def check_ffmpeg():
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found in your system PATH.", "error")
         raise typer.Exit(code=1)
+
+# ============================================================================ #
+#                          FUNCTION: needs_transcoding                         #
+# ============================================================================ #
+def needs_transcoding(file_path):
+    """
+    Returns True if the file needs transcoding (i.e., video is NOT av1).
+    Returns False if video is already av1 or if no video stream exists.
+    """
+    try:
+        # We ask for all streams, formatted as JSON, quietly (-v quiet)
+        cmd = [
+            "ffprobe",
+            "-v", "quiet",
+            "-print_format", "json",
+            "-show_streams",
+            file_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        data = json.loads(result.stdout)
+
+        # Iterate through streams to find the Video stream
+        for stream in data.get('streams', []):
+            if stream.get('codec_type') == 'video':
+                codec = stream.get('codec_name')
+                
+                # The core check: Is it already AV1?
+                if codec == 'av1':
+                    print(f"Skipping {file_path}: Already AV1.")
+                    return False
+                
+                # Optional: You can add logic here to re-encode AV1 
+                # if it's the WRONG kind of AV1 (e.g., massive bitrate)
+                # but for now, we assume if it's AV1, it's good.
+                return True
+
+        # If we get here, it's probably an audio file or has no video
+        print(f"Skipping {file_path}: No video stream found.")
+        return False
+    except Exception as e:
+        print(f"Error probing {file_path}: {e}")
+        return False
+        # Safety: Don't encode if we can't read it
 
 # ============================================================================ #
 #                        FUNCTION: maybe_delete_original                       #
@@ -117,6 +158,11 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         cprint(f"File '{input_path}' is not an MP4 or MKV file, skipping...", "info")
         return
         # raise typer.Exit(code=1)
+
+    # Check if transcoding is needed
+    if not needs_transcoding(input_path):
+        cprint(f"Skipping conversion for {filename} because it is already of AV1 format.", "info")
+        return
 
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
