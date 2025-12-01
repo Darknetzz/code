@@ -192,7 +192,9 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     
     if not input_path.lower().endswith((".mp4", ".mkv")): return
 
-    if not needs_transcoding(input_path): return
+    if not needs_transcoding(input_path):
+        cprint("Skipping (No Transcoding Needed): " + filename, "info")
+        return
 
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
