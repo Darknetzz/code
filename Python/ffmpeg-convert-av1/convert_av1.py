@@ -13,6 +13,32 @@ import typer
 console = Console()
 app = typer.Typer()
 
+# App metadata
+__app_name__ = "convert_av1"
+__version__ = "0.1.0"
+
+# Global --version flag callback
+def _version_callback(value: bool):
+    if value:
+        typer.echo(f"{__app_name__} {__version__}")
+        raise typer.Exit()
+
+# Register global options (eager)
+@app.callback()
+def _app_callback(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+        is_flag=True,
+    ),
+):
+    """Global options for the CLI."""
+    return
+
 # Store detected encoder info
 # Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu"}
 ACTIVE_ENCODER = None
