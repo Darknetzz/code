@@ -234,8 +234,8 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
 def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
-        if not input_path.lower().endswith(".mp4"):
-            cprint(f"File '{input_path}' is not an MP4 file.", "error")
+        if not input_path.lower().endswith(".mp4") and not input_path.lower().endswith(".mkv"):
+            cprint(f"File '{input_path}' is not an MP4 or MKV file.", "error")
             raise typer.Exit(code=1)
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
     elif os.path.isdir(input_path):
