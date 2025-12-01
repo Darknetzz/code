@@ -113,6 +113,11 @@ def get_video_bitrate(video_path):
 def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     filename = os.path.basename(input_path)
     
+    if not input_path.lower().endswith(".mp4") and not input_path.lower().endswith(".mkv"):
+        cprint(f"File '{input_path}' is not an MP4 or MKV file, skipping...", "info")
+        return
+        # raise typer.Exit(code=1)
+
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
         output_name = os.path.splitext(filename)[0] + "-AV1.mkv"
@@ -234,9 +239,6 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
 def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
     # Auto-detect if input is a file or directory
     if os.path.isfile(input_path):
-        if not input_path.lower().endswith(".mp4") and not input_path.lower().endswith(".mkv"):
-            cprint(f"File '{input_path}' is not an MP4 or MKV file.", "error")
-            raise typer.Exit(code=1)
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
     elif os.path.isdir(input_path):
         if output_dir is None:
@@ -245,7 +247,7 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
             os.makedirs(output_dir, exist_ok=True)
 
         for filename in os.listdir(input_path):
-            if filename.lower().endswith(".mp4"):
+            if filename.lower().endswith(".mp4") or filename.lower().endswith(".mkv"):
                 file_path = os.path.join(input_path, filename)
                 # Pass delete_original by reference through function calls
                 result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
