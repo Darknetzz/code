@@ -149,15 +149,44 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         return
 
     # Base command arguments
+    # command = [
+    #     "ffmpeg",
+    #     "-i", input_path,
+    #     "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p,scale=in_range=limited:out_range=limited",
+    #     "-c:v", "av1_amf",
+    #     "-quality", "balanced",  # Use balanced for better compression than speed
+    #     "-c:a", "libopus",
+    #     "-b:a", "128k",          # Slightly better audio quality
+    #     "-ac", "2",              # Stereo audio
+    # ]
+    # NOTE: New updated command
     command = [
         "ffmpeg",
         "-i", input_path,
-        "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p,scale=in_range=limited:out_range=limited",
-        "-c:v", "av1_amf",
-        "-quality", "balanced",  # Use balanced for better compression than speed
+        
+        # --- VIDEO FILTERS ---
+        # Scale to max 1080p, prevent upscaling (force_original...=decrease), 
+        # and ensure pixel format is compatible (yuv420p is the safest for players)
+        "-vf", "scale='min(1920,iw)':-2:force_original_aspect_ratio=decrease,format=yuv420p",
+        
+        # --- VIDEO ENCODER (CPU) ---
+        "-c:v", "libsvtav1",
+        "-preset", "6",       # 6 is the sweet spot. 4 is slow/best, 8 is fast.
+        "-crf", "26",         # 26 is visually transparent for 1080p. Go to 30 for smaller files.
+        "-g", "240",          # Keyframe interval (10s at 24fps). Good for seeking.
+        
+        # --- COMPATIBILITY FLAGS (The "Reddit" magic) ---
+        # Essential for playback on Apple devices and Web browsers
+        "-movflags", "+faststart",
+        "-metadata", "major_brand=mp42",
+        "-metadata", "compatible_brands=mp42av01iso2mp41",
+        
+        # --- AUDIO ENCODER ---
         "-c:a", "libopus",
-        "-b:a", "128k",          # Slightly better audio quality
-        "-ac", "2",              # Stereo audio
+        "-b:a", "128k",       # 128k Opus ~= 256k MP3. Plenty for stereo.
+        "-ac", "2",           # Force Stereo (Downmix 5.1 if needed)
+        
+        output_path
     ]
 
     # --- Rate Control Logic ---
