@@ -15,33 +15,17 @@ app = typer.Typer()
 
 # App metadata
 __app_name__ = "convert_av1"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
-# Global --version flag callback
+# Global --version flag callback (used by root callback)
 def _version_callback(value: bool):
     if value:
         typer.echo(f"{__app_name__} {__version__}")
         raise typer.Exit()
 
-# Register global options (eager)
-@app.callback()
-def _app_callback(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-V",
-        help="Show version and exit.",
-        callback=_version_callback,
-        is_eager=True,
-        is_flag=True,
-    ),
-):
-    """Global options for the CLI."""
-    return
-
-# Store detected encoder info
+# Store detected encoder info (initialized with CPU fallback to satisfy static analysis)
 # Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu"}
-ACTIVE_ENCODER = None
+ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -350,15 +334,25 @@ def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=Fa
     else:
         cprint("Invalid path.", "error")
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
     input_path: str = typer.Argument(..., help="Path to input"),
     output_dir: Optional[str] = typer.Argument(None, help="Output dir"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
-    overwrite: bool = typer.Option(False, "-o", "--overwrite")
+    overwrite: bool = typer.Option(False, "-o", "--overwrite"),
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+        is_flag=True,
+    ),
 ):
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
+    # If version flag triggered, callback already exited.
     check_ffmpeg()
     convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
 
