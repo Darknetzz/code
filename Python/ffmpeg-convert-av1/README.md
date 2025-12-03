@@ -53,6 +53,7 @@ python convert_av1.py "C:\Videos\movie.mkv" --overwrite
 # Manually set target video bitrate
 python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2500k
 python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2.5m
+python convert_av1.py "C:\Videos\movie.mkv" --dry-run
 ```
 
 ## Command reference
@@ -70,6 +71,7 @@ Options:
   -o, --overwrite         Overwrite existing output files
   -V, --version           Show version and exit
   --help                  Show this message and exit
+  --dry-run               Print planned actions without converting
 ```
 
 ## How it works

@@ -17,7 +17,7 @@ app = typer.Typer()
 
 # App metadata
 __app_name__ = "convert_av1"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # Constants
 BITRATE_REDUCTION_FACTOR = 0.5
@@ -285,7 +285,7 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False) -> bool:
+                       overwrite: bool = False, dry_run: bool = False) -> bool:
     """
     Converts a single video file to the target codec.
     Returns the current auto_delete state (True if user selected 'all').
@@ -314,9 +314,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     output_path = os.path.join(output_dir, output_name)
     temp_output = f"{output_path}.temp.mkv"
     
-    # Check disk space before proceeding
-    if not check_disk_space(input_path, output_dir):
-        return delete_original
+    # Check disk space before proceeding (skip in dry run)
+    if not dry_run:
+        if not check_disk_space(input_path, output_dir):
+            return delete_original
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
@@ -401,6 +402,20 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     command.extend(["-c:a", "libopus", "-b:a", "64k", temp_output])
 
     cprint(f"Converting: {filename} using {encoder_name}", "info")
+
+    # Dry run: Show planned command and summary, then return without executing
+    if dry_run:
+        summary = {
+            "input": input_path,
+            "output": output_path,
+            "encoder": encoder_name,
+            "codec": codec,
+            "pix_fmt": pix_fmt,
+            "bitrate": target_bitrate_int,
+        }
+        cprint("Dry run: Planned conversion", "info")
+        console.print(summary)
+        return delete_original
     
     try:
         result = subprocess.run(command, check=False)
@@ -461,13 +476,13 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 # ============================================================================ #
 def convert_videos(input_path: str, output_dir: Optional[str] = None, 
                   bitrate: Optional[str] = None, delete_original: bool = False, 
-                  overwrite: bool = False) -> None:
+                  overwrite: bool = False, dry_run: bool = False) -> None:
     """
     Main entry point for converting videos.
     Handles both single files and directory processing.
     """
     if os.path.isfile(input_path):
-        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
+        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
@@ -490,7 +505,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         # Process files with progress tracking
         for idx, file_path in enumerate(video_files, 1):
             cprint(f"\n[{idx}/{len(video_files)}] Processing: {os.path.basename(file_path)}", style="bold cyan")
-            auto_delete_result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
+            auto_delete_result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite, dry_run)
             # Update auto-delete flag based on user's "all" choice
             if auto_delete_result:
                 delete_original = True
@@ -506,6 +521,7 @@ def main(
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without converting"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -519,7 +535,7 @@ def main(
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
     # If version flag triggered, callback already exited.
     check_ffmpeg()
-    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite)
+    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
 
 if __name__ == "__main__":
     app()
