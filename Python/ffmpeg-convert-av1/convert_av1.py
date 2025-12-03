@@ -206,13 +206,15 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         cprint("Skipping (No Transcoding Needed): " + filename, "info")
         return
 
-    # Naming suffix
-    suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
+    # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
+        # When staying in same dir, add suffix to avoid collision during encoding
+        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     else:
         os.makedirs(output_dir, exist_ok=True)
+        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     
     output_path = os.path.join(output_dir, output_name)
@@ -305,8 +307,20 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
                 if file_size <= new_file_size:
                     cprint("Warning: File grew larger! (Entropy issue).", "warning")
                 else:
-                    if maybe_delete_original(input_path, auto_delete=delete_original):
+                    # Delete original and optionally rename to match original name
+                    should_continue_deleting = maybe_delete_original(input_path, auto_delete=delete_original)
+                    if should_continue_deleting is not False:  # True or original was deleted
                         delete_original = True
+                        
+                        # Rename converted file to original name if they're in same directory
+                        if os.path.dirname(output_path) == os.path.dirname(input_path):
+                            original_name_path = input_path
+                            if output_path != original_name_path:
+                                try:
+                                    os.rename(output_path, original_name_path)
+                                    cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
+                                except OSError as e:
+                                    cprint(f"Could not rename to original name: {e}", "warning")
             else:
                 cprint("Error: Temp file missing!", "error")
         except OSError as e:
