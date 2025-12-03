@@ -206,14 +206,13 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         cprint("Skipping (No Transcoding Needed): " + filename, "info")
         return
 
+    # Naming suffix
+    suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
-        # Naming suffix
-        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     else:
         os.makedirs(output_dir, exist_ok=True)
-        suffix = f"_{ACTIVE_ENCODER['codec']}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
     
     output_path = os.path.join(output_dir, output_name)
