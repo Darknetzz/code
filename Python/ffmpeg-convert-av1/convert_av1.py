@@ -6,8 +6,10 @@
 # python convert_av1.py "C:\Videos\video.mp4" --delete-original
 
 import os, subprocess, shutil, sys, json
-from typing import Optional
+from typing import Optional, Tuple
+from pathlib import Path
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 import typer
 
 console = Console()
@@ -15,7 +17,16 @@ app = typer.Typer()
 
 # App metadata
 __app_name__ = "convert_av1"
-__version__ = "0.1.1"
+__version__ = "0.2.0"
+
+# Constants
+BITRATE_REDUCTION_FACTOR = 0.5
+BITRATE_FALLBACK = 2_000_000
+BITRATE_MAXRATE_MULTIPLIER = 1.2
+BITRATE_BUFSIZE_MULTIPLIER = 2.0
+SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm")
+MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
+DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
 # Global --version flag callback (used by root callback)
 def _version_callback(value: bool):
@@ -54,9 +65,10 @@ def cprint(message, type="", style="bold green", **kwargs):
 # ============================================================================ #
 #                      FUNCTION: get_input_bitrate                             #
 # ============================================================================ #
-def get_input_bitrate(file_path):
+def get_input_bitrate(file_path: str) -> Optional[int]:
     """
     Returns the bitrate of the video stream in bits/s.
+    Falls back to calculating from file size and duration if not available.
     """
     try:
         cmd = [
@@ -66,7 +78,7 @@ def get_input_bitrate(file_path):
             "-of", "default=noprint_wrappers=1:nokey=1", 
             file_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         val = result.stdout.strip()
         if val.isdigit():
             return int(val)
@@ -78,13 +90,19 @@ def get_input_bitrate(file_path):
             "-of", "default=noprint_wrappers=1:nokey=1", 
             file_path
         ]
-        result_dur = subprocess.run(cmd_dur, capture_output=True, text=True)
-        duration = float(result_dur.stdout.strip())
-        size = os.path.getsize(file_path)
+        result_dur = subprocess.run(cmd_dur, capture_output=True, text=True, timeout=10)
+        duration_str = result_dur.stdout.strip()
         
-        if duration > 0:
-            return int((size * 8 / duration) * 0.9)
+        if duration_str and duration_str.replace('.', '', 1).isdigit():
+            duration = float(duration_str)
+            size = os.path.getsize(file_path)
             
+            if duration > 0:
+                # Calculate total bitrate, apply 0.9 factor to estimate video-only bitrate
+                return int((size * 8 / duration) * 0.9)
+            
+    except subprocess.TimeoutExpired:
+        cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
     except Exception as e:
         cprint(f"Could not calculate input bitrate: {e}", "warning")
     
@@ -93,9 +111,10 @@ def get_input_bitrate(file_path):
 # ============================================================================ #
 #                       FUNCTION: check_encoder_support                        #
 # ============================================================================ #
-def check_encoder_support(encoder_name):
+def check_encoder_support(encoder_name: str) -> bool:
     """
     Checks if a specific FFmpeg encoder is usable (drivers installed).
+    Uses 720p test to satisfy RDNA3 and newer NVENC requirements.
     """
     try:
         # Use 720p test to satisfy RDNA3 and newer NVENC requirements
@@ -104,7 +123,7 @@ def check_encoder_support(encoder_name):
             "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
             "-c:v", encoder_name, "-f", "null", "-"
         ]
-        return subprocess.run(cmd, check=False).returncode == 0
+        return subprocess.run(cmd, check=False, timeout=5).returncode == 0
     except Exception:
         return False
 
@@ -148,12 +167,20 @@ def check_ffmpeg():
 # ============================================================================ #
 #                          FUNCTION: needs_transcoding                         #
 # ============================================================================ #
-def needs_transcoding(file_path):
+def needs_transcoding(file_path: str) -> bool:
+    """
+    Determines if a video file needs transcoding based on current codec.
+    Returns True if transcoding is needed, False otherwise.
+    """
     try:
         cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", file_path]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
+            cprint(f"Warning: Could not probe {os.path.basename(file_path)}", "warning")
+            return False
+            
         data = json.loads(result.stdout)
-
         target_codec = ACTIVE_ENCODER["codec"]
 
         for stream in data.get('streams', []):
@@ -169,18 +196,30 @@ def needs_transcoding(file_path):
                 
                 return True # Needs update
         return False
-    except Exception:
+    except subprocess.TimeoutExpired:
+        cprint(f"Timeout while probing {os.path.basename(file_path)}", "warning")
+        return False
+    except json.JSONDecodeError:
+        cprint(f"Invalid video file: {os.path.basename(file_path)}", "warning")
+        return False
+    except Exception as e:
+        cprint(f"Error checking file: {e}", "warning")
         return False
 
 # ============================================================================ #
 #                        FUNCTION: maybe_delete_original                       #
 # ============================================================================ #
-def maybe_delete_original(original_path, auto_delete=False):
+def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool:
+    """
+    Prompts to delete the original file or deletes automatically.
+    Returns True if user wants to auto-delete remaining files, False otherwise.
+    """
     try:
         if auto_delete:
             os.remove(original_path)
-            cprint(f"Deleted original: {original_path}")
+            cprint(f"Deleted original: {os.path.basename(original_path)}")
             return True
+            
         resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
@@ -190,21 +229,76 @@ def maybe_delete_original(original_path, auto_delete=False):
             os.remove(original_path)
             cprint("Original deleted.", "success")
             return True
+    except PermissionError:
+        cprint(f"Permission denied: Cannot delete {original_path}", "error")
     except Exception as e:
         cprint(f"Could not delete {original_path}: {e}", "warning")
     return False
 
 # ============================================================================ #
+#                        FUNCTION: check_disk_space                            #
+# ============================================================================ #
+def check_disk_space(file_path: str, output_dir: str) -> bool:
+    """
+    Verifies sufficient disk space is available for conversion.
+    Returns True if enough space, False otherwise.
+    """
+    try:
+        file_size = os.path.getsize(file_path)
+        required_space = int(file_size * DISK_SPACE_SAFETY_MARGIN)
+        
+        stat = shutil.disk_usage(output_dir)
+        if stat.free < required_space:
+            cprint(f"Insufficient disk space. Need {required_space / (1024**3):.2f} GB, have {stat.free / (1024**3):.2f} GB", "error")
+            return False
+        return True
+    except Exception as e:
+        cprint(f"Could not check disk space: {e}", "warning")
+        return True  # Proceed anyway if we can't check
+
+# ============================================================================ #
+#                         FUNCTION: validate_video_file                        #
+# ============================================================================ #
+def validate_video_file(file_path: str) -> bool:
+    """
+    Validates that a file is a supported video file.
+    Returns True if valid, False otherwise.
+    """
+    if not os.path.isfile(file_path):
+        return False
+        
+    if not file_path.lower().endswith(SUPPORTED_EXTENSIONS):
+        return False
+    
+    # Check minimum file size
+    try:
+        if os.path.getsize(file_path) < MIN_FILE_SIZE_BYTES:
+            cprint(f"File too small: {os.path.basename(file_path)}", "warning")
+            return False
+    except OSError:
+        return False
+        
+    return True
+
+# ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
-def convert_single_file(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
+def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
+                       bitrate: Optional[str] = None, delete_original: bool = False, 
+                       overwrite: bool = False) -> bool:
+    """
+    Converts a single video file to the target codec.
+    Returns the current auto_delete state (True if user selected 'all').
+    """
     filename = os.path.basename(input_path)
     
-    if not input_path.lower().endswith((".mp4", ".mkv")): return
+    # Validate file
+    if not validate_video_file(input_path):
+        return delete_original
 
     if not needs_transcoding(input_path):
-        cprint("Skipping (No Transcoding Needed): " + filename, "info")
-        return
+        cprint(f"Skipping (No Transcoding Needed): {filename}", "info")
+        return delete_original
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
@@ -219,26 +313,38 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     
     output_path = os.path.join(output_dir, output_name)
     temp_output = f"{output_path}.temp.mkv"
+    
+    # Check disk space before proceeding
+    if not check_disk_space(input_path, output_dir):
+        return delete_original
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
-            if input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"): return
+            if input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
+                return delete_original
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
     if bitrate:
-        if isinstance(bitrate, str) and bitrate.lower().endswith('m'):
-             target_bitrate_int = int(bitrate[:-1]) * 1000000
-        else:
-             target_bitrate_int = int(bitrate)
-    else:
+        try:
+            if isinstance(bitrate, str) and bitrate.lower().endswith('m'):
+                target_bitrate_int = int(float(bitrate[:-1]) * 1_000_000)
+            elif isinstance(bitrate, str) and bitrate.lower().endswith('k'):
+                target_bitrate_int = int(float(bitrate[:-1]) * 1_000)
+            else:
+                target_bitrate_int = int(bitrate)
+        except ValueError:
+            cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
+            bitrate = None
+    
+    if not bitrate:
         input_bitrate = get_input_bitrate(input_path)
         if input_bitrate:
-            target_bitrate_int = int(input_bitrate * 0.5) # Force 50%
-            cprint(f"Source: {input_bitrate/1000000:.2f}M -> Target: {target_bitrate_int/1000000:.2f}M", "info")
+            target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
+            cprint(f"Source: {input_bitrate/1_000_000:.2f}M -> Target: {target_bitrate_int/1_000_000:.2f}M", "info")
         else:
-            cprint("Bitrate unknown. Using 2M fallback.", "warning")
-            target_bitrate_int = 2000000
+            cprint(f"Bitrate unknown. Using {BITRATE_FALLBACK/1_000_000:.1f}M fallback.", "warning")
+            target_bitrate_int = BITRATE_FALLBACK
 
     # --- BUILD COMMAND ---
     # Hardware Encoders (NVENC/AMF) prefer 'nv12'. CPU prefers 'yuv420p'.
@@ -266,8 +372,8 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
     # We use typical flags: -b:v (target), -maxrate (peak), -bufsize
     bitrate_args = [
         "-b:v", str(target_bitrate_int),
-        "-maxrate", str(int(target_bitrate_int * 1.2)),
-        "-bufsize", str(int(target_bitrate_int * 2))
+        "-maxrate", str(int(target_bitrate_int * BITRATE_MAXRATE_MULTIPLIER)),
+        "-bufsize", str(int(target_bitrate_int * BITRATE_BUFSIZE_MULTIPLIER))
     ]
 
     # Apply Vendor Specific Flags
@@ -290,15 +396,26 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
         command.extend(["-preset", "8", "-g", "240"])
         command.extend(bitrate_args)
 
-    # Audio: 64k Opus
-    command.extend(["-c:a", "libopus", "-b:a", "64k", "-ac", "2", temp_output])
+    # Audio: Copy or convert to Opus
+    # Preserve multi-channel audio if present, otherwise use stereo
+    command.extend(["-c:a", "libopus", "-b:a", "64k", temp_output])
 
     cprint(f"Converting: {filename} using {encoder_name}", "info")
-    result = subprocess.run(command, check=False)
+    
+    try:
+        result = subprocess.run(command, check=False)
+    except Exception as e:
+        cprint(f"FFmpeg execution error: {e}", "error")
+        if os.path.exists(temp_output):
+            try:
+                os.remove(temp_output)
+            except:
+                pass
+        return delete_original
 
     if result.returncode == 0:
         try:
-            if os.path.exists(temp_output):
+            if os.path.exists(temp_output) and os.path.getsize(temp_output) > MIN_FILE_SIZE_BYTES:
                 os.replace(temp_output, output_path)
                 file_size = os.path.getsize(input_path)
                 new_file_size = os.path.getsize(output_path)
@@ -306,10 +423,14 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
                 
                 if file_size <= new_file_size:
                     cprint("Warning: File grew larger! (Entropy issue).", "warning")
+                    # Still offer to delete if user wants
+                    auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
+                    if auto_delete_flag:
+                        delete_original = True
                 else:
                     # Delete original and optionally rename to match original name
-                    should_continue_deleting = maybe_delete_original(input_path, auto_delete=delete_original)
-                    if should_continue_deleting is not False:  # True or original was deleted
+                    auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
+                    if auto_delete_flag:
                         delete_original = True
                         
                         # Rename converted file to original name if they're in same directory
@@ -322,30 +443,61 @@ def convert_single_file(input_path, output_dir=None, bitrate=None, delete_origin
                                 except OSError as e:
                                     cprint(f"Could not rename to original name: {e}", "warning")
             else:
-                cprint("Error: Temp file missing!", "error")
+                cprint("Error: Temp file missing or invalid!", "error")
         except OSError as e:
             cprint(f"Error swapping files: {e}", "error")
     else:
         cprint(f"Conversion failed (Code: {result.returncode})", "error")
-        if os.path.exists(temp_output): os.remove(temp_output)
+        if os.path.exists(temp_output):
+            try:
+                os.remove(temp_output)
+            except Exception as e:
+                cprint(f"Could not remove temp file: {e}", "warning")
 
     return delete_original
 
 # ============================================================================ #
 #                           FUNCTION: convert_videos                           #
 # ============================================================================ #
-def convert_videos(input_path, output_dir=None, bitrate=None, delete_original=False, overwrite=False):
+def convert_videos(input_path: str, output_dir: Optional[str] = None, 
+                  bitrate: Optional[str] = None, delete_original: bool = False, 
+                  overwrite: bool = False) -> None:
+    """
+    Main entry point for converting videos.
+    Handles both single files and directory processing.
+    """
     if os.path.isfile(input_path):
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite)
     elif os.path.isdir(input_path):
-        if output_dir is None: output_dir = input_path
-        else: os.makedirs(output_dir, exist_ok=True)
+        if output_dir is None:
+            output_dir = input_path
+        else:
+            os.makedirs(output_dir, exist_ok=True)
+        
+        # Collect all video files first
+        video_files = []
         for filename in os.listdir(input_path):
-            if filename.lower().endswith((".mp4", ".mkv")):
-                res = convert_single_file(os.path.join(input_path, filename), output_dir, bitrate, delete_original, overwrite)
-                if isinstance(res, bool) and res: delete_original = True
+            file_path = os.path.join(input_path, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(SUPPORTED_EXTENSIONS):
+                video_files.append(file_path)
+        
+        if not video_files:
+            cprint("No video files found in directory.", "warning")
+            return
+        
+        cprint(f"Found {len(video_files)} video file(s) to process.", "info")
+        
+        # Process files with progress tracking
+        for idx, file_path in enumerate(video_files, 1):
+            cprint(f"\n[{idx}/{len(video_files)}] Processing: {os.path.basename(file_path)}", style="bold cyan")
+            auto_delete_result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite)
+            # Update auto-delete flag based on user's "all" choice
+            if auto_delete_result:
+                delete_original = True
+        
+        cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
     else:
-        cprint("Invalid path.", "error")
+        cprint("Invalid path: File or directory does not exist.", "error")
 
 @app.callback(invoke_without_command=True)
 def main(
