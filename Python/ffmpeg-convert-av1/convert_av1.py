@@ -7,7 +7,7 @@
 # python convert_av1.py "video.mp4" --delete-original
 # python convert_av1.py "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform
+import os, subprocess, shutil, sys, json, platform, glob
 from typing import Optional, Tuple
 from pathlib import Path
 from rich.console import Console
@@ -636,7 +636,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
 
 @app.callback(invoke_without_command=True)
 def main(
-    input_path: str = typer.Argument(..., help="Path to input"),
+    input_path: str = typer.Argument(..., help="Path to input (supports wildcards like 'test*.mp4')"),
     output_dir: Optional[str] = typer.Argument(None, help="Output dir"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
@@ -656,7 +656,77 @@ def main(
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
     # If version flag triggered, callback already exited.
     check_ffmpeg()
-    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive)
+    
+    # Expand wildcards in input_path
+    if '*' in input_path or '?' in input_path:
+        matched_files = glob.glob(input_path)
+        if not matched_files:
+            cprint(f"No files matched pattern: {input_path}", "error")
+            raise typer.Exit(code=1)
+        
+        # Filter to only video files
+        matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
+        
+        if not matched_files:
+            cprint(f"No video files matched pattern: {input_path}", "error")
+            raise typer.Exit(code=1)
+        
+        cprint(f"Found {len(matched_files)} file(s) matching pattern.", "info")
+        
+        # Process each matched file
+        # Track statistics for batch summary
+        total_original_size = 0
+        total_new_size = 0
+        files_converted = 0
+        auto_delete = delete_original
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            overall_task = progress.add_task(f"[cyan]Converting 0/{len(matched_files)} files...", total=len(matched_files))
+            
+            for idx, file_path in enumerate(matched_files, 1):
+                display_name = os.path.basename(file_path)
+                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name}")
+                cprint(f"\n[{idx}/{len(matched_files)}] Processing: {display_name}", style="bold cyan")
+                
+                # Capture original size before conversion
+                try:
+                    original_size = os.path.getsize(file_path)
+                except:
+                    original_size = 0
+                
+                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run)
+                
+                # Track statistics if conversion happened
+                if size_saved != 0:
+                    files_converted += 1
+                    total_original_size += original_size
+                    total_new_size += (original_size - size_saved)
+                
+                # Update auto-delete flag based on user's "all" choice
+                if auto_delete_result:
+                    auto_delete = True
+                
+                # Update progress
+                progress.advance(overall_task)
+        
+        # Display batch summary
+        cprint(f"\nBatch conversion complete! Processed {len(matched_files)} file(s).", "success")
+        
+        if files_converted > 0 and total_original_size > 0:
+            total_saved = total_original_size - total_new_size
+            percent_saved = (total_saved / total_original_size) * 100
+            
+            cprint(f"\n📊 Space Savings Summary:", style="bold cyan")
+            cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
+            cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
+            cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+    else:
+        # No wildcards - use existing logic
+        convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive)
 
 if __name__ == "__main__":
     app()

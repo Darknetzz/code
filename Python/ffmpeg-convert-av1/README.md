@@ -9,6 +9,8 @@ A fast, reliable video batch converter that targets the best available encoder o
 - Preserves multi‑channel audio (uses Opus at 64 kbps per stream)
 - Safe batch processing: disk space checks, temp file swap, overwrite prompts
 - Skips files that already use the target codec
+- **Wildcard pattern support**: Convert files matching patterns like `test*.mp4` or `video_?.mkv`
+- **Progress tracking**: Real-time progress indicator when converting multiple files
 - Clean CLI with helpful messages (powered by Typer + Rich)
 
 ## Requirements
@@ -40,6 +42,10 @@ python convert_av1.py "C:\Videos\movie.mkv"
 # Convert a single file to a specific output folder
 python convert_av1.py "C:\Videos\movie.mkv" "C:\Converted"
 
+# Convert all files matching a wildcard pattern
+python convert_av1.py "test*.mp4"
+python convert_av1.py "C:\Videos\vacation_*.mkv" "C:\Converted"
+
 # Convert a folder (outputs to same folder unless you provide one)
 python convert_av1.py "C:\Videos\Input"
 python convert_av1.py "C:\Videos\Input" "C:\Videos\Output"
@@ -68,7 +74,7 @@ python convert_av1.py "C:\Videos\Input" -r
 Usage: python convert_av1.py [INPUT_PATH] [OUTPUT_DIR] [OPTIONS]
 
 Arguments:
-  INPUT_PATH    Path to input (file or folder)
+  INPUT_PATH    Path to input (file or folder) - supports wildcards like 'test*.mp4'
   OUTPUT_DIR    Optional output directory (defaults to input or same folder)
 
 Options:
@@ -106,11 +112,13 @@ Options:
 
 ## Tips
 
+- **Use wildcards** to batch process files matching a pattern: `python convert_av1.py "episode_*.mkv"`
 - Use `--recursive` to process entire folder trees with subdirectories, preserving structure when using a separate output folder.
 - For archival quality, you can raise the bitrate or use CPU AV1 with `--bitrate`.
 - If you see larger outputs, the source may already be efficient (e.g., high-entropy or already AV1/HEVC). The script warns and lets you choose deletion.
 - To batch large folders, start with `--overwrite` only when you're confident in the settings.
 - Combine `--dry-run` with `--recursive` to preview all files that would be processed before committing to conversion.
+- **Progress tracking** shows real-time file count and current file being processed during batch conversions.
 
 ## Troubleshooting
 
