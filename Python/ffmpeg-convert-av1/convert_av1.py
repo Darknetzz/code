@@ -521,12 +521,15 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
             cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
             
-            # Determine output directory (preserve folder structure in recursive mode)
-            if recursive and output_dir != input_path:
+            # Determine output directory
+            # Always use the same directory as the source file unless output_dir is explicitly provided
+            if output_dir and output_dir != input_path:
+                # User provided explicit output directory - preserve folder structure
                 rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
                 current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
             else:
-                current_output_dir = output_dir if output_dir else os.path.dirname(file_path)
+                # No explicit output dir or same as input - use file's own directory
+                current_output_dir = os.path.dirname(file_path)
             
             auto_delete_result = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
             # Update auto-delete flag based on user's "all" choice
