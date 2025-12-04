@@ -18,7 +18,7 @@ if platform.system() == 'Windows':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import typer
 
 console = Console()
@@ -502,7 +502,6 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         
         # If we have a progress context, add a sub-task for this file
         if _PROGRESS_CONTEXT and total_duration and process.stdout:
-            from rich.progress import BarColumn, TimeRemainingColumn
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
                 total=100
@@ -650,6 +649,8 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
             transient=True,
         ) as progress:
             global _PROGRESS_CONTEXT
@@ -761,6 +762,8 @@ def main(
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
             transient=False,
         ) as progress:
             global _PROGRESS_CONTEXT
