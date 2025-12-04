@@ -26,7 +26,7 @@ app = typer.Typer()
 
 # App metadata
 __app_name__ = "convert_av1"
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # Constants
 BITRATE_REDUCTION_FACTOR = 0.5
@@ -484,8 +484,50 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         console.print(summary)
         return delete_original, 0
     
+    # Get video duration for progress calculation
     try:
-        result = subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        duration_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
+                       "-of", "default=noprint_wrappers=1:nokey=1", input_path]
+        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=10)
+        duration_str = duration_result.stdout.strip()
+        total_duration = float(duration_str) if duration_str and duration_str.replace('.', '', 1).isdigit() else None
+    except:
+        total_duration = None
+    
+    try:
+        # Run ffmpeg with progress tracking
+        import re
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                   universal_newlines=True, bufsize=1)
+        
+        # If we have a progress context, add a sub-task for this file
+        if _PROGRESS_CONTEXT and total_duration and process.stdout:
+            from rich.progress import BarColumn, TimeRemainingColumn
+            file_task = _PROGRESS_CONTEXT.add_task(
+                f"[yellow]  └─ Encoding...", 
+                total=100
+            )
+            
+            for line in process.stdout:
+                # Parse ffmpeg progress output
+                time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                if time_match and total_duration:
+                    hours, minutes, seconds = map(float, time_match.groups())
+                    current_time = hours * 3600 + minutes * 60 + seconds
+                    progress_percent = min((current_time / total_duration) * 100, 100)
+                    _PROGRESS_CONTEXT.update(file_task, completed=progress_percent)
+            
+            process.wait()
+            _PROGRESS_CONTEXT.update(file_task, completed=100)
+            _PROGRESS_CONTEXT.remove_task(file_task)
+        else:
+            # No progress context, just consume output
+            if process.stdout:
+                for line in process.stdout:
+                    pass
+            process.wait()
+        
+        result = process
     except Exception as e:
         cprint(f"FFmpeg execution error: {e}", "error")
         if os.path.exists(temp_output):
