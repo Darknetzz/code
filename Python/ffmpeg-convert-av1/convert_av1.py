@@ -440,23 +440,36 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     cprint("Warning: File grew larger! (Entropy issue).", "warning")
                     # Still offer to delete if user wants
                     auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
+                    # Track if original was deleted in this step
+                    original_deleted = not os.path.exists(input_path)
                     if auto_delete_flag:
                         delete_original = True
+                    # If original was deleted, rename output to original name when same directory
+                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path):
+                        original_name_path = input_path
+                        if output_path != original_name_path:
+                            try:
+                                os.rename(output_path, original_name_path)
+                                cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
+                            except OSError as e:
+                                cprint(f"Could not rename to original name: {e}", "warning")
                 else:
                     # Delete original and optionally rename to match original name
                     auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
+                    # Track if original was deleted in this step
+                    original_deleted = not os.path.exists(input_path)
                     if auto_delete_flag:
                         delete_original = True
-                        
-                        # Rename converted file to original name if they're in same directory
-                        if os.path.dirname(output_path) == os.path.dirname(input_path):
-                            original_name_path = input_path
-                            if output_path != original_name_path:
-                                try:
-                                    os.rename(output_path, original_name_path)
-                                    cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
-                                except OSError as e:
-                                    cprint(f"Could not rename to original name: {e}", "warning")
+                    
+                    # Rename converted file to original name if original was deleted
+                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path):
+                        original_name_path = input_path
+                        if output_path != original_name_path:
+                            try:
+                                os.rename(output_path, original_name_path)
+                                cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
+                            except OSError as e:
+                                cprint(f"Could not rename to original name: {e}", "warning")
             else:
                 cprint("Error: Temp file missing or invalid!", "error")
         except OSError as e:
