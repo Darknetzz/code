@@ -543,7 +543,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 file_size = os.path.getsize(input_path)
                 new_file_size = os.path.getsize(output_path)
                 size_saved = file_size - new_file_size
-                cprint(f"Done: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
+                saved_percent = (size_saved / file_size) * 100 if file_size > 0 else 0
+                cprint(f"Done: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB (Saved: {size_saved / (1024**2):.2f} MB, {saved_percent:.1f}%)", "success")
                 
                 if file_size <= new_file_size:
                     cprint("Warning: File grew larger! (Entropy issue).", "warning")
@@ -644,6 +645,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         total_original_size = 0
         total_new_size = 0
         files_converted = 0
+        per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         
         # Process files with progress tracking
         with Progress(
@@ -690,6 +692,8 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                     files_converted += 1
                     total_original_size += original_size
                     total_new_size += (original_size - size_saved)
+                    saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
+                    per_file_stats.append((display_path, original_size, size_saved, saved_percent))
                 
                 # Update auto-delete flag based on user's "all" choice
                 if auto_delete_result:
@@ -707,7 +711,13 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             total_saved = total_original_size - total_new_size
             percent_saved = (total_saved / total_original_size) * 100
             
-            cprint(f"\n📊 Space Savings Summary:", style="bold cyan")
+            # Show per-file stats if we have them
+            if per_file_stats:
+                cprint(f"\n📋 Per-File Summary:", style="bold cyan")
+                for filename, orig_size, saved, percent in per_file_stats:
+                    cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+            
+            cprint(f"\n📊 Total Space Savings:", style="bold cyan")
             cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
             cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
             cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
@@ -759,6 +769,7 @@ def main(
         total_new_size = 0
         files_converted = 0
         auto_delete = delete_original
+        per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         
         with Progress(
             SpinnerColumn(),
@@ -793,6 +804,8 @@ def main(
                     files_converted += 1
                     total_original_size += original_size
                     total_new_size += (original_size - size_saved)
+                    saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
+                    per_file_stats.append((display_name, original_size, size_saved, saved_percent))
                 
                 # Update auto-delete flag based on user's "all" choice
                 if auto_delete_result:
@@ -810,7 +823,13 @@ def main(
             total_saved = total_original_size - total_new_size
             percent_saved = (total_saved / total_original_size) * 100
             
-            cprint(f"\n📊 Space Savings Summary:", style="bold cyan")
+            # Show per-file stats if we have them
+            if per_file_stats:
+                cprint(f"\n📋 Per-File Summary:", style="bold cyan")
+                for filename, orig_size, saved, percent in per_file_stats:
+                    cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+            
+            cprint(f"\n📊 Total Space Savings:", style="bold cyan")
             cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
             cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
             cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
