@@ -285,20 +285,22 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False) -> bool:
+                       overwrite: bool = False, dry_run: bool = False) -> Tuple[bool, int]:
     """
     Converts a single video file to the target codec.
-    Returns the current auto_delete state (True if user selected 'all').
+    Returns a tuple: (auto_delete_flag, size_saved_bytes)
+    - auto_delete_flag: True if user selected 'all' for auto-delete
+    - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     """
     filename = os.path.basename(input_path)
     
     # Validate file
     if not validate_video_file(input_path):
-        return delete_original
+        return delete_original, 0
 
     if not needs_transcoding(input_path):
         cprint(f"Skipping (No Transcoding Needed): {filename}", "info")
-        return delete_original
+        return delete_original, 0
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
@@ -317,12 +319,12 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     # Check disk space before proceeding (skip in dry run)
     if not dry_run:
         if not check_disk_space(input_path, output_dir):
-            return delete_original
+            return delete_original, 0
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
             if input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
-                return delete_original
+                return delete_original, 0
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
@@ -415,7 +417,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         }
         cprint("Dry run: Planned conversion", "info")
         console.print(summary)
-        return delete_original
+        return delete_original, 0
     
     try:
         result = subprocess.run(command, check=False)
@@ -426,7 +428,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 os.remove(temp_output)
             except:
                 pass
-        return delete_original
+        return delete_original, 0
 
     if result.returncode == 0:
         try:
@@ -434,6 +436,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 os.replace(temp_output, output_path)
                 file_size = os.path.getsize(input_path)
                 new_file_size = os.path.getsize(output_path)
+                size_saved = file_size - new_file_size
                 cprint(f"Done: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB", "success")
                 
                 if file_size <= new_file_size:
@@ -470,6 +473,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                                 cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
                             except OSError as e:
                                 cprint(f"Could not rename to original name: {e}", "warning")
+                
+                return delete_original, size_saved
             else:
                 cprint("Error: Temp file missing or invalid!", "error")
         except OSError as e:
@@ -482,7 +487,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             except Exception as e:
                 cprint(f"Could not remove temp file: {e}", "warning")
 
-    return delete_original
+    return delete_original, 0
 
 # ============================================================================ #
 #                           FUNCTION: convert_videos                           #
@@ -496,6 +501,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
     Supports recursive subdirectory traversal when recursive=True.
     """
     if os.path.isfile(input_path):
+        # Single file - no batch summary needed
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
     elif os.path.isdir(input_path):
         if output_dir is None:
@@ -528,11 +534,22 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         mode_str = "recursively" if recursive else "in directory"
         cprint(f"Found {len(video_files)} video file(s) {mode_str}.", "info")
         
+        # Track statistics for batch summary
+        total_original_size = 0
+        total_new_size = 0
+        files_converted = 0
+        
         # Process files with progress tracking
         for idx, file_path in enumerate(video_files, 1):
             # Show relative path for recursive mode
             display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
             cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
+            
+            # Capture original size before conversion
+            try:
+                original_size = os.path.getsize(file_path)
+            except:
+                original_size = 0
             
             # Determine output directory
             # Always use the same directory as the source file unless output_dir is explicitly provided
@@ -544,12 +561,29 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 # No explicit output dir or same as input - use file's own directory
                 current_output_dir = os.path.dirname(file_path)
             
-            auto_delete_result = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
+            auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
+            
+            # Track statistics if conversion happened
+            if size_saved != 0:
+                files_converted += 1
+                total_original_size += original_size
+                total_new_size += (original_size - size_saved)
+            
             # Update auto-delete flag based on user's "all" choice
             if auto_delete_result:
                 delete_original = True
         
+        # Display batch summary with space savings
         cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
+        
+        if files_converted > 0 and total_original_size > 0:
+            total_saved = total_original_size - total_new_size
+            percent_saved = (total_saved / total_original_size) * 100
+            
+            cprint(f"\n📊 Space Savings Summary:", style="bold cyan")
+            cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
+            cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
+            cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
     else:
         cprint("Invalid path: File or directory does not exist.", "error")
 
