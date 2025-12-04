@@ -50,6 +50,7 @@ SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 
 # Global flag to suppress cprint output during conversions
 _SUPPRESS_OUTPUT = False
+_PROGRESS_CONTEXT = None
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -77,6 +78,21 @@ def cprint(message, type="", style="bold green", **kwargs):
 
     message = f"{prefix}  {message}"
     console.print(message, style=style, **kwargs)
+
+# ============================================================================ #
+#                            FUNCTION: safe_input                              #
+# ============================================================================ #
+def safe_input(prompt: str) -> str:
+    """
+    Input function that pauses progress bar if active.
+    """
+    global _PROGRESS_CONTEXT
+    if _PROGRESS_CONTEXT:
+        _PROGRESS_CONTEXT.stop()
+    result = input(prompt)
+    if _PROGRESS_CONTEXT:
+        _PROGRESS_CONTEXT.start()
+    return result
 
 # ============================================================================ #
 #                      FUNCTION: get_input_bitrate                             #
@@ -264,7 +280,7 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
             cprint(f"Deleted original: {os.path.basename(original_path)}")
             return True
             
-        resp = input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
+        resp = safe_input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
@@ -367,7 +383,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
-            if input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
+            if safe_input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
                 return delete_original, 0
 
     # --- CALCULATE TARGET BITRATE ---
@@ -594,6 +610,9 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             TextColumn("[progress.description]{task.description}"),
             transient=True,
         ) as progress:
+            global _PROGRESS_CONTEXT
+            _PROGRESS_CONTEXT = progress
+            
             overall_task = progress.add_task(f"[cyan]Converting 0/{len(video_files)} files...", total=len(video_files))
             
             for idx, file_path in enumerate(video_files, 1):
@@ -635,6 +654,8 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 
                 # Update progress
                 progress.advance(overall_task)
+            
+            _PROGRESS_CONTEXT = None
         
         # Display batch summary with space savings
         cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
@@ -700,6 +721,9 @@ def main(
             TextColumn("[progress.description]{task.description}"),
             transient=False,
         ) as progress:
+            global _PROGRESS_CONTEXT
+            _PROGRESS_CONTEXT = progress
+            
             overall_task = progress.add_task(f"[cyan]Converting 0/{len(matched_files)} files...", total=len(matched_files))
             
             for idx, file_path in enumerate(matched_files, 1):
@@ -730,6 +754,8 @@ def main(
                 
                 # Update progress
                 progress.advance(overall_task)
+            
+            _PROGRESS_CONTEXT = None
         
         # Display batch summary
         cprint(f"\nBatch conversion complete! Processed {len(matched_files)} file(s).", "success")
