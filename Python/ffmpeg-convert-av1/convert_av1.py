@@ -10,6 +10,13 @@
 import os, subprocess, shutil, sys, json, platform, glob
 from typing import Optional, Tuple
 from pathlib import Path
+
+# Force UTF-8 encoding on Windows
+if platform.system() == 'Windows':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import typer
@@ -634,10 +641,10 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
     else:
         cprint("Invalid path: File or directory does not exist.", "error")
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def main(
-    input_path: str = typer.Argument(..., help="Path to input (supports wildcards like 'test*.mp4')"),
-    output_dir: Optional[str] = typer.Argument(None, help="Output dir"),
+    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards and multiple files)"),
+    output_dir: Optional[str] = typer.Option(None, help="Output dir"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite"),
@@ -657,23 +664,22 @@ def main(
     # If version flag triggered, callback already exited.
     check_ffmpeg()
     
-    # Expand wildcards in input_path
-    if '*' in input_path or '?' in input_path:
-        matched_files = glob.glob(input_path)
+    if not input_paths:
+        cprint("Error: INPUT_PATH is required", "error")
+        raise typer.Exit(code=1)
+    
+    # If multiple paths passed (from wildcard expansion), process them all
+    if len(input_paths) > 1:
+        # Multiple files - treat as batch
+        matched_files = [p for p in input_paths if p.lower().endswith(SUPPORTED_EXTENSIONS)]
+        
         if not matched_files:
-            cprint(f"No files matched pattern: {input_path}", "error")
+            cprint("No video files in arguments.", "error")
             raise typer.Exit(code=1)
         
-        # Filter to only video files
-        matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
+        cprint(f"Found {len(matched_files)} file(s) to process.", "info")
         
-        if not matched_files:
-            cprint(f"No video files matched pattern: {input_path}", "error")
-            raise typer.Exit(code=1)
-        
-        cprint(f"Found {len(matched_files)} file(s) matching pattern.", "info")
-        
-        # Process each matched file
+        # Process each file
         # Track statistics for batch summary
         total_original_size = 0
         total_new_size = 0
@@ -725,7 +731,19 @@ def main(
             cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
             cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
     else:
-        # No wildcards - use existing logic
+        # Single path - could be file, directory, or wildcard pattern
+        input_path = input_paths[0]
+        
+        # Try to expand wildcards
+        if '*' in input_path or '?' in input_path:
+            matched_files = glob.glob(input_path)
+            if matched_files:
+                matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
+                if matched_files and len(matched_files) > 1:
+                    # Recursively call main with expanded list
+                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, version=None)
+        
+        # No wildcards or only 1 match - use existing logic
         convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive)
 
 if __name__ == "__main__":
