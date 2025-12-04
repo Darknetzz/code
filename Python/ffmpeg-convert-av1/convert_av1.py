@@ -1,11 +1,13 @@
 # ============================================================================ #
 #                                convert_av1.py                                #
 # ============================================================================ #
-# usage:
-# python convert_av1.py "C:\Videos\Input" "C:\Videos\Output"
-# python convert_av1.py "C:\Videos\video.mp4" --delete-original
+# usage (cross-platform):
+# python convert_av1.py "/path/to/videos" "/path/to/output"  (Linux/Mac)
+# python convert_av1.py "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
+# python convert_av1.py "video.mp4" --delete-original
+# python convert_av1.py "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json
+import os, subprocess, shutil, sys, json, platform
 from typing import Optional, Tuple
 from pathlib import Path
 from rich.console import Console
@@ -35,8 +37,9 @@ def _version_callback(value: bool):
         raise typer.Exit()
 
 # Store detected encoder info (initialized with CPU fallback to satisfy static analysis)
-# Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu"}
+# Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu|vaapi"}
 ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -138,29 +141,57 @@ def check_ffmpeg():
     
     cprint("Detecting Best Available Encoder...", "info")
     
-    # --- PRIORITY 1: AV1 HARDWARE (RTX 40-series / RX 7000-series) ---
-    if check_encoder_support("av1_nvenc"):
-        ACTIVE_ENCODER = {"encoder": "av1_nvenc", "codec": "av1", "hw_type": "nvidia"}
-        cprint("Hardware Found: NVIDIA AV1 (`av1_nvenc`).", "success")
-        return
+    # --- WINDOWS PRIORITY ---
+    if SYSTEM_PLATFORM == "windows":
+        # PRIORITY 1: AV1 HARDWARE (RTX 40-series / RX 7000-series)
+        if check_encoder_support("av1_nvenc"):
+            ACTIVE_ENCODER = {"encoder": "av1_nvenc", "codec": "av1", "hw_type": "nvidia"}
+            cprint("Hardware Found: NVIDIA AV1 (`av1_nvenc`).", "success")
+            return
+            
+        if check_encoder_support("av1_amf"):
+            ACTIVE_ENCODER = {"encoder": "av1_amf", "codec": "av1", "hw_type": "amd"}
+            cprint("Hardware Found: AMD AV1 (`av1_amf`).", "success")
+            return
+
+        # PRIORITY 2: HEVC HARDWARE (GTX 900+ / RX 5000+)
+        if check_encoder_support("hevc_nvenc"):
+            ACTIVE_ENCODER = {"encoder": "hevc_nvenc", "codec": "hevc", "hw_type": "nvidia"}
+            cprint("Hardware Found: NVIDIA HEVC (`hevc_nvenc`).", "success")
+            return
+
+        if check_encoder_support("hevc_amf"):
+            ACTIVE_ENCODER = {"encoder": "hevc_amf", "codec": "hevc", "hw_type": "amd"}
+            cprint("Hardware Found: AMD HEVC (`hevc_amf`).", "success")
+            return
+    
+    # --- LINUX/MAC PRIORITY (VAAPI for Intel/AMD GPUs on Linux) ---
+    elif SYSTEM_PLATFORM == "linux":
+        # PRIORITY 1: AV1 VAAPI (Intel/AMD GPUs on Linux)
+        if check_encoder_support("av1_vaapi"):
+            ACTIVE_ENCODER = {"encoder": "av1_vaapi", "codec": "av1", "hw_type": "vaapi"}
+            cprint("Hardware Found: VAAPI AV1 (`av1_vaapi`).", "success")
+            return
         
-    if check_encoder_support("av1_amf"):
-        ACTIVE_ENCODER = {"encoder": "av1_amf", "codec": "av1", "hw_type": "amd"}
-        cprint("Hardware Found: AMD AV1 (`av1_amf`).", "success")
-        return
+        # PRIORITY 2: NVIDIA NVENC (Linux with NVIDIA GPU)
+        if check_encoder_support("av1_nvenc"):
+            ACTIVE_ENCODER = {"encoder": "av1_nvenc", "codec": "av1", "hw_type": "nvidia"}
+            cprint("Hardware Found: NVIDIA AV1 (`av1_nvenc`).", "success")
+            return
+        
+        # PRIORITY 3: HEVC VAAPI
+        if check_encoder_support("hevc_vaapi"):
+            ACTIVE_ENCODER = {"encoder": "hevc_vaapi", "codec": "hevc", "hw_type": "vaapi"}
+            cprint("Hardware Found: VAAPI HEVC (`hevc_vaapi`).", "success")
+            return
+        
+        # PRIORITY 4: HEVC NVENC (Linux with NVIDIA GPU)
+        if check_encoder_support("hevc_nvenc"):
+            ACTIVE_ENCODER = {"encoder": "hevc_nvenc", "codec": "hevc", "hw_type": "nvidia"}
+            cprint("Hardware Found: NVIDIA HEVC (`hevc_nvenc`).", "success")
+            return
 
-    # --- PRIORITY 2: HEVC HARDWARE (GTX 900+ / RX 5000+) ---
-    if check_encoder_support("hevc_nvenc"):
-        ACTIVE_ENCODER = {"encoder": "hevc_nvenc", "codec": "hevc", "hw_type": "nvidia"}
-        cprint("Hardware Found: NVIDIA HEVC (`hevc_nvenc`).", "success")
-        return
-
-    if check_encoder_support("hevc_amf"):
-        ACTIVE_ENCODER = {"encoder": "hevc_amf", "codec": "hevc", "hw_type": "amd"}
-        cprint("Hardware Found: AMD HEVC (`hevc_amf`).", "success")
-        return
-
-    # --- PRIORITY 3: CPU FALLBACK ---
+    # --- PRIORITY 3: CPU FALLBACK (ALL PLATFORMS) ---
     ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
     cprint("No Hardware Encoder detected. Using CPU (`libsvtav1`).", "warning")
 
@@ -350,8 +381,13 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             target_bitrate_int = BITRATE_FALLBACK
 
     # --- BUILD COMMAND ---
-    # Hardware Encoders (NVENC/AMF) prefer 'nv12'. CPU prefers 'yuv420p'.
-    pix_fmt = "yuv420p" if ACTIVE_ENCODER["hw_type"] == "cpu" else "nv12"
+    # Pixel format selection: CPU uses yuv420p, GPU encoders typically use nv12, VAAPI uses same
+    if ACTIVE_ENCODER["hw_type"] == "cpu":
+        pix_fmt = "yuv420p"
+    elif ACTIVE_ENCODER["hw_type"] == "vaapi":
+        pix_fmt = "nv12"  # VAAPI encoder input format
+    else:
+        pix_fmt = "nv12"  # NVIDIA/AMD default
     
     command = [
         "ffmpeg", "-y", "-i", input_path,
