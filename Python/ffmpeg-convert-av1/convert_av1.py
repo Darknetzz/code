@@ -476,10 +476,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 # ============================================================================ #
 def convert_videos(input_path: str, output_dir: Optional[str] = None, 
                   bitrate: Optional[str] = None, delete_original: bool = False, 
-                  overwrite: bool = False, dry_run: bool = False) -> None:
+                  overwrite: bool = False, dry_run: bool = False, recursive: bool = False) -> None:
     """
     Main entry point for converting videos.
     Handles both single files and directory processing.
+    Supports recursive subdirectory traversal when recursive=True.
     """
     if os.path.isfile(input_path):
         convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
@@ -489,23 +490,45 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         else:
             os.makedirs(output_dir, exist_ok=True)
         
-        # Collect all video files first
+        # Collect all video files (recursively or not)
         video_files = []
-        for filename in os.listdir(input_path):
-            file_path = os.path.join(input_path, filename)
-            if os.path.isfile(file_path) and filename.lower().endswith(SUPPORTED_EXTENSIONS):
-                video_files.append(file_path)
+        
+        if recursive:
+            # Recursive: walk all subdirectories
+            for root, dirs, files in os.walk(input_path):
+                for filename in files:
+                    if filename.lower().endswith(SUPPORTED_EXTENSIONS):
+                        file_path = os.path.join(root, filename)
+                        video_files.append(file_path)
+        else:
+            # Non-recursive: only current directory
+            for filename in os.listdir(input_path):
+                file_path = os.path.join(input_path, filename)
+                if os.path.isfile(file_path) and filename.lower().endswith(SUPPORTED_EXTENSIONS):
+                    video_files.append(file_path)
         
         if not video_files:
-            cprint("No video files found in directory.", "warning")
+            mode = "directory tree" if recursive else "directory"
+            cprint(f"No video files found in {mode}.", "warning")
             return
         
-        cprint(f"Found {len(video_files)} video file(s) to process.", "info")
+        mode_str = "recursively" if recursive else "in directory"
+        cprint(f"Found {len(video_files)} video file(s) {mode_str}.", "info")
         
         # Process files with progress tracking
         for idx, file_path in enumerate(video_files, 1):
-            cprint(f"\n[{idx}/{len(video_files)}] Processing: {os.path.basename(file_path)}", style="bold cyan")
-            auto_delete_result = convert_single_file(file_path, output_dir, bitrate, delete_original, overwrite, dry_run)
+            # Show relative path for recursive mode
+            display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
+            cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
+            
+            # Determine output directory (preserve folder structure in recursive mode)
+            if recursive and output_dir != input_path:
+                rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
+                current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
+            else:
+                current_output_dir = output_dir if output_dir else os.path.dirname(file_path)
+            
+            auto_delete_result = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
             # Update auto-delete flag based on user's "all" choice
             if auto_delete_result:
                 delete_original = True
@@ -522,6 +545,7 @@ def main(
     delete_original: bool = typer.Option(False, "-d", "--delete-original"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without converting"),
+    recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -535,7 +559,7 @@ def main(
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
     # If version flag triggered, callback already exited.
     check_ffmpeg()
-    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
+    convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive)
 
 if __name__ == "__main__":
     app()

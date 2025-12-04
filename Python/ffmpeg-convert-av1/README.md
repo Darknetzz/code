@@ -53,7 +53,13 @@ python convert_av1.py "C:\Videos\movie.mkv" --overwrite
 # Manually set target video bitrate
 python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2500k
 python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2.5m
+
+# Dry run: show what would happen without converting
 python convert_av1.py "C:\Videos\movie.mkv" --dry-run
+
+# Process folder recursively (includes all subdirectories)
+python convert_av1.py "C:\Videos\Input" --recursive
+python convert_av1.py "C:\Videos\Input" -r
 ```
 
 ## Command reference
@@ -69,9 +75,10 @@ Options:
   --bitrate TEXT          Override video bitrate (e.g., 2500k, 2m)
   -d, --delete-original   Auto-delete originals after successful conversion
   -o, --overwrite         Overwrite existing output files
+  --dry-run               Print planned actions without converting
+  -r, --recursive         Process subdirectories recursively
   -V, --version           Show version and exit
   --help                  Show this message and exit
-  --dry-run               Print planned actions without converting
 ```
 
 ## How it works
@@ -99,9 +106,11 @@ Options:
 
 ## Tips
 
+- Use `--recursive` to process entire folder trees with subdirectories, preserving structure when using a separate output folder.
 - For archival quality, you can raise the bitrate or use CPU AV1 with `--bitrate`.
 - If you see larger outputs, the source may already be efficient (e.g., high-entropy or already AV1/HEVC). The script warns and lets you choose deletion.
-- To batch large folders, start with `--overwrite` only when you’re confident in the settings.
+- To batch large folders, start with `--overwrite` only when you're confident in the settings.
+- Combine `--dry-run` with `--recursive` to preview all files that would be processed before committing to conversion.
 
 ## Troubleshooting
 
