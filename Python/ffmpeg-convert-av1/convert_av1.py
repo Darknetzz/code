@@ -345,7 +345,7 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False) -> Tuple[bool, int]:
+                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False) -> Tuple[bool, int]:
     """
     Converts a single video file to the target codec.
     Returns a tuple: (auto_delete_flag, size_saved_bytes)
@@ -554,7 +554,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     if auto_delete_flag:
                         delete_original = True
                     # If original was deleted, rename output to original name when same directory
-                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path):
+                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path) and not keep_mkv:
                         original_name_path = input_path
                         if output_path != original_name_path:
                             try:
@@ -570,8 +570,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     if auto_delete_flag:
                         delete_original = True
                     
-                    # Rename converted file to original name if original was deleted
-                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path):
+                    # Rename converted file to original name if original was deleted (unless keep_mkv is set)
+                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path) and not keep_mkv:
                         original_name_path = input_path
                         if output_path != original_name_path:
                             try:
@@ -600,7 +600,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 # ============================================================================ #
 def convert_videos(input_path: str, output_dir: Optional[str] = None, 
                   bitrate: Optional[str] = None, delete_original: bool = False, 
-                  overwrite: bool = False, dry_run: bool = False, recursive: bool = False) -> None:
+                  overwrite: bool = False, dry_run: bool = False, recursive: bool = False, keep_mkv: bool = False) -> None:
     """
     Main entry point for converting videos.
     Handles both single files and directory processing.
@@ -608,7 +608,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
     """
     if os.path.isfile(input_path):
         # Single file - no batch summary needed
-        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run)
+        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv)
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
@@ -682,7 +682,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 # Suppress output during conversion
                 global _SUPPRESS_OUTPUT
                 _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
+                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv)
                 _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
@@ -723,6 +723,7 @@ def main(
     overwrite: bool = typer.Option(False, "-o", "--overwrite"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without converting"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
+    keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -784,7 +785,7 @@ def main(
                 # Suppress output during conversion
                 global _SUPPRESS_OUTPUT
                 _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run)
+                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv)
                 _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
@@ -824,10 +825,10 @@ def main(
                 matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
                 if matched_files and len(matched_files) > 1:
                     # Recursively call main with expanded list
-                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, version=None)
+                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv, version=None)
         
         # No wildcards or only 1 match - use existing logic
-        convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive)
+        convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv)
 
 if __name__ == "__main__":
     app()
