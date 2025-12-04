@@ -1,4 +1,4 @@
-import typer, subprocess
+import typer, subprocess, shutil
 from pathlib import Path
 
 app = typer.Typer()
@@ -7,6 +7,7 @@ app = typer.Typer()
 def main(file: Path = typer.Argument(..., help="Python file to process")):
     """
     CLI tool that accepts a single Python file as argument.
+    Compiles it with PyInstaller and cleans up build artifacts.
     """
     if not file.exists():
         typer.echo(f"Error: File '{file}' does not exist.", err=True)
@@ -17,7 +18,6 @@ def main(file: Path = typer.Argument(..., help="Python file to process")):
         raise typer.Exit(code=1)
     
     typer.echo(f"Processing Python file: {file}")
-    # Add your file processing logic here
 
     # Run pyinstaller
     result = subprocess.run(["pyinstaller", "--onefile", str(file)], capture_output=True, text=True)
@@ -27,11 +27,15 @@ def main(file: Path = typer.Argument(..., help="Python file to process")):
     
     typer.echo("PyInstaller completed successfully")
     
-    # Clean up build directory
-    subprocess.run(["rm", "-rf", "build"], shell=True)
+    # Clean up build directory (cross-platform)
+    build_path = Path("build")
+    if build_path.exists():
+        shutil.rmtree(build_path)
+    
     spec_file = file.with_suffix(".spec")
     if spec_file.exists():
         spec_file.unlink()
+    
     typer.echo("Cleaned up build directory")
 
 
