@@ -576,38 +576,49 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         files_converted = 0
         
         # Process files with progress tracking
-        for idx, file_path in enumerate(video_files, 1):
-            # Show relative path for recursive mode
-            display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
-            cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            overall_task = progress.add_task(f"[cyan]Converting 0/{len(video_files)} files...", total=len(video_files))
             
-            # Capture original size before conversion
-            try:
-                original_size = os.path.getsize(file_path)
-            except:
-                original_size = 0
-            
-            # Determine output directory
-            # Always use the same directory as the source file unless output_dir is explicitly provided
-            if output_dir and output_dir != input_path:
-                # User provided explicit output directory - preserve folder structure
-                rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
-                current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
-            else:
-                # No explicit output dir or same as input - use file's own directory
-                current_output_dir = os.path.dirname(file_path)
-            
-            auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
-            
-            # Track statistics if conversion happened
-            if size_saved != 0:
-                files_converted += 1
-                total_original_size += original_size
-                total_new_size += (original_size - size_saved)
-            
-            # Update auto-delete flag based on user's "all" choice
-            if auto_delete_result:
-                delete_original = True
+            for idx, file_path in enumerate(video_files, 1):
+                # Show relative path for recursive mode
+                display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
+                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path}")
+                cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
+                
+                # Capture original size before conversion
+                try:
+                    original_size = os.path.getsize(file_path)
+                except:
+                    original_size = 0
+                
+                # Determine output directory
+                # Always use the same directory as the source file unless output_dir is explicitly provided
+                if output_dir and output_dir != input_path:
+                    # User provided explicit output directory - preserve folder structure
+                    rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
+                    current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
+                else:
+                    # No explicit output dir or same as input - use file's own directory
+                    current_output_dir = os.path.dirname(file_path)
+                
+                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
+                
+                # Track statistics if conversion happened
+                if size_saved != 0:
+                    files_converted += 1
+                    total_original_size += original_size
+                    total_new_size += (original_size - size_saved)
+                
+                # Update auto-delete flag based on user's "all" choice
+                if auto_delete_result:
+                    delete_original = True
+                
+                # Update progress
+                progress.advance(overall_task)
         
         # Display batch summary with space savings
         cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
