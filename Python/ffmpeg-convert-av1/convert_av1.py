@@ -48,10 +48,16 @@ def _version_callback(value: bool):
 ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
 SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 
+# Global flag to suppress cprint output during conversions
+_SUPPRESS_OUTPUT = False
+
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
 def cprint(message, type="", style="bold green", **kwargs):
+    if _SUPPRESS_OUTPUT:
+        return
+        
     prefix = ""
     style  = ""
     type   = type.lower()
@@ -463,7 +469,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         return delete_original, 0
     
     try:
-        result = subprocess.run(command, check=False)
+        result = subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         cprint(f"FFmpeg execution error: {e}", "error")
         if os.path.exists(temp_output):
@@ -594,7 +600,6 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 # Show relative path for recursive mode
                 display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
                 progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path}")
-                cprint(f"\n[{idx}/{len(video_files)}] Processing: {display_path}", style="bold cyan")
                 
                 # Capture original size before conversion
                 try:
@@ -612,7 +617,11 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                     # No explicit output dir or same as input - use file's own directory
                     current_output_dir = os.path.dirname(file_path)
                 
+                # Suppress output during conversion
+                global _SUPPRESS_OUTPUT
+                _SUPPRESS_OUTPUT = True
                 auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run)
+                _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
                 if size_saved != 0:
@@ -689,14 +698,13 @@ def main(
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
-            transient=True,
+            transient=False,
         ) as progress:
             overall_task = progress.add_task(f"[cyan]Converting 0/{len(matched_files)} files...", total=len(matched_files))
             
             for idx, file_path in enumerate(matched_files, 1):
                 display_name = os.path.basename(file_path)
                 progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name}")
-                cprint(f"\n[{idx}/{len(matched_files)}] Processing: {display_name}", style="bold cyan")
                 
                 # Capture original size before conversion
                 try:
@@ -704,7 +712,11 @@ def main(
                 except:
                     original_size = 0
                 
+                # Suppress output during conversion
+                global _SUPPRESS_OUTPUT
+                _SUPPRESS_OUTPUT = True
                 auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run)
+                _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
                 if size_saved != 0:
