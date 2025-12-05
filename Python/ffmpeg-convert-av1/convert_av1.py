@@ -646,6 +646,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         total_new_size = 0
         files_converted = 0
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
+        cumulative_saved = 0  # Live running total saved (bytes)
         
         # Process files with progress tracking
         with Progress(
@@ -692,6 +693,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                     files_converted += 1
                     total_original_size += original_size
                     total_new_size += (original_size - size_saved)
+                    cumulative_saved += size_saved
                     saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
                     per_file_stats.append((display_path, original_size, size_saved, saved_percent))
                 
@@ -699,8 +701,15 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 if auto_delete_result:
                     delete_original = True
                 
-                # Update progress
+                # Update progress and show running total saved
                 progress.advance(overall_task)
+                progress.update(
+                    overall_task,
+                    description=(
+                        f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path} | "
+                        f"Saved: {cumulative_saved / (1024**3):.2f} GB"
+                    ),
+                )
             
             _PROGRESS_CONTEXT = None
         
@@ -770,6 +779,7 @@ def main(
         files_converted = 0
         auto_delete = delete_original
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
+        cumulative_saved = 0  # Live running total saved (bytes)
         
         with Progress(
             SpinnerColumn(),
@@ -804,6 +814,7 @@ def main(
                     files_converted += 1
                     total_original_size += original_size
                     total_new_size += (original_size - size_saved)
+                    cumulative_saved += size_saved
                     saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
                     per_file_stats.append((display_name, original_size, size_saved, saved_percent))
                 
@@ -811,8 +822,15 @@ def main(
                 if auto_delete_result:
                     auto_delete = True
                 
-                # Update progress
+                # Update progress and show running total saved
                 progress.advance(overall_task)
+                progress.update(
+                    overall_task,
+                    description=(
+                        f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name} | "
+                        f"Saved: {cumulative_saved / (1024**3):.2f} GB"
+                    ),
+                )
             
             _PROGRESS_CONTEXT = None
         
