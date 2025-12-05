@@ -519,6 +519,16 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             process.wait()
             _PROGRESS_CONTEXT.update(file_task, completed=100)
             _PROGRESS_CONTEXT.remove_task(file_task)
+        elif _PROGRESS_CONTEXT and process.stdout:
+            # No duration available; show a spinner-like indeterminate bar
+            file_task = _PROGRESS_CONTEXT.add_task(
+                f"[yellow]  └─ Encoding...", 
+                total=None
+            )
+            for _ in process.stdout:
+                pass
+            process.wait()
+            _PROGRESS_CONTEXT.remove_task(file_task)
         else:
             # No progress context, just consume output
             if process.stdout:
@@ -654,12 +664,17 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            TextColumn("[green]Saved: {task.fields[saved]} GB"),
             transient=True,
         ) as progress:
             global _PROGRESS_CONTEXT
             _PROGRESS_CONTEXT = progress
             
-            overall_task = progress.add_task(f"[cyan]Converting 0/{len(video_files)} files...", total=len(video_files))
+            overall_task = progress.add_task(
+                f"[cyan]Converting 0/{len(video_files)} files...",
+                total=len(video_files),
+                saved="0.00",
+            )
             
             for idx, file_path in enumerate(video_files, 1):
                 # Show relative path for recursive mode
@@ -705,10 +720,8 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 progress.advance(overall_task)
                 progress.update(
                     overall_task,
-                    description=(
-                        f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path} | "
-                        f"Saved: {cumulative_saved / (1024**3):.2f} GB"
-                    ),
+                    description=f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path}",
+                    fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
             _PROGRESS_CONTEXT = None
@@ -786,12 +799,17 @@ def main(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            TextColumn("[green]Saved: {task.fields[saved]} GB"),
             transient=False,
         ) as progress:
             global _PROGRESS_CONTEXT
             _PROGRESS_CONTEXT = progress
             
-            overall_task = progress.add_task(f"[cyan]Converting 0/{len(matched_files)} files...", total=len(matched_files))
+            overall_task = progress.add_task(
+                f"[cyan]Converting 0/{len(matched_files)} files...",
+                total=len(matched_files),
+                saved="0.00",
+            )
             
             for idx, file_path in enumerate(matched_files, 1):
                 display_name = os.path.basename(file_path)
@@ -826,10 +844,8 @@ def main(
                 progress.advance(overall_task)
                 progress.update(
                     overall_task,
-                    description=(
-                        f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name} | "
-                        f"Saved: {cumulative_saved / (1024**3):.2f} GB"
-                    ),
+                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name}",
+                    fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
             _PROGRESS_CONTEXT = None
