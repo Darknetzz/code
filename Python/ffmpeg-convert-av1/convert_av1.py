@@ -504,7 +504,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         if _PROGRESS_CONTEXT and total_duration and process.stdout:
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
-                total=100
+                total=100,
+                saved="",
             )
             
             for line in process.stdout:
@@ -523,7 +524,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             # No duration available; show a spinner-like indeterminate bar
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
-                total=None
+                total=None,
+                saved="",
             )
             for _ in process.stdout:
                 pass
