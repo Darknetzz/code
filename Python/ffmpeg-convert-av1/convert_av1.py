@@ -672,6 +672,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         cumulative_saved = 0  # Live running total saved (bytes)
         batch_start_time = time.time()  # Track elapsed time
+        file_times = []  # Track individual file encoding times for ETA
         
         # Process files with progress tracking
         with Progress(
@@ -694,6 +695,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             for idx, file_path in enumerate(video_files, 1):
                 # Show relative path for recursive mode
                 display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
+                file_start = time.time()
                 elapsed = int(time.time() - batch_start_time)
                 progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}")
                 
@@ -727,6 +729,10 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                     cumulative_saved += size_saved
                     saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
                     per_file_stats.append((display_path, original_size, size_saved, saved_percent))
+                    
+                    # Track file encoding time for ETA
+                    file_time = time.time() - file_start
+                    file_times.append(file_time)
                 
                 # Update auto-delete flag based on user's "all" choice
                 if auto_delete_result:
@@ -735,9 +741,19 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 # Update progress and show running total saved
                 progress.advance(overall_task)
                 elapsed = int(time.time() - batch_start_time)
+                
+                # Calculate ETA if we have timing data
+                eta_str = ""
+                if file_times:
+                    avg_time_per_file = sum(file_times) / len(file_times)
+                    remaining_files = len(video_files) - idx
+                    eta_seconds = int(avg_time_per_file * remaining_files)
+                    if eta_seconds > 0:
+                        eta_str = f" | ETA: {eta_seconds}s"
+                
                 progress.update(
                     overall_task,
-                    description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}",
+                    description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
                     fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
@@ -817,6 +833,7 @@ def main(
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         cumulative_saved = 0  # Live running total saved (bytes)
         batch_start_time = time.time()  # Track elapsed time
+        file_times = []  # Track individual file encoding times for ETA
         
         with Progress(
             SpinnerColumn(),
@@ -837,6 +854,7 @@ def main(
             
             for idx, file_path in enumerate(matched_files, 1):
                 display_name = os.path.basename(file_path)
+                file_start = time.time()
                 elapsed = int(time.time() - batch_start_time)
                 progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s) → {display_name}")
                 
@@ -860,6 +878,10 @@ def main(
                     cumulative_saved += size_saved
                     saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
                     per_file_stats.append((display_name, original_size, size_saved, saved_percent))
+                    
+                    # Track file encoding time for ETA
+                    file_time = time.time() - file_start
+                    file_times.append(file_time)
                 
                 # Update auto-delete flag based on user's "all" choice
                 if auto_delete_result:
@@ -868,9 +890,19 @@ def main(
                 # Update progress and show running total saved
                 progress.advance(overall_task)
                 elapsed = int(time.time() - batch_start_time)
+                
+                # Calculate ETA if we have timing data
+                eta_str = ""
+                if file_times:
+                    avg_time_per_file = sum(file_times) / len(file_times)
+                    remaining_files = len(matched_files) - idx
+                    eta_seconds = int(avg_time_per_file * remaining_files)
+                    if eta_seconds > 0:
+                        eta_str = f" | ETA: {eta_seconds}s"
+                
                 progress.update(
                     overall_task,
-                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s) → {display_name}",
+                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s{eta_str}) → {display_name}",
                     fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
