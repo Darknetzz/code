@@ -345,7 +345,7 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False) -> Tuple[bool, int]:
+                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int]:
     """
     Converts a single video file to the target codec.
     Returns a tuple: (auto_delete_flag, size_saved_bytes)
@@ -501,8 +501,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                                    universal_newlines=True, bufsize=1)
         
         # If we have a progress context, add a sub-task for this file
+        # Only show encoding progress for single-file conversions (show_progress=True)
         file_task = None
-        if _PROGRESS_CONTEXT and total_duration and process.stdout:
+        if _PROGRESS_CONTEXT and show_progress and total_duration and process.stdout:
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
                 total=100,
@@ -525,7 +526,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 if file_task is not None:
                     _PROGRESS_CONTEXT.remove_task(file_task)
                     
-        elif _PROGRESS_CONTEXT and process.stdout:
+        elif _PROGRESS_CONTEXT and show_progress and process.stdout:
             # No duration available; show a spinner-like indeterminate bar
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
@@ -710,7 +711,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 # Suppress output during conversion
                 global _SUPPRESS_OUTPUT
                 _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv)
+                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv, show_progress=False)
                 _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
@@ -739,7 +740,11 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         # Display batch summary with space savings
         cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
         
-        if files_converted > 0 and total_original_size > 0:
+        if files_converted == 0:
+            cprint("No files were converted.", "info")
+            return
+        
+        if total_original_size > 0:
             total_saved = total_original_size - total_new_size
             percent_saved = (total_saved / total_original_size) * 100
             
@@ -834,7 +839,7 @@ def main(
                 # Suppress output during conversion
                 global _SUPPRESS_OUTPUT
                 _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv)
+                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False)
                 _SUPPRESS_OUTPUT = False
                 
                 # Track statistics if conversion happened
@@ -863,7 +868,9 @@ def main(
         # Display batch summary
         cprint(f"\nBatch conversion complete! Processed {len(matched_files)} file(s).", "success")
         
-        if files_converted > 0 and total_original_size > 0:
+        if files_converted == 0:
+            cprint("No files were converted.", "info")
+        elif total_original_size > 0:
             total_saved = total_original_size - total_new_size
             percent_saved = (total_saved / total_original_size) * 100
             
