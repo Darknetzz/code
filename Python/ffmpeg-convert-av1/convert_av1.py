@@ -501,6 +501,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                                    universal_newlines=True, bufsize=1)
         
         # If we have a progress context, add a sub-task for this file
+        file_task = None
         if _PROGRESS_CONTEXT and total_duration and process.stdout:
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding...", 
@@ -508,18 +509,22 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 saved="",
             )
             
-            for line in process.stdout:
-                # Parse ffmpeg progress output
-                time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
-                if time_match and total_duration:
-                    hours, minutes, seconds = map(float, time_match.groups())
-                    current_time = hours * 3600 + minutes * 60 + seconds
-                    progress_percent = min((current_time / total_duration) * 100, 100)
-                    _PROGRESS_CONTEXT.update(file_task, completed=progress_percent)
-            
-            process.wait()
-            _PROGRESS_CONTEXT.update(file_task, completed=100)
-            _PROGRESS_CONTEXT.remove_task(file_task)
+            try:
+                for line in process.stdout:
+                    # Parse ffmpeg progress output
+                    time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                    if time_match and total_duration:
+                        hours, minutes, seconds = map(float, time_match.groups())
+                        current_time = hours * 3600 + minutes * 60 + seconds
+                        progress_percent = min((current_time / total_duration) * 100, 100)
+                        _PROGRESS_CONTEXT.update(file_task, completed=progress_percent)
+                
+                process.wait()
+                _PROGRESS_CONTEXT.update(file_task, completed=100)
+            finally:
+                if file_task is not None:
+                    _PROGRESS_CONTEXT.remove_task(file_task)
+                    
         elif _PROGRESS_CONTEXT and process.stdout:
             # No duration available; show a spinner-like indeterminate bar
             file_task = _PROGRESS_CONTEXT.add_task(
@@ -527,10 +532,13 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 total=None,
                 saved="",
             )
-            for _ in process.stdout:
-                pass
-            process.wait()
-            _PROGRESS_CONTEXT.remove_task(file_task)
+            try:
+                for _ in process.stdout:
+                    pass
+                process.wait()
+            finally:
+                if file_task is not None:
+                    _PROGRESS_CONTEXT.remove_task(file_task)
         else:
             # No progress context, just consume output
             if process.stdout:
