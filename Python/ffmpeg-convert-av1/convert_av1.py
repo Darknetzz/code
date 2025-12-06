@@ -7,7 +7,7 @@
 # python convert_av1.py "video.mp4" --delete-original
 # python convert_av1.py "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform, glob
+import os, subprocess, shutil, sys, json, platform, glob, time
 from typing import Optional, Tuple
 from pathlib import Path
 
@@ -659,6 +659,9 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             cprint(f"No video files found in {mode}.", "warning")
             return
         
+        # Sort files alphabetically for consistent processing order
+        video_files.sort()
+        
         mode_str = "recursively" if recursive else "in directory"
         cprint(f"Found {len(video_files)} video file(s) {mode_str}.", "info")
         
@@ -668,6 +671,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         files_converted = 0
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         cumulative_saved = 0  # Live running total saved (bytes)
+        batch_start_time = time.time()  # Track elapsed time
         
         # Process files with progress tracking
         with Progress(
@@ -690,7 +694,8 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             for idx, file_path in enumerate(video_files, 1):
                 # Show relative path for recursive mode
                 display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
-                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path}")
+                elapsed = int(time.time() - batch_start_time)
+                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}")
                 
                 # Capture original size before conversion
                 try:
@@ -729,9 +734,10 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 
                 # Update progress and show running total saved
                 progress.advance(overall_task)
+                elapsed = int(time.time() - batch_start_time)
                 progress.update(
                     overall_task,
-                    description=f"[cyan]Converting {idx}/{len(video_files)} files... → {display_path}",
+                    description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}",
                     fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
@@ -798,6 +804,8 @@ def main(
             cprint("No video files in arguments.", "error")
             raise typer.Exit(code=1)
         
+        # Sort files for consistent processing order
+        matched_files.sort()
         cprint(f"Found {len(matched_files)} file(s) to process.", "info")
         
         # Process each file
@@ -808,6 +816,7 @@ def main(
         auto_delete = delete_original
         per_file_stats = []  # Track (filename, original_size, saved_size, percent)
         cumulative_saved = 0  # Live running total saved (bytes)
+        batch_start_time = time.time()  # Track elapsed time
         
         with Progress(
             SpinnerColumn(),
@@ -828,7 +837,8 @@ def main(
             
             for idx, file_path in enumerate(matched_files, 1):
                 display_name = os.path.basename(file_path)
-                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name}")
+                elapsed = int(time.time() - batch_start_time)
+                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s) → {display_name}")
                 
                 # Capture original size before conversion
                 try:
@@ -857,9 +867,10 @@ def main(
                 
                 # Update progress and show running total saved
                 progress.advance(overall_task)
+                elapsed = int(time.time() - batch_start_time)
                 progress.update(
                     overall_task,
-                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... → {display_name}",
+                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s) → {display_name}",
                     fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
                 )
             
