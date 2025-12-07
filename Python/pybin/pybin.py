@@ -6,7 +6,12 @@ app = typer.Typer()
 @app.command()
 def main(
     file: Path = typer.Argument(..., help="Python file to process"),
-    keep_spec: bool = typer.Option(False, "--keep-spec", help="Keep the .spec file after building"),
+    keep_spec: bool = typer.Option(
+        True,
+        "--keep-spec/--no-keep-spec",
+        help="Keep the .spec file after building (default: keep)",
+        show_default=True,
+    ),
     keep_build: bool = typer.Option(False, "--keep-build", help="Keep the build directory after building"),
     output_dir: Path = typer.Option(None, "--output-dir", help="Optional output directory for the built executable (defaults to script's dist/ folder)"),
 ):

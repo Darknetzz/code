@@ -8,14 +8,14 @@ Simple wrapper around PyInstaller to build a single-file executable from a Pytho
 
 ## Usage
 ```bash
-# Basic build (cleans build/ and .spec afterward)
+# Basic build (keeps .spec, cleans build/ afterward)
 pybin my_script.py
 
 # Build to a custom output directory
 pybin my_script.py --output-dir D:/Apps/dist
 
-# Keep the .spec file for customization
-pybin my_script.py --keep-spec
+# Remove the .spec file after build
+pybin my_script.py --no-keep-spec
 
 # Keep the build directory (for debugging or inspection)
 pybin my_script.py --keep-build
