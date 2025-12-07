@@ -156,7 +156,7 @@ To enable tab completion in PowerShell:
 
 2. Generate the completion script:
    ```bash
-   convert_av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   convert_av1 --show-completion > ~\Documents\PowerShell\completions\convert_av1-completion.ps1
    ```
 
 3. Add to your PowerShell profile (`$PROFILE`):
@@ -172,7 +172,7 @@ To enable tab completion in PowerShell:
 
 5. After modifying CLI options, regenerate the completion:
    ```bash
-   convert_av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   convert_av1 --show-completion > ~\Documents\PowerShell\completions\convert_av1-completion.ps1
    ```
 
 **Note:** Avoid using `--install-completion` as it appends directly to your profile without formatting and can create duplicates. Use `--show-completion` and manually manage completion scripts instead.
