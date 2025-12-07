@@ -1,11 +1,11 @@
 # ============================================================================ #
-#                                convert_av1.py                                #
+#                                     av1.py                                   #
 # ============================================================================ #
 # usage (cross-platform):
-# python convert_av1.py "/path/to/videos" "/path/to/output"  (Linux/Mac)
-# python convert_av1.py "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
-# python convert_av1.py "video.mp4" --delete-original
-# python convert_av1.py "/path/to/videos" -r  (recursive)
+# av1 "/path/to/videos" "/path/to/output"  (Linux/Mac)
+# av1 "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
+# av1 "video.mp4" --delete-original
+# av1 "/path/to/videos" -r  (recursive)
 
 import os, subprocess, shutil, sys, json, platform, glob, time, signal, logging
 from typing import Optional, Tuple
@@ -24,8 +24,8 @@ import typer
 # ============================================================================ #
 #                           APP & CLI CONFIGURATION                            #
 # ============================================================================ #
-__app_name__ = "convert_av1"
-__version__ = "0.3.0"
+__app_name__ = "av1"
+__version__ = "0.3.1"
 
 console = Console()
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
@@ -129,12 +129,12 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     
     if log_type.lower() == "html":
-        log_file = os.path.join(log_dir, f"convert_av1_{timestamp}.html")
-        html_content = """<!DOCTYPE html>
+        log_file = os.path.join(log_dir, f"{__app_name__}_{timestamp}.html")
+        html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>convert_av1 Log - {}</title>
+    <title>{__app_name__} Log - {timestamp}</title>
     <style>
         body {{ font-family: monospace; margin: 20px; background: #1e1e1e; color: #d4d4d4; }}
         .log {{ white-space: pre-wrap; word-wrap: break-word; }}
@@ -145,10 +145,10 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
     </style>
 </head>
 <body>
-    <h2>convert_av1 Conversion Log</h2>
-    <p>Generated: {}</p>
+    <h2>{__app_name__} Conversion Log</h2>
+    <p>Generated: {timestamp}</p>
     <div class="log">
-{}
+{ "\n".join(_LOG_MESSAGES) }
     </div>
 </body>
 </html>
@@ -157,9 +157,9 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
             f.write(html_content)
     else:
         # Default to .txt
-        log_file = os.path.join(log_dir, f"convert_av1_{timestamp}.txt")
+        log_file = os.path.join(log_dir, f"{__app_name__}_{timestamp}.txt")
         with open(log_file, "w", encoding="utf-8") as f:
-            f.write("convert_av1 Conversion Log\n")
+            f.write(f"{__app_name__} Conversion Log\n")
             f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 60 + "\n\n")
             f.write("\n".join(_LOG_MESSAGES))

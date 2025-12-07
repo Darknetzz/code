@@ -1,4 +1,4 @@
-# convert_av1
+# av1
 
 A fast, reliable video batch converter that targets the best available encoder on your system (AV1 on NVIDIA/AMD GPUs when possible, otherwise HEVC or CPU AV1), with safe defaults to reduce file size by ~50% while preserving quality.
 
@@ -39,52 +39,52 @@ Basic usage examples (Windows PowerShell):
 
 ```powershell
 # Convert a single file in-place
-convert_av1 "C:\Videos\movie.mkv"
+av1 "C:\Videos\movie.mkv"
 
 # Convert a single file to a specific output folder
-convert_av1 "C:\Videos\movie.mkv" "C:\Converted"
+av1 "C:\Videos\movie.mkv" "C:\Converted"
 
 # Convert all files matching a wildcard pattern
-convert_av1 "test*.mp4"
-convert_av1 "C:\Videos\vacation_*.mkv" "C:\Converted"
+av1 "test*.mp4"
+av1 "C:\Videos\vacation_*.mkv" "C:\Converted"
 
 # Convert a folder (outputs to same folder unless you provide one)
-convert_av1 "C:\Videos\Input"
-convert_av1 "C:\Videos\Input" "C:\Videos\Output"
+av1 "C:\Videos\Input"
+av1 "C:\Videos\Input" "C:\Videos\Output"
 
 # Auto-delete originals after successful conversion
-convert_av1 "C:\Videos\movie.mkv" --delete-original
+av1 "C:\Videos\movie.mkv" --delete-original
 
 # Force overwrite existing outputs
-convert_av1 "C:\Videos\movie.mkv" --overwrite
+av1 "C:\Videos\movie.mkv" --overwrite
 
 # Manually set target video bitrate
-convert_av1 "C:\Videos\movie.mkv" --bitrate 2500k
-convert_av1 "C:\Videos\movie.mkv" --bitrate 2.5m
+av1 "C:\Videos\movie.mkv" --bitrate 2500k
+av1 "C:\Videos\movie.mkv" --bitrate 2.5m
 
 # Dry run: show what would happen without converting
-convert_av1 "C:\Videos\movie.mkv" --dry-run
+av1 "C:\Videos\movie.mkv" --dry-run
 
 # Process folder recursively (includes all subdirectories)
-convert_av1 "C:\Videos\Input" --recursive
-convert_av1 "C:\Videos\Input" -r
+av1 "C:\Videos\Input" --recursive
+av1 "C:\Videos\Input" -r
 
 # Save logs (default: ./logs/ as .txt)
-convert_av1 "C:\Videos\Input" --log-type txt
-convert_av1 "C:\Videos\Input" --log-type html
-convert_av1 "C:\Videos\Input" --log-type none  # Disable logging
+av1 "C:\Videos\Input" --log-type txt
+av1 "C:\Videos\Input" --log-type html
+av1 "C:\Videos\Input" --log-type none  # Disable logging
 
 # Custom log directory
-convert_av1 "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type html
+av1 "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type html
 
 # Keep .mkv extension when converting in-place
-convert_av1 "C:\Videos\movie.mp4" --delete-original --keep-mkv
+av1 "C:\Videos\movie.mp4" --delete-original --keep-mkv
 ```
 
 ## Command reference
 
 ```text
-Usage: convert_av1 [INPUT_PATH] [OUTPUT_DIR] [OPTIONS]
+Usage: av1 [INPUT_PATH] [OUTPUT_DIR] [OPTIONS]
 
 Arguments:
   INPUT_PATH    Path to input (file or folder) - supports wildcards like 'test*.mp4'
@@ -128,7 +128,7 @@ Options:
 
 ## Tips
 
-- **Use wildcards** to batch process files matching a pattern: `convert_av1 "episode_*.mkv"`
+- **Use wildcards** to batch process files matching a pattern: `av1 "episode_*.mkv"`
 - **Progress tracking** shows real-time file counter, elapsed time, ETA, and cumulative space saved.
 - **Graceful stopping**: Press `Ctrl+C` once to finish the current file and display a summary. Press `Ctrl+C` again to force quit immediately.
 - **Logging** automatically saves all output to timestamped files in `./logs/`. Use `--log-type html` for styled HTML logs or `--log-type none` to disable.
@@ -156,7 +156,7 @@ To enable tab completion in PowerShell:
 
 2. Generate the completion script:
    ```bash
-   convert_av1 --show-completion > ~\Documents\PowerShell\completions\convert_av1-completion.ps1
+   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
 
 3. Add to your PowerShell profile (`$PROFILE`):
@@ -172,7 +172,7 @@ To enable tab completion in PowerShell:
 
 5. After modifying CLI options, regenerate the completion:
    ```bash
-   convert_av1 --show-completion > ~\Documents\PowerShell\completions\convert_av1-completion.ps1
+   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
 
 **Note:** Avoid using `--install-completion` as it appends directly to your profile without formatting and can create duplicates. Use `--show-completion` and manually manage completion scripts instead.
