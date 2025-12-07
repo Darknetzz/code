@@ -21,39 +21,76 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import typer
 
-console = Console()
-app = typer.Typer(no_args_is_help=True, context_settings={"help_option_names": ["-h", "--help"]})
-
-# App metadata
+# ============================================================================ #
+#                           APP & CLI CONFIGURATION                            #
+# ============================================================================ #
 __app_name__ = "convert_av1"
 __version__ = "0.3.0"
 
-# Constants
+console = Console()
+app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
+
+# ============================================================================ #
+#                        ENCODING CONFIGURATION CONSTANTS                      #
+# ============================================================================ #
 BITRATE_REDUCTION_FACTOR = 0.5
 BITRATE_FALLBACK = 2_000_000
 BITRATE_MAXRATE_MULTIPLIER = 1.2
 BITRATE_BUFSIZE_MULTIPLIER = 2.0
+
+# ============================================================================ #
+#                         FILE HANDLING CONSTANTS                              #
+# ============================================================================ #
 SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm")
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
 DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
-# Global --version flag callback (used by root callback)
+# ============================================================================ #
+#                          SYSTEM STATE VARIABLES                              #
+# ============================================================================ #
+SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
+ACTIVE_ENCODER = {  # Detected encoder info (CPU fallback as default)
+    "encoder": "libsvtav1",  # Encoder name
+    "codec": "av1",  # av1 or hevc
+    "hw_type": "cpu"  # nvidia, amd, cpu, or vaapi
+}
+
+# ============================================================================ #
+#                           RUNTIME STATE FLAGS                                #
+# ============================================================================ #
+_SUPPRESS_OUTPUT = False  # Suppress cprint output during conversions
+_PROGRESS_CONTEXT = None  # Active progress context manager
+_USER_CANCELLED = False  # User pressed Ctrl+C
+_LOG_MESSAGES = []  # Store all messages for file logging
+_LOGGER = None  # Logger instance (unused, kept for compatibility)
+
+# ============================================================================ #
+#                          VERSION FLAG CALLBACK                               #
+# ============================================================================ #
 def _version_callback(value: bool):
+    """Display version and exit."""
     if value:
         typer.echo(f"{__app_name__} {__version__}")
         raise typer.Exit()
 
-# Store detected encoder info (initialized with CPU fallback to satisfy static analysis)
-# Structure: {"encoder": "name", "codec": "av1|hevc", "hw_type": "nvidia|amd|cpu|vaapi"}
-ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
-SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 
-# Global flag to suppress cprint output during conversions
-_SUPPRESS_OUTPUT = False
-_PROGRESS_CONTEXT = None
-_USER_CANCELLED = False
-_LOG_MESSAGES = []  # Store all messages for file logging
-_LOGGER = None  # Logger instance
+def _show_examples():
+    """Display formatted examples."""
+    examples = """
+    EXAMPLES:
+      av1 "C:\\Videos"                          Convert all videos in folder
+      av1 "C:\\Videos\\movie.mp4" -d            Convert single file, delete original  
+      av1 "episode_*.mkv"                       Wildcard pattern conversion
+      av1 "C:\\Input" "C:\\Output" -o            Batch with custom output folder
+      av1 "C:\\Videos" -r --log-type html       Recursive with HTML logging
+      av1 "C:\\Videos" -r --dry-run              Preview changes without converting
+    
+    NOTES:
+      • Logs saved to ./logs/ by default
+      • Press Ctrl+C once to finish current file and exit gracefully
+      • Use -h or --help for complete option list
+    """
+    console.print(examples)
 
 
 def _format_saved(bytes_amount: float) -> str:
@@ -876,7 +913,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
 
 @app.command()
 def main(
-    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4')"),
+    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4') - see README.md for examples"),
     output_dir: Optional[str] = typer.Option(None, help="Output dir"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)"),
     delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion"),
@@ -897,36 +934,36 @@ def main(
     ),
 ):
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction.
-    
+
     EXAMPLES:
-    
-      Convert all videos in a folder:
-        av1 "C:\\Videos"
-      
-      Convert a single file and delete original:
-        av1 "C:\\Videos\\movie.mp4" --delete-original
-      
-      Convert files matching a wildcard pattern:
-        av1 "episode_*.mkv"
-      
-      Batch convert with custom output folder:
-        av1 "C:\\Input" "C:\\Output" --overwrite
-      
-      Process recursively with HTML logs:
-        av1 "C:\\Videos" --recursive --log-type html
-      
-      Dry-run to preview what would be converted:
-        av1 "C:\\Videos" --recursive --dry-run
-    
-    By default, logs are saved to ./logs/ with timestamps.
-    Press Ctrl+C once during conversion to finish current file and exit gracefully.
+
+    • Convert all videos in a folder:
+      $ av1 "C:\\Videos"
+
+    • Convert single file and delete original:
+      $ av1 "C:\\Videos\\movie.mp4" --delete-original
+
+    • Wildcard pattern matching:
+      $ av1 "episode_*.mkv"
+
+    • Batch with custom output folder:
+      $ av1 "C:\\Input" "C:\\Output" --overwrite
+
+    • Recursive with HTML logging:
+      $ av1 "C:\\Videos" --recursive --log-type html
+
+    • Preview what would be converted:
+      $ av1 "C:\\Videos" --recursive --dry-run
     """
     # If version flag triggered, callback already exited.
     check_ffmpeg()
     
     if not input_paths:
-        cprint("Error: INPUT_PATH is required", "error")
-        raise typer.Exit(code=1)
+        # Show help when no input paths provided
+        import subprocess
+        import sys
+        subprocess.run([sys.executable, __file__, "--help"])
+        raise typer.Exit(code=0)
     
     # If multiple paths passed (from wildcard expansion), process them all
     if len(input_paths) > 1:
