@@ -1,7 +1,9 @@
 import typer, subprocess, shutil
 from pathlib import Path
+from rich.console import Console
 
 app = typer.Typer()
+console = Console()
 
 @app.command()
 def main(
@@ -20,60 +22,71 @@ def main(
     Compiles it with PyInstaller and cleans up build artifacts.
     """
     if not file.exists():
-        typer.echo(f"Error: File '{file}' does not exist.", err=True)
+        console.print(f"[red]✗ Error:[/red] File '{file}' does not exist.", style="bold")
         raise typer.Exit(code=1)
     
     if file.suffix != ".py":
-        typer.echo(f"Error: '{file}' is not a Python file.", err=True)
+        console.print(f"[red]✗ Error:[/red] '{file}' is not a Python file.", style="bold")
         raise typer.Exit(code=1)
     
-    typer.echo(f"Processing Python file: {file}")
+    console.print(f"[cyan]📦 Processing:[/cyan] {file}", style="bold")
 
     # Determine base paths (use script directory to keep outputs next to the script)
     base_dir = file.resolve().parent
     dist_path = output_dir.resolve() if output_dir else base_dir / "dist"
     work_path = base_dir / "build"
     spec_path = base_dir
+    spec_file = spec_path / f"{file.stem}.spec"
 
     # Ensure output directory exists
     dist_path.mkdir(parents=True, exist_ok=True)
 
     # Run pyinstaller with explicit paths
-    cmd = [
-        "pyinstaller",
-        "--onefile",
-        f"--distpath={dist_path}",
-        f"--workpath={work_path}",
-        f"--specpath={spec_path}",
-        str(file),
-    ]
+    # If a .spec file exists, use it directly to preserve custom settings
+    if spec_file.exists():
+        console.print(f"[green]✓ Found existing .spec file:[/green] {spec_file.name}")
+        cmd = [
+            "pyinstaller",
+            f"--distpath={dist_path}",
+            f"--workpath={work_path}",
+            str(spec_file),
+        ]
+    else:
+        console.print(f"[yellow]⚙ Generating new .spec file[/yellow]")
+        cmd = [
+            "pyinstaller",
+            "--onefile",
+            f"--distpath={dist_path}",
+            f"--workpath={work_path}",
+            f"--specpath={spec_path}",
+            str(file),
+        ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        typer.echo(f"Error running pyinstaller: {result.stderr}", err=True)
+        console.print(f"[red]✗ PyInstaller failed:[/red]", style="bold")
+        console.print(result.stderr, style="red")
         raise typer.Exit(code=1)
     
-    typer.echo("PyInstaller completed successfully")
+    console.print("[green]✓ PyInstaller completed successfully[/green]", style="bold")
     
     # Clean up build directory (cross-platform) if not keeping it
     if not keep_build:
         if work_path.exists():
             shutil.rmtree(work_path)
-            typer.echo("Cleaned up build directory")
-        else:
-            typer.echo("Build directory already cleaned")
+            console.print("[dim]  Cleaned up build directory[/dim]")
     else:
-        typer.echo("Keeping build directory (--keep-build)")
+        console.print("[yellow]  Keeping build directory (--keep-build)[/yellow]")
     
     # Clean up spec file if not keeping it
-    spec_file = spec_path / f"{file.stem}.spec"
     if not keep_spec:
         if spec_file.exists():
             spec_file.unlink()
-            typer.echo("Cleaned up .spec file")
-        else:
-            typer.echo(".spec file already cleaned")
-    else:
-        typer.echo("Keeping .spec file (--keep-spec)")
+            console.print("[dim]  Cleaned up .spec file[/dim]")
+    elif keep_spec and not spec_file.exists():
+        # Only show message if user explicitly set --keep-spec but no spec was generated
+        pass
+    
+    console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}.exe[/cyan]", style="bold")
 
 
 
