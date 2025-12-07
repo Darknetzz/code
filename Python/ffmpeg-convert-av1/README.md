@@ -149,23 +149,28 @@ Options:
 
 To enable tab completion in PowerShell:
 
-1. Generate the completion script:
+1. Create the completions directory:
+   ```bash
+   mkdir ~\Documents\PowerShell\completions
+   ```
+
+2. Generate the completion script:
    ```bash
    av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
 
-2. Add to your PowerShell profile (`$PROFILE`):
+3. Add to your PowerShell profile (`$PROFILE`):
    ```powershell
    # Load all completion scripts
    Get-ChildItem "$HOME\Documents\PowerShell\completions\*.ps1" | ForEach-Object { . $_ }
    ```
 
-3. Reload your profile:
+4. Reload your profile:
    ```powershell
    . $PROFILE
    ```
 
-4. After modifying CLI options, regenerate the completion:
+5. After modifying CLI options, regenerate the completion:
    ```bash
    av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
