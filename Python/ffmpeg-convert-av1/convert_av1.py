@@ -52,6 +52,17 @@ SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 _SUPPRESS_OUTPUT = False
 _PROGRESS_CONTEXT = None
 
+
+def _format_saved(bytes_amount: float) -> str:
+    """Pretty-print saved bytes as KB/MB/GB for progress columns."""
+    if bytes_amount >= 1024 ** 3:
+        return f"{bytes_amount / (1024 ** 3):.2f} GB"
+    if bytes_amount >= 1024 ** 2:
+        return f"{bytes_amount / (1024 ** 2):.1f} MB"
+    if bytes_amount >= 1024:
+        return f"{bytes_amount / 1024:.1f} KB"
+    return "0"
+
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
@@ -680,7 +691,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
-            TextColumn("[green]Saved: {task.fields[saved]} GB"),
+            TextColumn("[green]Saved: {task.fields[saved]}"),
             transient=True,
         ) as progress:
             global _PROGRESS_CONTEXT
@@ -689,7 +700,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             overall_task = progress.add_task(
                 f"[cyan]Converting 0/{len(video_files)} files...",
                 total=len(video_files),
-                saved="0.00",
+                saved=_format_saved(0),
             )
             
             for idx, file_path in enumerate(video_files, 1):
@@ -754,7 +765,7 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
                 progress.update(
                     overall_task,
                     description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
-                    fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
+                    fields={"saved": _format_saved(cumulative_saved)},
                 )
             
             _PROGRESS_CONTEXT = None
@@ -840,7 +851,7 @@ def main(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
-            TextColumn("[green]Saved: {task.fields[saved]} GB"),
+            TextColumn("[green]Saved: {task.fields[saved]}"),
             transient=False,
         ) as progress:
             global _PROGRESS_CONTEXT
@@ -849,7 +860,7 @@ def main(
             overall_task = progress.add_task(
                 f"[cyan]Converting 0/{len(matched_files)} files...",
                 total=len(matched_files),
-                saved="0.00",
+                saved=_format_saved(0),
             )
             
             for idx, file_path in enumerate(matched_files, 1):
@@ -903,7 +914,7 @@ def main(
                 progress.update(
                     overall_task,
                     description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s{eta_str}) → {display_name}",
-                    fields={"saved": f"{cumulative_saved / (1024**3):.2f}"},
+                    fields={"saved": _format_saved(cumulative_saved)},
                 )
             
             _PROGRESS_CONTEXT = None
