@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_submodules
 hiddenimports = collect_submodules('shellingham')
 
 a = Analysis(
-    ['pybin.py'],
+    ['convert_av1.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -25,7 +25,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='pybin',
+    name='convert_av1',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
