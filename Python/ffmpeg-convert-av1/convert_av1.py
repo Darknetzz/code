@@ -7,7 +7,7 @@
 # python convert_av1.py "video.mp4" --delete-original
 # python convert_av1.py "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform, glob, time
+import os, subprocess, shutil, sys, json, platform, glob, time, signal
 from typing import Optional, Tuple
 from pathlib import Path
 
@@ -51,6 +51,7 @@ SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 # Global flag to suppress cprint output during conversions
 _SUPPRESS_OUTPUT = False
 _PROGRESS_CONTEXT = None
+_USER_CANCELLED = False
 
 
 def _format_saved(bytes_amount: float) -> str:
@@ -62,6 +63,14 @@ def _format_saved(bytes_amount: float) -> str:
     if bytes_amount >= 1024:
         return f"{bytes_amount / 1024:.1f} KB"
     return "0"
+
+def _signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully during batch processing."""
+    global _USER_CANCELLED
+    _USER_CANCELLED = True
+    cprint("\n\nStopping after current file... (Press Ctrl+C again to force quit)", "warning")
+    # Restore default handler so second Ctrl+C will force quit
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -685,6 +694,11 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         batch_start_time = time.time()  # Track elapsed time
         file_times = []  # Track individual file encoding times for ETA
         
+        # Set up graceful cancellation handler
+        global _USER_CANCELLED
+        _USER_CANCELLED = False
+        signal.signal(signal.SIGINT, _signal_handler)
+        
         # Process files with progress tracking
         with Progress(
             SpinnerColumn(),
@@ -704,6 +718,11 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
             )
             
             for idx, file_path in enumerate(video_files, 1):
+                # Check if user cancelled
+                if _USER_CANCELLED:
+                    cprint("\nBatch conversion stopped by user.", "warning")
+                    break
+                
                 # Show relative path for recursive mode
                 display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
                 file_start = time.time()
@@ -835,6 +854,11 @@ def main(
         matched_files.sort()
         cprint(f"Found {len(matched_files)} file(s) to process.", "info")
         
+        # Set up graceful cancellation handler
+        global _USER_CANCELLED
+        _USER_CANCELLED = False
+        signal.signal(signal.SIGINT, _signal_handler)
+        
         # Process each file
         # Track statistics for batch summary
         total_original_size = 0
@@ -864,6 +888,11 @@ def main(
             )
             
             for idx, file_path in enumerate(matched_files, 1):
+                # Check if user cancelled
+                if _USER_CANCELLED:
+                    cprint("\nBatch conversion stopped by user.", "warning")
+                    break
+                
                 display_name = os.path.basename(file_path)
                 file_start = time.time()
                 elapsed = int(time.time() - batch_start_time)
