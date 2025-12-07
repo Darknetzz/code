@@ -91,17 +91,32 @@ Arguments:
   OUTPUT_DIR    Optional output directory (defaults to input or same folder)
 
 Options:
-  --bitrate TEXT          Override video bitrate (e.g., 2500k, 2m)
-  -d, --delete-original   Auto-delete originals after successful conversion
-  -o, --overwrite         Overwrite existing output files
-  --dry-run               Print planned actions without converting
-  -r, --recursive         Process subdirectories recursively
-  --keep-mkv              Keep .mkv extension instead of matching original filename
-  --log-type TEXT         Log output type: 'txt' (default), 'html', or 'none' to disable
-  --log-dir TEXT          Directory to save logs (default: ./logs)
-  -V, --version           Show version and exit
-  --help                  Show this message and exit
+   --bitrate TEXT          Override video bitrate (e.g., 2500k, 2m)
+   -d, --delete-original   Auto-delete originals after successful conversion
+   -o, --overwrite         Overwrite existing output files
+   --dry-run               Print planned actions without converting
+   -r, --recursive         Process subdirectories recursively
+   --keep-mkv              Keep .mkv extension instead of matching original filename
+   --log-type TEXT         Log output type: 'txt' (default), 'html', or 'none' to disable
+   --log-dir TEXT          Directory to save logs (default: ./logs)
+   -V, --version           Show version and exit
+   --help                  Show this message and exit
 ```
+
+### Options (table)
+<table>
+   <tr><th>Flag</th><th>Description</th></tr>
+   <tr><td>--bitrate &lt;TEXT&gt;</td><td>Override video bitrate (e.g., 2500k, 2m).</td></tr>
+   <tr><td>-d, --delete-original</td><td>Auto-delete originals after successful conversion.</td></tr>
+   <tr><td>-o, --overwrite</td><td>Overwrite existing output files.</td></tr>
+   <tr><td>--dry-run</td><td>Print planned actions without converting.</td></tr>
+   <tr><td>-r, --recursive</td><td>Process subdirectories recursively.</td></tr>
+   <tr><td>--keep-mkv</td><td>Keep .mkv extension instead of matching original filename.</td></tr>
+   <tr><td>--log-type &lt;TEXT&gt;</td><td>Log output type: 'txt' (default), 'html', or 'none' to disable.</td></tr>
+   <tr><td>--log-dir &lt;TEXT&gt;</td><td>Directory to save logs (default: ./logs).</td></tr>
+   <tr><td>-V, --version</td><td>Show version and exit.</td></tr>
+   <tr><td>--help</td><td>Show this message and exit.</td></tr>
+</table>
 
 ## How it works
 

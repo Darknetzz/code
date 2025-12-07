@@ -31,9 +31,12 @@ pybin my_script.py --keep-spec --keep-build
 4. Leaves the resulting executable in the `dist/` folder next to the script by default.
 
 ## Flags
-- `--keep-spec` — do not delete the generated `.spec` file after the build.
-- `--keep-build` — do not delete the `build/` directory after the build.
-- `--output-dir` — optional directory for the final executable; defaults to `<script_dir>/dist`.
+<table>
+   <tr><th>Flag</th><th>Description</th></tr>
+   <tr><td>--keep-spec / --no-keep-spec</td><td>Keep or delete the generated .spec file after the build (default: keep).</td></tr>
+   <tr><td>--keep-build</td><td>Keep the build directory after the build (default: removed).</td></tr>
+   <tr><td>--output-dir &lt;PATH&gt;</td><td>Optional output directory for the final executable (default: &lt;script_dir&gt;/dist).</td></tr>
+</table>
 
 ## Notes
 - The tool does not install PyInstaller for you; ensure it is installed and on PATH.
