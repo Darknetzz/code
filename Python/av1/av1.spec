@@ -9,7 +9,7 @@ hiddenimports = collect_submodules('shellingham') + [
 ]
 
 a = Analysis(
-    ['convert_av1.py'],
+    ['av1.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -29,7 +29,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='convert_av1',
+    name='av1',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
