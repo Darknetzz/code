@@ -2,7 +2,11 @@
 from PyInstaller.utils.hooks import collect_submodules
 
 # Collect all shellingham submodules to fix --show-completion
-hiddenimports = collect_submodules('shellingham')
+# Explicitly include platform-specific modules
+hiddenimports = collect_submodules('shellingham') + [
+    'shellingham.nt',
+    'shellingham.posix',
+]
 
 a = Analysis(
     ['convert_av1.py'],
