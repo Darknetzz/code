@@ -145,6 +145,33 @@ Options:
 - "Insufficient disk space" → Free space or change `OUTPUT_DIR` to a drive with more room.
 - Hardware encoder not detected → Update GPU drivers; verify FFmpeg build includes NVENC/AMF.
 
+## Shell Completion
+
+To enable tab completion in PowerShell:
+
+1. Generate the completion script:
+   ```bash
+   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   ```
+
+2. Add to your PowerShell profile (`$PROFILE`):
+   ```powershell
+   # Load all completion scripts
+   Get-ChildItem "$HOME\Documents\PowerShell\completions\*.ps1" | ForEach-Object { . $_ }
+   ```
+
+3. Reload your profile:
+   ```powershell
+   . $PROFILE
+   ```
+
+4. After modifying CLI options, regenerate the completion:
+   ```bash
+   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   ```
+
+**Note:** Avoid using `--install-completion` as it appends directly to your profile without formatting and can create duplicates. Use `--show-completion` and manually manage completion scripts instead.
+
 ## License
 
 This project is provided as-is without warranty. Use at your own risk.

@@ -40,3 +40,24 @@ pybin my_script.py --keep-spec --keep-build
 - The `.spec` file is regenerated each run unless you keep and reuse it with `--keep-spec`.
 - By default the `dist/`, `build/`, and `.spec` live in the same directory as the input script (even if you run `pybin` from elsewhere).
 - The final executable path defaults to `<script_dir>/dist/<script-name>.exe` on Windows.
+
+## Shell Completion
+To enable tab completion in PowerShell:
+
+1. Generate the completion script:
+   ```bash
+   pybin --show-completion > ~\Documents\PowerShell\completions\pybin-completion.ps1
+   ```
+
+2. Add to your PowerShell profile (`$PROFILE`):
+   ```powershell
+   # Load all completion scripts
+   Get-ChildItem "$HOME\Documents\PowerShell\completions\*.ps1" | ForEach-Object { . $_ }
+   ```
+
+3. Reload your profile:
+   ```powershell
+   . $PROFILE
+   ```
+
+**Note:** Avoid using `--install-completion` as it appends directly to your profile without formatting and can create duplicates. Use `--show-completion` and manually manage completion scripts instead.
