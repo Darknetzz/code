@@ -7,7 +7,7 @@
 # python convert_av1.py "video.mp4" --delete-original
 # python convert_av1.py "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform, glob, time, signal
+import os, subprocess, shutil, sys, json, platform, glob, time, signal, logging
 from typing import Optional, Tuple
 from pathlib import Path
 
@@ -52,6 +52,8 @@ SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
 _SUPPRESS_OUTPUT = False
 _PROGRESS_CONTEXT = None
 _USER_CANCELLED = False
+_LOG_MESSAGES = []  # Store all messages for file logging
+_LOGGER = None  # Logger instance
 
 
 def _format_saved(bytes_amount: float) -> str:
@@ -71,6 +73,62 @@ def _signal_handler(sig, frame):
     cprint("\n\nStopping after current file... (Press Ctrl+C again to force quit)", "warning")
     # Restore default handler so second Ctrl+C will force quit
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
+    """Save collected log messages to file (.txt or .html).
+    Returns the path to the saved log file, or None if disabled.
+    """
+    if not log_type or log_type.lower() == "none":
+        return None
+    
+    if not _LOG_MESSAGES:
+        return None
+    
+    # Create logs directory
+    log_dir = log_path or "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Generate filename with timestamp
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    
+    if log_type.lower() == "html":
+        log_file = os.path.join(log_dir, f"convert_av1_{timestamp}.html")
+        html_content = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>convert_av1 Log - {}</title>
+    <style>
+        body {{ font-family: monospace; margin: 20px; background: #1e1e1e; color: #d4d4d4; }}
+        .log {{ white-space: pre-wrap; word-wrap: break-word; }}
+        .success {{ color: #4ec9b0; }}
+        .error {{ color: #f48771; }}
+        .warning {{ color: #dcdcaa; }}
+        .info {{ color: #569cd6; }}
+    </style>
+</head>
+<body>
+    <h2>convert_av1 Conversion Log</h2>
+    <p>Generated: {}</p>
+    <div class="log">
+{}
+    </div>
+</body>
+</html>
+""".format(timestamp, time.strftime("%Y-%m-%d %H:%M:%S"), "\n".join(_LOG_MESSAGES))
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(html_content)
+    else:
+        # Default to .txt
+        log_file = os.path.join(log_dir, f"convert_av1_{timestamp}.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write("convert_av1 Conversion Log\n")
+            f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("=" * 60 + "\n\n")
+            f.write("\n".join(_LOG_MESSAGES))
+    
+    cprint(f"Log saved to: {log_file}", "success")
+    return log_file
 
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
@@ -98,6 +156,9 @@ def cprint(message, type="", style="bold green", **kwargs):
 
     message = f"{prefix}  {message}"
     console.print(message, style=style, **kwargs)
+    
+    # Log the message (with prefix for file logging)
+    _LOG_MESSAGES.append(message)
 
 # ============================================================================ #
 #                            FUNCTION: safe_input                              #
@@ -823,6 +884,8 @@ def main(
     dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without converting"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
+    log_type: str = typer.Option("txt", "--log-type", help="Log output type: 'txt', 'html', or 'none' to disable"),
+    log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: ./logs)"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -978,10 +1041,13 @@ def main(
                 matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
                 if matched_files and len(matched_files) > 1:
                     # Recursively call main with expanded list
-                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv, version=None)
+                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv, log_type, log_dir, version=None)
         
         # No wildcards or only 1 match - use existing logic
         convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv)
+    
+    # Save logs
+    _save_log(log_type, log_dir)
 
 if __name__ == "__main__":
     app()

@@ -10,7 +10,9 @@ A fast, reliable video batch converter that targets the best available encoder o
 - Safe batch processing: disk space checks, temp file swap, overwrite prompts
 - Skips files that already use the target codec
 - **Wildcard pattern support**: Convert files matching patterns like `test*.mp4` or `video_?.mkv`
-- **Progress tracking**: Real-time progress indicator when converting multiple files
+- **Progress tracking**: Real-time progress with elapsed time, ETA, and live savings counter
+- **Graceful cancellation**: Press Ctrl+C to stop after current file and save progress summary
+- **Automatic logging**: Save all output to `.txt` or `.html` logs (configurable)
 - Clean CLI with helpful messages (powered by Typer + Rich)
 
 ## Requirements
@@ -66,6 +68,17 @@ python convert_av1.py "C:\Videos\movie.mkv" --dry-run
 # Process folder recursively (includes all subdirectories)
 python convert_av1.py "C:\Videos\Input" --recursive
 python convert_av1.py "C:\Videos\Input" -r
+
+# Save logs (default: ./logs/ as .txt)
+python convert_av1.py "C:\Videos\Input" --log-type txt
+python convert_av1.py "C:\Videos\Input" --log-type html
+python convert_av1.py "C:\Videos\Input" --log-type none  # Disable logging
+
+# Custom log directory
+python convert_av1.py "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type html
+
+# Keep .mkv extension when converting in-place
+python convert_av1.py "C:\Videos\movie.mp4" --delete-original --keep-mkv
 ```
 
 ## Command reference
@@ -83,6 +96,9 @@ Options:
   -o, --overwrite         Overwrite existing output files
   --dry-run               Print planned actions without converting
   -r, --recursive         Process subdirectories recursively
+  --keep-mkv              Keep .mkv extension instead of matching original filename
+  --log-type TEXT         Log output type: 'txt' (default), 'html', or 'none' to disable
+  --log-dir TEXT          Directory to save logs (default: ./logs)
   -V, --version           Show version and exit
   --help                  Show this message and exit
 ```
@@ -113,12 +129,15 @@ Options:
 ## Tips
 
 - **Use wildcards** to batch process files matching a pattern: `python convert_av1.py "episode_*.mkv"`
+- **Progress tracking** shows real-time file counter, elapsed time, ETA, and cumulative space saved.
+- **Graceful stopping**: Press `Ctrl+C` once to finish the current file and display a summary. Press `Ctrl+C` again to force quit immediately.
+- **Logging** automatically saves all output to timestamped files in `./logs/`. Use `--log-type html` for styled HTML logs or `--log-type none` to disable.
 - Use `--recursive` to process entire folder trees with subdirectories, preserving structure when using a separate output folder.
 - For archival quality, you can raise the bitrate or use CPU AV1 with `--bitrate`.
 - If you see larger outputs, the source may already be efficient (e.g., high-entropy or already AV1/HEVC). The script warns and lets you choose deletion.
 - To batch large folders, start with `--overwrite` only when you're confident in the settings.
 - Combine `--dry-run` with `--recursive` to preview all files that would be processed before committing to conversion.
-- **Progress tracking** shows real-time file count and current file being processed during batch conversions.
+- Use `--keep-mkv` to preserve the `.mkv` extension when converting files in-place (useful for maintaining consistent naming).
 
 ## Troubleshooting
 
