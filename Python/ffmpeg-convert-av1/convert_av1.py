@@ -26,7 +26,7 @@ app = typer.Typer()
 
 # App metadata
 __app_name__ = "convert_av1"
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 # Constants
 BITRATE_REDUCTION_FACTOR = 0.5
@@ -876,15 +876,15 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
 
 @app.command()
 def main(
-    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards and multiple files)"),
+    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4')"),
     output_dir: Optional[str] = typer.Option(None, help="Output dir"),
-    bitrate: Optional[str] = typer.Option(None, help="Override bitrate"),
-    delete_original: bool = typer.Option(False, "-d", "--delete-original"),
-    overwrite: bool = typer.Option(False, "-o", "--overwrite"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned actions without converting"),
+    bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)"),
+    delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion"),
+    overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Overwrite existing output files"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show planned actions without converting"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
-    log_type: str = typer.Option("txt", "--log-type", help="Log output type: 'txt', 'html', or 'none' to disable"),
+    log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', or 'none'"),
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: ./logs)"),
     version: Optional[bool] = typer.Option(
         None,
@@ -896,7 +896,31 @@ def main(
         is_flag=True,
     ),
 ):
-    """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction."""
+    """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction.
+    
+    EXAMPLES:
+    
+      Convert all videos in a folder:
+        av1 "C:\\Videos"
+      
+      Convert a single file and delete original:
+        av1 "C:\\Videos\\movie.mp4" --delete-original
+      
+      Convert files matching a wildcard pattern:
+        av1 "episode_*.mkv"
+      
+      Batch convert with custom output folder:
+        av1 "C:\\Input" "C:\\Output" --overwrite
+      
+      Process recursively with HTML logs:
+        av1 "C:\\Videos" --recursive --log-type html
+      
+      Dry-run to preview what would be converted:
+        av1 "C:\\Videos" --recursive --dry-run
+    
+    By default, logs are saved to ./logs/ with timestamps.
+    Press Ctrl+C once during conversion to finish current file and exit gracefully.
+    """
     # If version flag triggered, callback already exited.
     check_ffmpeg()
     
