@@ -22,7 +22,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 import typer
 
 console = Console()
-app = typer.Typer()
+app = typer.Typer(no_args_is_help=True, context_settings={"help_option_names": ["-h", "--help"]})
 
 # App metadata
 __app_name__ = "convert_av1"
