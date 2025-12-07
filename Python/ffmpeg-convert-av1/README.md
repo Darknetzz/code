@@ -39,52 +39,52 @@ Basic usage examples (Windows PowerShell):
 
 ```powershell
 # Convert a single file in-place
-python convert_av1.py "C:\Videos\movie.mkv"
+convert_av1 "C:\Videos\movie.mkv"
 
 # Convert a single file to a specific output folder
-python convert_av1.py "C:\Videos\movie.mkv" "C:\Converted"
+convert_av1 "C:\Videos\movie.mkv" "C:\Converted"
 
 # Convert all files matching a wildcard pattern
-python convert_av1.py "test*.mp4"
-python convert_av1.py "C:\Videos\vacation_*.mkv" "C:\Converted"
+convert_av1 "test*.mp4"
+convert_av1 "C:\Videos\vacation_*.mkv" "C:\Converted"
 
 # Convert a folder (outputs to same folder unless you provide one)
-python convert_av1.py "C:\Videos\Input"
-python convert_av1.py "C:\Videos\Input" "C:\Videos\Output"
+convert_av1 "C:\Videos\Input"
+convert_av1 "C:\Videos\Input" "C:\Videos\Output"
 
 # Auto-delete originals after successful conversion
-python convert_av1.py "C:\Videos\movie.mkv" --delete-original
+convert_av1 "C:\Videos\movie.mkv" --delete-original
 
 # Force overwrite existing outputs
-python convert_av1.py "C:\Videos\movie.mkv" --overwrite
+convert_av1 "C:\Videos\movie.mkv" --overwrite
 
 # Manually set target video bitrate
-python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2500k
-python convert_av1.py "C:\Videos\movie.mkv" --bitrate 2.5m
+convert_av1 "C:\Videos\movie.mkv" --bitrate 2500k
+convert_av1 "C:\Videos\movie.mkv" --bitrate 2.5m
 
 # Dry run: show what would happen without converting
-python convert_av1.py "C:\Videos\movie.mkv" --dry-run
+convert_av1 "C:\Videos\movie.mkv" --dry-run
 
 # Process folder recursively (includes all subdirectories)
-python convert_av1.py "C:\Videos\Input" --recursive
-python convert_av1.py "C:\Videos\Input" -r
+convert_av1 "C:\Videos\Input" --recursive
+convert_av1 "C:\Videos\Input" -r
 
 # Save logs (default: ./logs/ as .txt)
-python convert_av1.py "C:\Videos\Input" --log-type txt
-python convert_av1.py "C:\Videos\Input" --log-type html
-python convert_av1.py "C:\Videos\Input" --log-type none  # Disable logging
+convert_av1 "C:\Videos\Input" --log-type txt
+convert_av1 "C:\Videos\Input" --log-type html
+convert_av1 "C:\Videos\Input" --log-type none  # Disable logging
 
 # Custom log directory
-python convert_av1.py "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type html
+convert_av1 "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type html
 
 # Keep .mkv extension when converting in-place
-python convert_av1.py "C:\Videos\movie.mp4" --delete-original --keep-mkv
+convert_av1 "C:\Videos\movie.mp4" --delete-original --keep-mkv
 ```
 
 ## Command reference
 
 ```text
-Usage: python convert_av1.py [INPUT_PATH] [OUTPUT_DIR] [OPTIONS]
+Usage: convert_av1 [INPUT_PATH] [OUTPUT_DIR] [OPTIONS]
 
 Arguments:
   INPUT_PATH    Path to input (file or folder) - supports wildcards like 'test*.mp4'
@@ -128,7 +128,7 @@ Options:
 
 ## Tips
 
-- **Use wildcards** to batch process files matching a pattern: `python convert_av1.py "episode_*.mkv"`
+- **Use wildcards** to batch process files matching a pattern: `convert_av1 "episode_*.mkv"`
 - **Progress tracking** shows real-time file counter, elapsed time, ETA, and cumulative space saved.
 - **Graceful stopping**: Press `Ctrl+C` once to finish the current file and display a summary. Press `Ctrl+C` again to force quit immediately.
 - **Logging** automatically saves all output to timestamped files in `./logs/`. Use `--log-type html` for styled HTML logs or `--log-type none` to disable.
@@ -156,7 +156,7 @@ To enable tab completion in PowerShell:
 
 2. Generate the completion script:
    ```bash
-   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   convert_av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
 
 3. Add to your PowerShell profile (`$PROFILE`):
@@ -172,7 +172,7 @@ To enable tab completion in PowerShell:
 
 5. After modifying CLI options, regenerate the completion:
    ```bash
-   av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
+   convert_av1 --show-completion > ~\Documents\PowerShell\completions\av1-completion.ps1
    ```
 
 **Note:** Avoid using `--install-completion` as it appends directly to your profile without formatting and can create duplicates. Use `--show-completion` and manually manage completion scripts instead.
