@@ -7,9 +7,8 @@
 # av1 "video.mp4" --delete-original
 # av1 "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform, glob, time, signal, logging
+import os, subprocess, shutil, sys, json, platform, glob, time, signal
 from typing import Optional, Tuple
-from pathlib import Path
 
 # Force UTF-8 encoding on Windows
 if platform.system() == 'Windows':
