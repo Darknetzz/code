@@ -1093,6 +1093,7 @@ def main(
         
         if files_converted == 0:
             cprint("No files were converted.", "info")
+            return
         elif total_original_size > 0:
             total_saved = total_original_size - total_new_size
             percent_saved = (total_saved / total_original_size) * 100
@@ -1123,8 +1124,10 @@ def main(
         # No wildcards or only 1 match - use existing logic
         convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv)
     
-    # Save logs
-    _save_log(log_type, log_dir)
+    # Save logs only if files were actually converted
+    global _LOG_MESSAGES
+    if _LOG_MESSAGES:
+        _save_log(log_type, log_dir)
 
 if __name__ == "__main__":
     app()
