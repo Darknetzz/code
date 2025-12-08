@@ -1,31 +1,46 @@
 # SnapBot - Snapchat API Integration
 
-Simple Python script for interacting with Snapchat using the unofficial API. Send messages, manage friends, and automate Snapchat interactions.
+⚠️ **NOTE: This is a proof-of-concept/educational tool.** Snapchat does not provide an official public API for third-party access. This script demonstrates how one might structure API interactions but cannot authenticate due to Snapchat's closed ecosystem.
 
-## Features
+Simple Python script for interacting with Snapchat using REST API concepts. Send messages, manage friends, and explore API integration patterns.
 
-- 🔐 **Account Authentication** - Secure login with credential storage
-- 💬 **Send Messages** - Text messaging to Snapchat friends
-- 👥 **Friend Management** - View and manage your friend list
-- 🎯 **Configuration** - Persistent config for preferences
-- 🔒 **Secure Credentials** - Encrypted credential storage with file permissions
-- 📊 **Rich CLI** - Beautiful terminal output with tables and formatting
+## ⚠️ Important Limitations
 
-## Installation
+**Snapchat does NOT have a public API**, so this tool:
+- ❌ **Cannot authenticate** with real Snapchat accounts
+- ❌ **Cannot send actual messages** 
+- ❌ **Cannot access real friends lists**
+- ✅ **CAN** demonstrate API patterns and structure
+- ✅ **CAN** be used as a foundation for alternative approaches
 
-```bash
-pip install -r requirements.txt
-```
+## Real Alternatives
 
-**Note:** The script uses `snapchat-unofficial` which requires:
-- Python 3.7+
-- Working internet connection
-- Valid Snapchat account
+If you need to automate Snapchat:
+
+### 1. **Snapchat Marketing API** (Official - Limited)
+- Requires Snapchat Business Account
+- Limited to marketing campaigns and ads
+- Official support from Snapchat
+
+### 2. **Lens Studio** (Official - Creative)
+- Create custom Snapchat lenses
+- Limited to lens development
+- Official Snapchat tool
+
+### 3. **Browser Automation** (Unofficial - Full Access)
+- Use Selenium, Playwright, or Puppeteer
+- Automate via browser like a real user
+- Still violates ToS but more reliable
+- Example: `from selenium import webdriver`
+
+### 4. **Bitmoji API** (Official - Limited)
+- Avatar/Bitmoji specific features
+- Official but very limited scope
 
 ## Commands
 
 ### Login
-Authenticate with your Snapchat account:
+Authenticate with your Snapchat account (if endpoint available):
 
 ```bash
 # Interactive login
@@ -37,6 +52,8 @@ python snapbot.py login -u username -p password
 # Save credentials for future use
 python snapbot.py login -u username -p password -s
 ```
+
+**Status:** ❌ Non-functional - endpoint not accessible
 
 ### Send Message
 Send a message or picture to a friend:
@@ -163,38 +180,40 @@ SnapBot creates two configuration files:
 4. **Account Risk**: Using unofficial APIs may violate Snapchat's ToS and risk account suspension
 5. **Rate Limiting**: Be respectful with message frequency to avoid rate limiting
 
-## Troubleshooting
+## Why This Doesn't Work (Yet)
 
-### "snapchat-unofficial not installed"
-```bash
-pip install snapchat-unofficial
+Snapchat actively prevents third-party API access:
+
+1. **No Official API** - Snapchat doesn't publish endpoints
+2. **Reverse Engineering Required** - Must guess API structure
+3. **Constant Changes** - Endpoints change frequently
+4. **Rate Limiting** - Heavy anti-bot measures
+5. **No Token Auth** - Credentials-only authentication isn't supported properly
+6. **Server-Side Validation** - Even correct requests are rejected
+
+## How to Make It Work
+
+### Option A: Browser Automation (Most Reliable)
+```python
+from selenium import webdriver
+
+driver = webdriver.Chrome()
+driver.get("https://www.snapchat.com")
+# Login via browser, then interact like a user
 ```
 
-### Authentication Failed
-- Verify username and password are correct
-- Check internet connection
-- Try logging in on official Snapchat app to confirm credentials work
-- Account may have 2FA enabled (not supported by unofficial API)
+### Option B: Reverse Engineering (Complex)
+1. Use Snapchat mobile app
+2. Intercept HTTP requests with proxy (Charles, Burp)
+3. Find actual API endpoints
+4. Find authentication mechanism
+5. Implement in this tool
+6. Repeat whenever Snapchat changes
 
-### Import Errors
-Ensure all requirements are installed:
-```bash
-pip install -r requirements.txt
-```
-
-## API Limitations
-
-The unofficial Snapchat API has some limitations:
-
-- May not support all Snapchat features
-- Text-only messaging (no photos/videos)
-- Subject to rate limiting
-- No official support from Snapchat
-- May break if Snapchat changes their API
-
-## Disclaimer
-
-This script uses an unofficial Snapchat API. Use at your own risk. Snapchat does not officially support third-party API access and may restrict or block access at any time.
+### Option C: Official API (Limited but Safe)
+- Apply for Snapchat Business Account
+- Use Marketing API
+- Limited to business features only
 
 ## License
 

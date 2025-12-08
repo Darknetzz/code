@@ -128,33 +128,48 @@ class SnapchatBot:
                     "password": self.password,
                 }
                 
-                response = self.session.post(
+                # Try multiple potential endpoints
+                endpoints = [
                     f"{SNAPCHAT_API_BASE}/login",
-                    json=auth_payload,
-                    timeout=30,
-                    verify=True
-                )
+                    f"{SNAPCHAT_API_BASE}/api/login",
+                    "https://api.snapchat.com/login",
+                ]
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    self.auth_token = data.get("access_token") or data.get("auth_token")
-                    self.authenticated = True
-                    
-                    if self.auth_token:
-                        self.session.headers.update({
-                            "Authorization": f"Bearer {self.auth_token}"
-                        })
-                    
-                    console.print("[bold green]✅ Successfully authenticated![/bold green]")
-                    return True
-                else:
-                    error_msg = response.json().get("error", "Unknown error") if response.text else "Unknown error"
-                    console.print(f"[bold red]Authentication failed: {error_msg}[/bold red]")
-                    return False
+                for endpoint in endpoints:
+                    try:
+                        response = self.session.post(
+                            endpoint,
+                            json=auth_payload,
+                            timeout=30,
+                            verify=True
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            self.auth_token = data.get("access_token") or data.get("auth_token")
+                            self.authenticated = True
+                            
+                            if self.auth_token:
+                                self.session.headers.update({
+                                    "Authorization": f"Bearer {self.auth_token}"
+                                })
+                            
+                            console.print("[bold green]✅ Successfully authenticated![/bold green]")
+                            return True
+                    except:
+                        continue
+                
+                console.print("[bold yellow]⚠️  Authentication failed[/bold yellow]")
+                console.print("[dim]Note: Snapchat doesn't provide a public API for third-party access[/dim]")
+                console.print("[dim]This is a proof-of-concept tool. Real integration would require:[/dim]")
+                console.print("[dim]  • Official Snapchat Business Account + Marketing API[/dim]")
+                console.print("[dim]  • Browser automation (Selenium/Playwright)[/dim]")
+                console.print("[dim]  • Snapchat's Lens Studio API (limited features)[/dim]")
+                return False
                     
         except requests.exceptions.RequestException as e:
             console.print(f"[bold red]Connection error: {e}[/bold red]")
-            console.print("[dim]Note: Snapchat API access requires official credentials[/dim]")
+            console.print("[dim]The Snapchat API endpoint may not be accessible or may have changed[/dim]")
             return False
         except Exception as e:
             console.print(f"[bold red]Authentication error: {e}[/bold red]")
