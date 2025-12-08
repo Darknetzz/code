@@ -20,7 +20,25 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Interactive TUI Mode (Default)
+### Quick Start
+
+The simplest way to use SizeTree - just provide a path:
+
+```bash
+# Scan current directory
+python sizetree.py
+
+# Scan any directory
+python sizetree.py C:\Users
+python sizetree.py /var/log
+python sizetree.py ..
+
+# Add options directly
+python sizetree.py . --depth 2 --limit 10
+python sizetree.py ~/Downloads --tree
+```
+
+### Interactive TUI Mode
 
 Launch the interactive Textual UI:
 
@@ -36,9 +54,9 @@ python sizetree.py tui . --depth 3
 - `h` - Toggle hidden files
 - Arrow keys / Mouse - Navigate tree
 
-### CLI Mode
+### CLI Mode (Explicit)
 
-Quick scan with table output:
+Use the `scan` command explicitly:
 
 ```bash
 # Scan current directory
@@ -69,14 +87,23 @@ python sizetree.py scan . --tree
 ## Examples
 
 ```bash
-# Quick scan of Downloads folder
-python sizetree.py scan ~/Downloads --limit 10
+# Quick scan of current directory
+python sizetree.py
+
+# Scan Downloads folder with limit
+python sizetree.py ~/Downloads --limit 10
+
+# Scan parent directory, 2 levels deep
+python sizetree.py .. --depth 2
 
 # Deep analysis with TUI
 python sizetree.py tui /var/log
 
-# Scan only 2 levels deep
-python sizetree.py scan . --depth 2 --tree
+# Show tree view in CLI
+python sizetree.py . --tree --depth 2
+
+# Scan Windows directory (explicit command)
+python sizetree.py scan C:\Windows --depth 1 --limit 5
 
 # Show version
 python sizetree.py version

@@ -383,5 +383,10 @@ def version():
 if __name__ == "__main__":
     # Show help if no arguments provided
     if len(sys.argv) == 1:
-        sys.argv.append("--help")
+        sys.argv.extend(["scan", "."])
+    # If first arg is not a command and not an option, treat it as a path for scan
+    elif len(sys.argv) >= 2 and not sys.argv[1].startswith('-') and sys.argv[1] not in ['scan', 'tui', 'version']:
+        path = sys.argv[1]
+        # Insert 'scan' command and keep the rest of the args
+        sys.argv = [sys.argv[0], 'scan', path] + sys.argv[2:]
     app()
