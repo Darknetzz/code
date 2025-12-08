@@ -64,14 +64,14 @@ def github_watcher(stream=False):
     # ─────────────────────────────────────────────────────────────────────── #
     #                               Script info                               #
     # ─────────────────────────────────────────────────────────────────────── #
-    script_name    = "github_watcher"
+    script_name    = __file__
     script_file    = os.path.basename(__file__)
-    script_author  = "Kristian Røste"
+    script_author  = "Darknetzz"
     script_version = "1.0.1"
     script_date    = time.strftime("%d.%m.%Y")
     script_desc    = f"Monitors github repos found in the JSON repos file `{reposFile}` file for new releases."
-    script_usage   = "python github_watcher.py -o -s -f \"templates/output.html\""
-    script_epilog  = "Made with ❤️ by Kristian Røste"
+    script_usage   = f"{script_name} -o -s -f \"templates/output.html\""
+    script_epilog  = "Made with ❤️ by Darknetzz"
 
     # ─────────────────────────────────────────────────────────────────────── #
     #                                 Argparse                                #
