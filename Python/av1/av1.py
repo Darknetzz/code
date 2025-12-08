@@ -27,8 +27,11 @@ import typer
 __app_name__ = "av1"
 __version__ = "0.3.1"
 
-console = Console()
-app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
+console = Console()  # Will be reinitialized in main() if --no-color is set
+app = typer.Typer(
+    context_settings={"help_option_names": ["-h", "--help"]},
+    rich_markup_mode="rich",  # Enable Rich markup in help output
+)
 
 # ============================================================================ #
 #                        ENCODING CONFIGURATION CONSTANTS                      #
@@ -63,6 +66,7 @@ _PROGRESS_CONTEXT = None  # Active progress context manager
 _USER_CANCELLED = False  # User pressed Ctrl+C
 _LOG_MESSAGES = []  # Store all messages for file logging
 _LOGGER = None  # Logger instance (unused, kept for compatibility)
+_NO_COLOR = False  # Disable colors when True
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -192,7 +196,12 @@ def cprint(message, type="", style="bold green", **kwargs):
         prefix = "✅"
 
     message = f"{prefix}  {message}"
-    console.print(message, style=style, **kwargs)
+    
+    # Disable styling if _NO_COLOR is set
+    if _NO_COLOR:
+        console.print(message, **kwargs)
+    else:
+        console.print(message, style=style, **kwargs)
     
     # Log the message (with prefix for file logging)
     _LOG_MESSAGES.append(message)
@@ -923,6 +932,7 @@ def main(
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
     log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', or 'none'"),
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: ./logs)"),
+    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -935,27 +945,34 @@ def main(
 ):
     """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction.
 
-    EXAMPLES:
-
-    • Convert all videos in a folder:
-      $ av1 "C:\\Videos"
-
-    • Convert single file and delete original:
-      $ av1 "C:\\Videos\\movie.mp4" --delete-original
-
-    • Wildcard pattern matching:
-      $ av1 "episode_*.mkv"
-
-    • Batch with custom output folder:
-      $ av1 "C:\\Input" "C:\\Output" --overwrite
-
-    • Recursive with HTML logging:
-      $ av1 "C:\\Videos" --recursive --log-type html
-
-    • Preview what would be converted:
-      $ av1 "C:\\Videos" --recursive --dry-run
+        \b
+        [bold cyan]EXAMPLES[/]:
+            [yellow]Convert all videos in a folder[/]:
+                $ av1 "C:\\Videos"
+    
+            [yellow]Convert single file and delete original[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --delete-original
+    
+            [yellow]Wildcard pattern matching[/]:
+                $ av1 "episode_*.mkv"
+    
+            [yellow]Batch with custom output folder[/]:
+                $ av1 "C:\\Input" "C:\\Output" --overwrite
+    
+            [yellow]Recursive with HTML logging[/]:
+                $ av1 "C:\\Videos" --recursive --log-type html
+    
+            [yellow]Preview what would be converted[/]:
+                $ av1 "C:\\Videos" --recursive --dry-run
     """
     # If version flag triggered, callback already exited.
+    
+    # Set global no-color flag and reinitialize console
+    global _NO_COLOR, console
+    _NO_COLOR = no_color
+    if no_color:
+        console = Console(no_color=True, force_terminal=True)
+    
     check_ffmpeg()
     
     if not input_paths:
