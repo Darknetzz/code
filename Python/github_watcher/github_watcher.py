@@ -34,7 +34,7 @@ os.chdir(CWD)
 # ─────────────────────────────────────────────────────────────────────── #
 #                              UTILITIES                                  #
 # ─────────────────────────────────────────────────────────────────────── #
-def fetch(url: str) -> requests.Response:
+def fetch(url: str) -> Optional[requests.Response]:
     """Fetch URL and return response."""
     try:
         return requests.get(url)
@@ -43,7 +43,7 @@ def fetch(url: str) -> requests.Response:
         return None
 
 
-def find(req: requests.Response, tagname: str, attributes: dict = None) -> Optional[str]:
+def find(req: Optional[requests.Response], tagname: str, attributes: Optional[dict] = None) -> Optional[str]:
     """Find tag in HTML response."""
     if not req or not req.content:
         return None
