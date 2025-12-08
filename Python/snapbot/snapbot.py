@@ -429,4 +429,7 @@ def version():
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.argv.extend(["--help"])
+    # If only 'config' is provided without options, show config help
+    elif len(sys.argv) == 2 and sys.argv[1] == "config":
+        sys.argv.append("--help")
     app()
