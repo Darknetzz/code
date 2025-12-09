@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 """
-SnapBot - Snapchat API Integration
-Simple script to interact with Snapchat using the REST API
+SnapBot - Snapchat Browser Automation
+Uses Selenium to automate Snapchat via browser (more reliable than API)
 """
 
 import os
 import json
 import sys
-import base64
+import time
+import zipfile
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 from datetime import datetime
+from urllib.request import urlretrieve
 
 import typer
-import requests
 from rich.console import Console
-from rich.table import Table
 from rich.prompt import Prompt, Confirm
+
+# Selenium imports
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.common.exceptions import NoSuchElementException
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    SELENIUM_AVAILABLE = False
 
 console = Console()
 app = typer.Typer(rich_markup_mode="rich")
@@ -25,16 +36,158 @@ app = typer.Typer(rich_markup_mode="rich")
 #                              CONSTANTS                                  #
 # ─────────────────────────────────────────────────────────────────────── #
 
-SCRIPT_VERSION = "1.1.0"
+SCRIPT_VERSION = "2.0.0"
 CONFIG_FILE = "snapchat_config.json"
 CREDENTIALS_FILE = "snapchat_credentials.json"
+SNAPCHAT_WEB_URL = "https://web.snapchat.com"
 
-# Snapchat API endpoints (using REST API approach)
-SNAPCHAT_API_BASE = "https://app.snapchat.com"
-SNAPCHAT_API_HEADERS = {
-    "User-Agent": "Snapchat/11.0.0 (Linux; Android 10)",
-    "X-Snap-Client": "Android",
-}
+# Chrome for Testing API endpoint
+CHROME_VERSION_API = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+
+# Fallback URLs if API fails (updated regularly)
+FALLBACK_CHROME_VERSION = "143.0.7499.40"  # Latest stable as of Dec 2025
+
+
+# ─────────────────────────────────────────────────────────────────────── #
+#                         CHROMIUM MANAGEMENT                             #
+# ─────────────────────────────────────────────────────────────────────── #
+
+def get_chromium_dir() -> Path:
+    """Get the directory where portable Chromium is stored."""
+    return Path(__file__).parent / "chromium"
+
+
+def get_chrome_binary_path() -> Optional[Path]:
+    """Get the path to Chrome/Chromium binary."""
+    chromium_dir = get_chromium_dir()
+    
+    # Check for portable Chromium
+    portable_paths = [
+        chromium_dir / "chrome-win64" / "chrome.exe",
+        chromium_dir / "chrome-win32" / "chrome.exe",
+        chromium_dir / "chrome.exe",
+    ]
+    
+    for path in portable_paths:
+        if path.exists():
+            return path
+    
+    return None
+
+
+def get_chromedriver_path() -> Optional[Path]:
+    """Get the path to ChromeDriver binary."""
+    chromium_dir = get_chromium_dir()
+    
+    # Check for portable ChromeDriver
+    driver_paths = [
+        chromium_dir / "chromedriver-win64" / "chromedriver.exe",
+        chromium_dir / "chromedriver-win32" / "chromedriver.exe",
+        chromium_dir / "chromedriver.exe",
+    ]
+    
+    for path in driver_paths:
+        if path.exists():
+            return path
+    
+    return None
+
+
+def get_latest_chrome_urls(arch: str) -> tuple[Optional[str], Optional[str]]:
+    """Fetch the latest Chrome and ChromeDriver URLs from Chrome for Testing API."""
+    import urllib.request
+    
+    try:
+        # Try to fetch latest version from API
+        with urllib.request.urlopen(CHROME_VERSION_API, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            stable = data['channels']['Stable']
+            version = stable['version']
+            
+            # Find the correct platform downloads
+            chrome_url = None
+            driver_url = None
+            
+            for download in stable['downloads']['chrome']:
+                if download['platform'] == f'win{arch[-2:]}':
+                    chrome_url = download['url']
+                    break
+            
+            for download in stable['downloads']['chromedriver']:
+                if download['platform'] == f'win{arch[-2:]}':
+                    driver_url = download['url']
+                    break
+            
+            if chrome_url and driver_url:
+                console.print(f"[dim]Using Chrome version: {version}[/dim]")
+                return chrome_url, driver_url
+    except Exception as e:
+        console.print(f"[dim]Could not fetch latest version: {e}[/dim]")
+    
+    # Fallback to hardcoded URLs
+    console.print(f"[dim]Using fallback Chrome version: {FALLBACK_CHROME_VERSION}[/dim]")
+    base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{FALLBACK_CHROME_VERSION}"
+    return (
+        f"{base_url}/{arch}/chrome-{arch}.zip",
+        f"{base_url}/{arch}/chromedriver-{arch}.zip"
+    )
+
+
+def download_chromium() -> bool:
+    """Download and extract portable Chromium and ChromeDriver."""
+    import platform
+    
+    arch = "win64" if platform.machine().endswith("64") else "win32"
+    chrome_url, driver_url = get_latest_chrome_urls(arch)
+    
+    if not chrome_url or not driver_url:
+        console.print(f"[bold red]No Chromium build available for: {arch}[/bold red]")
+        return False
+    
+    chromium_dir = get_chromium_dir()
+    chromium_dir.mkdir(exist_ok=True)
+    
+    chrome_zip = chromium_dir / "chromium.zip"
+    driver_zip = chromium_dir / "chromedriver.zip"
+    
+    try:
+        # Download Chrome
+        console.print(f"[bold]Downloading latest portable Chromium ({arch})...[/bold]")
+        console.print(f"[dim]This is a one-time download (~150 MB)[/dim]")
+        
+        def reporthook(blocknum, blocksize, totalsize):
+            downloaded = blocknum * blocksize
+            percent = min(100, (downloaded / totalsize) * 100) if totalsize > 0 else 0
+            mb_downloaded = downloaded / (1024 * 1024)
+            mb_total = totalsize / (1024 * 1024)
+            print(f"\r[{percent:3.0f}%] {mb_downloaded:.1f} MB / {mb_total:.1f} MB", end="")
+        
+        urlretrieve(chrome_url, chrome_zip, reporthook=reporthook)
+        print()
+        
+        console.print("[bold]Extracting Chromium...[/bold]")
+        with zipfile.ZipFile(chrome_zip, 'r') as zip_ref:
+            zip_ref.extractall(chromium_dir)
+        chrome_zip.unlink()
+        
+        # Download ChromeDriver
+        console.print(f"[bold]Downloading ChromeDriver ({arch})...[/bold]")
+        urlretrieve(driver_url, driver_zip)
+        
+        console.print("[bold]Extracting ChromeDriver...[/bold]")
+        with zipfile.ZipFile(driver_zip, 'r') as zip_ref:
+            zip_ref.extractall(chromium_dir)
+        driver_zip.unlink()
+        
+        console.print("[bold green]✅ Chromium and ChromeDriver installed successfully![/bold green]")
+        return True
+        
+    except Exception as e:
+        console.print(f"[bold red]Error downloading Chromium: {e}[/bold red]")
+        for zip_file in [chrome_zip, driver_zip]:
+            if zip_file.exists():
+                zip_file.unlink()
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────── #
@@ -54,13 +207,12 @@ def load_credentials() -> Optional[Dict]:
         return None
 
 
-def save_credentials(username: str, password: str, auth_token: Optional[str] = None) -> None:
+def save_credentials(username: str, password: str) -> None:
     """Save credentials to config file."""
     try:
         credentials = {
             "username": username,
             "password": password,
-            "auth_token": auth_token,
             "last_login": datetime.now().isoformat()
         }
         with open(CREDENTIALS_FILE, 'w') as f:
@@ -89,7 +241,7 @@ def get_default_config() -> Dict:
     """Get default configuration."""
     return {
         "version": SCRIPT_VERSION,
-        "auto_login": False,
+        "headless": False,
         "timeout": 30,
         "debug": False
     }
@@ -105,172 +257,130 @@ def save_config(config: Dict) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────── #
-#                              SNAPCHAT WRAPPER                           #
+#                              SNAPCHAT BROWSER BOT                       #
 # ─────────────────────────────────────────────────────────────────────── #
 
-class SnapchatBot:
-    """Wrapper for Snapchat API interactions using REST API."""
+class SnapchatBrowserBot:
+    """Browser-based Snapchat automation using Selenium."""
     
-    def __init__(self, username: str, password: str):
-        self.username = username
-        self.password = password
-        self.auth_token: Optional[str] = None
+    def __init__(self, headless: bool = False):
+        self.headless = headless
+        self.driver: Optional[webdriver.Chrome] = None
         self.authenticated = False
-        self.session = requests.Session()
-        self.session.headers.update(SNAPCHAT_API_HEADERS)
+        self.wait_timeout = 30
+    
+    def initialize_driver(self) -> bool:
+        """Initialize Chrome WebDriver."""
+        if not SELENIUM_AVAILABLE:
+            console.print("[bold red]Error: Selenium not installed[/bold red]")
+            console.print("[dim]Install with: pip install selenium webdriver-manager[/dim]")
+            return False
+        
+        try:
+            options = Options()
+            
+            # Check for portable Chromium first
+            chrome_binary = get_chrome_binary_path()
+            chromedriver_path = get_chromedriver_path()
+            
+            if not chrome_binary or not chromedriver_path:
+                console.print("[bold yellow]Portable Chromium not found[/bold yellow]")
+                if Confirm.ask("Download portable Chromium (~150 MB)?", default=True):
+                    if not download_chromium():
+                        return False
+                    chrome_binary = get_chrome_binary_path()
+                    chromedriver_path = get_chromedriver_path()
+                else:
+                    console.print("\n[bold yellow]Chrome Browser Not Found[/bold yellow]")
+                    console.print("[dim]SnapBot requires Chrome. Options:[/dim]\n")
+                    console.print("[dim]1. Install Google Chrome: https://www.google.com/chrome/[/dim]")
+                    console.print("[dim]2. Install Chromium: https://www.chromium.org/[/dim]")
+                    console.print("[dim]3. Run this script again to download portable Chromium[/dim]")
+                    return False
+            
+            # Set Chrome binary path
+            if chrome_binary:
+                options.binary_location = str(chrome_binary)
+                console.print(f"[dim]Using Chromium: {chrome_binary.name}[/dim]")
+            
+            if self.headless:
+                options.add_argument("--headless=new")
+            
+            # Additional options for stability
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36")
+            
+            with console.status("[bold]Initializing Chrome browser..."):
+                # Use portable ChromeDriver if available
+                if chromedriver_path:
+                    service = Service(executable_path=str(chromedriver_path))
+                    self.driver = webdriver.Chrome(service=service, options=options)
+                else:
+                    # Try using webdriver-manager as fallback
+                    try:
+                        from webdriver_manager.chrome import ChromeDriverManager
+                        service = Service(ChromeDriverManager().install())
+                        self.driver = webdriver.Chrome(service=service, options=options)
+                    except ImportError:
+                        # Last resort: system ChromeDriver
+                        self.driver = webdriver.Chrome(options=options)
+                
+                console.print("[bold green]✅ Browser initialized[/bold green]")
+                return True
+                
+        except Exception as e:
+            console.print(f"[bold red]Error initializing browser: {e}[/bold red]")
+            console.print("\n[bold yellow]Troubleshooting:[/bold yellow]")
+            console.print("[dim]1. Make sure webdriver-manager is installed:[/dim]")
+            console.print("[dim]   pip install webdriver-manager[/dim]")
+            console.print("[dim]2. If portable Chromium failed, try installing Chrome:[/dim]")
+            console.print("[dim]   https://www.google.com/chrome/[/dim]")
+            return False
     
     def authenticate(self) -> bool:
-        """Authenticate with Snapchat using username and password."""
-        try:
-            with console.status("[bold]Authenticating with Snapchat..."):
-                auth_payload = {
-                    "username": self.username,
-                    "password": self.password,
-                }
-                
-                # Try multiple potential endpoints
-                endpoints = [
-                    f"{SNAPCHAT_API_BASE}/login",
-                    f"{SNAPCHAT_API_BASE}/api/login",
-                    "https://api.snapchat.com/login",
-                ]
-                
-                for endpoint in endpoints:
-                    try:
-                        response = self.session.post(
-                            endpoint,
-                            json=auth_payload,
-                            timeout=30,
-                            verify=True
-                        )
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            self.auth_token = data.get("access_token") or data.get("auth_token")
-                            self.authenticated = True
-                            
-                            if self.auth_token:
-                                self.session.headers.update({
-                                    "Authorization": f"Bearer {self.auth_token}"
-                                })
-                            
-                            console.print("[bold green]✅ Successfully authenticated![/bold green]")
-                            return True
-                    except:
-                        continue
-                
-                console.print("[bold yellow]⚠️  Authentication failed[/bold yellow]")
-                console.print("[dim]Note: Snapchat doesn't provide a public API for third-party access[/dim]")
-                console.print("[dim]This is a proof-of-concept tool. Real integration would require:[/dim]")
-                console.print("[dim]  • Official Snapchat Business Account + Marketing API[/dim]")
-                console.print("[dim]  • Browser automation (Selenium/Playwright)[/dim]")
-                console.print("[dim]  • Snapchat's Lens Studio API (limited features)[/dim]")
-                return False
-                    
-        except requests.exceptions.RequestException as e:
-            console.print(f"[bold red]Connection error: {e}[/bold red]")
-            console.print("[dim]The Snapchat API endpoint may not be accessible or may have changed[/dim]")
+        """Authenticate with Snapchat via browser."""
+        if not self.driver:
+            console.print("[bold red]Browser not initialized[/bold red]")
             return False
+        
+        try:
+            with console.status("[bold]Loading Snapchat Web..."):
+                self.driver.get(SNAPCHAT_WEB_URL)
+                time.sleep(3)
+            
+            console.print("[bold blue]📱 Snapchat Web loaded[/bold blue]")
+            console.print("[dim]Please log in manually in the browser window...[/dim]")
+            console.print("[dim]Once you've logged in and can see your chats, press Enter here[/dim]")
+            
+            # Wait for user to manually login
+            input("[bold]Press Enter once logged in:[/bold] ")
+            
+            # Check if we're logged in by looking for the chat interface
+            with console.status("[bold]Verifying authentication..."):
+                time.sleep(2)
+                
+                try:
+                    # Look for elements that indicate successful login
+                    self.driver.find_element(By.XPATH, "//*[contains(text(), 'Chat')] | //*[@role='main']")
+                    self.authenticated = True
+                    console.print("[bold green]✅ Successfully authenticated![/bold green]")
+                    return True
+                except NoSuchElementException:
+                    console.print("[bold yellow]⚠️  Could not verify login[/bold yellow]")
+                    console.print("[dim]You may have encountered a 2FA prompt or page layout changed[/dim]")
+                    return False
+                    
         except Exception as e:
             console.print(f"[bold red]Authentication error: {e}[/bold red]")
             return False
     
-    def get_friends(self) -> Optional[List[Dict]]:
-        """Get list of friends."""
-        if not self.authenticated:
-            console.print("[bold red]Not authenticated[/bold red]")
-            return None
-        
-        try:
-            response = self.session.get(
-                f"{SNAPCHAT_API_BASE}/friends",
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                return response.json().get("friends", [])
-            else:
-                console.print(f"[bold red]Error getting friends: {response.status_code}[/bold red]")
-                return None
-                
-        except Exception as e:
-            console.print(f"[bold red]Error getting friends: {e}[/bold red]")
-            return None
-    
-    def send_message(self, recipient: str, message: str) -> bool:
-        """Send text message to a friend."""
-        if not self.authenticated:
-            console.print("[bold red]Not authenticated[/bold red]")
-            return False
-        
-        try:
-            with console.status(f"[bold]Sending message to {recipient}..."):
-                payload = {
-                    "recipient": recipient,
-                    "type": "text",
-                    "body": message,
-                }
-                
-                response = self.session.post(
-                    f"{SNAPCHAT_API_BASE}/chat/send",
-                    json=payload,
-                    timeout=30
-                )
-                
-                if response.status_code in [200, 201]:
-                    console.print(f"[bold green]✅ Message sent to {recipient}[/bold green]")
-                    return True
-                else:
-                    console.print(f"[bold red]Failed to send message: {response.status_code}[/bold red]")
-                    return False
-                    
-        except Exception as e:
-            console.print(f"[bold red]Error sending message: {e}[/bold red]")
-            return False
-    
-    def send_picture(self, recipient: str, image_path: str) -> bool:
-        """Send a picture to a friend."""
-        if not self.authenticated:
-            console.print("[bold red]Not authenticated[/bold red]")
-            return False
-        
-        image_file = Path(image_path)
-        if not image_file.exists():
-            console.print(f"[bold red]Error: Image file not found: {image_path}[/bold red]")
-            return False
-        
-        if not image_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-            console.print(f"[bold red]Error: Unsupported image format: {image_file.suffix}[/bold red]")
-            return False
-        
-        try:
-            with console.status(f"[bold]Sending picture to {recipient}..."):
-                with open(image_file, 'rb') as f:
-                    image_data = base64.b64encode(f.read()).decode('utf-8')
-                
-                payload = {
-                    "recipient": recipient,
-                    "type": "image",
-                    "media": image_data,
-                    "filename": image_file.name,
-                }
-                
-                response = self.session.post(
-                    f"{SNAPCHAT_API_BASE}/chat/send",
-                    json=payload,
-                    timeout=60
-                )
-                
-                if response.status_code in [200, 201]:
-                    console.print(f"[bold green]✅ Picture sent to {recipient}[/bold green]")
-                    return True
-                else:
-                    console.print(f"[bold red]Failed to send picture: {response.status_code}[/bold red]")
-                    return False
-                    
-        except Exception as e:
-            console.print(f"[bold red]Error sending picture: {e}[/bold red]")
-            return False
+    def close(self):
+        """Close the browser."""
+        if self.driver:
+            self.driver.quit()
+            console.print("[bold green]Browser closed[/bold green]")
 
 
 # ─────────────────────────────────────────────────────────────────────── #
@@ -279,107 +389,70 @@ class SnapchatBot:
 
 @app.command()
 def login(
-    username: Optional[str] = typer.Option(None, "-u", "--username", help="Snapchat username"),
-    password: Optional[str] = typer.Option(None, "-p", "--password", help="Snapchat password"),
-    save: bool = typer.Option(False, "-s", "--save", help="Save credentials for future use"),
+    save: bool = typer.Option(False, "-s", "--save", help="Save username for future use"),
+    headless: bool = typer.Option(False, "-h", "--headless", help="Run browser in headless mode"),
 ):
-    """Authenticate with Snapchat account."""
+    """Authenticate with Snapchat via browser."""
     
-    if not username:
-        username = Prompt.ask("[bold]Snapchat username[/bold]")
+    console.print("[dim]This command will open a Chrome browser to log into Snapchat[/dim]")
+    console.print("[dim]You'll complete the login manually, then this script will verify the session[/dim]")
     
-    if not password:
-        password = Prompt.ask("[bold]Snapchat password[/bold]", password=True)
+    # Create bot and authenticate
+    bot = SnapchatBrowserBot(headless=headless)
     
-    bot = SnapchatBot(username, password)
-    if bot.authenticate():
-        if save:
-            confirm = Confirm.ask("Save credentials?", default=False)
-            if confirm:
-                save_credentials(username, password, bot.auth_token)
-        
-        console.print("\n[bold green]🎉 Login successful![/bold green]")
-    else:
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def send(
-    recipient: str = typer.Argument(..., help="Friend username"),
-    message: Optional[str] = typer.Option(None, "-m", "--message", help="Text message to send"),
-    picture: Optional[str] = typer.Option(None, "-p", "--picture", help="Path to picture file"),
-    username: Optional[str] = typer.Option(None, "-u", "--username", help="Your username"),
-    password: Optional[str] = typer.Option(None, "-pw", "--password", help="Your password"),
-):
-    """Send a message or picture to a friend."""
-    
-    if not message and not picture:
-        console.print("[bold red]Error: Must provide either --message or --picture[/bold red]")
-        raise typer.Exit(code=1)
-    
-    credentials = load_credentials()
-    if not username and credentials:
-        username = credentials.get('username')
-    
-    if not username:
-        username = Prompt.ask("[bold]Your Snapchat username[/bold]")
-    
-    if not password and credentials and credentials.get('username') == username:
-        password = credentials.get('password')
-    
-    if not password:
-        password = Prompt.ask("[bold]Your Snapchat password[/bold]", password=True)
-    
-    bot = SnapchatBot(username, password)
-    if bot.authenticate():
-        if message:
-            bot.send_message(recipient, message)
-        if picture:
-            bot.send_picture(recipient, picture)
-    else:
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def friends(
-    username: Optional[str] = typer.Option(None, "-u", "--username", help="Your username"),
-    password: Optional[str] = typer.Option(None, "-pw", "--password", help="Your password"),
-    limit: int = typer.Option(20, "-l", "--limit", help="Number of friends to show"),
-):
-    """List your Snapchat friends."""
-    
-    credentials = load_credentials()
-    if not username and credentials:
-        username = credentials.get('username')
-    
-    if not username:
-        username = Prompt.ask("[bold]Your Snapchat username[/bold]")
-    
-    if not password and credentials and credentials.get('username') == username:
-        password = credentials.get('password')
-    
-    if not password:
-        password = Prompt.ask("[bold]Your Snapchat password[/bold]", password=True)
-    
-    bot = SnapchatBot(username, password)
-    if bot.authenticate():
-        console.print("\n[bold]Fetching friends...[/bold]")
-        friends_list = bot.get_friends()
-        
-        if friends_list:
-            table = Table(title=f"Your Snapchat Friends ({len(friends_list)})")
-            table.add_column("#", style="dim")
-            table.add_column("Username", style="cyan")
-            table.add_column("Display Name", style="green")
+    if bot.initialize_driver():
+        if bot.authenticate():
+            if save:
+                confirm = Confirm.ask("Save username for future use?", default=False)
+                if confirm:
+                    save_username = Prompt.ask("Username to save")
+                    save_credentials(save_username, "")
             
-            for i, friend in enumerate(friends_list[:limit], 1):
-                username_str = friend.get('username', 'N/A') if isinstance(friend, dict) else str(friend)
-                display_name = friend.get('display_name', '') if isinstance(friend, dict) else ''
-                table.add_row(str(i), username_str, display_name)
-            
-            console.print(table)
+            console.print("\n[bold green]🎉 Login successful![/bold green]")
+            console.print("[dim]Browser will close in 5 seconds...[/dim]")
+            time.sleep(5)
+            bot.close()
         else:
-            console.print("[bold yellow]No friends found[/bold yellow]")
+            bot.close()
+            raise typer.Exit(code=1)
+    else:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def browser(
+    headless: bool = typer.Option(False, "-h", "--headless", help="Run in headless mode"),
+):
+    """Open interactive Snapchat Web browser session."""
+    
+    console.print("[dim]Opening Snapchat Web in browser...[/dim]")
+    console.print("[dim]Log in manually and interact as needed[/dim]")
+    console.print("[dim]Close the browser window to exit[/dim]")
+    
+    # Create bot and open browser
+    bot = SnapchatBrowserBot(headless=headless)
+    
+    if bot.initialize_driver():
+        try:
+            with console.status("[bold]Loading Snapchat Web..."):
+                bot.driver.get(SNAPCHAT_WEB_URL)
+                time.sleep(3)
+            
+            console.print("[bold green]✅ Browser is open[/bold green]")
+            console.print("[dim]Keep this window open while you use Snapchat Web[/dim]")
+            console.print("[dim]Press Ctrl+C or close the browser to exit[/dim]")
+            
+            # Keep browser open
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                console.print("\n[dim]Closing browser...[/dim]")
+                bot.close()
+        except Exception as e:
+            console.print(f"[bold red]Error: {e}[/bold red]")
+            bot.close()
+            raise typer.Exit(code=1)
     else:
         raise typer.Exit(code=1)
 
@@ -387,29 +460,29 @@ def friends(
 @app.command()
 def config(
     show: bool = typer.Option(False, "-s", "--show", help="Show current config"),
-    auto_login: Optional[bool] = typer.Option(None, "-a", "--auto-login", help="Enable auto-login"),
+    headless: Optional[bool] = typer.Option(None, "-h", "--headless", help="Set headless mode"),
     debug: Optional[bool] = typer.Option(None, "-d", "--debug", help="Enable debug mode"),
 ):
     """Manage SnapBot configuration."""
     
-    config = load_config()
+    cfg = load_config()
     
     if show:
         console.print("[bold]Current Configuration:[/bold]")
-        for key, value in config.items():
+        for key, value in cfg.items():
             console.print(f"  {key}: {value}")
         return
     
-    if auto_login is not None:
-        config['auto_login'] = auto_login
-        console.print(f"[bold]Auto-login:[/bold] {auto_login}")
+    if headless is not None:
+        cfg['headless'] = headless
+        console.print(f"[bold]Headless mode:[/bold] {headless}")
     
     if debug is not None:
-        config['debug'] = debug
+        cfg['debug'] = debug
         console.print(f"[bold]Debug mode:[/bold] {debug}")
     
-    if auto_login is not None or debug is not None:
-        save_config(config)
+    if headless is not None or debug is not None:
+        save_config(cfg)
         console.print("[bold green]✅ Configuration updated[/bold green]")
 
 
@@ -435,16 +508,52 @@ def clear_cache():
 
 
 @app.command()
+def update_chromium(
+    force: bool = typer.Option(False, "-f", "--force", help="Force re-download even if already installed"),
+):
+    """Update portable Chromium to the latest version."""
+    
+    chromium_dir = get_chromium_dir()
+    
+    if chromium_dir.exists() and not force:
+        console.print("[bold yellow]Chromium already installed[/bold yellow]")
+        if not Confirm.ask("Re-download and update to latest version?", default=True):
+            console.print("[dim]Update cancelled[/dim]")
+            return
+    
+    # Remove old installation
+    if chromium_dir.exists():
+        console.print("[dim]Removing old Chromium installation...[/dim]")
+        import shutil
+        shutil.rmtree(chromium_dir)
+    
+    # Download latest version
+    if download_chromium():
+        console.print("[bold green]✅ Chromium updated successfully![/bold green]")
+    else:
+        console.print("[bold red]❌ Update failed[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def version():
     """Show version information."""
     console.print(f"[bold]SnapBot[/bold] v{SCRIPT_VERSION}")
-    console.print("Snapchat REST API Integration Tool")
+    console.print("Snapchat Browser Automation Tool (Selenium)")
+    if SELENIUM_AVAILABLE:
+        console.print("[bold green]✅[/bold green] [dim]Selenium installed[/dim]")
+    else:
+        console.print("[bold red]⚠️ [/bold red] [dim]Selenium not installed (pip install selenium webdriver-manager)[/dim]")
+    
+    # Show Chromium version if installed
+    chrome_binary = get_chrome_binary_path()
+    if chrome_binary:
+        console.print(f"[bold green]✅[/bold green] [dim]Portable Chromium installed[/dim]")
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.argv.extend(["--help"])
-    # If only 'config' is provided without options, show config help
     elif len(sys.argv) == 2 and sys.argv[1] == "config":
         sys.argv.append("--help")
     app()
