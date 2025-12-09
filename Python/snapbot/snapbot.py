@@ -24,6 +24,8 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import NoSuchElementException
     SELENIUM_AVAILABLE = True
 except ImportError:
@@ -75,6 +77,22 @@ def get_chrome_binary_path() -> Optional[Path]:
     return None
 
 
+def get_profile_dir() -> Path:
+    """Path to persistent Chromium profile (cookies, sessions)."""
+    return get_chromium_dir() / "profile"
+
+
+def get_chrome_version() -> str:
+    """Read stored Chromium version or fall back."""
+    version_file = get_chromium_dir() / "version.txt"
+    if version_file.exists():
+        try:
+            return version_file.read_text(encoding="utf-8").strip() or FALLBACK_CHROME_VERSION
+        except Exception:
+            return FALLBACK_CHROME_VERSION
+    return FALLBACK_CHROME_VERSION
+
+
 def get_chromedriver_path() -> Optional[Path]:
     """Get the path to ChromeDriver binary."""
     chromium_dir = get_chromium_dir()
@@ -93,8 +111,8 @@ def get_chromedriver_path() -> Optional[Path]:
     return None
 
 
-def get_latest_chrome_urls(arch: str) -> tuple[Optional[str], Optional[str]]:
-    """Fetch the latest Chrome and ChromeDriver URLs from Chrome for Testing API."""
+def get_latest_chrome_urls(arch: str) -> tuple[Optional[str], Optional[str], str]:
+    """Fetch the latest Chrome/Driver URLs from Chrome for Testing API and return version."""
     import urllib.request
     
     try:
@@ -120,7 +138,7 @@ def get_latest_chrome_urls(arch: str) -> tuple[Optional[str], Optional[str]]:
             
             if chrome_url and driver_url:
                 console.print(f"[dim]Using Chrome version: {version}[/dim]")
-                return chrome_url, driver_url
+                return chrome_url, driver_url, version
     except Exception as e:
         console.print(f"[dim]Could not fetch latest version: {e}[/dim]")
     
@@ -129,7 +147,8 @@ def get_latest_chrome_urls(arch: str) -> tuple[Optional[str], Optional[str]]:
     base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{FALLBACK_CHROME_VERSION}"
     return (
         f"{base_url}/{arch}/chrome-{arch}.zip",
-        f"{base_url}/{arch}/chromedriver-{arch}.zip"
+        f"{base_url}/{arch}/chromedriver-{arch}.zip",
+        FALLBACK_CHROME_VERSION,
     )
 
 
@@ -138,7 +157,7 @@ def download_chromium() -> bool:
     import platform
     
     arch = "win64" if platform.machine().endswith("64") else "win32"
-    chrome_url, driver_url = get_latest_chrome_urls(arch)
+    chrome_url, driver_url, version = get_latest_chrome_urls(arch)
     
     if not chrome_url or not driver_url:
         console.print(f"[bold red]No Chromium build available for: {arch}[/bold red]")
@@ -149,6 +168,7 @@ def download_chromium() -> bool:
     
     chrome_zip = chromium_dir / "chromium.zip"
     driver_zip = chromium_dir / "chromedriver.zip"
+    version_file = chromium_dir / "version.txt"
     
     try:
         # Download Chrome
@@ -178,6 +198,9 @@ def download_chromium() -> bool:
         with zipfile.ZipFile(driver_zip, 'r') as zip_ref:
             zip_ref.extractall(chromium_dir)
         driver_zip.unlink()
+
+        # Persist the version we downloaded so UA can match
+        version_file.write_text(f"{version}\n", encoding="utf-8")
         
         console.print("[bold green]✅ Chromium and ChromeDriver installed successfully![/bold green]")
         return True
@@ -278,6 +301,9 @@ class SnapchatBrowserBot:
         
         try:
             options = Options()
+            ua_version = get_chrome_version()
+            profile_dir = get_profile_dir()
+            profile_dir.mkdir(parents=True, exist_ok=True)
             
             # Check for portable Chromium first
             chrome_binary = get_chrome_binary_path()
@@ -310,7 +336,8 @@ class SnapchatBrowserBot:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36")
+            options.add_argument(f"--user-data-dir={profile_dir}")
+            options.add_argument(f"user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ua_version} Safari/537.36")
             
             with console.status("[bold]Initializing Chrome browser..."):
                 # Use portable ChromeDriver if available
@@ -360,17 +387,43 @@ class SnapchatBrowserBot:
             # Check if we're logged in by looking for the chat interface
             with console.status("[bold]Verifying authentication..."):
                 time.sleep(2)
-                
-                try:
-                    # Look for elements that indicate successful login
-                    self.driver.find_element(By.XPATH, "//*[contains(text(), 'Chat')] | //*[@role='main']")
+
+                # Try a handful of stable UI markers to reduce false negatives
+                markers = [
+                    (By.CSS_SELECTOR, "[data-test-id='conversation-input']"),
+                    (By.CSS_SELECTOR, "[data-testid='conversation-input']"),
+                    (By.CSS_SELECTOR, "[aria-label='Send a Chat']"),
+                    (By.CSS_SELECTOR, "[aria-label='Send a chat']"),
+                    (By.CSS_SELECTOR, "main"),
+                    (By.XPATH, "//*[contains(text(), 'Chat')]")
+                ]
+
+                found = None
+                for by, selector in markers:
+                    try:
+                        WebDriverWait(self.driver, self.wait_timeout).until(
+                            EC.presence_of_element_located((by, selector))
+                        )
+                        found = f"{by} {selector}"
+                        break
+                    except Exception:
+                        continue
+
+                if found:
                     self.authenticated = True
-                    console.print("[bold green]✅ Successfully authenticated![/bold green]")
+                    console.print(f"[bold green]✅ Successfully authenticated![/bold green] [dim]Detected: {found}[/dim]")
                     return True
-                except NoSuchElementException:
-                    console.print("[bold yellow]⚠️  Could not verify login[/bold yellow]")
-                    console.print("[dim]You may have encountered a 2FA prompt or page layout changed[/dim]")
-                    return False
+
+                # Fallback: if URL looks like chat, trust the session
+                if "web.snapchat.com" in (self.driver.current_url or ""):
+                    self.authenticated = True
+                    console.print("[bold green]✅ Logged in (URL check) — could not find a known marker[/bold green]")
+                    console.print("[dim]If anything looks off, re-run login and wait a bit longer after 2FA.[/dim]")
+                    return True
+
+                console.print("[bold yellow]⚠️  Could not verify login[/bold yellow]")
+                console.print("[dim]You may have encountered a 2FA prompt or page layout changed[/dim]")
+                return False
                     
         except Exception as e:
             console.print(f"[bold red]Authentication error: {e}[/bold red]")
@@ -508,6 +561,32 @@ def clear_cache():
 
 
 @app.command()
+def logout(
+    force: bool = typer.Option(False, "-f", "--force", help="Do not prompt before deleting the saved browser session"),
+):
+    """Log out by deleting the persistent Chromium profile (cookies/session)."""
+
+    profile_dir = get_profile_dir()
+
+    if not profile_dir.exists():
+        console.print("[bold yellow]No saved session found[/bold yellow]")
+        return
+
+    if not force:
+        if not Confirm.ask("Delete the saved browser session (cookies, profile)?", default=False):
+            console.print("[dim]Logout cancelled[/dim]")
+            return
+
+    try:
+        import shutil
+        shutil.rmtree(profile_dir)
+        console.print("[bold green]✅ Session cleared[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Error deleting profile: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def update_chromium(
     force: bool = typer.Option(False, "-f", "--force", help="Force re-download even if already installed"),
 ):
@@ -552,7 +631,10 @@ def version():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
+    # Allow global --version/-V to route to the version command
+    if any(arg in ("--version", "-V") for arg in sys.argv[1:]):
+        sys.argv = [sys.argv[0], "version"]
+    elif len(sys.argv) == 1:
         sys.argv.extend(["--help"])
     elif len(sys.argv) == 2 and sys.argv[1] == "config":
         sys.argv.append("--help")

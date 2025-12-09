@@ -6,3 +6,6 @@
 lib
 logs
 chromium
+auth.py
+*.pyc
+__pycache__/
