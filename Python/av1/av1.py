@@ -480,6 +480,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     """
     filename = os.path.basename(input_path)
     
+
     # Validate file
     if not validate_video_file(input_path):
         return delete_original, 0
@@ -487,6 +488,15 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     if not needs_transcoding(input_path):
         cprint(f"Skipping (No Transcoding Needed): {filename}", "info")
         return delete_original, 0
+
+    # Show actual file size before conversion
+    try:
+        file_size_bytes = os.path.getsize(input_path)
+        file_size_mb = file_size_bytes / (1024 ** 2)
+        file_size_gb = file_size_bytes / (1024 ** 3)
+        cprint(f"Actual file size: {file_size_mb:.2f} MB ({file_size_gb:.2f} GB)", "info")
+    except Exception as e:
+        cprint(f"Could not determine file size: {e}", "warning")
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
