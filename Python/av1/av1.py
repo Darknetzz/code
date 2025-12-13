@@ -930,7 +930,7 @@ def main(
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
     log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', or 'none'"),
-    log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: ./logs)"),
+    log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: %TEMP%/av1-logs)"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
     version: Optional[bool] = typer.Option(
         None,
@@ -1126,8 +1126,13 @@ def main(
     
     # Save logs only if files were actually converted
     global _LOG_MESSAGES
+    import tempfile
+    resolved_log_dir = log_dir
+    if resolved_log_dir is None:
+        temp_base = tempfile.gettempdir()
+        resolved_log_dir = os.path.join(temp_base, "av1-logs")
     if _LOG_MESSAGES:
-        _save_log(log_type, log_dir)
+        _save_log(log_type, resolved_log_dir)
 
 if __name__ == "__main__":
     app()
