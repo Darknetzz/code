@@ -10,8 +10,8 @@ app = typer.Typer(help="A modern wrapper for Windows mklink.")
 
 @app.command()
 def create_link(
-    link_path: Annotated[Path, typer.Argument(help="The path where the link will be created")],
-    target_path: Annotated[Path, typer.Argument(help="The existing file or directory to link to")],
+    target_path: Annotated[Path, typer.Argument(help="TARGET: Existing file/directory the link points to (required)")],
+    link_path: Optional[Path] = typer.Argument(None, help="LINK: Path to create (defaults to CWD/<target basename> if omitted)"),
     directory: bool = typer.Option(False, "--dir", "-d", help="Create a directory symbolic link (/D)"),
     junction: bool = typer.Option(False, "--junction", "-j", help="Create a Directory Junction (/J)"),
     hard: bool = typer.Option(False, "--hard", "-h", help="Create a hard link (/H)"),
@@ -29,7 +29,31 @@ def create_link(
         typer.secho("Error: You cannot use --dir, --junction, and --hard simultaneously.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    # 2. Determine the mklink flag
+    # 2. Resolve missing link using sensible defaults
+    # If link_path is omitted, default to CWD/<target basename>
+    if link_path is None:
+        link_path = Path.cwd() / target_path.name
+
+    # 3. Validate that link_path and target_path are not the same
+    try:
+        link_resolved = link_path.resolve()
+        target_resolved = target_path.resolve()
+        if link_resolved == target_resolved:
+            typer.secho("Error: Link path and target path cannot be the same.", fg=typer.colors.RED, bold=True)
+            typer.secho(f"  Link:   {link_path}", fg=typer.colors.RED)
+            typer.secho(f"  Target: {target_path}", fg=typer.colors.RED)
+            typer.echo("\nSpecify a different link name or location. Example:")
+            typer.echo(f"  pylink create-link {target_path} {target_path.parent / (target_path.stem + '4win' + target_path.suffix)}")
+            raise typer.Exit(code=1)
+    except OSError:
+        # Paths may not exist yet; just compare the paths as-is
+        if link_path.resolve() == target_path.resolve():
+            typer.secho("Error: Link path and target path cannot be the same.", fg=typer.colors.RED, bold=True)
+            typer.secho(f"  Link:   {link_path}", fg=typer.colors.RED)
+            typer.secho(f"  Target: {target_path}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+
+    # 4. Determine the mklink flag
     flag = ""
     if directory:
         flag = "/D"
@@ -38,7 +62,7 @@ def create_link(
     elif hard:
         flag = "/H"
 
-    # 3. Construct the command
+    # 4. Construct the command
     # Windows requires the command to be run inside a shell for mklink
     cmd = ["cmd", "/c", "mklink"]
     if flag:
@@ -48,7 +72,7 @@ def create_link(
     cmd.append(str(link_path))
     cmd.append(str(target_path))
 
-    # 4. Feedback to user
+    # 5. Feedback to user
     typer.secho(f"Executing: {' '.join(cmd)}", fg=typer.colors.BLUE)
 
     try:
@@ -57,9 +81,37 @@ def create_link(
         typer.secho("Success!", fg=typer.colors.GREEN, bold=True)
         
     except subprocess.CalledProcessError as e:
-        typer.secho(f"\nError: Failed to create link. (Exit Code: {e.returncode})", fg=typer.colors.RED)
-        if e.returncode == 1:
-            typer.echo("Tip: If you are not using --junction, ensure you are running as Administrator.")
+        # Emphasized error output with actionable hints
+        typer.secho("\n==============================", fg=typer.colors.RED)
+        typer.secho("  FAILED TO CREATE LINK", fg=typer.colors.RED, bold=True)
+        typer.secho("==============================\n", fg=typer.colors.RED)
+        typer.secho(f"Exit Code: {e.returncode}", fg=typer.colors.RED)
+        typer.secho("Command:", fg=typer.colors.RED)
+        typer.secho("  " + " ".join(cmd), fg=typer.colors.RED)
+
+        # Common pitfalls and guidance
+        typer.secho("\nPossible causes:", fg=typer.colors.YELLOW, bold=True)
+        typer.echo("  • The link path already exists. Remove it and retry.")
+        typer.echo("  • Arguments swapped. Correct order is: LINK first, TARGET second.")
+        typer.echo("  • Insufficient privileges. For symlinks, run as Administrator or enable Developer Mode.")
+        if junction:
+            typer.echo("  • Junctions typically require Administrator.")
+        if hard:
+            typer.echo("  • Hard links only work within the same volume.")
+        if directory:
+            typer.echo("  • Use --dir for directory symlinks; for folders consider --junction.")
+
+        # Extra tip for non-junction attempts
+        if e.returncode == 1 and not junction:
+            typer.echo("\nTip: If you are not using --junction, ensure you are running as Administrator.")
+        
+        # Show suggested fix if the link path exists
+        try:
+            if link_path.exists():
+                typer.secho("\nSuggestion:", fg=typer.colors.BLUE, bold=True)
+                typer.echo(f"  Remove existing link/file and retry:\n    del \"{link_path}\"\n    mklink {'/D ' if directory else ('/H ' if hard else '')}\"{link_path}\" \"{target_path}\"")
+        except Exception:
+            pass
         raise typer.Exit(code=e.returncode)
 
 if __name__ == "__main__":
