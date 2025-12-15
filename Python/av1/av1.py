@@ -48,6 +48,15 @@ MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
 DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
 # ============================================================================ #
+#                        ENCODING PARAMETER CONSTANTS                          #
+# ============================================================================ #
+AUDIO_BITRATE = "64k"  # Opus audio bitrate per stream
+MAX_VIDEO_WIDTH = 1920  # Maximum video width (maintains aspect ratio)
+VIDEO_BITRATE_ESTIMATE_FACTOR = 0.9  # Factor to estimate video-only bitrate from total
+PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
+ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
+
+# ============================================================================ #
 #                          SYSTEM STATE VARIABLES                              #
 # ============================================================================ #
 SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
@@ -70,14 +79,14 @@ _NO_COLOR = False  # Disable colors when True
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
 # ============================================================================ #
-def _version_callback(value: bool):
+def _version_callback(value: bool) -> None:
     """Display version and exit."""
     if value:
         typer.echo(f"{__app_name__} {__version__}")
         raise typer.Exit()
 
 
-def _show_examples():
+def _show_examples() -> None:
     """Display formatted examples."""
     examples = """
     EXAMPLES:
@@ -106,7 +115,7 @@ def _format_saved(bytes_amount: float) -> str:
         return f"{bytes_amount / 1024:.1f} KB"
     return "0"
 
-def _signal_handler(sig, frame):
+def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
     global _USER_CANCELLED
     _USER_CANCELLED = True
@@ -133,6 +142,7 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
     
     if log_type.lower() == "html":
         log_file = os.path.join(log_dir, f"{__app_name__}_{timestamp}.html")
+        timestamp_formatted = time.strftime("%Y-%m-%d %H:%M:%S")
         html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -149,13 +159,13 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 </head>
 <body>
     <h2>{__app_name__} Conversion Log</h2>
-    <p>Generated: {timestamp}</p>
+    <p>Generated: {timestamp_formatted}</p>
     <div class="log">
-{ "\n".join(_LOG_MESSAGES) }
+{chr(10).join(_LOG_MESSAGES)}
     </div>
 </body>
 </html>
-""".format(timestamp, time.strftime("%Y-%m-%d %H:%M:%S"), "\n".join(_LOG_MESSAGES))
+"""
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(html_content)
     else:
@@ -173,7 +183,7 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
-def cprint(message, type="", style="bold green", **kwargs):
+def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
     if _SUPPRESS_OUTPUT:
         return
         
@@ -236,7 +246,7 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
             "-of", "default=noprint_wrappers=1:nokey=1", 
             file_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         val = result.stdout.strip()
         if val.isdigit():
             return int(val)
@@ -256,8 +266,8 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
             size = os.path.getsize(file_path)
             
             if duration > 0:
-                # Calculate total bitrate, apply 0.9 factor to estimate video-only bitrate
-                return int((size * 8 / duration) * 0.9)
+                # Calculate total bitrate, apply factor to estimate video-only bitrate
+                return int((size * 8 / duration) * VIDEO_BITRATE_ESTIMATE_FACTOR)
             
     except subprocess.TimeoutExpired:
         cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
@@ -281,14 +291,14 @@ def check_encoder_support(encoder_name: str) -> bool:
             "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
             "-c:v", encoder_name, "-f", "null", "-"
         ]
-        return subprocess.run(cmd, check=False, timeout=5).returncode == 0
+        return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
     except Exception:
         return False
 
 # ============================================================================ #
 #                            FUNCTION: check_ffmpeg                            #
 # ============================================================================ #
-def check_ffmpeg():
+def check_ffmpeg() -> None:
     global ACTIVE_ENCODER
     if shutil.which("ffmpeg") is None:
         cprint("ffmpeg is not found.", "error")
@@ -360,7 +370,7 @@ def needs_transcoding(file_path: str) -> bool:
     """
     try:
         cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", file_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         
         if result.returncode != 0:
             cprint(f"Warning: Could not probe {os.path.basename(file_path)}", "warning")
@@ -556,7 +566,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     
     command = [
         "ffmpeg", "-y", "-i", input_path,
-        "-vf", f"scale='min(1920,iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
+        "-vf", f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
         "-movflags", "+faststart",
     ]
 
@@ -602,7 +612,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Audio: Copy or convert to Opus
     # Preserve multi-channel audio if present, otherwise use stereo
-    command.extend(["-c:a", "libopus", "-b:a", "64k", temp_output])
+    command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
 
     cprint(f"Converting: {filename} using {encoder_name}", "info")
 
@@ -624,10 +634,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     try:
         duration_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
                        "-of", "default=noprint_wrappers=1:nokey=1", input_path]
-        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=10)
+        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         duration_str = duration_result.stdout.strip()
         total_duration = float(duration_str) if duration_str and duration_str.replace('.', '', 1).isdigit() else None
-    except:
+    except (subprocess.TimeoutExpired, ValueError, subprocess.SubprocessError) as e:
+        cprint(f"Could not determine video duration: {e}", "warning")
         total_duration = None
     
     try:
@@ -689,7 +700,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         if os.path.exists(temp_output):
             try:
                 os.remove(temp_output)
-            except:
+            except OSError:
                 pass
         return delete_original, 0
 
@@ -754,11 +765,180 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     return delete_original, 0
 
 # ============================================================================ #
+#                      FUNCTION: process_batch_files                           #
+# ============================================================================ #
+def process_batch_files(
+    video_files: list[str],
+    output_dir: Optional[str],
+    input_path: str,
+    bitrate: Optional[str],
+    delete_original: bool,
+    overwrite: bool,
+    dry_run: bool,
+    keep_mkv: bool,
+    recursive: bool = False,
+    transient_progress: bool = True
+) -> None:
+    """
+    Process a batch of video files with progress tracking and statistics.
+    
+    Args:
+        video_files: List of file paths to process
+        output_dir: Optional output directory (None means same as input)
+        input_path: Base input path (for relative path display)
+        bitrate: Optional bitrate override
+        delete_original: Whether to auto-delete originals
+        overwrite: Whether to overwrite existing files
+        dry_run: If True, only show what would be done
+        keep_mkv: Whether to keep .mkv extension
+        recursive: Whether processing is recursive (affects display paths)
+        transient_progress: Whether progress bar should be transient
+    """
+    if not video_files:
+        return
+    
+    # Track statistics for batch summary
+    total_original_size = 0
+    total_new_size = 0
+    files_converted = 0
+    per_file_stats: list[Tuple[str, int, int, float]] = []
+    cumulative_saved = 0
+    batch_start_time = time.time()
+    file_times: list[float] = []
+    
+    # Set up graceful cancellation handler
+    global _USER_CANCELLED
+    _USER_CANCELLED = False
+    signal.signal(signal.SIGINT, _signal_handler)
+    
+    # Process files with progress tracking
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("[green]Saved: {task.fields[saved]}"),
+        transient=transient_progress,
+    ) as progress:
+        global _PROGRESS_CONTEXT
+        _PROGRESS_CONTEXT = progress
+        
+        overall_task = progress.add_task(
+            f"[cyan]Converting 0/{len(video_files)} files...",
+            total=len(video_files),
+            saved=_format_saved(0),
+        )
+        
+        auto_delete = delete_original
+        
+        for idx, file_path in enumerate(video_files, 1):
+            # Check if user cancelled
+            if _USER_CANCELLED:
+                cprint("\nBatch conversion stopped by user.", "warning")
+                break
+            
+            # Show relative path for recursive mode
+            display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
+            file_start = time.time()
+            elapsed = int(time.time() - batch_start_time)
+            progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}")
+            
+            # Capture original size before conversion
+            try:
+                original_size = os.path.getsize(file_path)
+            except OSError:
+                original_size = 0
+            
+            # Determine output directory
+            if output_dir and output_dir != input_path:
+                # User provided explicit output directory - preserve folder structure
+                rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
+                current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
+            else:
+                # No explicit output dir or same as input - use file's own directory
+                current_output_dir = os.path.dirname(file_path)
+            
+            # Suppress output during conversion
+            global _SUPPRESS_OUTPUT
+            _SUPPRESS_OUTPUT = True
+            auto_delete_result, size_saved = convert_single_file(
+                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False
+            )
+            _SUPPRESS_OUTPUT = False
+            
+            # Track statistics if conversion happened
+            if size_saved != 0:
+                files_converted += 1
+                total_original_size += original_size
+                total_new_size += (original_size - size_saved)
+                cumulative_saved += size_saved
+                saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
+                per_file_stats.append((display_path, original_size, size_saved, saved_percent))
+                
+                # Track file encoding time for ETA
+                file_time = time.time() - file_start
+                file_times.append(file_time)
+            
+            # Update auto-delete flag based on user's "all" choice
+            if auto_delete_result:
+                auto_delete = True
+            
+            # Update progress and show running total saved
+            progress.advance(overall_task)
+            elapsed = int(time.time() - batch_start_time)
+            
+            # Calculate ETA if we have timing data
+            eta_str = ""
+            if file_times:
+                avg_time_per_file = sum(file_times) / len(file_times)
+                remaining_files = len(video_files) - idx
+                eta_seconds = int(avg_time_per_file * remaining_files)
+                if eta_seconds > 0:
+                    eta_str = f" | ETA: {eta_seconds}s"
+            
+            progress.update(
+                overall_task,
+                description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
+                fields={"saved": _format_saved(cumulative_saved)},
+            )
+        
+        _PROGRESS_CONTEXT = None
+    
+    # Display batch summary
+    cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
+    
+    if files_converted == 0:
+        cprint("No files were converted.", "info")
+        return
+    
+    if total_original_size > 0:
+        total_saved = total_original_size - total_new_size
+        percent_saved = (total_saved / total_original_size) * 100
+        
+        # Show per-file stats if we have them
+        if per_file_stats:
+            cprint(f"\n📋 Per-File Summary:", style="bold cyan")
+            for filename, orig_size, saved, percent in per_file_stats:
+                cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+        
+        cprint(f"\n📊 Total Space Savings:", style="bold cyan")
+        cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
+        cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
+        cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+
+# ============================================================================ #
 #                           FUNCTION: convert_videos                           #
 # ============================================================================ #
-def convert_videos(input_path: str, output_dir: Optional[str] = None, 
-                  bitrate: Optional[str] = None, delete_original: bool = False, 
-                  overwrite: bool = False, dry_run: bool = False, recursive: bool = False, keep_mkv: bool = False) -> None:
+def convert_videos(
+    input_path: str, 
+    output_dir: Optional[str] = None, 
+    bitrate: Optional[str] = None, 
+    delete_original: bool = False, 
+    overwrite: bool = False, 
+    dry_run: bool = False, 
+    recursive: bool = False, 
+    keep_mkv: bool = False
+) -> None:
     """
     Main entry point for converting videos.
     Handles both single files and directory processing.
@@ -801,131 +981,11 @@ def convert_videos(input_path: str, output_dir: Optional[str] = None,
         mode_str = "recursively" if recursive else "in directory"
         cprint(f"Found {len(video_files)} video file(s) {mode_str}.", "info")
         
-        # Track statistics for batch summary
-        total_original_size = 0
-        total_new_size = 0
-        files_converted = 0
-        per_file_stats = []  # Track (filename, original_size, saved_size, percent)
-        cumulative_saved = 0  # Live running total saved (bytes)
-        batch_start_time = time.time()  # Track elapsed time
-        file_times = []  # Track individual file encoding times for ETA
-        
-        # Set up graceful cancellation handler
-        global _USER_CANCELLED
-        _USER_CANCELLED = False
-        signal.signal(signal.SIGINT, _signal_handler)
-        
-        # Process files with progress tracking
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("[green]Saved: {task.fields[saved]}"),
-            transient=True,
-        ) as progress:
-            global _PROGRESS_CONTEXT
-            _PROGRESS_CONTEXT = progress
-            
-            overall_task = progress.add_task(
-                f"[cyan]Converting 0/{len(video_files)} files...",
-                total=len(video_files),
-                saved=_format_saved(0),
-            )
-            
-            for idx, file_path in enumerate(video_files, 1):
-                # Check if user cancelled
-                if _USER_CANCELLED:
-                    cprint("\nBatch conversion stopped by user.", "warning")
-                    break
-                
-                # Show relative path for recursive mode
-                display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
-                file_start = time.time()
-                elapsed = int(time.time() - batch_start_time)
-                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}")
-                
-                # Capture original size before conversion
-                try:
-                    original_size = os.path.getsize(file_path)
-                except:
-                    original_size = 0
-                
-                # Determine output directory
-                # Always use the same directory as the source file unless output_dir is explicitly provided
-                if output_dir and output_dir != input_path:
-                    # User provided explicit output directory - preserve folder structure
-                    rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
-                    current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
-                else:
-                    # No explicit output dir or same as input - use file's own directory
-                    current_output_dir = os.path.dirname(file_path)
-                
-                # Suppress output during conversion
-                global _SUPPRESS_OUTPUT
-                _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, current_output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv, show_progress=False)
-                _SUPPRESS_OUTPUT = False
-                
-                # Track statistics if conversion happened
-                if size_saved != 0:
-                    files_converted += 1
-                    total_original_size += original_size
-                    total_new_size += (original_size - size_saved)
-                    cumulative_saved += size_saved
-                    saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
-                    per_file_stats.append((display_path, original_size, size_saved, saved_percent))
-                    
-                    # Track file encoding time for ETA
-                    file_time = time.time() - file_start
-                    file_times.append(file_time)
-                
-                # Update auto-delete flag based on user's "all" choice
-                if auto_delete_result:
-                    delete_original = True
-                
-                # Update progress and show running total saved
-                progress.advance(overall_task)
-                elapsed = int(time.time() - batch_start_time)
-                
-                # Calculate ETA if we have timing data
-                eta_str = ""
-                if file_times:
-                    avg_time_per_file = sum(file_times) / len(file_times)
-                    remaining_files = len(video_files) - idx
-                    eta_seconds = int(avg_time_per_file * remaining_files)
-                    if eta_seconds > 0:
-                        eta_str = f" | ETA: {eta_seconds}s"
-                
-                progress.update(
-                    overall_task,
-                    description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
-                    fields={"saved": _format_saved(cumulative_saved)},
-                )
-            
-            _PROGRESS_CONTEXT = None
-        
-        # Display batch summary with space savings
-        cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
-        
-        if files_converted == 0:
-            cprint("No files were converted.", "info")
-            return
-        
-        if total_original_size > 0:
-            total_saved = total_original_size - total_new_size
-            percent_saved = (total_saved / total_original_size) * 100
-            
-            # Show per-file stats if we have them
-            if per_file_stats:
-                cprint(f"\n📋 Per-File Summary:", style="bold cyan")
-                for filename, orig_size, saved, percent in per_file_stats:
-                    cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
-            
-            cprint(f"\n📊 Total Space Savings:", style="bold cyan")
-            cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
-            cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
-            cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+        # Process batch using shared helper function
+        process_batch_files(
+            video_files, output_dir, input_path, bitrate, delete_original,
+            overwrite, dry_run, keep_mkv, recursive, transient_progress=True
+        )
     else:
         cprint("Invalid path: File or directory does not exist.", "error")
 
@@ -986,9 +1046,7 @@ def main(
     
     if not input_paths:
         # Show help when no input paths provided
-        import subprocess
-        import sys
-        subprocess.run([sys.executable, __file__, "--help"])
+        app(["--help"])
         raise typer.Exit(code=0)
     
     # If multiple paths passed (from wildcard expansion), process them all
@@ -1004,120 +1062,21 @@ def main(
         matched_files.sort()
         cprint(f"Found {len(matched_files)} file(s) to process.", "info")
         
-        # Set up graceful cancellation handler
-        global _USER_CANCELLED
-        _USER_CANCELLED = False
-        signal.signal(signal.SIGINT, _signal_handler)
+        # Determine base path for relative path display (use common parent directory)
+        try:
+            if len(matched_files) > 1:
+                base_path = os.path.commonpath(matched_files)
+            else:
+                base_path = os.path.dirname(matched_files[0]) or os.getcwd()
+        except ValueError:
+            # Files are on different drives (Windows) or no common path
+            base_path = os.getcwd()
         
-        # Process each file
-        # Track statistics for batch summary
-        total_original_size = 0
-        total_new_size = 0
-        files_converted = 0
-        auto_delete = delete_original
-        per_file_stats = []  # Track (filename, original_size, saved_size, percent)
-        cumulative_saved = 0  # Live running total saved (bytes)
-        batch_start_time = time.time()  # Track elapsed time
-        file_times = []  # Track individual file encoding times for ETA
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("[green]Saved: {task.fields[saved]}"),
-            transient=False,
-        ) as progress:
-            global _PROGRESS_CONTEXT
-            _PROGRESS_CONTEXT = progress
-            
-            overall_task = progress.add_task(
-                f"[cyan]Converting 0/{len(matched_files)} files...",
-                total=len(matched_files),
-                saved=_format_saved(0),
-            )
-            
-            for idx, file_path in enumerate(matched_files, 1):
-                # Check if user cancelled
-                if _USER_CANCELLED:
-                    cprint("\nBatch conversion stopped by user.", "warning")
-                    break
-                
-                display_name = os.path.basename(file_path)
-                file_start = time.time()
-                elapsed = int(time.time() - batch_start_time)
-                progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s) → {display_name}")
-                
-                # Capture original size before conversion
-                try:
-                    original_size = os.path.getsize(file_path)
-                except:
-                    original_size = 0
-                
-                # Suppress output during conversion
-                global _SUPPRESS_OUTPUT
-                _SUPPRESS_OUTPUT = True
-                auto_delete_result, size_saved = convert_single_file(file_path, output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False)
-                _SUPPRESS_OUTPUT = False
-                
-                # Track statistics if conversion happened
-                if size_saved != 0:
-                    files_converted += 1
-                    total_original_size += original_size
-                    total_new_size += (original_size - size_saved)
-                    cumulative_saved += size_saved
-                    saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
-                    per_file_stats.append((display_name, original_size, size_saved, saved_percent))
-                    
-                    # Track file encoding time for ETA
-                    file_time = time.time() - file_start
-                    file_times.append(file_time)
-                
-                # Update auto-delete flag based on user's "all" choice
-                if auto_delete_result:
-                    auto_delete = True
-                
-                # Update progress and show running total saved
-                progress.advance(overall_task)
-                elapsed = int(time.time() - batch_start_time)
-                
-                # Calculate ETA if we have timing data
-                eta_str = ""
-                if file_times:
-                    avg_time_per_file = sum(file_times) / len(file_times)
-                    remaining_files = len(matched_files) - idx
-                    eta_seconds = int(avg_time_per_file * remaining_files)
-                    if eta_seconds > 0:
-                        eta_str = f" | ETA: {eta_seconds}s"
-                
-                progress.update(
-                    overall_task,
-                    description=f"[cyan]Converting {idx}/{len(matched_files)} files... ({elapsed}s{eta_str}) → {display_name}",
-                    fields={"saved": _format_saved(cumulative_saved)},
-                )
-            
-            _PROGRESS_CONTEXT = None
-        
-        # Display batch summary
-        cprint(f"\nBatch conversion complete! Processed {len(matched_files)} file(s).", "success")
-        
-        if files_converted == 0:
-            cprint("No files were converted.", "info")
-            return
-        elif total_original_size > 0:
-            total_saved = total_original_size - total_new_size
-            percent_saved = (total_saved / total_original_size) * 100
-            
-            # Show per-file stats if we have them
-            if per_file_stats:
-                cprint(f"\n📋 Per-File Summary:", style="bold cyan")
-                for filename, orig_size, saved, percent in per_file_stats:
-                    cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
-            
-            cprint(f"\n📊 Total Space Savings:", style="bold cyan")
-            cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
-            cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
-            cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+        # Process batch using shared helper function
+        process_batch_files(
+            matched_files, output_dir, base_path, bitrate, delete_original,
+            overwrite, dry_run, keep_mkv, recursive=False, transient_progress=False
+        )
     else:
         # Single path - could be file, directory, or wildcard pattern
         input_path = input_paths[0]
@@ -1136,12 +1095,12 @@ def main(
     
     # Save logs only if files were actually converted
     global _LOG_MESSAGES
-    import tempfile
-    resolved_log_dir = log_dir
-    if resolved_log_dir is None:
-        temp_base = tempfile.gettempdir()
-        resolved_log_dir = os.path.join(temp_base, "av1-logs")
     if _LOG_MESSAGES:
+        import tempfile
+        resolved_log_dir = log_dir
+        if resolved_log_dir is None:
+            temp_base = tempfile.gettempdir()
+            resolved_log_dir = os.path.join(temp_base, "av1-logs")
         _save_log(log_type, resolved_log_dir)
 
 if __name__ == "__main__":
