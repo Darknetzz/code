@@ -8,6 +8,7 @@
 # av1 "/path/to/videos" -r  (recursive)
 
 import os, subprocess, shutil, sys, json, platform, glob, time, signal
+from datetime import datetime, UTC
 from typing import Optional, Tuple
 
 # Force UTF-8 encoding on Windows
@@ -57,6 +58,37 @@ PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 
 # ============================================================================ #
+#                           ENVIRONMENT OVERRIDES                             #
+# ============================================================================ #
+# Environment variables to tweak behavior without changing CLI:
+#   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
+#   AV1_BITRATE_FALLBACK, AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
+#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH
+
+def _env_bool(val: str) -> bool:
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+FFMPEG_CMD = os.getenv("AV1_FFMPEG_PATH") or "ffmpeg"
+FFPROBE_CMD = os.getenv("AV1_FFPROBE_PATH") or "ffprobe"
+
+try:
+    _env_val = os.getenv("AV1_AUDIO_BITRATE")
+    if _env_val:
+        AUDIO_BITRATE = _env_val
+    _env_val = os.getenv("AV1_MAX_VIDEO_WIDTH")
+    if _env_val:
+        MAX_VIDEO_WIDTH = int(_env_val)
+    _env_val = os.getenv("AV1_BITRATE_REDUCTION_FACTOR")
+    if _env_val:
+        BITRATE_REDUCTION_FACTOR = float(_env_val)
+    _env_val = os.getenv("AV1_BITRATE_FALLBACK")
+    if _env_val:
+        BITRATE_FALLBACK = int(_env_val)
+except Exception:
+    # Ignore invalid env overrides and proceed with defaults
+    pass
+
+# ============================================================================ #
 #                          SYSTEM STATE VARIABLES                              #
 # ============================================================================ #
 SYSTEM_PLATFORM = platform.system().lower()  # 'windows', 'linux', 'darwin'
@@ -74,7 +106,9 @@ _PROGRESS_CONTEXT = None  # Active progress context manager
 _USER_CANCELLED = False  # User pressed Ctrl+C
 _LOG_MESSAGES = []  # Store all messages for file logging
 _LOGGER = None  # Logger instance (unused, kept for compatibility)
+_LOG_EVENTS: list[dict] = []  # Structured events for JSON logging
 _NO_COLOR = False  # Disable colors when True
+_NO_PROMPT = False  # Suppress interactive prompts
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -119,12 +153,12 @@ def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
     global _USER_CANCELLED
     _USER_CANCELLED = True
-    cprint("\n\nStopping after current file... (Press Ctrl+C again to force quit)", "warning")
+    cprint("\n\n⏸️  Gracefully stopping after current file...\n   (Press Ctrl+C again to force quit)", "warning")
     # Restore default handler so second Ctrl+C will force quit
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
-    """Save collected log messages to file (.txt or .html).
+    """Save collected log messages to file (.txt, .html or .json).
     Returns the path to the saved log file, or None if disabled.
     """
     if not log_type or log_type.lower() == "none":
@@ -140,7 +174,22 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
     # Generate filename with timestamp
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     
-    if log_type.lower() == "html":
+    if log_type.lower() == "json":
+        log_file = os.path.join(log_dir, f"{__app_name__}_{timestamp}.json")
+        payload = {
+            "app": __app_name__,
+            "version": __version__,
+            "generated": datetime.now(UTC).isoformat(timespec="seconds"),
+            "system_platform": SYSTEM_PLATFORM,
+            "encoder": ACTIVE_ENCODER,
+            "events": _LOG_EVENTS or [
+                {"ts": datetime.now(UTC).isoformat(timespec="seconds"), "level": "info", "message": m}
+                for m in _LOG_MESSAGES
+            ],
+        }
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    elif log_type.lower() == "html":
         log_file = os.path.join(log_dir, f"{__app_name__}_{timestamp}.html")
         timestamp_formatted = time.strftime("%Y-%m-%d %H:%M:%S")
         html_content = f"""<!DOCTYPE html>
@@ -184,9 +233,6 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
 def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
-    if _SUPPRESS_OUTPUT:
-        return
-        
     prefix = ""
     style  = ""
     type   = type.lower()
@@ -206,14 +252,23 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
 
     message = f"{prefix}  {message}"
     
-    # Disable styling if _NO_COLOR is set
-    if _NO_COLOR:
-        console.print(message, **kwargs)
-    else:
-        console.print(message, style=style, **kwargs)
+    # Disable styling if _NO_COLOR is set; respect suppression for console output only
+    if not _SUPPRESS_OUTPUT:
+        if _NO_COLOR:
+            console.print(message, **kwargs)
+        else:
+            console.print(message, style=style, **kwargs)
     
-    # Log the message (with prefix for file logging)
+    # Log the message (with prefix for file logging) and structured event
     _LOG_MESSAGES.append(message)
+    try:
+        _LOG_EVENTS.append({
+            "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+            "level": type or "info",
+            "message": message,
+        })
+    except Exception:
+        pass
 
 # ============================================================================ #
 #                            FUNCTION: safe_input                              #
@@ -240,7 +295,7 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
     """
     try:
         cmd = [
-            "ffprobe", "-v", "error", 
+            FFPROBE_CMD, "-v", "error", 
             "-select_streams", "v:0",
             "-show_entries", "stream=bit_rate",
             "-of", "default=noprint_wrappers=1:nokey=1", 
@@ -253,7 +308,7 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
         
         # Fallback: Calculate from duration/size
         cmd_dur = [
-            "ffprobe", "-v", "error", 
+            FFPROBE_CMD, "-v", "error", 
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", 
             file_path
@@ -287,7 +342,7 @@ def check_encoder_support(encoder_name: str) -> bool:
     try:
         # Use 720p test to satisfy RDNA3 and newer NVENC requirements
         cmd = [
-            "ffmpeg", "-v", "quiet", "-f", "lavfi",
+            FFMPEG_CMD, "-v", "quiet", "-f", "lavfi",
             "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
             "-c:v", encoder_name, "-f", "null", "-"
         ]
@@ -299,10 +354,25 @@ def check_encoder_support(encoder_name: str) -> bool:
 #                            FUNCTION: check_ffmpeg                            #
 # ============================================================================ #
 def check_ffmpeg() -> None:
-    global ACTIVE_ENCODER
-    if shutil.which("ffmpeg") is None:
-        cprint("ffmpeg is not found.", "error")
-        raise typer.Exit(code=1)
+    global ACTIVE_ENCODER, FFMPEG_CMD, FFPROBE_CMD
+    # Validate ffmpeg path or fallback to PATH
+    ffmpeg_ok = shutil.which(FFMPEG_CMD) or (os.path.exists(FFMPEG_CMD) and os.path.isfile(FFMPEG_CMD))
+    if not ffmpeg_ok:
+        path_ffmpeg = shutil.which("ffmpeg")
+        if path_ffmpeg:
+            FFMPEG_CMD = path_ffmpeg
+        else:
+            cprint("ffmpeg is not found.", "error")
+            raise typer.Exit(code=1)
+    # Validate ffprobe path or fallback to PATH
+    ffprobe_ok = shutil.which(FFPROBE_CMD) or (os.path.exists(FFPROBE_CMD) and os.path.isfile(FFPROBE_CMD))
+    if not ffprobe_ok:
+        path_ffprobe = shutil.which("ffprobe")
+        if path_ffprobe:
+            FFPROBE_CMD = path_ffprobe
+        else:
+            cprint("ffprobe is not found.", "error")
+            raise typer.Exit(code=1)
     
     cprint("Detecting Best Available Encoder...", "info")
     
@@ -369,7 +439,7 @@ def needs_transcoding(file_path: str) -> bool:
     Returns True if transcoding is needed, False otherwise.
     """
     try:
-        cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", file_path]
+        cmd = [FFPROBE_CMD, "-v", "quiet", "-print_format", "json", "-show_streams", file_path]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         
         if result.returncode != 0:
@@ -415,7 +485,9 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
             os.remove(original_path)
             cprint(f"Deleted original: {os.path.basename(original_path)}")
             return True
-            
+        # Suppress interactive prompt when _NO_PROMPT is enabled
+        if _NO_PROMPT:
+            return False
         resp = safe_input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
@@ -496,17 +568,17 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         return delete_original, 0
 
     if not needs_transcoding(input_path):
-        cprint(f"Skipping (No Transcoding Needed): {filename}", "info")
+        cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
         return delete_original, 0
 
-    # Show actual file size before conversion
-    try:
-        file_size_bytes = os.path.getsize(input_path)
-        file_size_mb = file_size_bytes / (1024 ** 2)
-        file_size_gb = file_size_bytes / (1024 ** 3)
-        cprint(f"Actual file size: {file_size_mb:.2f} MB ({file_size_gb:.2f} GB)", "info")
-    except Exception as e:
-        cprint(f"Could not determine file size: {e}", "warning")
+    # Show actual file size before conversion (only if not suppressed)
+    if not _SUPPRESS_OUTPUT:
+        try:
+            file_size_bytes = os.path.getsize(input_path)
+            file_size_mb = file_size_bytes / (1024 ** 2)
+            cprint(f"📦 Input size: {file_size_mb:.2f} MB", "info")
+        except Exception as e:
+            cprint(f"Could not determine file size: {e}", "warning")
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
@@ -550,9 +622,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         input_bitrate = get_input_bitrate(input_path)
         if input_bitrate:
             target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
-            cprint(f"Source: {input_bitrate/1_000_000:.2f}M -> Target: {target_bitrate_int/1_000_000:.2f}M", "info")
+            if not _SUPPRESS_OUTPUT:
+                cprint(f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M ({int(BITRATE_REDUCTION_FACTOR*100)}% reduction)", "info")
         else:
-            cprint(f"Bitrate unknown. Using {BITRATE_FALLBACK/1_000_000:.1f}M fallback.", "warning")
+            if not _SUPPRESS_OUTPUT:
+                cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
             target_bitrate_int = BITRATE_FALLBACK
 
     # --- BUILD COMMAND ---
@@ -565,7 +639,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         pix_fmt = "nv12"  # NVIDIA/AMD default
     
     command = [
-        "ffmpeg", "-y", "-i", input_path,
+        FFMPEG_CMD, "-y", "-i", input_path,
         "-vf", f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
         "-movflags", "+faststart",
     ]
@@ -614,7 +688,17 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     # Preserve multi-channel audio if present, otherwise use stereo
     command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
 
-    cprint(f"Converting: {filename} using {encoder_name}", "info")
+    if not _SUPPRESS_OUTPUT:
+        cprint(f"🎬 Converting: {filename}", "info")
+        cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
+    # Initialize per-file event context
+    file_event = {
+        "file": input_path,
+        "output": output_path,
+        "encoder": encoder_name,
+        "codec": codec,
+        "target_bps": target_bitrate_int,
+    }
 
     # Dry run: Show planned command and summary, then return without executing
     if dry_run:
@@ -626,13 +710,23 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             "pix_fmt": pix_fmt,
             "bitrate": target_bitrate_int,
         }
-        cprint("Dry run: Planned conversion", "info")
-        console.print(summary)
+        if not _SUPPRESS_OUTPUT:
+            cprint("🔍 Dry run: Planned conversion", "info")
+            console.print(summary)
+        try:
+            _LOG_EVENTS.append({
+                "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+                "level": "info",
+                "message": "dry_run_summary",
+                "data": summary,
+            })
+        except Exception:
+            pass
         return delete_original, 0
     
     # Get video duration for progress calculation
     try:
-        duration_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
+        duration_cmd = [FFPROBE_CMD, "-v", "error", "-show_entries", "format=duration", 
                        "-of", "default=noprint_wrappers=1:nokey=1", input_path]
         duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         duration_str = duration_result.stdout.strip()
@@ -712,10 +806,30 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 new_file_size = os.path.getsize(output_path)
                 size_saved = file_size - new_file_size
                 saved_percent = (size_saved / file_size) * 100 if file_size > 0 else 0
-                cprint(f"Done: {file_size / (1024**2):.2f} MB -> {new_file_size / (1024**2):.2f} MB (Saved: {size_saved / (1024**2):.2f} MB, {saved_percent:.1f}%)", "success")
+                if not _SUPPRESS_OUTPUT:
+                    cprint(f"✅ Complete: {file_size / (1024**2):.2f} MB → {new_file_size / (1024**2):.2f} MB", "success")
+                    cprint(f"   💾 Saved: {size_saved / (1024**2):.2f} MB ({saved_percent:.1f}%)", "success")
+                # Record per-file metrics
+                try:
+                    _LOG_EVENTS.append({
+                        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+                        "level": "success",
+                        "message": "file_metrics",
+                        "data": {
+                            **file_event,
+                            "original_bytes": file_size,
+                            "new_bytes": new_file_size,
+                            "saved_bytes": size_saved,
+                            "saved_percent": saved_percent,
+                            "duration": total_duration,
+                        }
+                    })
+                except Exception:
+                    pass
                 
                 if file_size <= new_file_size:
-                    cprint("Warning: File grew larger! (Entropy issue).", "warning")
+                    if not _SUPPRESS_OUTPUT:
+                        cprint("⚠️  Warning: Output file is larger than input (entropy/quality issue)", "warning")
                     # Still offer to delete if user wants
                     auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
                     # Track if original was deleted in this step
@@ -751,11 +865,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 
                 return delete_original, size_saved
             else:
-                cprint("Error: Temp file missing or invalid!", "error")
+                cprint("❌ Error: Temp file missing or invalid!", "error")
         except OSError as e:
-            cprint(f"Error swapping files: {e}", "error")
+            cprint(f"❌ Error swapping files: {e}", "error")
     else:
-        cprint(f"Conversion failed (Code: {result.returncode})", "error")
+        cprint(f"❌ Conversion failed (exit code: {result.returncode})", "error")
         if os.path.exists(temp_output):
             try:
                 os.remove(temp_output)
@@ -834,7 +948,7 @@ def process_batch_files(
         for idx, file_path in enumerate(video_files, 1):
             # Check if user cancelled
             if _USER_CANCELLED:
-                cprint("\nBatch conversion stopped by user.", "warning")
+                cprint(f"\n⏸️  Batch conversion interrupted. Finishing current file...", "warning")
                 break
             
             # Show relative path for recursive mode
@@ -905,10 +1019,21 @@ def process_batch_files(
         _PROGRESS_CONTEXT = None
     
     # Display batch summary
-    cprint(f"\nBatch conversion complete! Processed {len(video_files)} file(s).", "success")
+    batch_elapsed = int(time.time() - batch_start_time)
+    status_msg = "interrupted" if _USER_CANCELLED else "complete"
+    
+    console.print(f"\n{'='*60}", style="cyan")
+    cprint(f"📊 Batch conversion {status_msg}!", "success" if not _USER_CANCELLED else "warning")
+    console.print(f"{'='*60}", style="cyan")
+    
+    cprint(f"\n📈 Processing Summary:", style="bold cyan")
+    cprint(f"   Files processed:  {len(video_files)}", "info")
+    cprint(f"   Files converted:  {files_converted}", "success" if files_converted > 0 else "info")
+    cprint(f"   Files skipped:    {len(video_files) - files_converted}", "info")
+    cprint(f"   Time elapsed:     {batch_elapsed // 60}m {batch_elapsed % 60}s", "info")
     
     if files_converted == 0:
-        cprint("No files were converted.", "info")
+        cprint("\n💡 No files were converted (already using target codec or errors occurred).", "info")
         return
     
     if total_original_size > 0:
@@ -916,15 +1041,49 @@ def process_batch_files(
         percent_saved = (total_saved / total_original_size) * 100
         
         # Show per-file stats if we have them
-        if per_file_stats:
-            cprint(f"\n📋 Per-File Summary:", style="bold cyan")
+        if per_file_stats and len(per_file_stats) <= 10:
+            cprint(f"\n📋 Per-File Results:", style="bold cyan")
             for filename, orig_size, saved, percent in per_file_stats:
-                cprint(f"  {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+                status = "✅" if saved > 0 else "⚠️"
+                cprint(f"   {status} {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+        elif per_file_stats:
+            cprint(f"\n📋 Showing top 10 files by space saved:", style="bold cyan")
+            top_files = sorted(per_file_stats, key=lambda x: x[2], reverse=True)[:10]
+            for filename, orig_size, saved, percent in top_files:
+                cprint(f"   ✅ {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
         
-        cprint(f"\n📊 Total Space Savings:", style="bold cyan")
-        cprint(f"  Original Size:  {total_original_size / (1024**3):.2f} GB", "info")
-        cprint(f"  New Size:       {total_new_size / (1024**3):.2f} GB", "info")
-        cprint(f"  Space Saved:    {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+        cprint(f"\n💾 Total Space Savings:", style="bold cyan")
+        cprint(f"   Before:  {total_original_size / (1024**3):.2f} GB", "info")
+        cprint(f"   After:   {total_new_size / (1024**3):.2f} GB", "info")
+        cprint(f"   Saved:   {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+        
+        if batch_elapsed > 0:
+            avg_time = batch_elapsed / files_converted
+            cprint(f"   Average: {avg_time:.1f}s per file", "info")
+    
+    console.print(f"{'='*60}\n", style="cyan")
+    
+    # Emit batch summary event for JSON logs
+    if total_original_size > 0:
+        try:
+            total_saved = total_original_size - total_new_size
+            percent_saved = (total_saved / total_original_size) * 100
+            _LOG_EVENTS.append({
+                "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+                "level": "success",
+                "message": "batch_summary",
+                "data": {
+                    "files_total": len(video_files),
+                    "files_converted": files_converted,
+                    "original_bytes_total": total_original_size,
+                    "new_bytes_total": total_new_size,
+                    "saved_bytes_total": total_saved,
+                    "saved_percent_total": percent_saved,
+                    "elapsed_seconds": int(time.time() - batch_start_time),
+                }
+            })
+        except Exception:
+            pass
 
 # ============================================================================ #
 #                           FUNCTION: convert_videos                           #
@@ -972,14 +1131,14 @@ def convert_videos(
         
         if not video_files:
             mode = "directory tree" if recursive else "directory"
-            cprint(f"No video files found in {mode}.", "warning")
+            cprint(f"❌ No video files found in {mode}.", "warning")
             return
         
         # Sort files alphabetically for consistent processing order
         video_files.sort()
         
         mode_str = "recursively" if recursive else "in directory"
-        cprint(f"Found {len(video_files)} video file(s) {mode_str}.", "info")
+        cprint(f"🔍 Found {len(video_files)} video file(s) {mode_str}.\n", "info")
         
         # Process batch using shared helper function
         process_batch_files(
@@ -987,7 +1146,7 @@ def convert_videos(
             overwrite, dry_run, keep_mkv, recursive, transient_progress=True
         )
     else:
-        cprint("Invalid path: File or directory does not exist.", "error")
+        cprint("❌ Invalid path: File or directory does not exist.", "error")
 
 @app.command()
 def main(
@@ -999,9 +1158,12 @@ def main(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show planned actions without converting"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
-    log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', or 'none'"),
+    log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', 'json', or 'none'"),
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: %TEMP%/av1-logs)"),
+    ffmpeg: Optional[str] = typer.Option(None, "--ffmpeg", help="Path to ffmpeg executable (overrides env)"),
+    ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
+    no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -1036,9 +1198,33 @@ def main(
     """
     # If version flag triggered, callback already exited.
     
+    # Apply environment overrides for color and logging
+    env_no_color = os.getenv("AV1_NO_COLOR")
+    if env_no_color and _env_bool(env_no_color):
+        no_color = True
+    env_no_prompt = os.getenv("AV1_NO_PROMPT")
+    if env_no_prompt and _env_bool(env_no_prompt):
+        no_prompt = True
+
+    env_log_type = os.getenv("AV1_LOG_TYPE")
+    if env_log_type and (log_type == "txt"):
+        log_type = env_log_type
+
+    env_log_dir = os.getenv("AV1_LOG_DIR")
+    if env_log_dir and log_dir is None:
+        log_dir = env_log_dir
+
+    # Override ffmpeg/ffprobe paths from CLI if provided
+    global FFMPEG_CMD, FFPROBE_CMD
+    if ffmpeg:
+        FFMPEG_CMD = ffmpeg
+    if ffprobe:
+        FFPROBE_CMD = ffprobe
+
     # Set global no-color flag and reinitialize console
-    global _NO_COLOR, console
+    global _NO_COLOR, _NO_PROMPT, console
     _NO_COLOR = no_color
+    _NO_PROMPT = no_prompt
     if no_color:
         console = Console(no_color=True, force_terminal=True)
     
@@ -1055,7 +1241,7 @@ def main(
         matched_files = [p for p in input_paths if p.lower().endswith(SUPPORTED_EXTENSIONS)]
         
         if not matched_files:
-            cprint("No video files in arguments.", "error")
+            cprint("❌ No video files found in arguments.", "error")
             raise typer.Exit(code=1)
         
         # Sort files for consistent processing order
