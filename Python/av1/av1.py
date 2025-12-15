@@ -7,7 +7,15 @@
 # av1 "video.mp4" --delete-original
 # av1 "/path/to/videos" -r  (recursive)
 
-import os, subprocess, shutil, sys, json, platform, glob, time, signal
+import os
+import subprocess
+import shutil
+import sys
+import json
+import platform
+import glob
+import time
+import signal
 from datetime import datetime, UTC
 from typing import Optional, Tuple
 
@@ -746,7 +754,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         file_task = None
         if _PROGRESS_CONTEXT and show_progress and total_duration and process.stdout:
             file_task = _PROGRESS_CONTEXT.add_task(
-                f"[yellow]  └─ Encoding...", 
+                "[yellow]  └─ Encoding...", 
                 total=100,
                 saved="",
             )
@@ -770,7 +778,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         elif _PROGRESS_CONTEXT and show_progress and process.stdout:
             # No duration available; show a spinner-like indeterminate bar
             file_task = _PROGRESS_CONTEXT.add_task(
-                f"[yellow]  └─ Encoding...", 
+                "[yellow]  └─ Encoding...", 
                 total=None,
                 saved="",
             )
@@ -948,7 +956,7 @@ def process_batch_files(
         for idx, file_path in enumerate(video_files, 1):
             # Check if user cancelled
             if _USER_CANCELLED:
-                cprint(f"\n⏸️  Batch conversion interrupted. Finishing current file...", "warning")
+                cprint("\n⏸️  Batch conversion interrupted. Finishing current file...", "warning")
                 break
             
             # Show relative path for recursive mode
@@ -1026,7 +1034,7 @@ def process_batch_files(
     cprint(f"📊 Batch conversion {status_msg}!", "success" if not _USER_CANCELLED else "warning")
     console.print(f"{'='*60}", style="cyan")
     
-    cprint(f"\n📈 Processing Summary:", style="bold cyan")
+    cprint("\n📈 Processing Summary:", style="bold cyan")
     cprint(f"   Files processed:  {len(video_files)}", "info")
     cprint(f"   Files converted:  {files_converted}", "success" if files_converted > 0 else "info")
     cprint(f"   Files skipped:    {len(video_files) - files_converted}", "info")
@@ -1042,17 +1050,17 @@ def process_batch_files(
         
         # Show per-file stats if we have them
         if per_file_stats and len(per_file_stats) <= 10:
-            cprint(f"\n📋 Per-File Results:", style="bold cyan")
+            cprint("\n📋 Per-File Results:", style="bold cyan")
             for filename, orig_size, saved, percent in per_file_stats:
                 status = "✅" if saved > 0 else "⚠️"
                 cprint(f"   {status} {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
         elif per_file_stats:
-            cprint(f"\n📋 Showing top 10 files by space saved:", style="bold cyan")
+            cprint("\n📋 Showing top 10 files by space saved:", style="bold cyan")
             top_files = sorted(per_file_stats, key=lambda x: x[2], reverse=True)[:10]
             for filename, orig_size, saved, percent in top_files:
                 cprint(f"   ✅ {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
         
-        cprint(f"\n💾 Total Space Savings:", style="bold cyan")
+        cprint("\n💾 Total Space Savings:", style="bold cyan")
         cprint(f"   Before:  {total_original_size / (1024**3):.2f} GB", "info")
         cprint(f"   After:   {total_new_size / (1024**3):.2f} GB", "info")
         cprint(f"   Saved:   {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
