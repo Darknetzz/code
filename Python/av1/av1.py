@@ -753,24 +753,46 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         # Only show encoding progress for single-file conversions (show_progress=True)
         file_task = None
         if _PROGRESS_CONTEXT and show_progress and total_duration and process.stdout:
+            encoding_start = time.time()
             file_task = _PROGRESS_CONTEXT.add_task(
-                "[yellow]  └─ Encoding...", 
+                f"[yellow]  └─ Encoding: {filename}", 
                 total=100,
-                saved="",
+                fps="",
+                eta="",
             )
             
             try:
                 for line in process.stdout:
                     # Parse ffmpeg progress output
                     time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                    fps_match = re.search(r'fps=\s*(\d+\.?\d*)', line)
+                    
                     if time_match and total_duration:
                         hours, minutes, seconds = map(float, time_match.groups())
                         current_time = hours * 3600 + minutes * 60 + seconds
                         progress_percent = min((current_time / total_duration) * 100, 100)
-                        _PROGRESS_CONTEXT.update(file_task, completed=progress_percent)
+                        
+                        # Calculate ETA
+                        elapsed = time.time() - encoding_start
+                        if progress_percent > 0 and elapsed > 0:
+                            total_estimated = (elapsed / progress_percent) * 100
+                            eta_seconds = int(total_estimated - elapsed)
+                            eta_str = f"{eta_seconds // 60}m {eta_seconds % 60}s" if eta_seconds > 60 else f"{eta_seconds}s"
+                        else:
+                            eta_str = "calculating..."
+                        
+                        # Get FPS info
+                        fps_str = f"{int(float(fps_match.group(1)))} fps" if fps_match else ""
+                        
+                        _PROGRESS_CONTEXT.update(
+                            file_task, 
+                            completed=progress_percent,
+                            fps=fps_str,
+                            eta=f"ETA: {eta_str}"
+                        )
                 
                 process.wait()
-                _PROGRESS_CONTEXT.update(file_task, completed=100)
+                _PROGRESS_CONTEXT.update(file_task, completed=100, eta="Done")
             finally:
                 if file_task is not None:
                     _PROGRESS_CONTEXT.remove_task(file_task)
@@ -778,7 +800,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         elif _PROGRESS_CONTEXT and show_progress and process.stdout:
             # No duration available; show a spinner-like indeterminate bar
             file_task = _PROGRESS_CONTEXT.add_task(
-                "[yellow]  └─ Encoding...", 
+                f"[yellow]  └─ Encoding: {filename}", 
                 total=None,
                 saved="",
             )
@@ -939,6 +961,8 @@ def process_batch_files(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(),
+        TextColumn("[cyan]{task.fields[fps]}"),
+        TextColumn("[yellow]{task.fields[eta]}"),
         TextColumn("[green]Saved: {task.fields[saved]}"),
         transient=transient_progress,
     ) as progress:
@@ -949,6 +973,8 @@ def process_batch_files(
             f"[cyan]Converting 0/{len(video_files)} files...",
             total=len(video_files),
             saved=_format_saved(0),
+            fps="",
+            eta="",
         )
         
         auto_delete = delete_original
@@ -984,7 +1010,7 @@ def process_batch_files(
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
             auto_delete_result, size_saved = convert_single_file(
-                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False
+                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=True
             )
             _SUPPRESS_OUTPUT = False
             
@@ -1021,7 +1047,7 @@ def process_batch_files(
             progress.update(
                 overall_task,
                 description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
-                fields={"saved": _format_saved(cumulative_saved)},
+                fields={"saved": _format_saved(cumulative_saved), "fps": "", "eta": ""},
             )
         
         _PROGRESS_CONTEXT = None
@@ -1172,6 +1198,7 @@ def main(
     ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)"),
+    parallel: int = typer.Option(1, "--parallel", "-j", help="Number of files to process simultaneously (GPU: 2-4 recommended, CPU: 1)"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -1228,6 +1255,15 @@ def main(
         FFMPEG_CMD = ffmpeg
     if ffprobe:
         FFPROBE_CMD = ffprobe
+    
+    # Validate parallel value
+    if parallel < 1:
+        cprint("⚠️  --parallel must be at least 1, setting to 1", "warning")
+        parallel = 1
+    elif parallel > 1:
+        cprint(f"ℹ️  Note: Parallel processing (--parallel {parallel}) is currently experimental.", "info")
+        cprint("    For now, files will be processed sequentially. Full parallel support coming soon!", "info")
+        parallel = 1  # Force sequential for now
 
     # Set global no-color flag and reinitialize console
     global _NO_COLOR, _NO_PROMPT, console
