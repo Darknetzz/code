@@ -143,45 +143,152 @@ Options:
 
 ## How it works
 
-1. Checks that `ffmpeg` is available.
-2. Detects the best available encoder in this order:
-   - NVIDIA AV1 (`av1_nvenc`) → AMD AV1 (`av1_amf`) → NVIDIA HEVC (`hevc_nvenc`) → AMD HEVC (`hevc_amf`) → CPU AV1 (`libsvtav1`).
-3. For each video file:
-   - Skips if already encoded with the target codec (AV1 or HEVC).
-   - Probes input bitrate and sets target to ~50% (configurable).
-   - Applies safe scaling (max width 1920) keeping aspect ratio.
-   - Encodes video with VBR using sensible `-b:v`, `-maxrate`, and `-bufsize`.
-   - Preserves audio channels and re-encodes to Opus 64k.
-   - Writes to a temp `.temp.mkv`, then atomically swaps on success.
-   - Optionally deletes or prompts to delete the original; can rename output to original name when converting in-place.
+1. **Validates environment**: Checks that `ffmpeg` and `ffprobe` are available (uses PATH or env/CLI overrides with automatic fallback).
+2. **Detects best encoder**:
+   - **Windows**: NVIDIA AV1 (`av1_nvenc`) → AMD AV1 (`av1_amf`) → NVIDIA HEVC (`hevc_nvenc`) → AMD HEVC (`hevc_amf`) → CPU AV1 (`libsvtav1`)
+   - **Linux**: VAAPI AV1 → NVIDIA AV1 (`av1_nvenc`) → VAAPI HEVC → NVIDIA HEVC → CPU AV1
+3. **For each video file**:
+   - Skips if already encoded with target codec (optimization).
+   - Probes input bitrate and calculates target (50% reduction by default).
+   - Applies safe scaling (max width 1920, maintains aspect ratio).
+   - Encodes with VBR using `-b:v` (target), `-maxrate` (peak), `-bufsize` (buffer).
+   - Preserves audio channels, re-encodes to Opus (configurable).
+   - Writes to temp `.temp.mkv`, atomically swaps on success.
+   - Optionally deletes or prompts to delete original; can rename output when converting in-place.
+4. **Displays progress**: Nested progress bars showing overall batch progress and per-file encoding progress with FPS/ETA.
+5. **Saves logs**: Structured logs (txt/html/json) with per-file metrics, batch summary, and execution timeline.
+
+## Environment Variables
+
+Configure defaults without CLI flags (useful for automation, CI/CD, or system-wide settings):
+
+```powershell
+# Ffmpeg/Ffprobe paths (CLI --ffmpeg/--ffprobe take precedence)
+$env:AV1_FFMPEG_PATH = "C:\custom\ffmpeg.exe"
+$env:AV1_FFPROBE_PATH = "C:\custom\ffprobe.exe"
+
+# Encoding parameters
+$env:AV1_AUDIO_BITRATE = "96k"               # Opus audio bitrate (default: 64k)
+$env:AV1_MAX_VIDEO_WIDTH = "1280"            # Max output width (default: 1920)
+$env:AV1_BITRATE_REDUCTION_FACTOR = "0.45"   # Bitrate reduction ratio (default: 0.5)
+$env:AV1_BITRATE_FALLBACK = "1800000"        # Fallback in bps if probe fails (default: 2M)
+
+# Logging and display
+$env:AV1_LOG_TYPE = "json"                   # Default log format (default: txt)
+$env:AV1_LOG_DIR = "C:\Logs"                 # Default log directory (default: %TEMP%/av1-logs)
+$env:AV1_NO_COLOR = "1"                      # Disable colored output (default: enabled)
+$env:AV1_NO_PROMPT = "1"                     # Suppress interactive prompts (default: enabled)
+```
+
+Example: Automation script with custom defaults
+```powershell
+$env:AV1_LOG_TYPE = "json"
+$env:AV1_NO_PROMPT = "1"
+$env:AV1_BITRATE_REDUCTION_FACTOR = "0.6"  # 40% reduction instead of 50%
+
+python .\av1.py "D:\Videos" --recursive --delete-original
+# Logs will be JSON, no prompts, and use 40% bitrate reduction
+```
 
 ## Notes and defaults
 
-- Pixel format: `nv12` for hardware encoders, `yuv420p` for CPU.
-- Scaling: `min(1920, iw)` to cap at 1080p while preserving aspect ratio.
-- HEVC outputs are tagged `hvc1` for broader compatibility.
-- Output container: `.mkv` with `+faststart` for faster playback start.
-- Supported input extensions: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
-- Disk space safety: requires ~1.5× the input file size free in the output drive.
+- **Pixel format**: `nv12` for hardware encoders, `yuv420p` for CPU (automatically selected).
+- **Scaling**: `min(1920, iw)` to cap at 1920px width while preserving aspect ratio; can be overridden with `AV1_MAX_VIDEO_WIDTH`.
+- **HEVC compatibility**: Outputs tagged `hvc1` for broader device compatibility.
+- **Output container**: `.mkv` with `+faststart` flag for faster playback start.
+- **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
+- **Disk space safety**: Requires ~1.5× input file size free in output drive before encoding starts.
+- **Audio codec**: Opus at configurable bitrate (default 64k per stream) for smaller files and good quality.
+- **Default log location**: `%TEMP%\av1-logs\` on Windows (can override with `--log-dir` or `AV1_LOG_DIR`).
+- **Progress display**: Shows real-time FPS, ETA per-file, cumulative bytes saved, and batch timeline.
 
 ## Tips
 
 - **Use wildcards** to batch process files matching a pattern: `av1 "episode_*.mkv"`
-- **Progress tracking** shows real-time file counter, elapsed time, ETA, and cumulative space saved.
-- **Graceful stopping**: Press `Ctrl+C` once to finish the current file and display a summary. Press `Ctrl+C` again to force quit immediately.
-- **Logging** automatically saves all output to timestamped files in `./logs/`. Use `--log-type html` for styled HTML logs or `--log-type none` to disable.
-- Use `--recursive` to process entire folder trees with subdirectories, preserving structure when using a separate output folder.
-- For archival quality, you can raise the bitrate or use CPU AV1 with `--bitrate`.
-- If you see larger outputs, the source may already be efficient (e.g., high-entropy or already AV1/HEVC). The script warns and lets you choose deletion.
-- To batch large folders, start with `--overwrite` only when you're confident in the settings.
-- Combine `--dry-run` with `--recursive` to preview all files that would be processed before committing to conversion.
-- Use `--keep-mkv` to preserve the `.mkv` extension when converting files in-place (useful for maintaining consistent naming).
+- **Progress tracking** shows real-time FPS, ETA, file count, elapsed time, and cumulative space saved across nested progress bars.
+- **Graceful Ctrl+C handling**: Press `Ctrl+C` once to gracefully finish the current file and display a summary. Press `Ctrl+C` again to force quit.
+- **Logging** automatically saves structured logs to `%TEMP%\av1-logs\` (configurable). Use `--log-type json` for automation/parsing or `--log-type html` for styled reports.
+- **Automation-friendly**: Combine `--no-prompt`, `--no-color`, and `--log-type json` for unattended batch jobs.
+- **Environment overrides**: Set `AV1_*` env vars for system-wide defaults; CLI flags always take precedence.
+- Use `--recursive` to process entire folder trees, preserving directory structure when using separate output folder.
+- For archival quality, raise the bitrate or use CPU AV1 with `AV1_BITRATE_REDUCTION_FACTOR=0.3`.
+- If outputs are larger, source may already be efficient. The script warns and lets you choose deletion.
+- Start with `--dry-run --recursive` to preview all files before committing to conversion.
+- Use `--keep-mkv` to preserve `.mkv` extension when converting in-place (useful for consistent naming).
+- Use `--ffmpeg` and `--ffprobe` flags to test different FFmpeg builds without modifying PATH.
+
+## Logging
+
+Logs are automatically saved to `%TEMP%\av1-logs\` with timestamped filenames:
+
+- **Text logs** (`.txt`): Plain text with timestamps and emoji indicators, good for quick review.
+- **HTML logs** (`.html`): Styled, clickable, color-coded output for web viewing or email reports.
+- **JSON logs** (`.json`): Structured data including per-file metrics (original size, bitrate, duration, FPS, etc.) and batch summary; ideal for scripting/automation.
+
+Example JSON log structure:
+```json
+{
+  "app": "av1",
+  "version": "0.3.1",
+  "generated": "2025-12-16T14:23:45+00:00",
+  "system_platform": "windows",
+  "encoder": {
+    "encoder": "av1_amf",
+    "codec": "av1",
+    "hw_type": "amd"
+  },
+  "events": [
+    {
+      "ts": "2025-12-16T14:23:46+00:00",
+      "level": "info",
+      "message": "Detecting Best Available Encoder..."
+    },
+    {
+      "ts": "2025-12-16T14:23:47+00:00",
+      "level": "success",
+      "message": "file_metrics",
+      "data": {
+        "file": "video.mp4",
+        "encoder": "av1_amf",
+        "original_bytes": 54773,
+        "new_bytes": 38626,
+        "saved_bytes": 16147,
+        "saved_percent": 29.48,
+        "duration": 2.0
+      }
+    },
+    {
+      "ts": "2025-12-16T14:23:50+00:00",
+      "level": "success",
+      "message": "batch_summary",
+      "data": {
+        "files_total": 520,
+        "files_converted": 515,
+        "saved_bytes_total": 8234567,
+        "saved_percent_total": 28.5,
+        "elapsed_seconds": 1043
+      }
+    }
+  ]
+}
+```
 
 ## Troubleshooting
 
-- "ffmpeg is not found" → Install FFmpeg and ensure `ffmpeg.exe` and `ffprobe.exe` are in PATH.
-- "Insufficient disk space" → Free space or change `OUTPUT_DIR` to a drive with more room.
-- Hardware encoder not detected → Update GPU drivers; verify FFmpeg build includes NVENC/AMF.
+- **"ffmpeg is not found"** → Install FFmpeg and ensure it's in PATH, or use `--ffmpeg` / `AV1_FFMPEG_PATH` to specify path.
+- **"ffprobe is not found"** → Similar to above; tool will auto-fallback to PATH if specified path is invalid.
+- **"Insufficient disk space"** → Free space or change `--output-dir` to a drive with more room. Tool validates 1.5× file size before encoding.
+- **Hardware encoder not detected** → Update GPU drivers; verify FFmpeg build includes NVENC/AMF. Use `--dry-run` to see which encoder was selected.
+- **Output larger than input** → Source may already be highly compressed or incompressible (entropy). Raise `AV1_MAX_VIDEO_WIDTH` for aggressive scaling or reduce `AV1_BITRATE_REDUCTION_FACTOR` for higher quality.
+- **Progress bar crashes with KeyError** → Ensure all `_LOG_EVENTS` fields match the Progress bar columns (should be resolved in latest version).
+- **Parallel option disabled** → Currently marked experimental; full support coming soon. Sequential processing is fast enough for most use cases.
+
+## Performance Notes
+
+- **GPU encoding**: Hardware encoders (NVIDIA/AMD) are very fast—typically 2-5× realtime encoding speed. 
+- **CPU encoding**: CPU AV1 (`libsvtav1`) is slower (~0.5x realtime) but produces smaller files. Useful for archival when time permits.
+- **Large batches**: For 500+ files, consider using `--no-prompt`, `--no-color`, and `--log-type json` for minimal overhead.
+- **Disk I/O**: Ensure output drive can sustain write speeds; slow I/O will bottleneck encoding speed.
 
 ## Shell Completion
 
