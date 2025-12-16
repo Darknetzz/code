@@ -759,6 +759,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 total=100,
                 fps="",
                 eta="",
+                saved="",
             )
             
             try:
@@ -802,6 +803,8 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding: {filename}", 
                 total=None,
+                fps="",
+                eta="",
                 saved="",
             )
             try:
