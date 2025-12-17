@@ -14,7 +14,8 @@ def safe_rename_files(dry_run=False):
     for f in os.listdir('.'):
         if not os.path.isfile(f):  # Skip directories
             continue
-        if len(f) < 4 or not f[-4:].isdigit():  # Check extension is numeric
+        # Check if extension (after last dot) is numeric
+        if not f.split('.')[-1].isdigit():
             continue
         files_to_rename.append(f)
     
