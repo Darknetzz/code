@@ -24,6 +24,7 @@ if platform.system() == 'Windows':
 
 from rich.console import Console
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 import typer
 
 # ============================================================================ #
@@ -99,6 +100,9 @@ def check_corruption(file_path: str, reported_duration: Optional[float]) -> Tupl
         # First check: Try to decode from the very end
         # If file is truncated, this will fail or decode less than expected
         if reported_duration and reported_duration > 5:
+            filename = os.path.basename(file_path)
+            console.print(f"[cyan]Checking end of file: {filename}[/cyan]")
+            
             # Try to decode from near the end (last 5 seconds)
             seek_time = max(0, reported_duration - 5)
             cmd = [
@@ -155,95 +159,172 @@ def check_corruption(file_path: str, reported_duration: Optional[float]) -> Tupl
                 "-f", "null",
                 "-"
             ]
-            decode_result = subprocess.run(
-                decode_cmd,
-                capture_output=True,
-                text=True,
-                timeout=DECODE_TIMEOUT * 3  # Give more time for full decode
-            )
             
-            decode_stderr = decode_result.stderr.strip()
+            # Use progress bar to show decode progress
+            filename = os.path.basename(file_path)
+            actual_duration = None
+            decode_stderr_lines = []
             
-            # Parse output to find actual duration decoded
-            # Look for "time=" in output to see how far we got
-            time_matches = re.findall(r'time=(\d+):(\d+):(\d+\.\d+)', decode_stderr)
-            if time_matches:
-                # Get the last time value (how far we decoded)
-                last_match = time_matches[-1]
-                hours, minutes, seconds = map(float, last_match)
-                actual_duration = hours * 3600 + minutes * 60 + seconds
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TextColumn("[cyan]{task.fields[current_time]}"),
+                TextColumn("[yellow]{task.fields[speed]}"),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    f"[cyan]Verifying: {filename}",
+                    total=reported_duration if reported_duration else 100,
+                    current_time="00:00:00.000",
+                    speed=""
+                )
                 
-                # If we decoded significantly less than reported, file is truncated
-                if reported_duration and actual_duration < reported_duration * 0.9:
+                # Start the process
+                process = subprocess.Popen(
+                    decode_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True
+                )
+                
+                # Parse output in real-time
+                corruption_keywords = [
+                    "error", "corrupt", "invalid", "moov atom not found",
+                    "could not find codec parameters", "failed to read frame",
+                    "error while decoding", "invalid data found",
+                    "bitstream not supported", "error reading header", "end of file",
+                ]
+                
+                try:
+                    # Read stderr line by line
+                    for line in process.stderr:
+                        decode_stderr_lines.append(line)
+                        line_lower = line.lower()
+                        
+                        # Check for corruption keywords
+                        for keyword in corruption_keywords:
+                            if keyword in line_lower:
+                                process.terminate()
+                                error_msg = line.strip()[:200]
+                                return False, f"Corruption detected during decode: {error_msg}"
+                        
+                        # Parse time information
+                        time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                        if time_match:
+                            hours, minutes, seconds = map(float, time_match.groups())
+                            current_time_sec = hours * 3600 + minutes * 60 + seconds
+                            actual_duration = current_time_sec
+                            
+                            # Format current time
+                            time_str = f"{int(hours):02d}:{int(minutes):02d}:{seconds:06.3f}"
+                            
+                            # Parse speed if available
+                            speed_match = re.search(r'speed=\s*([\d.]+)x', line)
+                            speed_str = f"{speed_match.group(1)}x" if speed_match else ""
+                            
+                            # Update progress
+                            if reported_duration:
+                                progress_percent = min((current_time_sec / reported_duration) * 100, 100)
+                                progress.update(
+                                    task,
+                                    completed=current_time_sec,
+                                    current_time=time_str,
+                                    speed=speed_str
+                                )
+                            else:
+                                progress.update(
+                                    task,
+                                    current_time=time_str,
+                                    speed=speed_str
+                                )
+                        
+                        # Parse fps if available
+                        fps_match = re.search(r'fps=\s*(\d+)', line)
+                        if fps_match:
+                            fps_str = f"{fps_match.group(1)} fps"
+                            progress.update(task, description=f"[cyan]Verifying: {filename} ({fps_str})")
+                    
+                    # Wait for process to complete
+                    process.wait()
+                    
+                except Exception as e:
+                    process.terminate()
+                    return False, f"Error during decode: {str(e)}"
+            
+            decode_stderr = "\n".join(decode_stderr_lines)
+            
+            # Check if we decoded the full duration
+            if reported_duration and actual_duration:
+                if actual_duration < reported_duration * 0.9:
                     missing_percent = (1 - actual_duration / reported_duration) * 100
                     return False, f"File truncated: decoded {actual_duration:.1f}s but reported {reported_duration:.1f}s ({missing_percent:.1f}% missing)"
             
-            # Check for corruption errors during full decode
-            corruption_keywords = [
-                "error",
-                "corrupt",
-                "invalid",
-                "moov atom not found",
-                "could not find codec parameters",
-                "failed to read frame",
-                "error while decoding",
-                "invalid data found",
-                "bitstream not supported",
-                "error reading header",
-                "end of file",
-            ]
-            
-            if decode_stderr:
-                decode_stderr_lower = decode_stderr.lower()
-                for keyword in corruption_keywords:
-                    if keyword in decode_stderr_lower:
-                        # Extract relevant error message
-                        error_lines = [line for line in decode_stderr.split('\n') if keyword in line.lower()]
-                        error_msg = error_lines[0] if error_lines else decode_stderr[:200]
-                        return False, f"Corruption detected during decode: {error_msg}"
-            
-            if decode_result.returncode != 0:
+            if process.returncode != 0:
                 return False, f"Decoding failed: {decode_stderr[:200] or 'Unknown error'}"
         
-        # Third check: Sample multiple points
+        # Third check: Sample multiple points (quick check with progress)
         sample_points = [0.0]  # Always check start
         if reported_duration and reported_duration > 10:
             sample_points.append(reported_duration / 4)  # 25%
             sample_points.append(reported_duration / 2)  # 50%
             sample_points.append(reported_duration * 0.75)  # 75%
         
-        for sample_time in sample_points:
-            cmd = [
-                FFMPEG_CMD, "-v", "error",
-                "-ss", str(sample_time),
-                "-i", file_path,
-                "-t", "2",
-                "-f", "null",
-                "-"
-            ]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=DECODE_TIMEOUT
+        filename = os.path.basename(file_path)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            sample_task = progress.add_task(
+                f"[cyan]Sampling keyframes: {filename}",
+                total=len(sample_points)
             )
             
-            stderr = result.stderr.strip()
-            
-            if stderr:
-                stderr_lower = stderr.lower()
-                corruption_keywords = [
-                    "error", "corrupt", "invalid", "moov atom not found",
-                    "could not find codec parameters", "failed to read frame",
-                    "error while decoding", "invalid data found",
-                    "bitstream not supported", "error reading header",
+            for idx, sample_time in enumerate(sample_points):
+                progress.update(
+                    sample_task,
+                    description=f"[cyan]Sampling at {sample_time:.1f}s: {filename}",
+                    completed=idx + 1
+                )
+                
+                cmd = [
+                    FFMPEG_CMD, "-v", "error",
+                    "-ss", str(sample_time),
+                    "-i", file_path,
+                    "-t", "2",
+                    "-f", "null",
+                    "-"
                 ]
-                for keyword in corruption_keywords:
-                    if keyword in stderr_lower:
-                        return False, f"Corruption detected at {sample_time:.1f}s: {stderr}"
-            
-            if result.returncode != 0:
-                return False, f"Decoding failed at {sample_time:.1f}s: {stderr or 'Unknown error'}"
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=DECODE_TIMEOUT
+                )
+                
+                stderr = result.stderr.strip()
+                
+                if stderr:
+                    stderr_lower = stderr.lower()
+                    corruption_keywords = [
+                        "error", "corrupt", "invalid", "moov atom not found",
+                        "could not find codec parameters", "failed to read frame",
+                        "error while decoding", "invalid data found",
+                        "bitstream not supported", "error reading header",
+                    ]
+                    for keyword in corruption_keywords:
+                        if keyword in stderr_lower:
+                            return False, f"Corruption detected at {sample_time:.1f}s: {stderr}"
+                
+                if result.returncode != 0:
+                    return False, f"Decoding failed at {sample_time:.1f}s: {stderr or 'Unknown error'}"
         
         return True, None
         
