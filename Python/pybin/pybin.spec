@@ -1,19 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_submodules
 
-# Collect all shellingham submodules to fix --show-completion
-# Explicitly include platform-specific modules
-hiddenimports = collect_submodules('shellingham') + [
-    'shellingham.nt',
-    'shellingham.posix',
-]
 
 a = Analysis(
     ['pybin.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=hiddenimports,
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
