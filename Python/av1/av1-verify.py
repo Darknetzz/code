@@ -47,6 +47,8 @@ PROBE_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 #                           ENVIRONMENT OVERRIDES                             #
 # ============================================================================ #
 FFPROBE_CMD = os.getenv("AV1_FFPROBE_PATH") or "ffprobe"
+FFMPEG_CMD = os.getenv("AV1_FFMPEG_PATH") or "ffmpeg"
+DECODE_TIMEOUT = 30  # Timeout for corruption check (seconds)
 
 # ============================================================================ #
 #                         FUNCTION: check_ffprobe                             #
@@ -62,6 +64,121 @@ def check_ffprobe() -> None:
         else:
             console.print("❌  ffprobe is not found.", style="red")
             raise typer.Exit(code=1)
+
+# ============================================================================ #
+#                         FUNCTION: check_ffmpeg                               #
+# ============================================================================ #
+def check_ffmpeg() -> bool:
+    """Check if ffmpeg is available. Returns True if available."""
+    global FFMPEG_CMD
+    ffmpeg_ok = shutil.which(FFMPEG_CMD) or (os.path.exists(FFMPEG_CMD) and os.path.isfile(FFMPEG_CMD))
+    if not ffmpeg_ok:
+        path_ffmpeg = shutil.which("ffmpeg")
+        if path_ffmpeg:
+            FFMPEG_CMD = path_ffmpeg
+            return True
+        return False
+    return True
+
+# ============================================================================ #
+#                      FUNCTION: check_corruption                             #
+# ============================================================================ #
+def check_corruption(file_path: str) -> Tuple[bool, Optional[str]]:
+    """
+    Actually decode frames to check for corruption.
+    Returns (is_valid, error_message).
+    This is more thorough than just reading metadata.
+    Samples multiple points in the video to catch corruption.
+    """
+    if not check_ffmpeg():
+        # If ffmpeg not available, skip deep check
+        return True, None
+    
+    try:
+        # First, get the duration to sample different points
+        duration_cmd = [
+            FFPROBE_CMD, "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            file_path
+        ]
+        duration_result = subprocess.run(
+            duration_cmd,
+            capture_output=True,
+            text=True,
+            timeout=PROBE_TIMEOUT
+        )
+        
+        duration = None
+        if duration_result.returncode == 0:
+            try:
+                duration = float(duration_result.stdout.strip())
+            except (ValueError, TypeError):
+                pass
+        
+        # Sample points: start, middle, end (if duration available)
+        # Otherwise just check the beginning
+        sample_points = [0.0]  # Always check start
+        if duration and duration > 10:
+            sample_points.append(duration / 2)  # Middle
+            sample_points.append(max(0, duration - 5))  # Near end
+        
+        # Check each sample point
+        for sample_time in sample_points:
+            # Use ffmpeg to attempt to decode a few frames from this point
+            # -ss: seek to position
+            # -t 2: decode 2 seconds worth of frames
+            # -v error: only show errors
+            # -f null: output to null (we don't need the decoded video)
+            cmd = [
+                FFMPEG_CMD, "-v", "error",
+                "-ss", str(sample_time),
+                "-i", file_path,
+                "-t", "2",  # Check 2 seconds worth of frames
+                "-f", "null",
+                "-"
+            ]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=DECODE_TIMEOUT
+            )
+            
+            # Check stderr for error messages
+            stderr = result.stderr.strip()
+            
+            # Common corruption indicators
+            corruption_keywords = [
+                "error",
+                "corrupt",
+                "invalid",
+                "moov atom not found",
+                "could not find codec parameters",
+                "failed to read frame",
+                "error while decoding",
+                "invalid data found",
+                "bitstream not supported",
+                "error reading header",
+            ]
+            
+            # If there are errors in stderr, check if they indicate corruption
+            if stderr:
+                stderr_lower = stderr.lower()
+                for keyword in corruption_keywords:
+                    if keyword in stderr_lower:
+                        return False, f"Corruption detected at {sample_time:.1f}s: {stderr}"
+            
+            # If return code is non-zero, there was an error
+            if result.returncode != 0:
+                return False, f"Decoding failed at {sample_time:.1f}s: {stderr or 'Unknown error'}"
+        
+        return True, None
+        
+    except subprocess.TimeoutExpired:
+        return False, "Timeout during corruption check"
+    except Exception as e:
+        return False, f"Error during corruption check: {str(e)}"
 
 # ============================================================================ #
 #                      FUNCTION: format_duration                              #
@@ -165,6 +282,11 @@ def verify_video_file(file_path: str) -> Tuple[bool, Optional[dict]]:
                     bitrate = int(format_bitrate)
                 except (ValueError, TypeError):
                     pass
+        
+        # Now perform actual corruption check by attempting to decode frames
+        is_valid, corruption_error = check_corruption(file_path)
+        if not is_valid:
+            return False, {"error": f"Corrupt video data: {corruption_error}"}
         
         return True, {
             "codec": video_codec or "unknown",
