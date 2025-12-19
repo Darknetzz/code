@@ -13,6 +13,7 @@ import sys
 import json
 import platform
 import glob
+import re
 from typing import Optional, Tuple
 
 # Force UTF-8 encoding on Windows
@@ -83,58 +84,28 @@ def check_ffmpeg() -> bool:
 # ============================================================================ #
 #                      FUNCTION: check_corruption                             #
 # ============================================================================ #
-def check_corruption(file_path: str) -> Tuple[bool, Optional[str]]:
+def check_corruption(file_path: str, reported_duration: Optional[float]) -> Tuple[bool, Optional[str]]:
     """
-    Actually decode frames to check for corruption.
+    Actually decode frames to check for corruption and truncation.
     Returns (is_valid, error_message).
     This is more thorough than just reading metadata.
-    Samples multiple points in the video to catch corruption.
+    Verifies we can decode the full reported duration.
     """
     if not check_ffmpeg():
         # If ffmpeg not available, skip deep check
         return True, None
     
     try:
-        # First, get the duration to sample different points
-        duration_cmd = [
-            FFPROBE_CMD, "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            file_path
-        ]
-        duration_result = subprocess.run(
-            duration_cmd,
-            capture_output=True,
-            text=True,
-            timeout=PROBE_TIMEOUT
-        )
-        
-        duration = None
-        if duration_result.returncode == 0:
-            try:
-                duration = float(duration_result.stdout.strip())
-            except (ValueError, TypeError):
-                pass
-        
-        # Sample points: start, middle, end (if duration available)
-        # Otherwise just check the beginning
-        sample_points = [0.0]  # Always check start
-        if duration and duration > 10:
-            sample_points.append(duration / 2)  # Middle
-            sample_points.append(max(0, duration - 5))  # Near end
-        
-        # Check each sample point
-        for sample_time in sample_points:
-            # Use ffmpeg to attempt to decode a few frames from this point
-            # -ss: seek to position
-            # -t 2: decode 2 seconds worth of frames
-            # -v error: only show errors
-            # -f null: output to null (we don't need the decoded video)
+        # First check: Try to decode from the very end
+        # If file is truncated, this will fail or decode less than expected
+        if reported_duration and reported_duration > 5:
+            # Try to decode from near the end (last 5 seconds)
+            seek_time = max(0, reported_duration - 5)
             cmd = [
                 FFMPEG_CMD, "-v", "error",
-                "-ss", str(sample_time),
+                "-ss", str(seek_time),
                 "-i", file_path,
-                "-t", "2",  # Check 2 seconds worth of frames
+                "-t", "10",  # Try to decode 10 seconds (should get ~5 if file is complete)
                 "-f", "null",
                 "-"
             ]
@@ -145,10 +116,69 @@ def check_corruption(file_path: str) -> Tuple[bool, Optional[str]]:
                 timeout=DECODE_TIMEOUT
             )
             
-            # Check stderr for error messages
             stderr = result.stderr.strip()
             
-            # Common corruption indicators
+            # Check for truncation indicators
+            if "end of file" in stderr.lower() or "invalid data" in stderr.lower():
+                return False, f"File appears truncated - cannot decode to end: {stderr}"
+            
+            # If return code is non-zero, check if it's a real error
+            if result.returncode != 0:
+                # Some errors are acceptable (like seeking past end), but others indicate corruption
+                if "invalid" in stderr.lower() or "corrupt" in stderr.lower():
+                    return False, f"Corruption detected near end: {stderr}"
+        
+        # Second check: Verify actual decodable duration
+        # Count frames to see if we can actually decode the full duration
+        if reported_duration:
+            # Use ffprobe to count frames - this will fail if file is truncated
+            frame_count_cmd = [
+                FFPROBE_CMD, "-v", "error",
+                "-select_streams", "v:0",
+                "-count_frames",
+                "-show_entries", "stream=nb_read_frames",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                file_path
+            ]
+            frame_result = subprocess.run(
+                frame_count_cmd,
+                capture_output=True,
+                text=True,
+                timeout=DECODE_TIMEOUT
+            )
+            
+            # Alternative: Try to decode the entire video and see how far we get
+            # Use -v info to get progress output with time information
+            decode_cmd = [
+                FFMPEG_CMD, "-v", "info",
+                "-i", file_path,
+                "-f", "null",
+                "-"
+            ]
+            decode_result = subprocess.run(
+                decode_cmd,
+                capture_output=True,
+                text=True,
+                timeout=DECODE_TIMEOUT * 3  # Give more time for full decode
+            )
+            
+            decode_stderr = decode_result.stderr.strip()
+            
+            # Parse output to find actual duration decoded
+            # Look for "time=" in output to see how far we got
+            time_matches = re.findall(r'time=(\d+):(\d+):(\d+\.\d+)', decode_stderr)
+            if time_matches:
+                # Get the last time value (how far we decoded)
+                last_match = time_matches[-1]
+                hours, minutes, seconds = map(float, last_match)
+                actual_duration = hours * 3600 + minutes * 60 + seconds
+                
+                # If we decoded significantly less than reported, file is truncated
+                if reported_duration and actual_duration < reported_duration * 0.9:
+                    missing_percent = (1 - actual_duration / reported_duration) * 100
+                    return False, f"File truncated: decoded {actual_duration:.1f}s but reported {reported_duration:.1f}s ({missing_percent:.1f}% missing)"
+            
+            # Check for corruption errors during full decode
             corruption_keywords = [
                 "error",
                 "corrupt",
@@ -160,16 +190,58 @@ def check_corruption(file_path: str) -> Tuple[bool, Optional[str]]:
                 "invalid data found",
                 "bitstream not supported",
                 "error reading header",
+                "end of file",
             ]
             
-            # If there are errors in stderr, check if they indicate corruption
+            if decode_stderr:
+                decode_stderr_lower = decode_stderr.lower()
+                for keyword in corruption_keywords:
+                    if keyword in decode_stderr_lower:
+                        # Extract relevant error message
+                        error_lines = [line for line in decode_stderr.split('\n') if keyword in line.lower()]
+                        error_msg = error_lines[0] if error_lines else decode_stderr[:200]
+                        return False, f"Corruption detected during decode: {error_msg}"
+            
+            if decode_result.returncode != 0:
+                return False, f"Decoding failed: {decode_stderr[:200] or 'Unknown error'}"
+        
+        # Third check: Sample multiple points
+        sample_points = [0.0]  # Always check start
+        if reported_duration and reported_duration > 10:
+            sample_points.append(reported_duration / 4)  # 25%
+            sample_points.append(reported_duration / 2)  # 50%
+            sample_points.append(reported_duration * 0.75)  # 75%
+        
+        for sample_time in sample_points:
+            cmd = [
+                FFMPEG_CMD, "-v", "error",
+                "-ss", str(sample_time),
+                "-i", file_path,
+                "-t", "2",
+                "-f", "null",
+                "-"
+            ]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=DECODE_TIMEOUT
+            )
+            
+            stderr = result.stderr.strip()
+            
             if stderr:
                 stderr_lower = stderr.lower()
+                corruption_keywords = [
+                    "error", "corrupt", "invalid", "moov atom not found",
+                    "could not find codec parameters", "failed to read frame",
+                    "error while decoding", "invalid data found",
+                    "bitstream not supported", "error reading header",
+                ]
                 for keyword in corruption_keywords:
                     if keyword in stderr_lower:
                         return False, f"Corruption detected at {sample_time:.1f}s: {stderr}"
             
-            # If return code is non-zero, there was an error
             if result.returncode != 0:
                 return False, f"Decoding failed at {sample_time:.1f}s: {stderr or 'Unknown error'}"
         
@@ -284,7 +356,7 @@ def verify_video_file(file_path: str) -> Tuple[bool, Optional[dict]]:
                     pass
         
         # Now perform actual corruption check by attempting to decode frames
-        is_valid, corruption_error = check_corruption(file_path)
+        is_valid, corruption_error = check_corruption(file_path, duration)
         if not is_valid:
             return False, {"error": f"Corrupt video data: {corruption_error}"}
         
