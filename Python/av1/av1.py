@@ -445,39 +445,70 @@ def needs_transcoding(file_path: str) -> bool:
     """
     Determines if a video file needs transcoding based on current codec.
     Returns True if transcoding is needed, False otherwise.
+    Also detects corrupt/invalid files and reports them.
     """
     try:
-        cmd = [FFPROBE_CMD, "-v", "quiet", "-print_format", "json", "-show_streams", file_path]
+        cmd = [FFPROBE_CMD, "-v", "error", "-print_format", "json", "-show_streams", file_path]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
         
         if result.returncode != 0:
-            cprint(f"Warning: Could not probe {os.path.basename(file_path)}", "warning")
+            # Check stderr for corruption indicators
+            stderr_lower = result.stderr.lower() if result.stderr else ""
+            corruption_keywords = [
+                "corrupt", "invalid", "moov atom not found", "could not find codec parameters",
+                "error while decoding", "invalid data found", "bitstream not supported",
+                "error reading header", "end of file", "truncated"
+            ]
+            
+            is_corrupt = any(keyword in stderr_lower for keyword in corruption_keywords)
+            
+            if is_corrupt:
+                cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)}", "error")
+                if result.stderr:
+                    error_msg = result.stderr.strip()[:200]  # Limit length
+                    cprint(f"   Error: {error_msg}", "error")
+            else:
+                cprint(f"⚠️  Could not probe {os.path.basename(file_path)} - may be invalid or unsupported", "warning")
             return False
             
         data = json.loads(result.stdout)
         target_codec = ACTIVE_ENCODER["codec"]
 
-        for stream in data.get('streams', []):
-            if stream.get('codec_type') == 'video':
-                current_codec = stream.get('codec_name')
-                
-                # Logic: If we are targeting AV1, skip if already AV1.
-                # If targeting HEVC, skip if already HEVC (or AV1, which is better).
-                if target_codec == "av1" and current_codec == "av1": 
-                    return False
-                if target_codec == "hevc" and current_codec in ['hevc', 'h265', 'av1']: 
-                    return False
-                
-                return True # Needs update
-        return False
+        # Check if file has any video streams
+        video_streams = [s for s in data.get('streams', []) if s.get('codec_type') == 'video']
+        if not video_streams:
+            cprint(f"❌ Corrupt or invalid file: {os.path.basename(file_path)} (no video stream found)", "error")
+            return False
+
+        for stream in video_streams:
+            current_codec = stream.get('codec_name')
+            
+            # Logic: If we are targeting AV1, skip if already AV1.
+            # If targeting HEVC, skip if already HEVC (or AV1, which is better).
+            if target_codec == "av1" and current_codec == "av1": 
+                return False
+            if target_codec == "hevc" and current_codec in ['hevc', 'h265', 'av1']: 
+                return False
+            
+            return True # Needs update
+        
+        # Should not reach here, but if we do, assume it needs transcoding
+        return True
     except subprocess.TimeoutExpired:
-        cprint(f"Timeout while probing {os.path.basename(file_path)}", "warning")
+        cprint(f"⏱️  Timeout while probing {os.path.basename(file_path)} - file may be very large or corrupt", "warning")
         return False
     except json.JSONDecodeError:
-        cprint(f"Invalid video file: {os.path.basename(file_path)}", "warning")
+        # If ffprobe returns invalid JSON, the file is likely corrupt
+        cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)} (invalid metadata)", "error")
         return False
     except Exception as e:
-        cprint(f"Error checking file: {e}", "warning")
+        # Check if the error message suggests corruption
+        error_str = str(e).lower()
+        if any(keyword in error_str for keyword in ["corrupt", "invalid", "truncated", "error reading"]):
+            cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)}", "error")
+            cprint(f"   Error: {str(e)[:200]}", "error")
+        else:
+            cprint(f"⚠️  Error checking file {os.path.basename(file_path)}: {e}", "warning")
         return False
 
 # ============================================================================ #
