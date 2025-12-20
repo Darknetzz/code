@@ -540,19 +540,23 @@ def verify_and_display(file_path: str, show_table: bool = False) -> bool:
 # ============================================================================ #
 #                      FUNCTION: verify_batch                                 #
 # ============================================================================ #
-def verify_batch(file_paths: list[str]) -> None:
-    """Verify multiple files and display results in a table."""
+def verify_batch(file_paths: list[str]) -> list[str]:
+    """Verify multiple files and display results in a table.
+    Returns list of corrupt file paths."""
     if not file_paths:
-        return
+        return []
     
     results = []
     valid_count = 0
+    corrupt_files = []
     
     for file_path in file_paths:
         is_valid, info = verify_video_file(file_path)
         results.append((file_path, is_valid, info))
         if is_valid:
             valid_count += 1
+        else:
+            corrupt_files.append(file_path)
     
     # Create table
     table = Table(title=f"Video Verification Results ({valid_count}/{len(results)} valid)")
@@ -586,6 +590,8 @@ def verify_batch(file_paths: list[str]) -> None:
     console.print()
     console.print(table)
     console.print()
+    
+    return corrupt_files
 
 @app.command()
 def main(
@@ -646,12 +652,53 @@ def main(
     # Remove duplicates and sort
     all_files = sorted(list(set(all_files)))
     
+    corrupt_files = []
+    
     if len(all_files) == 1:
         # Single file - detailed output
-        verify_and_display(all_files[0], show_table=False)
+        is_valid = verify_and_display(all_files[0], show_table=False)
+        if not is_valid:
+            corrupt_files.append(all_files[0])
     else:
         # Multiple files - table output
-        verify_batch(all_files)
+        corrupt_files = verify_batch(all_files)
+    
+    # Prompt user to delete corrupt files
+    if corrupt_files:
+        console.print(f"\n[red]Found {len(corrupt_files)} corrupt file(s):[/red]")
+        for corrupt_file in corrupt_files:
+            console.print(f"  • {corrupt_file}")
+        
+        console.print()
+        try:
+            response = typer.prompt(
+                f"Delete {len(corrupt_files)} corrupt file(s)?",
+                type=str,
+                default="n"
+            ).lower().strip()
+            
+            if response in ('y', 'yes'):
+                deleted_count = 0
+                failed_count = 0
+                
+                for corrupt_file in corrupt_files:
+                    try:
+                        os.remove(corrupt_file)
+                        console.print(f"✅  [green]Deleted: {os.path.basename(corrupt_file)}[/green]")
+                        deleted_count += 1
+                    except OSError as e:
+                        console.print(f"❌  [red]Failed to delete {os.path.basename(corrupt_file)}: {e}[/red]")
+                        failed_count += 1
+                
+                console.print(f"\n[green]Deleted {deleted_count} file(s)[/green]", end="")
+                if failed_count > 0:
+                    console.print(f", [red]{failed_count} failed[/red]")
+                else:
+                    console.print()
+            else:
+                console.print("[yellow]Corrupt files not deleted.[/yellow]")
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Deletion cancelled.[/yellow]")
 
 if __name__ == "__main__":
     app()
