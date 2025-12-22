@@ -52,7 +52,7 @@ BITRATE_BUFSIZE_MULTIPLIER = 2.0
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
-SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm")
+SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
 DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
