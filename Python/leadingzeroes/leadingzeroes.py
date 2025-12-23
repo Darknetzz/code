@@ -28,14 +28,18 @@ def worker(worker_id, target_zeroes):
     
     # Start with a random string to ensure each worker has a different starting point
     rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
-    hash_obj = hashlib.sha256(rand_str.encode())
+    # Initialize the input string with the random starting string
+    input_string = rand_str
+    hash_obj = hashlib.sha256(input_string.encode())
     hash_hex = hash_obj.hexdigest()
     
     print(f"Worker {worker_id + 1} starting with: {hash_hex}")
     
     while True:
-        # Hash the previous hash (chain iteration)
-        hash_obj = hashlib.sha256(hash_hex.encode())
+        # Instead of replacing, accumulate: append the hash to the input string
+        # This creates a growing input string that gets hashed each iteration
+        input_string += hash_hex
+        hash_obj = hashlib.sha256(input_string.encode())
         hash_hex = hash_obj.hexdigest()
         
         # Count leading zeroes (consecutive zeros from the start)
@@ -61,6 +65,7 @@ def worker(worker_id, target_zeroes):
                     print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {leading} LEADING zeroes!")
                     print(f"  Hash:   {hash_hex}")
                     print(f"  Hash length: {len(hash_hex)} characters")
+                    print(f"  Input length: {len(input_string)} characters")
                     print(f"  Worker iteration: {worker_total_iterations:,}")
                     print(f"  Global total attempts: {current_total:,}\n")
                     
@@ -81,6 +86,7 @@ def worker(worker_id, target_zeroes):
                     print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {trailing} TRAILING zeroes!")
                     print(f"  Hash:   {hash_hex}")
                     print(f"  Hash length: {len(hash_hex)} characters")
+                    print(f"  Input length: {len(input_string)} characters")
                     print(f"  Worker iteration: {worker_total_iterations:,}")
                     print(f"  Global total attempts: {current_total:,}\n")
                     
