@@ -99,21 +99,33 @@ def worker(worker_id, target_zeroes):
                 # Update the global counter with this worker's contributions
                 total_attempts.value += local_attempts
                 
-                # Calculate current milestone (which 100M we're at)
-                current_milestone = total_attempts.value // 100000000
+                # Only print progress at 100M milestones (100M, 200M, 300M, etc.)
+                # Check if we've crossed a 100M boundary
+                current_total = total_attempts.value
+                current_milestone = current_total // 100000000
                 
-                # Only print progress when we hit a NEW milestone (strictly greater)
-                # Check and update atomically to prevent multiple workers from printing
-                if current_milestone > last_progress_milestone.value:
+                # Only print if:
+                # 1. We've reached a new milestone (current_milestone > last printed)
+                # 2. We're actually at or past the milestone threshold (current_total >= milestone * 100M)
+                # 3. The milestone is at least 1 (don't print at 100k, only at 100M+)
+                if (current_milestone > last_progress_milestone.value and 
+                    current_milestone >= 1 and 
+                    current_total >= (current_milestone * 100000000)):
                     # Update the milestone counter FIRST to prevent other workers from printing
                     last_progress_milestone.value = current_milestone
                     
-                    # Now calculate time and rate
-                    elapsed = time.time() - start_time.value
-                    if elapsed > 0.001:  # Avoid division by very small numbers
-                        rate = total_attempts.value / elapsed
-                        # Format rate with 2 decimal places for better readability
-                        print(f"[{elapsed:.2f}s] Progress: {total_attempts.value:,} attempts ({rate:,.2f} hashes/sec)")
+                    # Calculate elapsed time and rate
+                    current_time = time.time()
+                    elapsed = current_time - start_time.value
+                    
+                    # Only print if we have valid timing data
+                    if elapsed > 0.001 and start_time.value > 0:
+                        rate = current_total / elapsed
+                        # Format rate appropriately
+                        if rate >= 1000:
+                            print(f"[{elapsed:.2f}s] Progress: {current_total:,} attempts ({rate:,.0f} hashes/sec)")
+                        else:
+                            print(f"[{elapsed:.2f}s] Progress: {current_total:,} attempts ({rate:,.2f} hashes/sec)")
                 
                 # Reset local counter after adding to global
                 local_attempts = 0
@@ -141,7 +153,7 @@ def main():
     for p in processes:
         p.join()
     
-    elapsed = time.time() - start_time
+    elapsed = time.time() - start_time.value
     print(f"\nSearch completed in {elapsed:.2f} seconds")
     print(f"Total attempts: {total_attempts.value:,}")
     print(f"Max leading zeroes found: {max_leading.value}")
