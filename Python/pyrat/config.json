@@ -1,0 +1,15 @@
+{
+  "//": "Configuration for pyrat RAT client and CNC server. CLI flags override these values.",
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9001
+  },
+  "client": {
+    "host": "127.0.0.1",
+    "port": 9001,
+    "reconnect_delay": 5.0,
+    "heartbeat_interval": 20.0
+  }
+}
+
+

@@ -109,12 +109,45 @@ Unknown message types are rejected by the client with an `error` message.
 
 ---
 
+## Configuration (`config.json`)
+
+Both the RAT client and CNC server can read default settings from `config.json`
+in the same directory:
+
+```json
+{
+  "//": "Configuration for pyrat RAT client and CNC server. CLI flags override these values.",
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9001
+  },
+  "client": {
+    "host": "127.0.0.1",
+    "port": 9001,
+    "reconnect_delay": 5.0,
+    "heartbeat_interval": 20.0
+  }
+}
+```
+
+- **Server section** controls default bind host/port for `cnc_server.py`.
+- **Client section** controls default CNC host/port and timing for `rat.py`.
+- **Command‑line flags always override the config file** when explicitly provided.
+
+---
+
 ## Running the CNC Server
 
 On the **controlling** machine:
 
 ```bash
 cd Python/pyrat
+python cnc_server.py
+```
+
+You can still override config values explicitly:
+
+```bash
 python cnc_server.py --host 0.0.0.0 --port 9001
 ```
 
@@ -144,6 +177,12 @@ On the **authorized target** machine:
 
 ```bash
 cd Python/pyrat
+python rat.py
+```
+
+You can still override config values explicitly:
+
+```bash
 python rat.py --host <CNC_IP> --port 9001
 ```
 

