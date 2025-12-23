@@ -13,17 +13,21 @@ counter_lock = Lock()
 start_time: float = 0.0
 
 def worker(worker_id, target_zeroes):
-    """Worker function that generates random strings and checks for zeroes"""
+    """Worker function that creates a hash chain and checks for zeroes"""
     local_attempts = 0
     local_max_leading = 0
     local_max_trailing = 0
     
+    # Start with a random string
+    rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
+    hash_obj = hashlib.sha256(rand_str.encode())
+    hash_hex = hash_obj.hexdigest()
+    
+    print(f"Worker {worker_id} starting with: {hash_hex}")
+    
     while True:
-        # Generate random string
-        rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
-        
-        # Hash it
-        hash_obj = hashlib.sha256(rand_str.encode())
+        # Hash the previous hash (chain iteration)
+        hash_obj = hashlib.sha256(hash_hex.encode())
         hash_hex = hash_obj.hexdigest()
         
         # Count leading zeroes
@@ -42,8 +46,8 @@ def worker(worker_id, target_zeroes):
                 if leading > max_leading.value:
                     max_leading.value = leading
                     print(f"[{elapsed:.2f}s] Worker {worker_id}: Found {leading} LEADING zeroes!")
-                    print(f"  String: {rand_str}")
                     print(f"  Hash:   {hash_hex}")
+                    print(f"  Iteration: {local_attempts + total_attempts.value:,}")
                     print(f"  Total attempts: {total_attempts.value:,}\n")
                     
                     if leading >= target_zeroes:
@@ -56,8 +60,8 @@ def worker(worker_id, target_zeroes):
                 if trailing > max_trailing.value:
                     max_trailing.value = trailing
                     print(f"[{elapsed:.2f}s] Worker {worker_id}: Found {trailing} TRAILING zeroes!")
-                    print(f"  String: {rand_str}")
                     print(f"  Hash:   {hash_hex}")
+                    print(f"  Iteration: {local_attempts + total_attempts.value:,}")
                     print(f"  Total attempts: {total_attempts.value:,}\n")
                     
                     if trailing >= target_zeroes:
