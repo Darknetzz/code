@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-from rich.table import Table
+from rich.markup import escape
 
 console = Console()
 app = typer.Typer(
@@ -93,23 +93,21 @@ def generate_output_path(input_path: str) -> str:
 
 def show_help_message():
     """Display a helpful message about the tool."""
-    help_text = Text()
-    help_text.append("Background Removal Tool\n", style="bold cyan")
-    help_text.append("\nThis tool removes white/whitish backgrounds from images by making them transparent.\n", style="dim")
+    help_content = (
+        "[bold cyan]Background Removal Tool[/bold cyan]\n\n"
+        "[dim]This tool removes white/whitish backgrounds from images by making them transparent.[/dim]\n\n"
+        "[bold]Usage Examples:[/bold]\n"
+        "  [cyan]python pybgrm.py image.png[/cyan]\n"
+        "  [cyan]python pybgrm.py image.png -o output.png[/cyan]\n"
+        "  [cyan]python pybgrm.py image.png --threshold 200[/cyan]\n\n"
+        "[bold]Options:[/bold]\n"
+        "  [yellow]-o, --output[/yellow]    Specify output file path (default: adds '_transparent' to input name)\n"
+        "  [yellow]-t, --threshold[/yellow] RGB threshold for white detection (0-255, default: 220)\n"
+        "  [yellow]--help[/yellow]          Show this help message\n\n"
+        "[dim]Note:[/dim] Output is always saved as PNG to support transparency."
+    )
     
-    help_text.append("\n[bold]Usage Examples:[/bold]\n", style="bold")
-    help_text.append("  python pybgrm.py image.png\n", style="cyan")
-    help_text.append("  python pybgrm.py image.png -o output.png\n", style="cyan")
-    help_text.append("  python pybgrm.py image.png --threshold 200\n", style="cyan")
-    
-    help_text.append("\n[bold]Options:[/bold]\n", style="bold")
-    help_text.append("  [yellow]-o, --output[/yellow]    Specify output file path (default: adds '_transparent' to input name)\n")
-    help_text.append("  [yellow]-t, --threshold[/yellow] RGB threshold for white detection (0-255, default: 220)\n")
-    help_text.append("  [yellow]--help[/yellow]          Show this help message\n")
-    
-    help_text.append("\n[bold]Note:[/bold] Output is always saved as PNG to support transparency.\n", style="dim")
-    
-    console.print(Panel(help_text, title="[bold]pybgrm[/bold]", border_style="cyan", padding=(1, 2)))
+    console.print(Panel(help_content, title="[bold]pybgrm[/bold]", border_style="cyan", padding=(1, 2)))
 
 
 @app.command()
