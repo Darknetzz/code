@@ -60,6 +60,7 @@ def worker(worker_id, target_zeroes):
                     current_total = total_attempts.value + local_attempts
                     print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {leading} LEADING zeroes!")
                     print(f"  Hash:   {hash_hex}")
+                    print(f"  Hash length: {len(hash_hex)} characters")
                     print(f"  Worker iteration: {worker_total_iterations:,}")
                     print(f"  Global total attempts: {current_total:,}\n")
                     
@@ -79,6 +80,7 @@ def worker(worker_id, target_zeroes):
                     current_total = total_attempts.value + local_attempts
                     print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {trailing} TRAILING zeroes!")
                     print(f"  Hash:   {hash_hex}")
+                    print(f"  Hash length: {len(hash_hex)} characters")
                     print(f"  Worker iteration: {worker_total_iterations:,}")
                     print(f"  Global total attempts: {current_total:,}\n")
                     
