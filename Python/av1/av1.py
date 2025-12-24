@@ -157,6 +157,16 @@ def _format_saved(bytes_amount: float) -> str:
         return f"{bytes_amount / 1024:.1f} KB"
     return "0"
 
+def _format_size(bytes_amount: float) -> str:
+    """Pretty-print file size as KB/MB/GB for progress columns."""
+    if bytes_amount >= 1024 ** 3:
+        return f"{bytes_amount / (1024 ** 3):.2f} GB"
+    if bytes_amount >= 1024 ** 2:
+        return f"{bytes_amount / (1024 ** 2):.2f} MB"
+    if bytes_amount >= 1024:
+        return f"{bytes_amount / 1024:.1f} KB"
+    return f"{bytes_amount} B"
+
 def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
     global _USER_CANCELLED
@@ -610,13 +620,15 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
         return delete_original, 0
 
-    # Show actual file size before conversion (only if not suppressed)
-    if not _SUPPRESS_OUTPUT:
-        try:
-            file_size_bytes = os.path.getsize(input_path)
+    # Get file size (used for display and progress)
+    try:
+        file_size_bytes = os.path.getsize(input_path)
+        if not _SUPPRESS_OUTPUT:
             file_size_mb = file_size_bytes / (1024 ** 2)
             cprint(f"📦 Input size: {file_size_mb:.2f} MB", "info")
-        except Exception as e:
+    except Exception as e:
+        file_size_bytes = 0
+        if not _SUPPRESS_OUTPUT:
             cprint(f"Could not determine file size: {e}", "warning")
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
@@ -785,11 +797,13 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         file_task = None
         if _PROGRESS_CONTEXT and show_progress and total_duration and process.stdout:
             encoding_start = time.time()
+            file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding: {filename}", 
                 total=100,
                 fps="",
                 eta="",
+                size=file_size_str,
                 saved="",
             )
             
@@ -816,26 +830,31 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                         # Get FPS info
                         fps_str = f"{int(float(fps_match.group(1)))} fps" if fps_match else ""
                         
+                        file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
                         _PROGRESS_CONTEXT.update(
                             file_task, 
                             completed=progress_percent,
                             fps=fps_str,
-                            eta=f"ETA: {eta_str}"
+                            eta=f"ETA: {eta_str}",
+                            size=file_size_str
                         )
                 
                 process.wait()
-                _PROGRESS_CONTEXT.update(file_task, completed=100, eta="Done")
+                file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
+                _PROGRESS_CONTEXT.update(file_task, completed=100, eta="Done", size=file_size_str)
             finally:
                 if file_task is not None:
                     _PROGRESS_CONTEXT.remove_task(file_task)
                     
         elif _PROGRESS_CONTEXT and show_progress and process.stdout:
             # No duration available; show a spinner-like indeterminate bar
+            file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
             file_task = _PROGRESS_CONTEXT.add_task(
                 f"[yellow]  └─ Encoding: {filename}", 
                 total=None,
                 fps="",
                 eta="",
+                size=file_size_str,
                 saved="",
             )
             try:
@@ -997,6 +1016,7 @@ def process_batch_files(
         TaskProgressColumn(),
         TextColumn("[cyan]{task.fields[fps]}"),
         TextColumn("[yellow]{task.fields[eta]}"),
+        TextColumn("[blue]Size: {task.fields[size]}"),
         TextColumn("[green]Saved: {task.fields[saved]}"),
         transient=transient_progress,
     ) as progress:
@@ -1009,6 +1029,7 @@ def process_batch_files(
             saved=_format_saved(0),
             fps="",
             eta="",
+            size="",
         )
         
         auto_delete = delete_original
@@ -1081,7 +1102,7 @@ def process_batch_files(
             progress.update(
                 overall_task,
                 description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
-                fields={"saved": _format_saved(cumulative_saved), "fps": "", "eta": ""},
+                fields={"saved": _format_saved(cumulative_saved), "fps": "", "eta": "", "size": ""},
             )
         
         _PROGRESS_CONTEXT = None
