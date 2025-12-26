@@ -157,8 +157,18 @@ You should see something like:
 [cnc] Listening on 0.0.0.0:9001
 ```
 
-The CNC server exposes a simple CLI:
+### Interface Modes
 
+The CNC server supports three interface modes:
+
+#### 1. CLI Mode (Default)
+Traditional command-line interface:
+
+```bash
+python cnc_server.py --mode cli --host 0.0.0.0 --port 9001
+```
+
+Commands:
 - **`help`** – Show help and available commands.
 - **`list`** – List connected clients with IDs and basic info.
 - **`use <id>`** – Select a client to control (e.g. `use 1`).
@@ -168,6 +178,40 @@ The CNC server exposes a simple CLI:
 - **`pwd`** – Ask the client for its current working directory.
 - **`exit_client`** – Ask the selected client to exit.
 - **`quit` / `exit` / `q`** – Quit the CNC server.
+
+#### 2. Web Mode
+Modern web-based interface with real-time updates:
+
+```bash
+python cnc_server.py --mode web --host 0.0.0.0 --port 9001 --web-port 8080
+```
+
+Then open your browser to `http://127.0.0.1:8080` (or the configured web-host).
+
+**Requirements:** Install Flask and Flask-SocketIO:
+```bash
+pip install -r requirements.txt
+```
+
+Features:
+- Real-time client list updates
+- Visual client cards with connection info
+- Interactive command panel
+- Live output display
+- Modern, responsive UI
+
+#### 3. GUI Mode
+Desktop graphical interface using tkinter:
+
+```bash
+python cnc_server.py --mode gui --host 0.0.0.0 --port 9001
+```
+
+Features:
+- Client list with selection
+- Command buttons and input fields
+- Scrollable output window
+- No additional dependencies (uses built-in tkinter)
 
 ---
 
