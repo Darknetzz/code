@@ -393,7 +393,8 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
 
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'pyrat-educational-only'
-    socketio = SocketIO(app, cors_allowed_origins="*")
+    # Use threading mode for better compatibility with background threads
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
     # HTML template
     HTML_TEMPLATE = """
@@ -639,11 +640,31 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
     @socketio.on('connect')
     def handle_connect():
         emit('server_info', {'host': server.host, 'port': server.port})
-        emit_clients_update()
+        # Send current client list to newly connected web client
+        with server._lock:
+            clients_data = []
+            for cid, session in server.clients.items():
+                clients_data.append({
+                    'id': cid,
+                    'address': session.address,
+                    'info': session.info,
+                    'alive': session.alive
+                })
+        emit('clients_update', {'clients': clients_data})
 
     @socketio.on('get_clients')
     def handle_get_clients():
-        emit_clients_update()
+        # When called from within a SocketIO handler, use emit to send to current client
+        with server._lock:
+            clients_data = []
+            for cid, session in server.clients.items():
+                clients_data.append({
+                    'id': cid,
+                    'address': session.address,
+                    'info': session.info,
+                    'alive': session.alive
+                })
+        emit('clients_update', {'clients': clients_data})
 
     @socketio.on('command')
     def handle_command(data):
@@ -697,26 +718,26 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                     'info': session.info,
                     'alive': session.alive
                 })
-        # Emit from background thread - use app context and broadcast to all clients
+        # Emit from background thread - Flask-SocketIO requires app context
         try:
-            with app.app_context():
-                socketio.emit('clients_update', {'clients': clients_data}, broadcast=True, namespace='/')
+            # Use socketio.emit() which broadcasts to all when called from background thread
+            socketio.emit('clients_update', {'clients': clients_data}, namespace='/')
         except Exception as e:
             print(f"[cnc] Error emitting clients_update: {e}")
+            import traceback
+            traceback.print_exc()
 
     def on_event(event_type: str, data: JsonDict):
         if event_type in ('client_connected', 'client_hello', 'client_disconnected', 'client_removed', 'client_response'):
             emit_clients_update()
         if event_type == 'client_response':
             try:
-                with app.app_context():
-                    socketio.emit('client_response', data, broadcast=True, namespace='/')
+                socketio.emit('client_response', data, namespace='/')
             except Exception as e:
                 print(f"[cnc] Error emitting client_response: {e}")
         if event_type == 'desktop_frame':
             try:
-                with app.app_context():
-                    socketio.emit('desktop_frame', data, broadcast=True, namespace='/')
+                socketio.emit('desktop_frame', data, namespace='/')
             except Exception as e:
                 print(f"[cnc] Error emitting desktop_frame: {e}")
 
