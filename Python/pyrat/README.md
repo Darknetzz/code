@@ -79,6 +79,23 @@ Communication is done over TCP, using **newline‑delimited JSON messages**.
 - **`bye`**
   - Sent when the client receives an `exit` command and is about to terminate.
 
+- **`desktop_frame`**
+  - Response to a `desktop_frame` or `desktop_start` command, containing a screenshot.
+  - Example:
+    ```json
+    {
+      "type": "desktop_frame",
+      "image": "base64-encoded-jpeg-data...",
+      "format": "jpeg"
+    }
+    ```
+
+- **`desktop_started`**
+  - Response to a `desktop_start` command, confirming streaming has begun.
+
+- **`desktop_stopped`**
+  - Response to a `desktop_stop` command, confirming streaming has stopped.
+
 ---
 
 ### Messages from CNC to client
@@ -104,6 +121,65 @@ Communication is done over TCP, using **newline‑delimited JSON messages**.
 
 - **`exit`**
   - Requests the client to shut down.
+
+- **`desktop_start`**
+  - Starts continuous desktop streaming at the specified FPS.
+  - Example:
+    ```json
+    {
+      "type": "desktop_start",
+      "fps": 5.0
+    }
+    ```
+
+- **`desktop_stop`**
+  - Stops desktop streaming.
+  - Example:
+    ```json
+    {
+      "type": "desktop_stop"
+    }
+    ```
+
+- **`desktop_frame`**
+  - Requests a single screenshot.
+  - Example:
+    ```json
+    {
+      "type": "desktop_frame"
+    }
+    ```
+
+- **`mouse_move`**
+  - Moves the mouse cursor to the specified coordinates.
+  - Example:
+    ```json
+    {
+      "type": "mouse_move",
+      "x": 100,
+      "y": 200
+    }
+    ```
+
+- **`mouse_click`**
+  - Performs a mouse click (left, right, or middle button).
+  - Example:
+    ```json
+    {
+      "type": "mouse_click",
+      "button": "left"
+    }
+    ```
+
+- **`key_press`**
+  - Simulates a key press (limited support, platform-dependent).
+  - Example:
+    ```json
+    {
+      "type": "key_press",
+      "key": "a"
+    }
+    ```
 
 Unknown message types are rejected by the client with an `error` message.
 
@@ -176,6 +252,9 @@ Commands:
 - **`exec <cmd>`** – Execute a shell command on the selected client.
 - **`cd <path>`** – Change working directory on the selected client.
 - **`pwd`** – Ask the client for its current working directory.
+- **`desktop_start [fps]`** – Start remote desktop streaming (default: 5 fps).
+- **`desktop_stop`** – Stop remote desktop streaming.
+- **`desktop_frame`** – Request a single screenshot.
 - **`exit_client`** – Ask the selected client to exit.
 - **`quit` / `exit` / `q`** – Quit the CNC server.
 
@@ -197,6 +276,7 @@ Features:
 - Real-time client list updates
 - Visual client cards with connection info
 - Interactive command panel
+- **Remote desktop viewer with live screen streaming**
 - Live output display
 - Modern, responsive UI
 
@@ -210,6 +290,7 @@ python cnc_server.py --mode gui --host 0.0.0.0 --port 9001
 Features:
 - Client list with selection
 - Command buttons and input fields
+- **Remote desktop viewer with screenshot display**
 - Scrollable output window
 - No additional dependencies (uses built-in tkinter)
 

