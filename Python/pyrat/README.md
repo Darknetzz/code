@@ -96,6 +96,26 @@ Communication is done over TCP, using **newline‑delimited JSON messages**.
 - **`desktop_stopped`**
   - Response to a `desktop_stop` command, confirming streaming has stopped.
 
+- **`list_dir_result` / `list_dir_error`**
+  - Result of a remote directory listing.
+  - Example:
+    ```json
+    {
+      "type": "list_dir_result",
+      "path": "C:/Users/User",
+      "items": [{"name":"Documents","is_dir":true,"size":0,"mtime":1730000000}]
+    }
+    ```
+
+- **`download_result` / `download_error`**
+  - Result of a file download, `data` contains base64 file content.
+
+- **`upload_result` / `upload_error`**
+  - Result of a remote file upload.
+
+- **`mkdir_result`, `rm_result`, `mv_result`** (and corresponding `*_error`)
+  - Results from basic file operations on the client.
+
 ---
 
 ### Messages from CNC to client
@@ -123,12 +143,16 @@ Communication is done over TCP, using **newline‑delimited JSON messages**.
   - Requests the client to shut down.
 
 - **`desktop_start`**
-  - Starts continuous desktop streaming at the specified FPS.
+  - Starts continuous desktop streaming; supports options: `fps`, `quality`, `scale`, `format`, `region`.
   - Example:
     ```json
     {
       "type": "desktop_start",
-      "fps": 5.0
+      "fps": 10,
+      "quality": 80,
+      "scale": 0.5,
+      "format": "jpeg",
+      "region": [0,0,1280,720]
     }
     ```
 
@@ -142,11 +166,14 @@ Communication is done over TCP, using **newline‑delimited JSON messages**.
     ```
 
 - **`desktop_frame`**
-  - Requests a single screenshot.
+  - Requests a single screenshot. Accepts `quality`, `scale`, `format`, optional `region`.
   - Example:
     ```json
     {
-      "type": "desktop_frame"
+      "type": "desktop_frame",
+      "quality": 75,
+      "scale": 1.0,
+      "format": "png"
     }
     ```
 
@@ -252,9 +279,14 @@ Commands:
 - **`exec <cmd>`** – Execute a shell command on the selected client.
 - **`cd <path>`** – Change working directory on the selected client.
 - **`pwd`** – Ask the client for its current working directory.
-- **`desktop_start [fps]`** – Start remote desktop streaming (default: 5 fps).
+- **`desktop_start [opts]`** – Start remote desktop streaming; opts: `fps=<n> quality=<10-95> scale=<0.1-1.0> format=<jpeg|png> region=<x1,y1,x2,y2>`.
 - **`desktop_stop`** – Stop remote desktop streaming.
-- **`desktop_frame`** – Request a single screenshot.
+- **`desktop_frame [opts]`** – Request a single screenshot (same opts as `desktop_start`).
+- **`mouse_move x y`**, **`mouse_click [left|right|middle]`**, **`key_press <key>`** – Basic remote input controls (limited, platform‑dependent).
+- **`ls [path]`** – List a directory on the client.
+- **`download <remote>`** – Download a remote file.
+- **`upload <local> <remote>`** – Upload a local file to the client.
+- **`mkdir <path>`**, **`rm <path>`**, **`mv <src> <dst>`** – Simple file operations.
 - **`exit_client`** – Ask the selected client to exit.
 - **`quit` / `exit` / `q`** – Quit the CNC server.
 
@@ -277,6 +309,8 @@ Features:
 - Visual client cards with connection info
 - Interactive command panel
 - **Remote desktop viewer with live screen streaming**
+- **Configurable desktop capture** (FPS, quality, scale, format, region)
+- **File browser** (list, download, upload, delete)
 - Live output display
 - Modern, responsive UI
 

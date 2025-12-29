@@ -30,6 +30,8 @@ from typing import Any, Dict, Optional
 DEFAULT_RECONNECT_DELAY = 5.0  # seconds (can be overridden via config)
 DEFAULT_HEARTBEAT_INTERVAL = 20.0  # seconds (can be overridden via config)
 DEFAULT_DESKTOP_FPS = 5.0  # frames per second for desktop streaming
+DEFAULT_DESKTOP_QUALITY = 70  # JPEG quality default
+DEFAULT_DESKTOP_SCALE = 1.0   # 1.0 = original size
 
 
 def send_json_line(sock: socket.socket, payload: Dict[str, Any]) -> None:
@@ -87,7 +89,13 @@ def run_command(cmd: str, cwd: str | None = None) -> Dict[str, Any]:
         return {"ok": False, "error": repr(exc)}
 
 
-def capture_screenshot() -> Optional[str]:
+def capture_screenshot(
+    *,
+    scale: float = DEFAULT_DESKTOP_SCALE,
+    quality: int = DEFAULT_DESKTOP_QUALITY,
+    fmt: str = "jpeg",
+    region: Optional[tuple[int, int, int, int]] = None,
+) -> Optional[str]:
     """
     Capture a screenshot and return it as a base64-encoded JPEG string.
     Returns None if screenshot capture fails.
@@ -96,7 +104,7 @@ def capture_screenshot() -> Optional[str]:
         if sys.platform == "win32":
             try:
                 from PIL import ImageGrab
-                img = ImageGrab.grab()
+                img = ImageGrab.grab(bbox=region)
             except ImportError:
                 return None
         elif sys.platform.startswith("linux"):
@@ -136,15 +144,29 @@ def capture_screenshot() -> Optional[str]:
         elif sys.platform == "darwin":
             try:
                 from PIL import ImageGrab
-                img = ImageGrab.grab()
+                img = ImageGrab.grab(bbox=region)
             except ImportError:
                 return None
         else:
             return None
 
-        # Convert to JPEG and encode as base64
+        # Optional scale
+        try:
+            if scale and scale > 0 and scale != 1.0:
+                from PIL import Image
+                new_w = max(1, int(img.width * scale))
+                new_h = max(1, int(img.height * scale))
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        except Exception:
+            pass
+
+        # Convert to desired format and encode as base64
         buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=70, optimize=True)
+        if fmt.lower() == "png":
+            img.save(buffer, format="PNG", optimize=True)
+        else:
+            q = max(10, min(95, int(quality)))
+            img.save(buffer, format="JPEG", quality=q, optimize=True)
         img_bytes = buffer.getvalue()
         return base64.b64encode(img_bytes).decode("utf-8")
     except Exception:
@@ -152,14 +174,21 @@ def capture_screenshot() -> Optional[str]:
 
 
 def desktop_stream_loop(
-    sock: socket.socket, stop_event: threading.Event, fps: float
+    sock: socket.socket,
+    stop_event: threading.Event,
+    fps: float,
+    *,
+    scale: float = DEFAULT_DESKTOP_SCALE,
+    quality: int = DEFAULT_DESKTOP_QUALITY,
+    fmt: str = "jpeg",
+    region: Optional[tuple[int, int, int, int]] = None,
 ) -> None:
     """
     Continuously capture and send screenshots at the specified FPS.
     """
     interval = 1.0 / fps
     while not stop_event.is_set():
-        screenshot_b64 = capture_screenshot()
+        screenshot_b64 = capture_screenshot(scale=scale, quality=quality, fmt=fmt, region=region)
         if screenshot_b64:
             try:
                 send_json_line(
@@ -167,7 +196,7 @@ def desktop_stream_loop(
                     {
                         "type": "desktop_frame",
                         "image": screenshot_b64,
-                        "format": "jpeg",
+                        "format": fmt,
                     },
                 )
             except OSError:
@@ -240,27 +269,51 @@ def client_loop(host: str, port: int, reconnect_delay: float, hb_interval: float
                     send_json_line(sock, {"type": "pong"})
                 elif msg_type == "desktop_start":
                     fps = float(msg.get("fps", DEFAULT_DESKTOP_FPS))
+                    quality = int(msg.get("quality", DEFAULT_DESKTOP_QUALITY))
+                    scale = float(msg.get("scale", DEFAULT_DESKTOP_SCALE))
+                    fmt = str(msg.get("format", "jpeg")).lower()
+                    region = msg.get("region")
+                    # region should be [x1,y1,x2,y2]
+                    if isinstance(region, list) and len(region) == 4:
+                        try:
+                            region = (int(region[0]), int(region[1]), int(region[2]), int(region[3]))
+                        except Exception:
+                            region = None
+                    else:
+                        region = None
                     desktop_stop_event.clear()
                     desktop_thread = threading.Thread(
                         target=desktop_stream_loop,
                         args=(sock, desktop_stop_event, fps),
+                        kwargs={"scale": scale, "quality": quality, "fmt": fmt, "region": region},
                         daemon=True,
                     )
                     desktop_thread.start()
-                    send_json_line(sock, {"type": "desktop_started", "fps": fps})
+                    send_json_line(sock, {"type": "desktop_started", "fps": fps, "quality": quality, "scale": scale, "format": fmt})
                 elif msg_type == "desktop_stop":
                     desktop_stop_event.set()
                     send_json_line(sock, {"type": "desktop_stopped"})
                 elif msg_type == "desktop_frame":
                     # Single screenshot request
-                    screenshot_b64 = capture_screenshot()
+                    quality = int(msg.get("quality", DEFAULT_DESKTOP_QUALITY))
+                    scale = float(msg.get("scale", DEFAULT_DESKTOP_SCALE))
+                    fmt = str(msg.get("format", "jpeg")).lower()
+                    region = msg.get("region")
+                    if isinstance(region, list) and len(region) == 4:
+                        try:
+                            region = (int(region[0]), int(region[1]), int(region[2]), int(region[3]))
+                        except Exception:
+                            region = None
+                    else:
+                        region = None
+                    screenshot_b64 = capture_screenshot(scale=scale, quality=quality, fmt=fmt, region=region)
                     if screenshot_b64:
                         send_json_line(
                             sock,
                             {
                                 "type": "desktop_frame",
                                 "image": screenshot_b64,
-                                "format": "jpeg",
+                                "format": fmt,
                             },
                         )
                     else:
@@ -268,6 +321,68 @@ def client_loop(host: str, port: int, reconnect_delay: float, hb_interval: float
                             sock,
                             {"type": "desktop_frame_error", "error": "Screenshot capture failed"},
                         )
+                elif msg_type == "list_dir":
+                    path = msg.get("path") or os.getcwd()
+                    try:
+                        items = []
+                        with os.scandir(path) as it:
+                            for entry in it:
+                                try:
+                                    stat = entry.stat()
+                                    items.append({
+                                        "name": entry.name,
+                                        "is_dir": entry.is_dir(),
+                                        "size": stat.st_size,
+                                        "mtime": stat.st_mtime,
+                                    })
+                                except OSError:
+                                    items.append({"name": entry.name, "is_dir": entry.is_dir(), "size": None, "mtime": None})
+                        send_json_line(sock, {"type": "list_dir_result", "path": path, "items": items})
+                    except OSError as exc:
+                        send_json_line(sock, {"type": "list_dir_error", "path": path, "error": str(exc)})
+                elif msg_type == "download":
+                    path = msg.get("path") or ""
+                    try:
+                        with open(path, "rb") as f:
+                            data_b64 = base64.b64encode(f.read()).decode("utf-8")
+                        send_json_line(sock, {"type": "download_result", "path": path, "data": data_b64})
+                    except OSError as exc:
+                        send_json_line(sock, {"type": "download_error", "path": path, "error": str(exc)})
+                elif msg_type == "upload":
+                    path = msg.get("path") or ""
+                    data_b64 = msg.get("data") or ""
+                    try:
+                        data = base64.b64decode(data_b64)
+                        with open(path, "wb") as f:
+                            f.write(data)
+                        send_json_line(sock, {"type": "upload_result", "path": path, "ok": True})
+                    except Exception as exc:
+                        send_json_line(sock, {"type": "upload_error", "path": path, "error": str(exc)})
+                elif msg_type == "mkdir":
+                    path = msg.get("path") or ""
+                    try:
+                        os.makedirs(path, exist_ok=True)
+                        send_json_line(sock, {"type": "mkdir_result", "path": path, "ok": True})
+                    except OSError as exc:
+                        send_json_line(sock, {"type": "mkdir_error", "path": path, "error": str(exc)})
+                elif msg_type == "rm":
+                    path = msg.get("path") or ""
+                    try:
+                        if os.path.isdir(path):
+                            os.rmdir(path)
+                        else:
+                            os.remove(path)
+                        send_json_line(sock, {"type": "rm_result", "path": path, "ok": True})
+                    except OSError as exc:
+                        send_json_line(sock, {"type": "rm_error", "path": path, "error": str(exc)})
+                elif msg_type == "mv":
+                    src = msg.get("src") or ""
+                    dst = msg.get("dst") or ""
+                    try:
+                        os.replace(src, dst)
+                        send_json_line(sock, {"type": "mv_result", "src": src, "dst": dst, "ok": True})
+                    except OSError as exc:
+                        send_json_line(sock, {"type": "mv_error", "src": src, "dst": dst, "error": str(exc)})
                 elif msg_type == "mouse_move":
                     # Mouse movement command
                     x = msg.get("x")
@@ -473,23 +588,24 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parse_args(argv)
 
-    host = args.host or (client_cfg.get("host") if isinstance(client_cfg, dict) else None) or "127.0.0.1"
-    port = args.port or int(
-        (client_cfg.get("port") if isinstance(client_cfg, dict) else 9001)
-    )
+    host_cfg = client_cfg.get("host") if isinstance(client_cfg, dict) else None
+    host = args.host or (host_cfg if host_cfg else "127.0.0.1")
+
+    port_cfg = client_cfg.get("port") if isinstance(client_cfg, dict) else None
+    port = args.port if args.port is not None else (int(port_cfg) if port_cfg is not None else 9001)
+
+    rd_cfg = client_cfg.get("reconnect_delay") if isinstance(client_cfg, dict) else None
     reconnect_delay = (
         args.reconnect_delay
         if args.reconnect_delay is not None
-        else float(
-            (client_cfg.get("reconnect_delay") if isinstance(client_cfg, dict) else DEFAULT_RECONNECT_DELAY)
-        )
+        else (float(rd_cfg) if rd_cfg is not None else DEFAULT_RECONNECT_DELAY)
     )
+
+    hb_cfg = client_cfg.get("heartbeat_interval") if isinstance(client_cfg, dict) else None
     hb_interval = (
         args.heartbeat_interval
         if args.heartbeat_interval is not None
-        else float(
-            (client_cfg.get("heartbeat_interval") if isinstance(client_cfg, dict) else DEFAULT_HEARTBEAT_INTERVAL)
-        )
+        else (float(hb_cfg) if hb_cfg is not None else DEFAULT_HEARTBEAT_INTERVAL)
     )
 
     client_loop(host, port, reconnect_delay, hb_interval)
