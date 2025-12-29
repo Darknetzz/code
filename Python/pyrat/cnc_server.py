@@ -17,13 +17,14 @@ You can type `help` at the server prompt for available commands.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import socket
 import threading
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Callable
+
+import typer
 
 
 JsonDict = Dict[str, object]
@@ -553,37 +554,22 @@ def load_config() -> JsonDict:
         return {}
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Educational CNC server for the simple RAT client.",
-    )
-    parser.add_argument(
-        "--host",
-        help="Host/IP to bind the CNC server to (overrides config.json if provided)",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        help="TCP port to listen on (overrides config.json if provided)",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["cli", "web", "gui"],
-        default="cli",
-        help="Interface mode: cli (default), web, or gui",
-    )
-    parser.add_argument(
-        "--web-port",
-        type=int,
-        default=8080,
-        help="Port for web interface (default: 8080)",
-    )
-    parser.add_argument(
-        "--web-host",
-        default="127.0.0.1",
-        help="Host for web interface (default: 127.0.0.1)",
-    )
-    return parser.parse_args()
+app = typer.Typer(help="Educational CNC server for the simple RAT client.")
+
+
+@app.command()
+def cli_command(
+    host: str = typer.Option(None, help="Host/IP to bind the CNC server to (overrides config.json if provided)"),
+    port: int = typer.Option(None, help="TCP port to listen on (overrides config.json if provided)"),
+    mode: str = typer.Option("cli", help="Interface mode: cli (default), web, or gui"),
+    web_port: int = typer.Option(8080, "--web-port", help="Port for web interface (default: 8080)"),
+    web_host: str = typer.Option("127.0.0.1", "--web-host", help="Host for web interface (default: 127.0.0.1)"),
+) -> None:
+    """Run the CNC server."""
+    if mode not in ["cli", "web", "gui"]:
+        typer.echo(f"Error: Invalid mode '{mode}'. Choose from: cli, web, gui", err=True)
+        raise typer.Exit(code=1)
+    main_with_args(host, port, mode, web_port, web_host)
 
 
 def run_web(server: CNCServer, web_host: str, web_port: int) -> None:
@@ -1424,30 +1410,34 @@ def run_gui(server: CNCServer) -> None:
     root.mainloop()
 
 
-def main() -> None:
+def main_with_args(
+    host: str | None = None,
+    port: int | None = None,
+    mode: str = "cli",
+    web_port: int = 8080,
+    web_host: str = "127.0.0.1",
+) -> None:
     cfg = load_config()
     server_cfg = cfg.get("server") if isinstance(cfg, dict) else {}
 
-    args = parse_args()
-
     host_cfg = server_cfg.get("host") if isinstance(server_cfg, dict) else None
-    host = args.host or (host_cfg if host_cfg else "0.0.0.0")
+    host = host or (host_cfg if host_cfg else "0.0.0.0")
 
     port_cfg = server_cfg.get("port") if isinstance(server_cfg, dict) else None
-    port = args.port if args.port is not None else (int(port_cfg) if port_cfg is not None else 9001)
+    port = port if port is not None else (int(port_cfg) if port_cfg is not None else 9001)
 
     server = CNCServer(host, port)
     server.start()
 
-    if args.mode == "web":
-        run_web(server, args.web_host, args.web_port)
-    elif args.mode == "gui":
+    if mode == "web":
+        run_web(server, web_host, web_port)
+    elif mode == "gui":
         run_gui(server)
     else:
         run_cli(server)
 
 
 if __name__ == "__main__":
-    main()
+    app()
 
 
