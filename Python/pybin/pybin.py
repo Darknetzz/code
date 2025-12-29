@@ -1,4 +1,6 @@
-import typer, subprocess, shutil
+import typer
+import subprocess
+import shutil
 from pathlib import Path
 from rich.console import Console
 
@@ -52,18 +54,19 @@ def main(
             str(spec_file),
         ]
     else:
-        console.print(f"[yellow]⚙ Generating new .spec file[/yellow]")
+        console.print("[yellow]⚙ Generating new .spec file[/yellow]")
         cmd = [
             "pyinstaller",
             "--onefile",
             f"--distpath={dist_path}",
             f"--workpath={work_path}",
             f"--specpath={spec_path}",
-            str(file),
+            str(file.resolve()),  # Use absolute path to avoid cross-drive issues
         ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # Run from the file's directory to avoid Windows cross-drive path issues
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(base_dir))
     if result.returncode != 0:
-        console.print(f"[red]✗ PyInstaller failed:[/red]", style="bold")
+        console.print("[red]✗ PyInstaller failed:[/red]", style="bold")
         console.print(result.stderr, style="red")
         raise typer.Exit(code=1)
     
