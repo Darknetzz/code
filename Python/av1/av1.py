@@ -380,8 +380,7 @@ def check_encoder_support(encoder_name: str) -> bool:
                 if proc.returncode == 0:
                     return True
 
-                # If FFmpeg attempted VAAPI but failed due to libva ABI/symbol issues,
-                # try a distro `/usr/bin/ffmpeg` as a fallback (common on Debian/Ubuntu).
+                # Inspect output for libva ABI / symbol resolution failures
                 stderr = (proc.stderr or "") + (proc.stdout or "")
                 if any(s in stderr for s in ("failed to resolve symbol", "vaMapBuffer2", "libva.so.2", "_libva_so_2_tramp_resolve")):
                     fallback = "/usr/bin/ffmpeg"
@@ -395,7 +394,6 @@ def check_encoder_support(encoder_name: str) -> bool:
                             proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
                             if proc2.returncode == 0:
                                 # Switch global ffmpeg to the working distro binary for subsequent operations
-                                # global FFMPEG_CMD
                                 FFMPEG_CMD = fallback
                                 cprint("Detected libva ABI mismatch in current ffmpeg; falling back to /usr/bin/ffmpeg.", "warning")
                                 return True
