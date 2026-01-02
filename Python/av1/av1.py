@@ -647,6 +647,10 @@ def check_disk_space(file_path: str, output_dir: str) -> bool:
         file_size = os.path.getsize(file_path)
         required_space = int(file_size * DISK_SPACE_SAFETY_MARGIN)
         
+        # Handle empty string or None output_dir
+        if not output_dir:
+            output_dir = os.getcwd()
+        
         stat = shutil.disk_usage(output_dir)
         if stat.free < required_space:
             cprint(f"Insufficient disk space. Need {required_space / (1024**3):.2f} GB, have {stat.free / (1024**3):.2f} GB", "error")
@@ -716,7 +720,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
-        output_dir = os.path.dirname(input_path)
+        output_dir = os.path.dirname(input_path) or os.getcwd()
         # When staying in same dir, add suffix to avoid collision during encoding
         suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
@@ -869,6 +873,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         cprint(f"Could not determine video duration: {e}", "warning")
         total_duration = None
     
+    # Collect output for error reporting
+    error_lines = []
+    
     try:
         # Run ffmpeg with progress tracking
         import re
@@ -892,6 +899,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             
             try:
                 for line in process.stdout:
+                    # Collect error lines (typically contain "error", "Error", "failed", etc.)
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
+                    
                     # Parse ffmpeg progress output
                     time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
                     fps_match = re.search(r'fps=\s*(\d+\.?\d*)', line)
@@ -941,8 +953,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 saved="",
             )
             try:
-                for _ in process.stdout:
-                    pass
+                for line in process.stdout:
+                    # Collect error lines
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
                 process.wait()
             finally:
                 if file_task is not None:
@@ -951,7 +966,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             # No progress context, just consume output
             if process.stdout:
                 for line in process.stdout:
-                    pass
+                    # Collect error lines
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
             process.wait()
         
         result = process
@@ -1036,6 +1054,14 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             cprint(f"❌ Error swapping files: {e}", "error")
     else:
         cprint(f"❌ Conversion failed (exit code: {result.returncode})", "error")
+        # Show relevant error messages from ffmpeg output
+        if error_lines:
+            # Show last few error lines (most relevant are usually at the end)
+            relevant_errors = error_lines[-5:] if len(error_lines) > 5 else error_lines
+            cprint("FFmpeg error output:", "error")
+            for err_line in relevant_errors:
+                if err_line:  # Skip empty lines
+                    cprint(f"   {err_line}", "error")
         if os.path.exists(temp_output):
             try:
                 os.remove(temp_output)
