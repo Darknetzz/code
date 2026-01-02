@@ -696,6 +696,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     """
+    global ACTIVE_ENCODER
     filename = os.path.basename(input_path)
     
 
@@ -1062,6 +1063,54 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             for err_line in relevant_errors:
                 if err_line:  # Skip empty lines
                     cprint(f"   {err_line}", "error")
+            
+            # Check for libva ABI mismatch errors and provide guidance/retry
+            error_text = " ".join(error_lines).lower()
+            libva_indicators = [
+                "function not implemented", "invalid argument", "error reinitializing",
+                "failed to resolve symbol", "vamapbuffer2", "libva.so"
+            ]
+            is_libva_error = any(indicator in error_text for indicator in libva_indicators)
+            
+            if is_libva_error:
+                cprint("\n⚠️  Hardware encoding failed due to libva ABI mismatch with PATH ffmpeg.", "warning")
+                
+                # Auto-retry with CPU encoding if hardware encoding failed (still using PATH ffmpeg)
+                if ACTIVE_ENCODER["hw_type"] != "cpu":
+                    cprint("🔄 Automatically retrying with CPU encoding (still using PATH ffmpeg)...", "info")
+                    
+                    # Save original encoder and switch to CPU temporarily
+                    original_encoder = ACTIVE_ENCODER.copy()
+                    ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+                    
+                    # Clean up failed temp file
+                    if os.path.exists(temp_output):
+                        try:
+                            os.remove(temp_output)
+                        except Exception:
+                            pass
+                    
+                    # Retry conversion with CPU encoder
+                    try:
+                        result = convert_single_file(
+                            input_path, output_dir, bitrate, delete_original, 
+                            overwrite, dry_run, keep_mkv, show_progress
+                        )
+                        # Restore original encoder after retry
+                        ACTIVE_ENCODER = original_encoder
+                        return result
+                    except Exception as e:
+                        # Restore original encoder even on exception
+                        ACTIVE_ENCODER = original_encoder
+                        raise
+                else:
+                    cprint("   Solutions:", "info")
+                    cprint("   1. Use system ffmpeg: Set AV1_FFMPEG_FALLBACK=true", "info")
+                    cprint("   2. Fix libva compatibility: Update libva libraries to match your ffmpeg build", "info")
+            else:
+                # Non-libva error, just show the error
+                pass
+        
         if os.path.exists(temp_output):
             try:
                 os.remove(temp_output)
