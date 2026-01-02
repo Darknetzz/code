@@ -127,7 +127,26 @@ def _version_callback(value: bool) -> None:
         py_exec = sys.executable
         py_ver = platform.python_version()
         typer.echo(f"{__app_name__} {__version__} — Python: {py_exec} ({py_ver})")
-        raise typer.Exit()
+        # Attempt to run a lightweight hardware encoder detection and print result.
+        try:
+            # Use check_ffmpeg to populate ACTIVE_ENCODER; catch failures to avoid exiting.
+            try:
+                check_ffmpeg()
+            except Exception:
+                # If check_ffmpeg raised (missing ffmpeg/ffprobe or other), report and continue
+                cprint("⚠️  Could not run encoder detection (ffmpeg/ffprobe missing or check failed).", "warning")
+
+            # Print detected encoder summary
+            try:
+                enc = ACTIVE_ENCODER.get("encoder") if isinstance(ACTIVE_ENCODER, dict) else None
+                hw = ACTIVE_ENCODER.get("hw_type") if isinstance(ACTIVE_ENCODER, dict) else None
+                if enc:
+                    typer.echo(f"Detected encoder: {enc} (type: {hw})")
+            except Exception:
+                pass
+
+        finally:
+            raise typer.Exit()
 
 
 def _show_examples() -> None:
@@ -1439,4 +1458,16 @@ def main(
         _save_log(log_type, resolved_log_dir)
 
 if __name__ == "__main__":
-    app()
+    try:
+        app()
+    finally:
+        # Best-effort terminal restore: show cursor and reset terminal state.
+        try:
+            console.show_cursor()
+        except Exception:
+            pass
+        try:
+            # Ensure echo/icanon etc. are restored for shells that lost input visibility
+            os.system("stty sane")
+        except Exception:
+            pass
