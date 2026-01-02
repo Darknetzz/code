@@ -124,7 +124,9 @@ _NO_PROMPT = False  # Suppress interactive prompts
 def _version_callback(value: bool) -> None:
     """Display version and exit."""
     if value:
-        typer.echo(f"{__app_name__} {__version__}")
+        py_exec = sys.executable
+        py_ver = platform.python_version()
+        typer.echo(f"{__app_name__} {__version__} — Python: {py_exec} ({py_ver})")
         raise typer.Exit()
 
 
