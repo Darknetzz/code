@@ -323,9 +323,14 @@ def safe_input(prompt: str) -> str:
     if _PROGRESS_CONTEXT:
         try:
             _PROGRESS_CONTEXT.stop()
-            # Give it a moment to fully stop
+            # Give it a moment to fully stop and restore terminal
             import time
-            time.sleep(0.1)
+            time.sleep(0.2)
+            # Ensure console is ready for input
+            try:
+                console.show_cursor()
+            except Exception:
+                pass
         except Exception:
             pass
     
@@ -339,12 +344,31 @@ def safe_input(prompt: str) -> str:
         # Print newline first to ensure we're on a fresh line
         sys.stdout.write("\n")
         sys.stdout.flush()
+        sys.stderr.flush()
+        # Ensure stdin is in the right mode
+        if hasattr(sys.stdin, 'fileno'):
+            try:
+                import termios
+                import tty
+                # Save terminal settings
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                # Set terminal to normal mode
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except (ImportError, OSError, AttributeError):
+                # Not a TTY or Windows - that's okay
+                pass
     except Exception:
         pass
     
     try:
-        # Get input from user - pass prompt directly to input() so it displays properly
-        result = input(prompt)
+        # Use Rich console.input() which handles terminal state better
+        # But fallback to standard input() if that fails
+        try:
+            result = console.input(prompt)
+        except (AttributeError, Exception):
+            # Fallback to standard input
+            result = input(prompt)
     except (EOFError, KeyboardInterrupt):
         # Handle Ctrl+C or EOF gracefully
         result = ""
