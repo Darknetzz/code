@@ -830,6 +830,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     if not _SUPPRESS_OUTPUT:
         cprint(f"🎬 Converting: {filename}", "info")
         cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
+        # Show ffmpeg path for debugging
+        if os.getenv("AV1_DEBUG"):
+            cprint(f"   FFmpeg: {FFMPEG_CMD}", "info")
+            cprint(f"   Command: {' '.join(command)}", "info")
     # Initialize per-file event context
     file_event = {
         "file": input_path,
@@ -1065,12 +1069,21 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     cprint(f"   {err_line}", "error")
             
             # Check for libva ABI mismatch errors and provide guidance/retry
+            # Only check for libva errors if we're using a hardware encoder (vaapi specifically)
             error_text = " ".join(error_lines).lower()
-            libva_indicators = [
-                "function not implemented", "invalid argument", "error reinitializing",
-                "failed to resolve symbol", "vamapbuffer2", "libva.so"
+            is_hardware_encoder = ACTIVE_ENCODER["hw_type"] in ("vaapi", "nvidia", "amd")
+            
+            # More specific libva indicators - these are libva-specific errors
+            libva_specific_indicators = [
+                "failed to resolve symbol", "vamapbuffer2", "libva.so", 
+                "error reinitializing filters", "function not implemented"
             ]
-            is_libva_error = any(indicator in error_text for indicator in libva_indicators)
+            # Only consider it a libva error if:
+            # 1. We're using hardware encoding (especially vaapi)
+            # 2. AND we see libva-specific error messages
+            is_libva_error = (is_hardware_encoder and 
+                            ACTIVE_ENCODER["hw_type"] == "vaapi" and
+                            any(indicator in error_text for indicator in libva_specific_indicators))
             
             if is_libva_error:
                 cprint("\n⚠️  Hardware encoding failed due to libva ABI mismatch with PATH ffmpeg.", "warning")
@@ -1107,9 +1120,17 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     cprint("   Solutions:", "info")
                     cprint("   1. Use system ffmpeg: Set AV1_FFMPEG_FALLBACK=true", "info")
                     cprint("   2. Fix libva compatibility: Update libva libraries to match your ffmpeg build", "info")
+            elif ACTIVE_ENCODER["hw_type"] == "cpu":
+                # CPU encoding failure - different issue, not libva
+                cprint("\n⚠️  CPU encoding failed. This may indicate an issue with:", "warning")
+                cprint("   • FFmpeg build compatibility", "info")
+                cprint("   • Input file format/corruption", "info")
+                cprint("   • Missing codec support (libsvtav1)", "info")
+                cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
             else:
-                # Non-libva error, just show the error
-                pass
+                # Other hardware encoding failure (not libva)
+                cprint("\n⚠️  Hardware encoding failed (non-libva error).", "warning")
+                cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
         
         if os.path.exists(temp_output):
             try:
