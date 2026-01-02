@@ -126,7 +126,8 @@ def _version_callback(value: bool) -> None:
     if value:
         py_exec = sys.executable
         py_ver = platform.python_version()
-        typer.echo(f"{__app_name__} {__version__} — Python: {py_exec} ({py_ver})")
+        typer.echo(f"{__app_name__} {__version__}")
+        typer.echo(f"Python: {py_exec} ({py_ver})")
         
         # Get ffmpeg version
         try:
