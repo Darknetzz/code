@@ -1092,30 +1092,40 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 if ACTIVE_ENCODER["hw_type"] != "cpu":
                     cprint("🔄 Automatically retrying with CPU encoding (still using PATH ffmpeg)...", "info")
                     
-                    # Save original encoder and switch to CPU temporarily
+                    # Save original encoder first
                     original_encoder = ACTIVE_ENCODER.copy()
-                    ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
                     
-                    # Clean up failed temp file
-                    if os.path.exists(temp_output):
+                    # Verify CPU encoder is available before retrying
+                    if not check_encoder_support("libsvtav1"):
+                        cprint("❌ CPU encoder (libsvtav1) not available in PATH ffmpeg.", "error")
+                        cprint("   Your PATH ffmpeg may not have libsvtav1 support compiled in.", "warning")
+                        cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
+                        # Restore original encoder
+                        ACTIVE_ENCODER = original_encoder
+                    else:
+                        # Switch to CPU temporarily
+                        ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+                        
+                        # Clean up failed temp file
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception:
+                                pass
+                        
+                        # Retry conversion with CPU encoder
                         try:
-                            os.remove(temp_output)
-                        except Exception:
-                            pass
-                    
-                    # Retry conversion with CPU encoder
-                    try:
-                        result = convert_single_file(
-                            input_path, output_dir, bitrate, delete_original, 
-                            overwrite, dry_run, keep_mkv, show_progress
-                        )
-                        # Restore original encoder after retry
-                        ACTIVE_ENCODER = original_encoder
-                        return result
-                    except Exception as e:
-                        # Restore original encoder even on exception
-                        ACTIVE_ENCODER = original_encoder
-                        raise
+                            result = convert_single_file(
+                                input_path, output_dir, bitrate, delete_original, 
+                                overwrite, dry_run, keep_mkv, show_progress
+                            )
+                            # Restore original encoder after retry
+                            ACTIVE_ENCODER = original_encoder
+                            return result
+                        except Exception as e:
+                            # Restore original encoder even on exception
+                            ACTIVE_ENCODER = original_encoder
+                            raise
                 else:
                     cprint("   Solutions:", "info")
                     cprint("   1. Use system ffmpeg: Set AV1_FFMPEG_FALLBACK=true", "info")

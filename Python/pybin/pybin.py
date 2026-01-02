@@ -89,7 +89,8 @@ def main(
         # Only show message if user explicitly set --keep-spec but no spec was generated
         pass
     
-    console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}.exe[/cyan]", style="bold")
+    ext = file.suffix if file.suffix else ""
+    console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}{ext}[/cyan]", style="bold")
 
 
 
