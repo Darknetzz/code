@@ -402,11 +402,15 @@ def check_encoder_support(encoder_name: str) -> bool:
                 # Inspect output for libva ABI / symbol resolution failures
                 stderr = (proc.stderr or "") + (proc.stdout or "")
                 if any(s in stderr for s in ("failed to resolve symbol", "vaMapBuffer2", "libva.so.2", "_libva_so_2_tramp_resolve")):
-                    # Check if user wants automatic fallback (default: disabled to prefer PATH ffmpeg)
-                    allow_fallback = _env_bool(os.getenv("AV1_FFMPEG_FALLBACK", "false"))
+                    # Check if user wants automatic fallback (default: auto-detect for hardware encoding)
+                    fallback_env = os.getenv("AV1_FFMPEG_FALLBACK", "auto")
+                    allow_fallback = _env_bool(fallback_env) if fallback_env != "auto" else None
                     ignore_warning = _env_bool(os.getenv("AV1_IGNORE_LIBVA_WARNING", "true"))  # Default: try anyway
                     
-                    if allow_fallback:
+                    # Auto-fallback: try system ffmpeg for hardware encoding if PATH ffmpeg has libva issues
+                    should_try_fallback = (allow_fallback is True) or (fallback_env == "auto" and encoder_name.endswith("_vaapi"))
+                    
+                    if should_try_fallback:
                         fallback = "/usr/bin/ffmpeg"
                         if os.path.exists(fallback) and os.path.isfile(fallback) and fallback != FFMPEG_CMD:
                             fallback_cmd = [
@@ -417,9 +421,10 @@ def check_encoder_support(encoder_name: str) -> bool:
                             try:
                                 proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
                                 if proc2.returncode == 0:
-                                    # Switch global ffmpeg to the working distro binary for subsequent operations
+                                    # Switch global ffmpeg to the working distro binary for hardware encoding
                                     FFMPEG_CMD = fallback
-                                    cprint("Detected libva ABI mismatch in current ffmpeg; falling back to /usr/bin/ffmpeg.", "warning")
+                                    cprint("Detected libva ABI mismatch in PATH ffmpeg; using system ffmpeg for hardware encoding.", "warning")
+                                    cprint("(PATH ffmpeg will still be used for CPU encoding if needed)", "info")
                                     return True
                             except Exception:
                                 pass
@@ -427,11 +432,11 @@ def check_encoder_support(encoder_name: str) -> bool:
                     # If ignoring warning, try using the encoder anyway (user wants PATH ffmpeg)
                     if ignore_warning:
                         cprint("Detected libva ABI mismatch warning, but attempting to use hardware encoder with PATH ffmpeg.", "warning")
-                        cprint("If encoding fails, set AV1_IGNORE_LIBVA_WARNING=false to disable this behavior.", "info")
+                        cprint("If encoding fails, set AV1_FFMPEG_FALLBACK=auto to automatically use system ffmpeg for hardware encoding.", "info")
                         return True  # Try it anyway - might work despite the warning
                     else:
                         cprint("Detected libva ABI mismatch in ffmpeg. Hardware encoding may not work.", "warning")
-                        cprint("Set AV1_IGNORE_LIBVA_WARNING=true to attempt hardware encoding anyway.", "info")
+                        cprint("Set AV1_FFMPEG_FALLBACK=auto to automatically use system ffmpeg for hardware encoding.", "info")
 
                 return False
             except Exception:
@@ -696,7 +701,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     """
-    global ACTIVE_ENCODER
+    global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
     
 
@@ -777,11 +782,25 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     else:
         pix_fmt = "nv12"  # NVIDIA/AMD default
     
-    command = [
-        FFMPEG_CMD, "-y", "-i", input_path,
-        "-vf", f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
-        "-movflags", "+faststart",
-    ]
+    command = [FFMPEG_CMD, "-y"]
+    
+    # VAAPI requires device specification before input
+    if ACTIVE_ENCODER["hw_type"] == "vaapi":
+        vaapi_dev = os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")
+        command.extend(["-vaapi_device", vaapi_dev])
+    
+    command.extend(["-i", input_path])
+    
+    # Build filter chain - VAAPI needs hwupload after format conversion
+    if ACTIVE_ENCODER["hw_type"] == "vaapi":
+        # VAAPI: scale -> format -> hwupload (upload to hardware)
+        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+    else:
+        # Other encoders: just scale and format
+        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+    
+    command.extend(["-vf", filter_chain])
+    command.extend(["-movflags", "+faststart"])
 
     # --- ENCODER SPECIFIC SETTINGS ---
     encoder_name = ACTIVE_ENCODER["encoder"]
@@ -820,8 +839,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         
     else:
         # CPU (SVT-AV1)
+        # SVT-AV1 uses different bitrate control - use only -b:v, not -maxrate/-bufsize
         command.extend(["-preset", "8", "-g", "240"])
-        command.extend(bitrate_args)
+        # Use only target bitrate for CPU encoder (SVT-AV1 handles rate control internally)
+        command.extend(["-b:v", str(target_bitrate_int)])
 
     # Audio: Copy or convert to Opus
     # Preserve multi-channel audio if present, otherwise use stereo
@@ -1087,6 +1108,37 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             
             if is_libva_error:
                 cprint("\n⚠️  Hardware encoding failed due to libva ABI mismatch with PATH ffmpeg.", "warning")
+                
+                # Try system ffmpeg for hardware encoding if auto-fallback is enabled
+                fallback_env = os.getenv("AV1_FFMPEG_FALLBACK", "auto")
+                should_try_system_ffmpeg = (fallback_env == "auto" or _env_bool(fallback_env))
+                
+                if should_try_system_ffmpeg and ACTIVE_ENCODER["hw_type"] != "cpu" and FFMPEG_CMD != "/usr/bin/ffmpeg":
+                    system_ffmpeg = "/usr/bin/ffmpeg"
+                    if os.path.exists(system_ffmpeg):
+                        cprint("🔄 Retrying hardware encoding with system ffmpeg (compatible with libva)...", "info")
+                        original_ffmpeg = FFMPEG_CMD
+                        FFMPEG_CMD = system_ffmpeg
+                        
+                        # Clean up failed temp file
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception:
+                                pass
+                        
+                        # Retry with system ffmpeg
+                        try:
+                            result = convert_single_file(
+                                input_path, output_dir, bitrate, delete_original, 
+                                overwrite, dry_run, keep_mkv, show_progress
+                            )
+                            # Keep system ffmpeg for this session (hardware encoding works)
+                            return result
+                        except Exception as e:
+                            # Restore PATH ffmpeg on failure
+                            FFMPEG_CMD = original_ffmpeg
+                            raise
                 
                 # Auto-retry with CPU encoding if hardware encoding failed (still using PATH ffmpeg)
                 if ACTIVE_ENCODER["hw_type"] != "cpu":
