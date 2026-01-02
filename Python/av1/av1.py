@@ -165,7 +165,7 @@ def _show_examples() -> None:
       • Press Ctrl+C once to finish current file and exit gracefully
       • Use -h or --help for complete option list
     """
-    console.print(examples)
+    cprint(examples, "info")
 
 
 def _format_saved(bytes_amount: float) -> str:
@@ -272,6 +272,7 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
 def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
+    timestamp = time.strftime('%H:%M:%S')
     prefix = ""
     style  = ""
     type   = type.lower()
@@ -289,7 +290,7 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
         style = "green"
         prefix = "✅"
 
-    message = f"{prefix}  {message}"
+    message = f"[{timestamp}] {prefix}  {message}"
     
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
     if not _SUPPRESS_OUTPUT:
@@ -335,22 +336,15 @@ def safe_input(prompt: str) -> str:
     # Ensure we're on a new line and flush all output
     try:
         import sys
-        # Use Rich console to print prompt (handles terminal state better)
-        console.print()  # New line
-        console.print(prompt, end="")
-        console.file.flush()
+        # Print newline first to ensure we're on a fresh line
+        sys.stdout.write("\n")
         sys.stdout.flush()
-        sys.stderr.flush()
     except Exception:
-        # Fallback to standard print if Rich fails
-        try:
-            print("\n" + prompt, end="", flush=True)
-        except Exception:
-            pass
+        pass
     
     try:
-        # Get input from user using standard input (Rich console.input() might interfere)
-        result = input()
+        # Get input from user - pass prompt directly to input() so it displays properly
+        result = input(prompt)
     except (EOFError, KeyboardInterrupt):
         # Handle Ctrl+C or EOF gracefully
         result = ""
@@ -919,7 +913,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         }
         if not _SUPPRESS_OUTPUT:
             cprint("🔍 Dry run: Planned conversion", "info")
-            console.print(summary)
+            # Format summary dict for display
+            summary_str = "\n".join(f"  {k}: {v}" for k, v in summary.items())
+            cprint(f"Summary:\n{summary_str}", "info")
         try:
             _LOG_EVENTS.append({
                 "ts": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1395,9 +1391,9 @@ def process_batch_files(
     batch_elapsed = int(time.time() - batch_start_time)
     status_msg = "interrupted" if _USER_CANCELLED else "complete"
     
-    console.print(f"\n{'='*60}", style="cyan")
+    cprint(f"\n{'='*60}", "info")
     cprint(f"📊 Batch conversion {status_msg}!", "success" if not _USER_CANCELLED else "warning")
-    console.print(f"{'='*60}", style="cyan")
+    cprint(f"{'='*60}", "info")
     
     cprint("\n📈 Processing Summary:", style="bold cyan")
     cprint(f"   Files processed:  {len(video_files)}", "info")
@@ -1434,7 +1430,7 @@ def process_batch_files(
             avg_time = batch_elapsed / files_converted
             cprint(f"   Average: {avg_time:.1f}s per file", "info")
     
-    console.print(f"{'='*60}\n", style="cyan")
+    cprint(f"{'='*60}\n", "info")
     
     # Emit batch summary event for JSON logs
     if total_original_size > 0:
