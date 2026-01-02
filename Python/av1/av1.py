@@ -71,7 +71,7 @@ ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 # Environment variables to tweak behavior without changing CLI:
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
 #   AV1_BITRATE_FALLBACK, AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
-#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH
+#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
 
 def _env_bool(val: str) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
@@ -402,22 +402,36 @@ def check_encoder_support(encoder_name: str) -> bool:
                 # Inspect output for libva ABI / symbol resolution failures
                 stderr = (proc.stderr or "") + (proc.stdout or "")
                 if any(s in stderr for s in ("failed to resolve symbol", "vaMapBuffer2", "libva.so.2", "_libva_so_2_tramp_resolve")):
-                    fallback = "/usr/bin/ffmpeg"
-                    if os.path.exists(fallback) and os.path.isfile(fallback) and fallback != FFMPEG_CMD:
-                        fallback_cmd = [
-                            fallback, "-v", "quiet", "-vaapi_device", vaapi_dev,
-                            "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
-                            "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
-                        ]
-                        try:
-                            proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
-                            if proc2.returncode == 0:
-                                # Switch global ffmpeg to the working distro binary for subsequent operations
-                                FFMPEG_CMD = fallback
-                                cprint("Detected libva ABI mismatch in current ffmpeg; falling back to /usr/bin/ffmpeg.", "warning")
-                                return True
-                        except Exception:
-                            pass
+                    # Check if user wants automatic fallback (default: disabled to prefer PATH ffmpeg)
+                    allow_fallback = _env_bool(os.getenv("AV1_FFMPEG_FALLBACK", "false"))
+                    ignore_warning = _env_bool(os.getenv("AV1_IGNORE_LIBVA_WARNING", "true"))  # Default: try anyway
+                    
+                    if allow_fallback:
+                        fallback = "/usr/bin/ffmpeg"
+                        if os.path.exists(fallback) and os.path.isfile(fallback) and fallback != FFMPEG_CMD:
+                            fallback_cmd = [
+                                fallback, "-v", "quiet", "-vaapi_device", vaapi_dev,
+                                "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                                "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
+                            ]
+                            try:
+                                proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                                if proc2.returncode == 0:
+                                    # Switch global ffmpeg to the working distro binary for subsequent operations
+                                    FFMPEG_CMD = fallback
+                                    cprint("Detected libva ABI mismatch in current ffmpeg; falling back to /usr/bin/ffmpeg.", "warning")
+                                    return True
+                            except Exception:
+                                pass
+                    
+                    # If ignoring warning, try using the encoder anyway (user wants PATH ffmpeg)
+                    if ignore_warning:
+                        cprint("Detected libva ABI mismatch warning, but attempting to use hardware encoder with PATH ffmpeg.", "warning")
+                        cprint("If encoding fails, set AV1_IGNORE_LIBVA_WARNING=false to disable this behavior.", "info")
+                        return True  # Try it anyway - might work despite the warning
+                    else:
+                        cprint("Detected libva ABI mismatch in ffmpeg. Hardware encoding may not work.", "warning")
+                        cprint("Set AV1_IGNORE_LIBVA_WARNING=true to attempt hardware encoding anyway.", "info")
 
                 return False
             except Exception:
