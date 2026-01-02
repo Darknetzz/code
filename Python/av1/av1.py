@@ -314,14 +314,57 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
 # ============================================================================ #
 def safe_input(prompt: str) -> str:
     """
-    Input function that pauses progress bar if active.
+    Input function that pauses progress bar if active and ensures terminal is ready for input.
     """
-    global _PROGRESS_CONTEXT
+    global _PROGRESS_CONTEXT, _SUPPRESS_OUTPUT, console
+    
+    # Stop progress bar if active and ensure it's properly stopped
     if _PROGRESS_CONTEXT:
-        _PROGRESS_CONTEXT.stop()
-    result = input(prompt)
-    if _PROGRESS_CONTEXT:
-        _PROGRESS_CONTEXT.start()
+        try:
+            _PROGRESS_CONTEXT.stop()
+            # Give it a moment to fully stop
+            import time
+            time.sleep(0.1)
+        except Exception:
+            pass
+    
+    # Temporarily disable output suppression to show prompt
+    old_suppress = _SUPPRESS_OUTPUT
+    _SUPPRESS_OUTPUT = False
+    
+    # Ensure we're on a new line and flush all output
+    try:
+        import sys
+        # Use Rich console to print prompt (handles terminal state better)
+        console.print()  # New line
+        console.print(prompt, end="")
+        console.file.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        # Fallback to standard print if Rich fails
+        try:
+            print("\n" + prompt, end="", flush=True)
+        except Exception:
+            pass
+    
+    try:
+        # Get input from user using standard input (Rich console.input() might interfere)
+        result = input()
+    except (EOFError, KeyboardInterrupt):
+        # Handle Ctrl+C or EOF gracefully
+        result = ""
+    finally:
+        # Restore output suppression state
+        _SUPPRESS_OUTPUT = old_suppress
+        
+        # Restart progress bar if it was active
+        if _PROGRESS_CONTEXT:
+            try:
+                _PROGRESS_CONTEXT.start()
+            except Exception:
+                pass
+    
     return result
 
 # ============================================================================ #
