@@ -127,6 +127,39 @@ def _version_callback(value: bool) -> None:
         py_exec = sys.executable
         py_ver = platform.python_version()
         typer.echo(f"{__app_name__} {__version__} — Python: {py_exec} ({py_ver})")
+        
+        # Get ffmpeg version
+        try:
+            global FFMPEG_CMD
+            # Validate ffmpeg path first
+            ffmpeg_ok = shutil.which(FFMPEG_CMD) or (os.path.exists(FFMPEG_CMD) and os.path.isfile(FFMPEG_CMD))
+            if not ffmpeg_ok:
+                path_ffmpeg = shutil.which("ffmpeg")
+                if path_ffmpeg:
+                    FFMPEG_CMD = path_ffmpeg
+            
+            # Get version
+            version_cmd = [FFMPEG_CMD, "-version"]
+            result = subprocess.run(version_cmd, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Parse version from first line (e.g., "ffmpeg version 6.1.1-3ubuntu5" or "ffmpeg version N-122320-g38e89fe502-20260101")
+                first_line = result.stdout.split('\n')[0] if result.stdout else ""
+                if "version" in first_line.lower():
+                    # Extract version string - typically "ffmpeg version X.Y.Z" or "ffmpeg version N-XXXXX"
+                    parts = first_line.split()
+                    if len(parts) >= 3 and parts[0].lower() == "ffmpeg" and parts[1].lower() == "version":
+                        ffmpeg_version = parts[2]
+                        # Shorten git versions (N-122320-g38e89fe502-20260101 -> N-122320)
+                        if ffmpeg_version.startswith("N-") and "-g" in ffmpeg_version:
+                            ffmpeg_version = ffmpeg_version.split("-g")[0]
+                        typer.echo(f"FFmpeg: {FFMPEG_CMD} ({ffmpeg_version})")
+        except Exception:
+            # If we can't get version, just show the path
+            try:
+                typer.echo(f"FFmpeg: {FFMPEG_CMD}")
+            except Exception:
+                pass
+        
         # Attempt to run a lightweight hardware encoder detection and print result.
         try:
             # Use check_ffmpeg to populate ACTIVE_ENCODER; catch failures to avoid exiting.
