@@ -359,6 +359,8 @@ def check_encoder_support(encoder_name: str) -> bool:
     Checks if a specific FFmpeg encoder is usable (drivers installed).
     Uses 720p test to satisfy RDNA3 and newer NVENC requirements.
     """
+    global FFMPEG_CMD
+
     try:
         # Some hardware encoders require additional options to exercise the
         # encoder (for example VAAPI needs a device and hwupload). Build a
@@ -372,6 +374,37 @@ def check_encoder_support(encoder_name: str) -> bool:
                 "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
                 "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
             ]
+
+            try:
+                proc = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                if proc.returncode == 0:
+                    return True
+
+                # If FFmpeg attempted VAAPI but failed due to libva ABI/symbol issues,
+                # try a distro `/usr/bin/ffmpeg` as a fallback (common on Debian/Ubuntu).
+                stderr = (proc.stderr or "") + (proc.stdout or "")
+                if any(s in stderr for s in ("failed to resolve symbol", "vaMapBuffer2", "libva.so.2", "_libva_so_2_tramp_resolve")):
+                    fallback = "/usr/bin/ffmpeg"
+                    if os.path.exists(fallback) and os.path.isfile(fallback) and fallback != FFMPEG_CMD:
+                        fallback_cmd = [
+                            fallback, "-v", "quiet", "-vaapi_device", vaapi_dev,
+                            "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                            "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
+                        ]
+                        try:
+                            proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                            if proc2.returncode == 0:
+                                # Switch global ffmpeg to the working distro binary for subsequent operations
+                                # global FFMPEG_CMD
+                                FFMPEG_CMD = fallback
+                                cprint("Detected libva ABI mismatch in current ffmpeg; falling back to /usr/bin/ffmpeg.", "warning")
+                                return True
+                        except Exception:
+                            pass
+
+                return False
+            except Exception:
+                return False
         else:
             # Default test (works for NVENC/AMF/CPU encoders)
             cmd = [
@@ -380,7 +413,10 @@ def check_encoder_support(encoder_name: str) -> bool:
                 "-c:v", encoder_name, "-f", "null", "-"
             ]
 
-        return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
+            try:
+                return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
+            except Exception:
+                return False
     except Exception:
         return False
 
