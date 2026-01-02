@@ -360,12 +360,26 @@ def check_encoder_support(encoder_name: str) -> bool:
     Uses 720p test to satisfy RDNA3 and newer NVENC requirements.
     """
     try:
-        # Use 720p test to satisfy RDNA3 and newer NVENC requirements
-        cmd = [
-            FFMPEG_CMD, "-v", "quiet", "-f", "lavfi",
-            "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
-            "-c:v", encoder_name, "-f", "null", "-"
-        ]
+        # Some hardware encoders require additional options to exercise the
+        # encoder (for example VAAPI needs a device and hwupload). Build a
+        # slightly different test command depending on encoder type.
+        duration = "0.5"
+        if "vaapi" in encoder_name:
+            # VAAPI typically needs the vaapi device and a hwupload stage
+            vaapi_dev = os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")
+            cmd = [
+                FFMPEG_CMD, "-v", "quiet", "-vaapi_device", vaapi_dev,
+                "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
+            ]
+        else:
+            # Default test (works for NVENC/AMF/CPU encoders)
+            cmd = [
+                FFMPEG_CMD, "-v", "quiet", "-f", "lavfi",
+                "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                "-c:v", encoder_name, "-f", "null", "-"
+            ]
+
         return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
     except Exception:
         return False
