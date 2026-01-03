@@ -71,7 +71,7 @@ ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 # Environment variables to tweak behavior without changing CLI:
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
 #   AV1_BITRATE_FALLBACK, AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
-#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH
+#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
 
 def _env_bool(val: str) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
@@ -124,8 +124,63 @@ _NO_PROMPT = False  # Suppress interactive prompts
 def _version_callback(value: bool) -> None:
     """Display version and exit."""
     if value:
+        py_exec = sys.executable
+        py_ver = platform.python_version()
         typer.echo(f"{__app_name__} {__version__}")
-        raise typer.Exit()
+        typer.echo(f"Python: {py_exec} ({py_ver})")
+        
+        # Get ffmpeg version
+        try:
+            global FFMPEG_CMD
+            # Validate ffmpeg path first
+            ffmpeg_ok = shutil.which(FFMPEG_CMD) or (os.path.exists(FFMPEG_CMD) and os.path.isfile(FFMPEG_CMD))
+            if not ffmpeg_ok:
+                path_ffmpeg = shutil.which("ffmpeg")
+                if path_ffmpeg:
+                    FFMPEG_CMD = path_ffmpeg
+            
+            # Get version
+            version_cmd = [FFMPEG_CMD, "-version"]
+            result = subprocess.run(version_cmd, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Parse version from first line (e.g., "ffmpeg version 6.1.1-3ubuntu5" or "ffmpeg version N-122320-g38e89fe502-20260101")
+                first_line = result.stdout.split('\n')[0] if result.stdout else ""
+                if "version" in first_line.lower():
+                    # Extract version string - typically "ffmpeg version X.Y.Z" or "ffmpeg version N-XXXXX"
+                    parts = first_line.split()
+                    if len(parts) >= 3 and parts[0].lower() == "ffmpeg" and parts[1].lower() == "version":
+                        ffmpeg_version = parts[2]
+                        # Shorten git versions (N-122320-g38e89fe502-20260101 -> N-122320)
+                        if ffmpeg_version.startswith("N-") and "-g" in ffmpeg_version:
+                            ffmpeg_version = ffmpeg_version.split("-g")[0]
+                        typer.echo(f"FFmpeg: {FFMPEG_CMD} ({ffmpeg_version})")
+        except Exception:
+            # If we can't get version, just show the path
+            try:
+                typer.echo(f"FFmpeg: {FFMPEG_CMD}")
+            except Exception:
+                pass
+        
+        # Attempt to run a lightweight hardware encoder detection and print result.
+        try:
+            # Use check_ffmpeg to populate ACTIVE_ENCODER; catch failures to avoid exiting.
+            try:
+                check_ffmpeg()
+            except Exception:
+                # If check_ffmpeg raised (missing ffmpeg/ffprobe or other), report and continue
+                cprint("⚠️  Could not run encoder detection (ffmpeg/ffprobe missing or check failed).", "warning")
+
+            # Print detected encoder summary
+            try:
+                enc = ACTIVE_ENCODER.get("encoder") if isinstance(ACTIVE_ENCODER, dict) else None
+                hw = ACTIVE_ENCODER.get("hw_type") if isinstance(ACTIVE_ENCODER, dict) else None
+                if enc:
+                    typer.echo(f"Detected encoder: {enc} (type: {hw})")
+            except Exception:
+                pass
+
+        finally:
+            raise typer.Exit()
 
 
 def _show_examples() -> None:
@@ -144,7 +199,7 @@ def _show_examples() -> None:
       • Press Ctrl+C once to finish current file and exit gracefully
       • Use -h or --help for complete option list
     """
-    console.print(examples)
+    cprint(examples, "info")
 
 
 def _format_saved(bytes_amount: float) -> str:
@@ -251,6 +306,7 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
 def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
+    timestamp = time.strftime('%H:%M:%S')
     prefix = ""
     style  = ""
     type   = type.lower()
@@ -268,7 +324,7 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
         style = "green"
         prefix = "✅"
 
-    message = f"{prefix}  {message}"
+    message = f"[{timestamp}] {prefix}  {message}"
     
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
     if not _SUPPRESS_OUTPUT:
@@ -293,14 +349,74 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
 # ============================================================================ #
 def safe_input(prompt: str) -> str:
     """
-    Input function that pauses progress bar if active.
+    Input function that pauses progress bar if active and ensures terminal is ready for input.
     """
-    global _PROGRESS_CONTEXT
+    global _PROGRESS_CONTEXT, _SUPPRESS_OUTPUT, console
+    
+    # Stop progress bar if active and ensure it's properly stopped
     if _PROGRESS_CONTEXT:
-        _PROGRESS_CONTEXT.stop()
-    result = input(prompt)
-    if _PROGRESS_CONTEXT:
-        _PROGRESS_CONTEXT.start()
+        try:
+            _PROGRESS_CONTEXT.stop()
+            # Give it a moment to fully stop and restore terminal
+            import time
+            time.sleep(0.2)
+            # Ensure console is ready for input
+            try:
+                console.show_cursor()
+            except Exception:
+                pass
+        except Exception:
+            pass
+    
+    # Temporarily disable output suppression to show prompt
+    old_suppress = _SUPPRESS_OUTPUT
+    _SUPPRESS_OUTPUT = False
+    
+    # Ensure we're on a new line and flush all output
+    try:
+        import sys
+        # Print newline first to ensure we're on a fresh line
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # Ensure stdin is in the right mode
+        if hasattr(sys.stdin, 'fileno'):
+            try:
+                import termios
+                import tty
+                # Save terminal settings
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                # Set terminal to normal mode
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except (ImportError, OSError, AttributeError):
+                # Not a TTY or Windows - that's okay
+                pass
+    except Exception:
+        pass
+    
+    try:
+        # Use Rich console.input() which handles terminal state better
+        # But fallback to standard input() if that fails
+        try:
+            result = console.input(prompt)
+        except (AttributeError, Exception):
+            # Fallback to standard input
+            result = input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        # Handle Ctrl+C or EOF gracefully
+        result = ""
+    finally:
+        # Restore output suppression state
+        _SUPPRESS_OUTPUT = old_suppress
+        
+        # Restart progress bar if it was active
+        if _PROGRESS_CONTEXT:
+            try:
+                _PROGRESS_CONTEXT.start()
+            except Exception:
+                pass
+    
     return result
 
 # ============================================================================ #
@@ -357,14 +473,81 @@ def check_encoder_support(encoder_name: str) -> bool:
     Checks if a specific FFmpeg encoder is usable (drivers installed).
     Uses 720p test to satisfy RDNA3 and newer NVENC requirements.
     """
+    global FFMPEG_CMD
+
     try:
-        # Use 720p test to satisfy RDNA3 and newer NVENC requirements
-        cmd = [
-            FFMPEG_CMD, "-v", "quiet", "-f", "lavfi",
-            "-i", "testsrc=size=1280x720:rate=30:duration=0.1",
-            "-c:v", encoder_name, "-f", "null", "-"
-        ]
-        return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
+        # Some hardware encoders require additional options to exercise the
+        # encoder (for example VAAPI needs a device and hwupload). Build a
+        # slightly different test command depending on encoder type.
+        duration = "0.5"
+        if "vaapi" in encoder_name:
+            # VAAPI typically needs the vaapi device and a hwupload stage
+            vaapi_dev = os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")
+            cmd = [
+                FFMPEG_CMD, "-v", "quiet", "-vaapi_device", vaapi_dev,
+                "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
+            ]
+
+            try:
+                proc = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                if proc.returncode == 0:
+                    return True
+
+                # Inspect output for libva ABI / symbol resolution failures
+                stderr = (proc.stderr or "") + (proc.stdout or "")
+                if any(s in stderr for s in ("failed to resolve symbol", "vaMapBuffer2", "libva.so.2", "_libva_so_2_tramp_resolve")):
+                    # Check if user wants automatic fallback (default: auto-detect for hardware encoding)
+                    fallback_env = os.getenv("AV1_FFMPEG_FALLBACK", "auto")
+                    allow_fallback = _env_bool(fallback_env) if fallback_env != "auto" else None
+                    ignore_warning = _env_bool(os.getenv("AV1_IGNORE_LIBVA_WARNING", "true"))  # Default: try anyway
+                    
+                    # Auto-fallback: try system ffmpeg for hardware encoding if PATH ffmpeg has libva issues
+                    should_try_fallback = (allow_fallback is True) or (fallback_env == "auto" and encoder_name.endswith("_vaapi"))
+                    
+                    if should_try_fallback:
+                        fallback = "/usr/bin/ffmpeg"
+                        if os.path.exists(fallback) and os.path.isfile(fallback) and fallback != FFMPEG_CMD:
+                            fallback_cmd = [
+                                fallback, "-v", "quiet", "-vaapi_device", vaapi_dev,
+                                "-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                                "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
+                            ]
+                            try:
+                                proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                                if proc2.returncode == 0:
+                                    # Switch global ffmpeg to the working distro binary for hardware encoding
+                                    FFMPEG_CMD = fallback
+                                    cprint("Detected libva ABI mismatch in PATH ffmpeg; using system ffmpeg for hardware encoding.", "warning")
+                                    cprint("(PATH ffmpeg will still be used for CPU encoding if needed)", "info")
+                                    return True
+                            except Exception:
+                                pass
+                    
+                    # If ignoring warning, try using the encoder anyway (user wants PATH ffmpeg)
+                    if ignore_warning:
+                        cprint("Detected libva ABI mismatch warning, but attempting to use hardware encoder with PATH ffmpeg.", "warning")
+                        cprint("If encoding fails, set AV1_FFMPEG_FALLBACK=auto to automatically use system ffmpeg for hardware encoding.", "info")
+                        return True  # Try it anyway - might work despite the warning
+                    else:
+                        cprint("Detected libva ABI mismatch in ffmpeg. Hardware encoding may not work.", "warning")
+                        cprint("Set AV1_FFMPEG_FALLBACK=auto to automatically use system ffmpeg for hardware encoding.", "info")
+
+                return False
+            except Exception:
+                return False
+        else:
+            # Default test (works for NVENC/AMF/CPU encoders)
+            cmd = [
+                FFMPEG_CMD, "-v", "quiet", "-f", "lavfi",
+                "-i", f"testsrc=size=1280x720:rate=30:duration={duration}",
+                "-c:v", encoder_name, "-f", "null", "-"
+            ]
+
+            try:
+                return subprocess.run(cmd, check=False, timeout=ENCODER_TEST_TIMEOUT).returncode == 0
+            except Exception:
+                return False
     except Exception:
         return False
 
@@ -564,6 +747,10 @@ def check_disk_space(file_path: str, output_dir: str) -> bool:
         file_size = os.path.getsize(file_path)
         required_space = int(file_size * DISK_SPACE_SAFETY_MARGIN)
         
+        # Handle empty string or None output_dir
+        if not output_dir:
+            output_dir = os.getcwd()
+        
         stat = shutil.disk_usage(output_dir)
         if stat.free < required_space:
             cprint(f"Insufficient disk space. Need {required_space / (1024**3):.2f} GB, have {stat.free / (1024**3):.2f} GB", "error")
@@ -609,6 +796,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     """
+    global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
     
 
@@ -633,7 +821,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
     if output_dir is None:
-        output_dir = os.path.dirname(input_path)
+        output_dir = os.path.dirname(input_path) or os.getcwd()
         # When staying in same dir, add suffix to avoid collision during encoding
         suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
@@ -689,11 +877,25 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     else:
         pix_fmt = "nv12"  # NVIDIA/AMD default
     
-    command = [
-        FFMPEG_CMD, "-y", "-i", input_path,
-        "-vf", f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}",
-        "-movflags", "+faststart",
-    ]
+    command = [FFMPEG_CMD, "-y"]
+    
+    # VAAPI requires device specification before input
+    if ACTIVE_ENCODER["hw_type"] == "vaapi":
+        vaapi_dev = os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")
+        command.extend(["-vaapi_device", vaapi_dev])
+    
+    command.extend(["-i", input_path])
+    
+    # Build filter chain - VAAPI needs hwupload after format conversion
+    if ACTIVE_ENCODER["hw_type"] == "vaapi":
+        # VAAPI: scale -> format -> hwupload (upload to hardware)
+        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+    else:
+        # Other encoders: just scale and format
+        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+    
+    command.extend(["-vf", filter_chain])
+    command.extend(["-movflags", "+faststart"])
 
     # --- ENCODER SPECIFIC SETTINGS ---
     encoder_name = ACTIVE_ENCODER["encoder"]
@@ -732,8 +934,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         
     else:
         # CPU (SVT-AV1)
+        # SVT-AV1 uses different bitrate control - use only -b:v, not -maxrate/-bufsize
         command.extend(["-preset", "8", "-g", "240"])
-        command.extend(bitrate_args)
+        # Use only target bitrate for CPU encoder (SVT-AV1 handles rate control internally)
+        command.extend(["-b:v", str(target_bitrate_int)])
 
     # Audio: Copy or convert to Opus
     # Preserve multi-channel audio if present, otherwise use stereo
@@ -742,6 +946,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     if not _SUPPRESS_OUTPUT:
         cprint(f"🎬 Converting: {filename}", "info")
         cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
+        # Show ffmpeg path for debugging
+        if os.getenv("AV1_DEBUG"):
+            cprint(f"   FFmpeg: {FFMPEG_CMD}", "info")
+            cprint(f"   Command: {' '.join(command)}", "info")
     # Initialize per-file event context
     file_event = {
         "file": input_path,
@@ -763,7 +971,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         }
         if not _SUPPRESS_OUTPUT:
             cprint("🔍 Dry run: Planned conversion", "info")
-            console.print(summary)
+            # Format summary dict for display
+            summary_str = "\n".join(f"  {k}: {v}" for k, v in summary.items())
+            cprint(f"Summary:\n{summary_str}", "info")
         try:
             _LOG_EVENTS.append({
                 "ts": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -785,6 +995,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     except (subprocess.TimeoutExpired, ValueError, subprocess.SubprocessError) as e:
         cprint(f"Could not determine video duration: {e}", "warning")
         total_duration = None
+    
+    # Collect output for error reporting
+    error_lines = []
     
     try:
         # Run ffmpeg with progress tracking
@@ -809,6 +1022,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             
             try:
                 for line in process.stdout:
+                    # Collect error lines (typically contain "error", "Error", "failed", etc.)
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
+                    
                     # Parse ffmpeg progress output
                     time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
                     fps_match = re.search(r'fps=\s*(\d+\.?\d*)', line)
@@ -858,8 +1076,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 saved="",
             )
             try:
-                for _ in process.stdout:
-                    pass
+                for line in process.stdout:
+                    # Collect error lines
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
                 process.wait()
             finally:
                 if file_task is not None:
@@ -868,7 +1089,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             # No progress context, just consume output
             if process.stdout:
                 for line in process.stdout:
-                    pass
+                    # Collect error lines
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                        error_lines.append(line.strip())
             process.wait()
         
         result = process
@@ -953,6 +1177,120 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             cprint(f"❌ Error swapping files: {e}", "error")
     else:
         cprint(f"❌ Conversion failed (exit code: {result.returncode})", "error")
+        # Show relevant error messages from ffmpeg output
+        if error_lines:
+            # Show last few error lines (most relevant are usually at the end)
+            relevant_errors = error_lines[-5:] if len(error_lines) > 5 else error_lines
+            cprint("FFmpeg error output:", "error")
+            for err_line in relevant_errors:
+                if err_line:  # Skip empty lines
+                    cprint(f"   {err_line}", "error")
+            
+            # Check for libva ABI mismatch errors and provide guidance/retry
+            # Only check for libva errors if we're using a hardware encoder (vaapi specifically)
+            error_text = " ".join(error_lines).lower()
+            is_hardware_encoder = ACTIVE_ENCODER["hw_type"] in ("vaapi", "nvidia", "amd")
+            
+            # More specific libva indicators - these are libva-specific errors
+            libva_specific_indicators = [
+                "failed to resolve symbol", "vamapbuffer2", "libva.so", 
+                "error reinitializing filters", "function not implemented"
+            ]
+            # Only consider it a libva error if:
+            # 1. We're using hardware encoding (especially vaapi)
+            # 2. AND we see libva-specific error messages
+            is_libva_error = (is_hardware_encoder and 
+                            ACTIVE_ENCODER["hw_type"] == "vaapi" and
+                            any(indicator in error_text for indicator in libva_specific_indicators))
+            
+            if is_libva_error:
+                cprint("\n⚠️  Hardware encoding failed due to libva ABI mismatch with PATH ffmpeg.", "warning")
+                
+                # Try system ffmpeg for hardware encoding if auto-fallback is enabled
+                fallback_env = os.getenv("AV1_FFMPEG_FALLBACK", "auto")
+                should_try_system_ffmpeg = (fallback_env == "auto" or _env_bool(fallback_env))
+                
+                if should_try_system_ffmpeg and ACTIVE_ENCODER["hw_type"] != "cpu" and FFMPEG_CMD != "/usr/bin/ffmpeg":
+                    system_ffmpeg = "/usr/bin/ffmpeg"
+                    if os.path.exists(system_ffmpeg):
+                        cprint("🔄 Retrying hardware encoding with system ffmpeg (compatible with libva)...", "info")
+                        original_ffmpeg = FFMPEG_CMD
+                        FFMPEG_CMD = system_ffmpeg
+                        
+                        # Clean up failed temp file
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception:
+                                pass
+                        
+                        # Retry with system ffmpeg
+                        try:
+                            result = convert_single_file(
+                                input_path, output_dir, bitrate, delete_original, 
+                                overwrite, dry_run, keep_mkv, show_progress
+                            )
+                            # Keep system ffmpeg for this session (hardware encoding works)
+                            return result
+                        except Exception as e:
+                            # Restore PATH ffmpeg on failure
+                            FFMPEG_CMD = original_ffmpeg
+                            raise
+                
+                # Auto-retry with CPU encoding if hardware encoding failed (still using PATH ffmpeg)
+                if ACTIVE_ENCODER["hw_type"] != "cpu":
+                    cprint("🔄 Automatically retrying with CPU encoding (still using PATH ffmpeg)...", "info")
+                    
+                    # Save original encoder first
+                    original_encoder = ACTIVE_ENCODER.copy()
+                    
+                    # Verify CPU encoder is available before retrying
+                    if not check_encoder_support("libsvtav1"):
+                        cprint("❌ CPU encoder (libsvtav1) not available in PATH ffmpeg.", "error")
+                        cprint("   Your PATH ffmpeg may not have libsvtav1 support compiled in.", "warning")
+                        cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
+                        # Restore original encoder
+                        ACTIVE_ENCODER = original_encoder
+                    else:
+                        # Switch to CPU temporarily
+                        ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+                        
+                        # Clean up failed temp file
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception:
+                                pass
+                        
+                        # Retry conversion with CPU encoder
+                        try:
+                            result = convert_single_file(
+                                input_path, output_dir, bitrate, delete_original, 
+                                overwrite, dry_run, keep_mkv, show_progress
+                            )
+                            # Restore original encoder after retry
+                            ACTIVE_ENCODER = original_encoder
+                            return result
+                        except Exception as e:
+                            # Restore original encoder even on exception
+                            ACTIVE_ENCODER = original_encoder
+                            raise
+                else:
+                    cprint("   Solutions:", "info")
+                    cprint("   1. Use system ffmpeg: Set AV1_FFMPEG_FALLBACK=true", "info")
+                    cprint("   2. Fix libva compatibility: Update libva libraries to match your ffmpeg build", "info")
+            elif ACTIVE_ENCODER["hw_type"] == "cpu":
+                # CPU encoding failure - different issue, not libva
+                cprint("\n⚠️  CPU encoding failed. This may indicate an issue with:", "warning")
+                cprint("   • FFmpeg build compatibility", "info")
+                cprint("   • Input file format/corruption", "info")
+                cprint("   • Missing codec support (libsvtav1)", "info")
+                cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
+            else:
+                # Other hardware encoding failure (not libva)
+                cprint("\n⚠️  Hardware encoding failed (non-libva error).", "warning")
+                cprint("   Try: Set AV1_FFMPEG_FALLBACK=true to use system ffmpeg", "info")
+        
         if os.path.exists(temp_output):
             try:
                 os.remove(temp_output)
@@ -1111,9 +1449,9 @@ def process_batch_files(
     batch_elapsed = int(time.time() - batch_start_time)
     status_msg = "interrupted" if _USER_CANCELLED else "complete"
     
-    console.print(f"\n{'='*60}", style="cyan")
+    cprint(f"\n{'='*60}", "info")
     cprint(f"📊 Batch conversion {status_msg}!", "success" if not _USER_CANCELLED else "warning")
-    console.print(f"{'='*60}", style="cyan")
+    cprint(f"{'='*60}", "info")
     
     cprint("\n📈 Processing Summary:", style="bold cyan")
     cprint(f"   Files processed:  {len(video_files)}", "info")
@@ -1150,7 +1488,7 @@ def process_batch_files(
             avg_time = batch_elapsed / files_converted
             cprint(f"   Average: {avg_time:.1f}s per file", "info")
     
-    console.print(f"{'='*60}\n", style="cyan")
+    cprint(f"{'='*60}\n", "info")
     
     # Emit batch summary event for JSON logs
     if total_original_size > 0:
@@ -1240,20 +1578,20 @@ def convert_videos(
 @app.command()
 def main(
     input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4') - see README.md for examples"),
-    output_dir: Optional[str] = typer.Option(None, help="Output dir"),
-    bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)"),
-    delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion"),
-    overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Overwrite existing output files"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show planned actions without converting"),
-    recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively"),
-    keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename"),
-    log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', 'json', or 'none'"),
-    log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: %TEMP%/av1-logs)"),
-    ffmpeg: Optional[str] = typer.Option(None, "--ffmpeg", help="Path to ffmpeg executable (overrides env)"),
-    ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)"),
-    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
-    no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)"),
-    parallel: int = typer.Option(1, "--parallel", "-j", help="Number of files to process simultaneously (GPU: 2-4 recommended, CPU: 1)"),
+    output_dir: Optional[str] = typer.Option(None, help="Output dir", rich_help_panel="Input/Output"),
+    bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)", rich_help_panel="Input/Output"),
+    delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion", rich_help_panel="File Handling"),
+    overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Overwrite existing output files", rich_help_panel="File Handling"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show planned actions without converting", rich_help_panel="File Handling"),
+    recursive: bool = typer.Option(False, "-r", "--recursive", help="Process subdirectories recursively", rich_help_panel="File Handling"),
+    keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep .mkv extension instead of matching original filename", rich_help_panel="File Handling"),
+    log_type: str = typer.Option("txt", "--log-type", help="Log type: 'txt', 'html', 'json', or 'none'", rich_help_panel="Logging"),
+    log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: %TEMP%/av1-logs)", rich_help_panel="Logging"),
+    ffmpeg: Optional[str] = typer.Option(None, "--ffmpeg", help="Path to ffmpeg executable (overrides env)", rich_help_panel="FFmpeg"),
+    ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)", rich_help_panel="FFmpeg"),
+    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output", rich_help_panel="Display"),
+    no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)", rich_help_panel="Display"),
+    parallel: int = typer.Option(1, "--parallel", "-j", help="Number of files to process simultaneously (GPU: 2-4 recommended, CPU: 1)", rich_help_panel="Performance"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -1389,4 +1727,16 @@ def main(
         _save_log(log_type, resolved_log_dir)
 
 if __name__ == "__main__":
-    app()
+    try:
+        app()
+    finally:
+        # Best-effort terminal restore: show cursor and reset terminal state.
+        try:
+            console.show_cursor()
+        except Exception:
+            pass
+        try:
+            # Ensure echo/icanon etc. are restored for shells that lost input visibility
+            os.system("stty sane")
+        except Exception:
+            pass

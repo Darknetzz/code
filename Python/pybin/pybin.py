@@ -3,10 +3,37 @@ import subprocess
 import shutil
 from pathlib import Path
 from rich.console import Console
-
+import time
 app = typer.Typer()
 console = Console()
 
+# ============================================================================ #
+#                               FUNCTION: cprint                               #
+# ============================================================================ #
+def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
+    prefix = f"[{time.now().strftime('%H:%M:%S')}]"
+    style  = ""
+    type   = type.lower()
+    
+    if type == "error":
+        style = "red"
+        prefix = "❌"
+    elif type == "warning":
+        style = "yellow"
+        prefix = "⚠️"
+    elif type == "info":
+        style = "blue"
+        prefix = "ℹ️"
+    elif type == "success":
+        style = "green"
+        prefix = "✅"
+    message = f"{prefix}  {message}"
+    console.print(message, style=style, **kwargs)
+
+
+# ============================================================================ #
+#                                FUNCTION: main                                #
+# ============================================================================ #
 @app.command()
 def main(
     file: Path = typer.Argument(..., help="Python file to process"),
@@ -89,7 +116,8 @@ def main(
         # Only show message if user explicitly set --keep-spec but no spec was generated
         pass
     
-    console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}.exe[/cyan]", style="bold")
+    ext = file.suffix if file.suffix else ""
+    console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}{ext}[/cyan]", style="bold")
 
 
 
