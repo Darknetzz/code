@@ -382,13 +382,18 @@ def safe_input(prompt: str) -> str:
         # Ensure stdin is in the right mode
         if hasattr(sys.stdin, 'fileno'):
             try:
-                import termios
-                import tty
-                # Save terminal settings
-                fd = sys.stdin.fileno()
-                old_settings = termios.tcgetattr(fd)
-                # Set terminal to normal mode
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                import importlib
+                import importlib.util as importlib_util
+                # Dynamically check for the POSIX-only `termios` module to appease type checkers
+                if importlib_util.find_spec("termios") is not None:
+                    termios = importlib.import_module("termios")
+                    fd = sys.stdin.fileno()
+                    tcget = getattr(termios, "tcgetattr", None)
+                    tcset = getattr(termios, "tcsetattr", None)
+                    tcsadrain = getattr(termios, "TCSADRAIN", None)
+                    if callable(tcget) and callable(tcset) and tcsadrain is not None:
+                        old_settings = tcget(fd)
+                        tcset(fd, tcsadrain, old_settings)
             except (ImportError, OSError, AttributeError):
                 # Not a TTY or Windows - that's okay
                 pass
@@ -1232,7 +1237,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                             )
                             # Keep system ffmpeg for this session (hardware encoding works)
                             return result
-                        except Exception as e:
+                        except Exception:
                             # Restore PATH ffmpeg on failure
                             FFMPEG_CMD = original_ffmpeg
                             raise
@@ -1271,7 +1276,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                             # Restore original encoder after retry
                             ACTIVE_ENCODER = original_encoder
                             return result
-                        except Exception as e:
+                        except Exception:
                             # Restore original encoder even on exception
                             ACTIVE_ENCODER = original_encoder
                             raise
@@ -1737,6 +1742,9 @@ if __name__ == "__main__":
             pass
         try:
             # Ensure echo/icanon etc. are restored for shells that lost input visibility
-            os.system("stty sane")
+            # Only invoke `stty` if it's present on the system (Windows typically lacks it).
+            import shutil
+            if shutil.which("stty"):
+                os.system("stty sane")
         except Exception:
             pass
