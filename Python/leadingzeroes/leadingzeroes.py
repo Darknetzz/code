@@ -962,4 +962,20 @@ def run_search(
 
 
 if __name__ == "__main__":
+    # Required for PyInstaller/frozen executables with multiprocessing
+    multiprocessing.freeze_support()
+    
+    # Filter out PyInstaller's injected multiprocessing option if present
+    # (PyInstaller may inject --multiprocessing-fork which Typer doesn't recognize)
+    if '--multiprocessing-fork' in sys.argv:
+        sys.argv.remove('--multiprocessing-fork')
+    
+    # Set multiprocessing start method (spawn is default on Windows, required for PyInstaller)
+    if sys.platform == 'win32':
+        try:
+            multiprocessing.set_start_method('spawn', force=True)
+        except RuntimeError:
+            # Start method already set, ignore
+            pass
+    
     app()
