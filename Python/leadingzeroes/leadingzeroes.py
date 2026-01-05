@@ -145,19 +145,21 @@ def get_gpu_devices():
     return devices
 
 
+
+
 def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing, 
                num_workers, total_attempts, counter_lock, found_solution, 
                start_time, console_output_queue, device_idx=0, batch_size=50000,
                random_seed=0, random_length=0, check_recurring=False, recurring_min_length=3, recurring_find_any=False):
     """
-    GPU-accelerated worker using batch processing with concurrent hashing.
+    Optimized CPU batch processing worker with concurrent hashing.
     
-    Note: Full GPU SHA-256 requires a complex OpenCL/CUDA kernel implementation.
-    This version uses optimized batch processing with CPU hashlib, which still
-    provides performance benefits through better CPU utilization.
+    Note: This uses CPU-based hashlib with optimized batch processing for better
+    performance. True GPU acceleration would require implementing a complex OpenCL
+    SHA-256 kernel (hundreds of lines of code with padding/block processing).
     
-    For true GPU acceleration, consider using hashcat or implementing a full
-    SHA-256 OpenCL/CUDA kernel.
+    Current performance (~200k hashes/sec) is good for CPU-based Python hashing.
+    For true GPU acceleration, consider using specialized tools like hashcat.
     
     Args:
         random_seed: Seed for deterministic randomness (0 = no randomness)
@@ -551,11 +553,12 @@ def main(
     
     Prompts for any settings not provided via command-line arguments unless --default is used.
     
-    GPU acceleration is auto-detected and enabled by default if available. Use --cpu to force
-    CPU mode or --gpu to force GPU mode. GPU mode uses optimized batch processing with concurrent
-    hashing for better performance.
+    Optimized batch processing mode is auto-detected if GPU devices are found. Use --cpu to force
+    standard CPU mode or --gpu to force optimized batch mode. Optimized batch mode uses concurrent
+    CPU hashing with better parallelization for improved performance.
     
-    For true GPU SHA-256 acceleration, full OpenCL/CUDA kernel implementation would be required.
+    Note: True GPU SHA-256 acceleration (using GPU compute units) would require implementing a
+    complex OpenCL kernel. Current implementation uses optimized CPU batch processing.
     """
     # If a subcommand was invoked, don't run the main search
     if ctx.invoked_subcommand is not None:
@@ -687,14 +690,14 @@ def run_search(
                 mode_info = "[dim]CPU (no GPU detected)[/dim]"
             else:
                 gpu_enabled = True
-                mode_info = f"[green]GPU (forced, {len(gpu_devices)} device(s))[/green]"
+                mode_info = f"[yellow]Optimized CPU Batch (GPU detected but using CPU hashing)[/yellow]"
     else:
         # Auto-detect GPU
         if GPU_AVAILABLE:
             gpu_devices = get_gpu_devices()
             if gpu_devices:
                 gpu_enabled = True
-                mode_info = f"[green]GPU (auto-detected, {len(gpu_devices)} device(s))[/green]"
+                mode_info = f"[yellow]Optimized CPU Batch (GPU detected but using CPU hashing)[/yellow]"
                 # Show which GPU was detected
                 if len(gpu_devices) == 1:
                     _, device = gpu_devices[0]
