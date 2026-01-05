@@ -544,7 +544,7 @@ def main(
     use_gpu: bool = typer.Option(False, "--gpu", help="Force GPU acceleration (overrides auto-detection)"),
     force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU mode (disable GPU acceleration)"),
     random_seed: Optional[int] = typer.Option(None, "--random-seed", "-r", help="Seed for deterministic randomness (0 = disabled, default: auto-generate)"),
-    random_length: Optional[int] = typer.Option(None, "--random-length", "-l", help="Number of random hex characters to append to input (default: 16)")
+    random_length: Optional[int] = typer.Option(None, "--random-length", "-l", help="Enable randomness and append N hex characters to input (disabled by default)")
 ):
     """
     Find a hash with leading or trailing zeroes using parallel processing.
@@ -646,7 +646,7 @@ def run_search(
         if random_seed is None:
             # Use a timestamp-based seed for reproducibility if desired, or use secrets for true randomness
             final_random_seed = secrets.randbits(64)  # 64-bit random seed
-            console.print(f"[dim]Generated random seed: {final_random_seed}[/dim]")
+            console.print(f"[cyan]Generated random seed: {final_random_seed}[/cyan]")
         else:
             final_random_seed = random_seed
     elif random_seed is not None:
