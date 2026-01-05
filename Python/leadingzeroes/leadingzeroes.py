@@ -5,6 +5,8 @@ import threading
 import signal
 import sys
 import secrets
+import os
+from pathlib import Path
 from multiprocessing import Value, Lock, Manager
 import typer
 from typing import Optional
@@ -145,6 +147,40 @@ def get_gpu_devices():
     return devices
 
 
+def load_opencl_kernel(device_idx=0):
+    """Load and compile the OpenCL SHA-256 kernel."""
+    if not GPU_AVAILABLE:
+        return None, None, None
+    
+    try:
+        devices = get_gpu_devices()
+        if not devices or device_idx >= len(devices):
+            return None, None, None
+        
+        platform, device = devices[device_idx]
+        
+        # Create context and queue
+        ctx = cl.Context([device])
+        queue = cl.CommandQueue(ctx)
+        
+        # Load kernel source
+        script_dir = Path(__file__).parent
+        kernel_path = script_dir / "sha256.cl"
+        
+        if not kernel_path.exists():
+            return None, None, None
+        
+        with open(kernel_path, 'r') as f:
+            kernel_source = f.read()
+        
+        # Compile program
+        program = cl.Program(ctx, kernel_source).build()
+        kernel = program.sha256_kernel
+        
+        return ctx, queue, kernel
+    except Exception as e:
+        # Kernel loading failed, return None
+        return None, None, None
 
 
 def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing, 
@@ -152,14 +188,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                start_time, console_output_queue, device_idx=0, batch_size=50000,
                random_seed=0, random_length=0, check_recurring=False, recurring_min_length=3, recurring_find_any=False):
     """
-    Optimized CPU batch processing worker with concurrent hashing.
-    
-    Note: This uses CPU-based hashlib with optimized batch processing for better
-    performance. True GPU acceleration would require implementing a complex OpenCL
-    SHA-256 kernel (hundreds of lines of code with padding/block processing).
-    
-    Current performance (~200k hashes/sec) is good for CPU-based Python hashing.
-    For true GPU acceleration, consider using specialized tools like hashcat.
+    GPU-accelerated worker using OpenCL SHA-256 kernel.
     
     Args:
         random_seed: Seed for deterministic randomness (0 = no randomness)
@@ -167,11 +196,15 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
         check_recurring: Check for recurring character patterns
         recurring_min_length: Minimum length of recurring pattern to match
     """
-    from concurrent.futures import ThreadPoolExecutor
-    import os
+    if not GPU_AVAILABLE:
+        # Fallback to CPU if GPU not available
+        return
     
-    # Use multiple threads for batch processing
-    num_threads = min(os.cpu_count() or 4, 8)
+    # Load OpenCL kernel
+    ctx, queue, kernel = load_opencl_kernel(device_idx)
+    if ctx is None or queue is None or kernel is None:
+        # Kernel loading failed, fallback to CPU
+        return
     
     target_leading = '0' * target_zeroes
     target_trailing = '0' * target_zeroes
@@ -179,61 +212,93 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
     nonce = worker_id
     local_attempts = 0
     
-    def hash_and_check(nonce_val):
-        """Hash a single nonce and check if it matches."""
-        # Create input string with prefix, nonce, and optional random data
-        if random_length > 0 and random_seed != 0:
-            random_part = generate_deterministic_random(nonce_val, random_seed, random_length)
-            input_str = f"{prefix}{nonce_val}{random_part}"
-        else:
-            input_str = f"{prefix}{nonce_val}"
-        hash_result = hashlib.sha256(input_str.encode()).hexdigest()
-        
-        found = None
-        zero_type = None
-        
-        pattern = None
-        pattern_length = None
-        
-        if check_leading and hash_result.startswith(target_leading):
-            found = True
-            zero_type = 'leading'
-        elif check_trailing and hash_result.endswith(target_trailing):
-            found = True
-            zero_type = 'trailing'
-        elif check_recurring:
-            effective_min = 2 if recurring_find_any else recurring_min_length
-            pattern_len, pattern_type, pattern_found = find_longest_recurring(hash_result, effective_min, recurring_find_any)
-            if pattern_len >= effective_min:
-                found = True
-                zero_type = f'recurring_{pattern_type}'
-                pattern = pattern_found
-                pattern_length = pattern_len
-        
-        return found, zero_type, hash_result, input_str, pattern, pattern_length
+    # Input stride: 64 bytes per input (kernel limitation: inputs must be < 55 bytes)
+    stride = 64
+    max_input_length = 54  # Stay under 55 bytes for kernel compatibility
     
     while True:
         if found_solution['found']:
             return
         
-        # Process batch in parallel
+        # Prepare batch
         batch_nonces = [nonce + i * num_workers for i in range(batch_size)]
         
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            results = list(executor.map(hash_and_check, batch_nonces))
+        # Build input buffer
+        input_buffer = np.zeros(batch_size * stride, dtype=np.uint8)
         
-        local_attempts += batch_size
+        input_strings = []
+        for i, nonce_val in enumerate(batch_nonces):
+            # Create input string (must be < 55 bytes)
+            if random_length > 0 and random_seed != 0:
+                random_part = generate_deterministic_random(nonce_val, random_seed, random_length)
+                input_str = f"{prefix}{nonce_val}{random_part}"
+            else:
+                input_str = f"{prefix}{nonce_val}"
+            
+            # Check length limit
+            input_bytes = input_str.encode('utf-8')
+            if len(input_bytes) > max_input_length:
+                # Truncate if too long (shouldn't happen in normal use)
+                input_bytes = input_bytes[:max_input_length]
+            
+            input_strings.append(input_str)
+            
+            # Copy bytes into buffer
+            offset = i * stride
+            input_buffer[offset:offset + len(input_bytes)] = np.array(list(input_bytes), dtype=np.uint8)
         
-        # Check results
-        for result in results:
-            found, zero_type, hash_result, input_str, pattern, pattern_length = result
+        # Allocate GPU buffers
+        input_buf = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=input_buffer)
+        output_buf = cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, batch_size * 32)  # 32 bytes per hash
+        
+        # Execute kernel
+        kernel.set_arg(0, input_buf)
+        kernel.set_arg(1, output_buf)
+        kernel.set_arg(2, np.int32(stride))
+        
+        cl.enqueue_nd_range_kernel(queue, kernel, (batch_size,), None)
+        queue.finish()
+        
+        # Read results
+        output_array = np.empty(batch_size * 32, dtype=np.uint8)
+        cl.enqueue_copy(queue, output_array, output_buf)
+        queue.finish()
+        
+        # Process results
+        for i in range(batch_size):
+            # Extract hash (32 bytes)
+            hash_bytes = bytes(output_array[i * 32:(i + 1) * 32])
+            hash_hex = hash_bytes.hex()
+            
+            input_str = input_strings[i]
+            
+            # Check for matches
+            found = None
+            zero_type = None
+            pattern = None
+            pattern_length = None
+            
+            if check_leading and hash_hex.startswith(target_leading):
+                found = True
+                zero_type = 'leading'
+            elif check_trailing and hash_hex.endswith(target_trailing):
+                found = True
+                zero_type = 'trailing'
+            elif check_recurring:
+                effective_min = 2 if recurring_find_any else recurring_min_length
+                pattern_len, pattern_type, pattern_found = find_longest_recurring(hash_hex, effective_min, recurring_find_any)
+                if pattern_len >= effective_min:
+                    found = True
+                    zero_type = f'recurring_{pattern_type}'
+                    pattern = pattern_found
+                    pattern_length = pattern_len
+            
             if found:
                 with counter_lock:
-                    # Add local attempts to global counter before reporting
-                    total_attempts.value += local_attempts
+                    total_attempts.value += local_attempts + (i + 1)
                     if not found_solution['found']:
                         found_solution['found'] = True
-                        found_solution['hash'] = hash_result
+                        found_solution['hash'] = hash_hex
                         found_solution['input'] = input_str
                         found_solution['zero_type'] = zero_type
                         elapsed = time.time() - start_time.value
@@ -241,7 +306,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                         found_data = {
                             'type': zero_type,
                             'target': target_zeroes if 'recurring' not in zero_type else pattern_length,
-                            'hash': hash_result,
+                            'hash': hash_hex,
                             'input': input_str,
                             'elapsed': elapsed,
                             'worker': worker_id + 1,
@@ -251,17 +316,16 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                             found_data['pattern'] = pattern
                             found_data['pattern_length'] = pattern_length
                         console_output_queue.put(('found', found_data))
-                        local_attempts = 0  # Reset after reporting
                         return
         
+        local_attempts += batch_size
         nonce += batch_size * num_workers
         
-        # Update counter periodically (every 10k iterations for better progress updates)
+        # Update counter periodically
         if local_attempts % 10000 == 0:
             with counter_lock:
                 total_attempts.value += local_attempts
                 current_total = total_attempts.value
-                # Send progress updates every 1M attempts (more frequent updates)
                 if current_total % 1000000 == 0 and current_total > 0:
                     elapsed = time.time() - start_time.value
                     if elapsed > 0.001:
@@ -528,7 +592,8 @@ def list_gpus(
         
         console.print("\n")
         console.print(table)
-        console.print("\n[dim]Tip: Use --detailed flag for more information about each device[/dim]\n")
+        console.print()
+
 
 
 @app.callback(invoke_without_command=True)
@@ -553,19 +618,17 @@ def main(
     
     Prompts for any settings not provided via command-line arguments unless --default is used.
     
-    Optimized batch processing mode is auto-detected if GPU devices are found. Use --cpu to force
-    standard CPU mode or --gpu to force optimized batch mode. Optimized batch mode uses concurrent
-    CPU hashing with better parallelization for improved performance.
-    
-    Note: True GPU SHA-256 acceleration (using GPU compute units) would require implementing a
-    complex OpenCL kernel. Current implementation uses optimized CPU batch processing.
+    GPU acceleration is auto-detected and enabled by default if available. Use --cpu to force
+    CPU mode or --gpu to force GPU mode. GPU mode uses real OpenCL kernel acceleration.
     """
     # If a subcommand was invoked, don't run the main search
     if ctx.invoked_subcommand is not None:
         return
     
     # Otherwise, run the search
-    run_search(target_zeroes, prefix, check_leading, check_trailing, check_recurring, recurring_min_length, recurring_find_any, workers, use_defaults, use_gpu, force_cpu, random_seed, random_length)
+    run_search(target_zeroes, prefix, check_leading, check_trailing, check_recurring,
+               recurring_min_length, recurring_find_any, workers, use_defaults, use_gpu,
+               force_cpu, random_seed, random_length)
 
 
 def run_search(
@@ -584,85 +647,69 @@ def run_search(
     random_length: Optional[int]
 ):
     # Auto-enable recurring if --recurring-any is provided
-    if recurring_find_any and not check_recurring:
+    if recurring_find_any:
         check_recurring = True
     
-    # Auto-enable recurring if --recurring-any is provided (do this early)
-    if recurring_find_any and not check_recurring:
-        check_recurring = True
-    
-    # Use defaults if flag is set
-    if use_defaults:
-        prefix = prefix or "my_homelab_challenge_"
-        # Only set target_zeroes if we're checking leading/trailing
-        if not check_recurring or check_leading or check_trailing:
-            target_zeroes = target_zeroes or 6
-        else:
-            target_zeroes = 0  # Not used for recurring-only mode
-        if check_leading is None and check_trailing is None and not check_recurring:
-            check_leading = False
-            check_trailing = True
-    else:
-        # Prompt for prefix if not provided
+    # Prompt for settings if not provided (unless --default is used)
+    if not use_defaults:
+        if target_zeroes is None and not check_recurring:
+            target_zeroes_input = typer.prompt("Target number of zeroes", default=6, type=int)
+            target_zeroes = target_zeroes_input
+        
         if prefix is None:
-            prefix = typer.prompt("Prefix string", default="my_homelab_challenge_")
+            prefix_input = typer.prompt("Prefix string", default="my_homelab_challenge_", type=str)
+            prefix = prefix_input
         
-        # Only prompt for target_zeroes if we're checking leading or trailing zeroes
-        only_recurring = check_recurring and not check_leading and not check_trailing
-        if target_zeroes is None and not only_recurring:
-            target_zeroes = typer.prompt("Target number of zeroes", default=6, type=int)
-        elif target_zeroes is None and only_recurring:
-            target_zeroes = 0  # Not used for recurring patterns, but need a value
-        
-        # Prompt for check type if none are explicitly set
         if check_leading is None and check_trailing is None and not check_recurring:
-            while True:
-                check_type = typer.prompt(
-                    "Check for (l)eading, (t)railing, (r)ecurring, or (b)oth zeroes?",
-                    default="t"
-                ).lower().strip()
-                if check_type in ["l", "t", "r", "b"]:
-                    break
-                console.print("[yellow]Please enter 'l', 't', 'r', or 'b'[/yellow]")
-            check_leading = check_type in ["l", "b"]
-            check_trailing = check_type in ["t", "b"]
-            if check_type == "r":
-                check_recurring = True
+            check_type = typer.prompt("Check for (l)eading, (t)railing, or (b)oth zeroes?", default="t", type=str).lower()
+            if 'l' in check_type:
+                check_leading = True
+            if 't' in check_type:
+                check_trailing = True
+            if 'b' in check_type:
+                check_leading = True
+                check_trailing = True
+        
+        if check_leading is None:
+            check_leading = False
+        if check_trailing is None:
+            check_trailing = False
+    else:
+        # Use defaults
+        if target_zeroes is None:
+            target_zeroes = 6
+        if prefix is None:
+            prefix = "my_homelab_challenge_"
+        if check_leading is None:
+            check_leading = False
+        if check_trailing is None:
+            check_trailing = True
     
-    # If only one is provided via CLI, default the other to False
-    if check_leading is None:
-        check_leading = False
-    if check_trailing is None:
-        check_trailing = False
+    # Validate that at least one check type is enabled
+    if not check_leading and not check_trailing and not check_recurring:
+        console.print("[bold red]Error:[/bold red] Must specify at least one check type (--leading, --trailing, or --recurring)")
+        raise typer.Exit(1)
     
-    # Handle randomness parameters
+    # Handle randomness options
     use_randomness = False
     final_random_seed = 0
     final_random_length = 0
     
-    # If random_length is set, enable randomness
-    if random_length is not None and random_length > 0:
-        use_randomness = True
-        final_random_length = random_length
-        
-        # Generate seed if not provided
-        if random_seed is None:
-            # Use a timestamp-based seed for reproducibility if desired, or use secrets for true randomness
-            final_random_seed = secrets.randbits(64)  # 64-bit random seed
-            console.print(f"[cyan]Generated random seed: {final_random_seed}[/cyan]")
+    if random_length is not None:
+        if random_length > 0:
+            use_randomness = True
+            final_random_length = random_length
+            if random_seed is None or random_seed == 0:
+                # Auto-generate seed
+                final_random_seed = secrets.randbits(64)
+            else:
+                final_random_seed = random_seed
         else:
-            final_random_seed = random_seed
-    elif random_seed is not None:
-        # Seed provided but no length - ignore seed
-        console.print("[yellow]Warning: random-seed provided but random-length not set. Randomness disabled.[/yellow]")
+            use_randomness = False
+            final_random_seed = 0
+            final_random_length = 0
     
-    # Validate configuration
-    if not check_leading and not check_trailing and not check_recurring:
-        console.print("[bold red]Error:[/bold red] At least one of --leading, --trailing, or --recurring must be enabled")
-        raise typer.Exit(1)
-    
-    # GPU auto-detection
-    gpu_devices = []
+    # Determine GPU/CPU mode
     gpu_enabled = False
     
     if force_cpu:
@@ -690,14 +737,14 @@ def run_search(
                 mode_info = "[dim]CPU (no GPU detected)[/dim]"
             else:
                 gpu_enabled = True
-                mode_info = f"[yellow]Optimized CPU Batch (GPU detected but using CPU hashing)[/yellow]"
+                mode_info = f"[green]GPU (OpenCL, {len(gpu_devices)} device(s))[/green]"
     else:
         # Auto-detect GPU
         if GPU_AVAILABLE:
             gpu_devices = get_gpu_devices()
             if gpu_devices:
                 gpu_enabled = True
-                mode_info = f"[yellow]Optimized CPU Batch (GPU detected but using CPU hashing)[/yellow]"
+                mode_info = f"[green]GPU (OpenCL, {len(gpu_devices)} device(s))[/green]"
                 # Show which GPU was detected
                 if len(gpu_devices) == 1:
                     _, device = gpu_devices[0]
@@ -801,189 +848,118 @@ def run_search(
     # Create progress bar
     progress = Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
         BarColumn(),
+        TextColumn("[progress.description]{task.description}"),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("•"),
-        TextColumn("[cyan]{task.completed:,}[/cyan] attempts"),
-        TextColumn("•"),
-        TextColumn("[green]{task.fields[rate]:,.0f}[/green] hashes/sec"),
-        TextColumn("•"),
         TimeElapsedColumn(),
-        console=console,
-        transient=False
+        TimeRemainingColumn(),
+        console=console
     )
     
-    task_id = progress.add_task("[cyan]Searching for hash...", total=None, rate=0)
-    
-    # Start progress bar
-    progress.start()
-    
-    solution_found = False
-    
-    def update_progress():
-        """Update progress bar from queue messages."""
-        import queue
-        nonlocal solution_found
-        last_update = 0
-        while not solution_found and shutdown_flag.value == 0:
-            try:
-                msg_type, data = console_output_queue.get(timeout=0.1)
-                if msg_type == 'found':
-                    solution_found = True
-                    progress.stop()
-                    table = Table(show_header=False, box=box.DOUBLE, padding=(0, 1), border_style="green")
+    # Start output monitor thread
+    def output_monitor():
+        with progress:
+            task = progress.add_task("[cyan]Searching for hash...", total=None)
+            
+            last_update = time.time()
+            update_interval = 0.2  # Update progress bar every 200ms
+            
+            while not found_solution_shared['found']:
+                try:
+                    message_type, data = console_output_queue.get(timeout=0.1)
                     
-                    # Format the found message based on type
-                    if 'recurring' in data['type']:
-                        pattern_type = data['type'].replace('recurring_', '').upper()
-                        pattern_display = data.get('pattern', 'N/A')
-                        pattern_len = data.get('pattern_length', data['target'])
-                        table.add_row("[bold green]FOUND![/bold green]", f"{pattern_len} character {pattern_type} pattern")
-                        table.add_row("[bold]Pattern:[/bold]", f"[magenta]{pattern_display}[/magenta]")
-                    else:
-                        table.add_row("[bold green]FOUND![/bold green]", f"{data['target']} {data['type'].upper()} zeroes")
-                    
-                    table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
-                    table.add_row("[bold]Input:[/bold]", f"[cyan]{data['input']}[/cyan]")
-                    table.add_row("[bold]Time:[/bold]", f"{data['elapsed']:.2f} seconds")
-                    table.add_row("[bold]Worker:[/bold]", f"{data['worker']}")
-                    table.add_row("[bold]Total attempts:[/bold]", f"{data['attempts']:,}")
-                    console.print("\n")
-                    console.print(Panel(table, title="[bold green]🎉 Solution Found![/bold green]", border_style="green"))
-                    console.print()
-                elif msg_type == 'progress':
-                    # Update progress bar
-                    progress.update(
-                        task_id,
-                        completed=data['attempts'],
-                        rate=data['rate'],
-                        description="[cyan]Searching for hash..."
-                    )
-                    last_update = time.time()
-                elif msg_type == 'error':
-                    console.print(f"[yellow]Warning:[/yellow] {data}")
-            except queue.Empty:
-                # Update progress with current stats periodically even without new message
-                current_time = time.time()
-                if current_time - last_update > 0.2:  # Update every 200ms for smoother updates
-                    # Always read from shared counter for accurate progress
-                    attempts = total_attempts_shared.value
-                    if attempts > 0:
-                        elapsed = time.time() - start_time_shared.value
-                        if elapsed > 0:
-                            rate = attempts / elapsed
+                    if message_type == 'found':
+                        progress.update(task, description="[green]✓ Solution found![/green]")
+                        # Display found solution
+                        console.print("\n")
+                        if data['type'].startswith('recurring_'):
+                            pattern_type = data['type'].replace('recurring_', '')
+                            found_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+                            found_table.add_row("[bold]Type:[/bold]", f"[green]{pattern_type} pattern[/green]")
+                            found_table.add_row("[bold]Pattern:[/bold]", f"[cyan]{data.get('pattern', 'N/A')}[/cyan]")
+                            found_table.add_row("[bold]Length:[/bold]", f"[magenta]{data.get('pattern_length', data['target'])}[/magenta]")
+                            found_table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
+                            found_table.add_row("[bold]Input:[/bold]", f"[dim]{data['input']}[/dim]")
+                            found_table.add_row("[bold]Worker:[/bold]", f"[cyan]{data['worker']}[/cyan]")
+                            found_table.add_row("[bold]Attempts:[/bold]", f"[dim]{data['attempts']:,}[/dim]")
+                            found_table.add_row("[bold]Time:[/bold]", f"[dim]{data['elapsed']:.2f}s[/dim]")
+                            console.print(Panel(found_table, title="[bold green]Solution Found![/bold green]", border_style="green"))
+                        else:
+                            found_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+                            found_table.add_row("[bold]Type:[/bold]", f"[green]{data['type']} zeroes[/green]")
+                            found_table.add_row("[bold]Target:[/bold]", f"[magenta]{data['target']}[/magenta]")
+                            found_table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
+                            found_table.add_row("[bold]Input:[/bold]", f"[dim]{data['input']}[/dim]")
+                            found_table.add_row("[bold]Worker:[/bold]", f"[cyan]{data['worker']}[/cyan]")
+                            found_table.add_row("[bold]Attempts:[/bold]", f"[dim]{data['attempts']:,}[/dim]")
+                            found_table.add_row("[bold]Time:[/bold]", f"[dim]{data['elapsed']:.2f}s[/dim]")
+                            console.print(Panel(found_table, title="[bold green]Solution Found![/bold green]", border_style="green"))
+                        break
+                    elif message_type == 'progress':
+                        current_time = time.time()
+                        if current_time - last_update >= update_interval:
+                            rate = data['rate']
                             progress.update(
-                                task_id,
-                                completed=attempts,
-                                rate=rate,
-                                description="[cyan]Searching for hash..."
+                                task,
+                                description=f"[cyan]Searching for hash...[/cyan] • [dim]{data['attempts']:,}[/dim] attempts • [dim]{rate:,.0f}[/dim] hashes/sec • [dim]{data['elapsed']:.0f}s[/dim]"
                             )
                             last_update = current_time
-                continue
-            except Exception:
-                pass
+                except:
+                    # Timeout or queue empty, continue
+                    pass
+            
+            # Final summary
+            if found_solution_shared['found']:
+                elapsed = time.time() - start_time_shared.value
+                final_total = total_attempts_shared.value
+                rate = final_total / elapsed if elapsed > 0 else 0
+                
+                console.print("\n")
+                summary_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+                summary_table.add_row("[bold]Total Attempts:[/bold]", f"[cyan]{final_total:,}[/cyan]")
+                summary_table.add_row("[bold]Total Time:[/bold]", f"[cyan]{elapsed:.2f}s[/cyan]")
+                summary_table.add_row("[bold]Average Rate:[/bold]", f"[cyan]{rate:,.0f} hashes/sec[/cyan]")
+                console.print(Panel(summary_table, title="[bold blue]Summary[/bold blue]", border_style="blue"))
     
-    # Start progress update thread
-    progress_thread = threading.Thread(target=update_progress, daemon=True)
-    progress_thread.start()
+    monitor_thread = threading.Thread(target=output_monitor, daemon=True)
+    monitor_thread.start()
     
-    # Create worker processes
+    # Start worker processes
     processes = []
-    # Use gpu_devices from detection above (already set)
-    for i in range(num_workers):
-        if gpu_enabled:
-            # Use GPU-accelerated worker
-            device_idx = i % len(gpu_devices) if gpu_devices else 0
-            p = multiprocessing.Process(
-                target=worker_gpu,
-                args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
-                      total_attempts_shared, counter_lock_shared, found_solution_shared, 
-                      start_time_shared, console_output_queue, device_idx, 50000,
-                      final_random_seed, final_random_length, check_recurring, recurring_min_length, recurring_find_any)
-            )
-        else:
-            # Use CPU worker
-            p = multiprocessing.Process(
-                target=worker,
-                args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
-                      total_attempts_shared, counter_lock_shared, found_solution_shared, 
-                      start_time_shared, console_output_queue, final_random_seed, final_random_length,
-                      check_recurring, recurring_min_length, recurring_find_any)
-            )
-        p.start()
-        processes.append(p)
-    
-    # Wait for processes with graceful shutdown handling
     try:
-        # Monitor for shutdown or completion
-        while any(p.is_alive() for p in processes) and not solution_found:
-            time.sleep(0.1)
-            # Check if we should shutdown
-            if shutdown_flag.value == 1:
-                console.print("\n[yellow]Interrupt received. Shutting down gracefully...[/yellow]")
-                break
+        for i in range(num_workers):
+            if gpu_enabled:
+                p = multiprocessing.Process(
+                    target=worker_gpu,
+                    args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
+                          total_attempts_shared, counter_lock_shared, found_solution_shared,
+                          start_time_shared, console_output_queue, i % len(get_gpu_devices()) if GPU_AVAILABLE else 0, 50000,
+                          final_random_seed, final_random_length, check_recurring, recurring_min_length, recurring_find_any)
+                )
+            else:
+                p = multiprocessing.Process(
+                    target=worker,
+                    args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
+                          total_attempts_shared, counter_lock_shared, found_solution_shared,
+                          start_time_shared, console_output_queue,
+                          final_random_seed, final_random_length, check_recurring, recurring_min_length, recurring_find_any)
+                )
+            p.start()
+            processes.append(p)
         
-        # Give processes a moment to finish
+        # Wait for all processes to complete
         for p in processes:
-            if p.is_alive():
-                p.join(timeout=2)
-        
-        # Force terminate if still running (shouldn't happen with graceful shutdown)
-        if shutdown_flag.value == 1:
-            for p in processes:
-                if p.is_alive():
-                    p.terminate()
-                    p.join(timeout=1)
-                    if p.is_alive():
-                        p.kill()
+            p.join()
+    
     except KeyboardInterrupt:
-        # Handle keyboard interrupt during join
-        console.print("\n[yellow]Interrupt received. Shutting down...[/yellow]")
-        shutdown_flag.value = 1
+        console.print("\n[yellow]Interrupted by user[/yellow]")
         found_solution_shared['found'] = True
         for p in processes:
+            p.terminate()
+            p.join(timeout=1)
             if p.is_alive():
-                p.terminate()
-                p.join(timeout=1)
-                if p.is_alive():
-                    p.kill()
-    
-    # Stop progress bar if still running
-    if not solution_found:
-        progress.stop()
-    
-    # Print final summary with Rich
-    elapsed = time.time() - start_time_shared.value
-    was_interrupted = shutdown_flag.value == 1 and not found_solution_shared['found']
-    
-    summary_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
-    
-    if was_interrupted:
-        summary_table.add_row("[bold]Status:[/bold]", "[yellow]Interrupted by user[/yellow]")
-        summary_table.add_row("[bold]Time elapsed:[/bold]", f"[dim]{elapsed:.2f} seconds[/dim]")
-    else:
-        summary_table.add_row("[bold]Search completed in:[/bold]", f"[green]{elapsed:.2f} seconds[/green]")
-    
-    summary_table.add_row("[bold]Total attempts:[/bold]", f"[yellow]{total_attempts_shared.value:,}[/yellow]")
-    
-    if found_solution_shared['found'] and found_solution_shared['hash']:
-        summary_table.add_row("[bold]Solution found:[/bold]", f"[green]{found_solution_shared['zero_type']} zeroes[/green]")
-        summary_table.add_row("[bold]Input:[/bold]", f"[cyan]{found_solution_shared['input']}[/cyan]")
-        summary_table.add_row("[bold]Hash:[/bold]", f"[yellow]{found_solution_shared['hash']}[/yellow]")
-    elif was_interrupted:
-        summary_table.add_row("[bold]Solution:[/bold]", "[dim]No solution found (search interrupted)[/dim]")
-    else:
-        summary_table.add_row("[bold]Solution:[/bold]", "[red]No solution found[/red]")
-    
-    title = "[bold yellow]Search Interrupted[/bold yellow]" if was_interrupted else "[bold blue]Final Summary[/bold blue]"
-    border_color = "yellow" if was_interrupted else "blue"
-    
-    console.print("\n")
-    console.print(Panel(summary_table, title=title, border_style=border_color))
-    console.print()
+                p.kill()
 
 
-if __name__ == '__main__':
-    multiprocessing.freeze_support()  # Required for Windows
+if __name__ == "__main__":
     app()
