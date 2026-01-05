@@ -249,6 +249,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                             found_data['pattern'] = pattern
                             found_data['pattern_length'] = pattern_length
                         console_output_queue.put(('found', found_data))
+                        local_attempts = 0  # Reset after reporting
                         return
         
         nonce += batch_size * num_workers
@@ -332,6 +333,7 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
                         'worker': worker_id + 1,
                         'attempts': current_total
                     }))
+                    local_attempts = 0  # Reset after reporting
             return
         
         # Check trailing zeroes
@@ -356,6 +358,7 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
                         'worker': worker_id + 1,
                         'attempts': current_total
                     }))
+                    local_attempts = 0  # Reset after reporting
             return
         
         # Check for recurring patterns
@@ -385,6 +388,7 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
                             'pattern': pattern,
                             'pattern_length': pattern_len
                         }))
+                        local_attempts = 0  # Reset after reporting
                 return
         
         nonce += num_workers  # Stride by num_workers to maintain separation
@@ -719,7 +723,7 @@ def run_search(
     
     # Initialize shared state (must be done in main process)
     manager = Manager()
-    total_attempts_shared = Value('i', 0)
+    total_attempts_shared = Value('q', 0)  # Use 64-bit integer to avoid overflow
     counter_lock_shared = Lock()
     found_solution_shared = manager.dict()
     found_solution_shared['found'] = False
