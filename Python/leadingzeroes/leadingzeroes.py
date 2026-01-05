@@ -23,6 +23,57 @@ try:
 except ImportError:
     GPU_AVAILABLE = False
 
+def find_longest_recurring(hash_str: str, min_length: int = 3) -> tuple:
+    """
+    Find the longest recurring pattern in a hash string.
+    
+    Returns:
+        (pattern_length, pattern_type, pattern) where:
+        - pattern_length: Length of the recurring pattern
+        - pattern_type: 'same_char' for all same character, 'repeating' for repeating sequence
+        - pattern: The actual pattern found
+    """
+    if len(hash_str) < min_length:
+        return (0, None, None)
+    
+    max_len = 0
+    max_pattern = None
+    max_type = None
+    
+    # Check for same character sequences (e.g., "aaaa", "0000")
+    i = 0
+    while i < len(hash_str):
+        char = hash_str[i]
+        j = i + 1
+        while j < len(hash_str) and hash_str[j] == char:
+            j += 1
+        length = j - i
+        if length >= min_length and length > max_len:
+            max_len = length
+            max_pattern = char * length
+            max_type = 'same_char'
+        i = j
+    
+    # Check for repeating sequences (e.g., "ababab", "123123")
+    for seq_len in range(1, len(hash_str) // 2 + 1):
+        for start in range(len(hash_str) - seq_len * 2 + 1):
+            pattern = hash_str[start:start + seq_len]
+            # Check if pattern repeats
+            repeats = 1
+            pos = start + seq_len
+            while pos + seq_len <= len(hash_str) and hash_str[pos:pos + seq_len] == pattern:
+                repeats += 1
+                pos += seq_len
+            
+            total_length = repeats * seq_len
+            if repeats >= 2 and total_length >= min_length and total_length > max_len:
+                max_len = total_length
+                max_pattern = pattern * repeats
+                max_type = 'repeating'
+    
+    return (max_len, max_type, max_pattern)
+
+
 def generate_deterministic_random(nonce: int, seed: int, length: int) -> str:
     """
     Generate deterministic random-looking data from nonce and seed.
@@ -74,7 +125,7 @@ def get_gpu_devices():
 def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing, 
                num_workers, total_attempts, counter_lock, found_solution, 
                start_time, console_output_queue, device_idx=0, batch_size=50000,
-               random_seed=0, random_length=0):
+               random_seed=0, random_length=0, check_recurring=False, recurring_min_length=3):
     """
     GPU-accelerated worker using batch processing with concurrent hashing.
     
@@ -88,6 +139,8 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
     Args:
         random_seed: Seed for deterministic randomness (0 = no randomness)
         random_length: Number of random hex characters to append (0 = no randomness)
+        check_recurring: Check for recurring character patterns
+        recurring_min_length: Minimum length of recurring pattern to match
     """
     from concurrent.futures import ThreadPoolExecutor
     import os
@@ -114,14 +167,24 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
         found = None
         zero_type = None
         
+        pattern = None
+        pattern_length = None
+        
         if check_leading and hash_result.startswith(target_leading):
             found = True
             zero_type = 'leading'
         elif check_trailing and hash_result.endswith(target_trailing):
             found = True
             zero_type = 'trailing'
+        elif check_recurring:
+            pattern_len, pattern_type, pattern_found = find_longest_recurring(hash_result, recurring_min_length)
+            if pattern_len >= recurring_min_length:
+                found = True
+                zero_type = f'recurring_{pattern_type}'
+                pattern = pattern_found
+                pattern_length = pattern_len
         
-        return found, zero_type, hash_result, input_str
+        return found, zero_type, hash_result, input_str, pattern, pattern_length
     
     while True:
         if found_solution['found']:
@@ -136,7 +199,8 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
         local_attempts += batch_size
         
         # Check results
-        for found, zero_type, hash_result, input_str in results:
+        for result in results:
+            found, zero_type, hash_result, input_str, pattern, pattern_length = result
             if found:
                 with counter_lock:
                     if not found_solution['found']:
@@ -146,15 +210,19 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                         found_solution['zero_type'] = zero_type
                         elapsed = time.time() - start_time.value
                         current_total = total_attempts.value + local_attempts
-                        console_output_queue.put(('found', {
+                        found_data = {
                             'type': zero_type,
-                            'target': target_zeroes,
+                            'target': target_zeroes if 'recurring' not in zero_type else pattern_length,
                             'hash': hash_result,
                             'input': input_str,
                             'elapsed': elapsed,
                             'worker': worker_id + 1,
                             'attempts': current_total
-                        }))
+                        }
+                        if pattern:
+                            found_data['pattern'] = pattern
+                            found_data['pattern_length'] = pattern_length
+                        console_output_queue.put(('found', found_data))
                         return
         
         nonce += batch_size * num_workers
@@ -178,7 +246,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
 
 def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_workers, 
            total_attempts, counter_lock, found_solution, start_time, console_output_queue,
-           random_seed=0, random_length=0):
+           random_seed=0, random_length=0, check_recurring=False, recurring_min_length=3):
     """
     Worker function that increments nonces and checks for target zeroes.
     Each worker starts from a different nonce range to avoid collisions.
@@ -186,6 +254,8 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
     Args:
         random_seed: Seed for deterministic randomness (0 = no randomness)
         random_length: Number of random hex characters to append (0 = no randomness)
+        check_recurring: Check for recurring character patterns
+        recurring_min_length: Minimum length of recurring pattern to match
     """
     local_attempts = 0
     
@@ -256,6 +326,32 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
                         'attempts': current_total
                     }))
             return
+        
+        # Check for recurring patterns
+        if check_recurring:
+            pattern_len, pattern_type, pattern = find_longest_recurring(hash_result, recurring_min_length)
+            if pattern_len >= recurring_min_length:
+                with counter_lock:
+                    if not found_solution['found']:
+                        found_solution['found'] = True
+                        found_solution['hash'] = hash_result
+                        found_solution['input'] = input_str
+                        found_solution['zero_type'] = f'recurring_{pattern_type}'
+                        elapsed = time.time() - start_time.value
+                        current_total = total_attempts.value + local_attempts
+                        # Send formatted output to queue for main process to display
+                        console_output_queue.put(('found', {
+                            'type': f'recurring_{pattern_type}',
+                            'target': pattern_len,
+                            'hash': hash_result,
+                            'input': input_str,
+                            'elapsed': elapsed,
+                            'worker': worker_id + 1,
+                            'attempts': current_total,
+                            'pattern': pattern,
+                            'pattern_length': pattern_len
+                        }))
+                return
         
         nonce += num_workers  # Stride by num_workers to maintain separation
         
@@ -402,6 +498,8 @@ def main(
     prefix: Optional[str] = typer.Option(None, "--prefix", "-p", help="Prefix string to use before nonce"),
     check_leading: Optional[bool] = typer.Option(None, "--leading/--no-leading", help="Check for leading zeroes"),
     check_trailing: Optional[bool] = typer.Option(None, "--trailing/--no-trailing", help="Check for trailing zeroes"),
+    check_recurring: bool = typer.Option(False, "--recurring", help="Check for recurring character patterns"),
+    recurring_min_length: int = typer.Option(3, "--recurring-min", help="Minimum length of recurring pattern to match"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: CPU count)"),
     use_defaults: bool = typer.Option(False, "--default", help="Use default values without prompting"),
     use_gpu: bool = typer.Option(False, "--gpu", help="Force GPU acceleration (overrides auto-detection)"),
@@ -425,7 +523,7 @@ def main(
         return
     
     # Otherwise, run the search
-    run_search(target_zeroes, prefix, check_leading, check_trailing, workers, use_defaults, use_gpu, force_cpu, random_seed, random_length)
+    run_search(target_zeroes, prefix, check_leading, check_trailing, check_recurring, recurring_min_length, workers, use_defaults, use_gpu, force_cpu, random_seed, random_length)
 
 
 def run_search(
@@ -433,6 +531,8 @@ def run_search(
     prefix: Optional[str],
     check_leading: Optional[bool],
     check_trailing: Optional[bool],
+    check_recurring: bool,
+    recurring_min_length: int,
     workers: Optional[int],
     use_defaults: bool,
     use_gpu: bool,
@@ -497,8 +597,8 @@ def run_search(
         console.print("[yellow]Warning: random-seed provided but random-length not set. Randomness disabled.[/yellow]")
     
     # Validate configuration
-    if not check_leading and not check_trailing:
-        console.print("[bold red]Error:[/bold red] At least one of --leading or --trailing must be enabled")
+    if not check_leading and not check_trailing and not check_recurring:
+        console.print("[bold red]Error:[/bold red] At least one of --leading, --trailing, or --recurring must be enabled")
         raise typer.Exit(1)
     
     # GPU auto-detection
@@ -582,6 +682,8 @@ def run_search(
         check_types.append("[cyan]leading[/cyan]")
     if check_trailing:
         check_types.append("[cyan]trailing[/cyan]")
+    if check_recurring:
+        check_types.append(f"[cyan]recurring[/cyan] (min: {recurring_min_length})")
     
     config_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
     config_table.add_row("[bold]Mode:[/bold]", mode_info)
@@ -591,8 +693,21 @@ def run_search(
         config_table.add_row("[bold]Randomness:[/bold]", f"[cyan]Enabled (seed: {final_random_seed}, length: {final_random_length})[/cyan]")
     else:
         config_table.add_row("[bold]Randomness:[/bold]", "[dim]Disabled[/dim]")
-    config_table.add_row("[bold]Target:[/bold]", f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)} zeroes")
-    config_table.add_row("[bold]Expected:[/bold]", f"~[dim]{16**target_zeroes:,}[/dim] attempts (1 in {16**target_zeroes:,})")
+    
+    target_text = f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)}"
+    if check_recurring and (check_leading or check_trailing):
+        target_text += f" zeroes / recurring patterns"
+    elif check_leading or check_trailing:
+        target_text += " zeroes"
+    else:
+        target_text += " patterns"
+    
+    config_table.add_row("[bold]Target:[/bold]", target_text)
+    
+    if check_leading or check_trailing:
+        config_table.add_row("[bold]Expected:[/bold]", f"~[dim]{16**target_zeroes:,}[/dim] attempts (1 in {16**target_zeroes:,})")
+    else:
+        config_table.add_row("[bold]Expected:[/bold]", "[dim]Varies based on pattern[/dim]")
     
     console.print("\n")
     console.print(Panel(config_table, title="[bold blue]Hash Search Configuration[/bold blue]", border_style="blue"))
@@ -655,7 +770,17 @@ def run_search(
                     solution_found = True
                     progress.stop()
                     table = Table(show_header=False, box=box.DOUBLE, padding=(0, 1), border_style="green")
-                    table.add_row("[bold green]FOUND![/bold green]", f"{data['target']} {data['type'].upper()} zeroes")
+                    
+                    # Format the found message based on type
+                    if 'recurring' in data['type']:
+                        pattern_type = data['type'].replace('recurring_', '').upper()
+                        pattern_display = data.get('pattern', 'N/A')
+                        pattern_len = data.get('pattern_length', data['target'])
+                        table.add_row("[bold green]FOUND![/bold green]", f"{pattern_len} character {pattern_type} pattern")
+                        table.add_row("[bold]Pattern:[/bold]", f"[magenta]{pattern_display}[/magenta]")
+                    else:
+                        table.add_row("[bold green]FOUND![/bold green]", f"{data['target']} {data['type'].upper()} zeroes")
+                    
                     table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
                     table.add_row("[bold]Input:[/bold]", f"[cyan]{data['input']}[/cyan]")
                     table.add_row("[bold]Time:[/bold]", f"{data['elapsed']:.2f} seconds")
@@ -710,7 +835,7 @@ def run_search(
                 args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
                       total_attempts_shared, counter_lock_shared, found_solution_shared, 
                       start_time_shared, console_output_queue, device_idx, 50000,
-                      final_random_seed, final_random_length)
+                      final_random_seed, final_random_length, check_recurring, recurring_min_length)
             )
         else:
             # Use CPU worker
@@ -718,7 +843,8 @@ def run_search(
                 target=worker,
                 args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
                       total_attempts_shared, counter_lock_shared, found_solution_shared, 
-                      start_time_shared, console_output_queue, final_random_seed, final_random_length)
+                      start_time_shared, console_output_queue, final_random_seed, final_random_length,
+                      check_recurring, recurring_min_length)
             )
         p.start()
         processes.append(p)
