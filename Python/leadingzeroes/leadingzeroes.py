@@ -4,6 +4,7 @@ import multiprocessing
 import threading
 import signal
 import sys
+import secrets
 from multiprocessing import Value, Lock, Manager
 import typer
 from typing import Optional
@@ -21,6 +22,37 @@ try:
     GPU_AVAILABLE = True
 except ImportError:
     GPU_AVAILABLE = False
+
+def generate_deterministic_random(nonce: int, seed: int, length: int) -> str:
+    """
+    Generate deterministic random-looking data from nonce and seed.
+    Uses hash-based approach to ensure reproducibility while appearing random.
+    """
+    if length == 0:
+        return ""
+    
+    # Combine seed and nonce for deterministic randomness
+    combined = f"{seed}:{nonce}".encode()
+    
+    # Generate hash and use it to create random-looking hex string
+    hash_bytes = hashlib.sha256(combined).digest()
+    
+    # Convert to hex and take the requested length
+    hex_str = hash_bytes.hex()
+    
+    # If we need more bytes, hash again with an index
+    if length > len(hex_str):
+        result = hex_str
+        idx = 0
+        while len(result) < length:
+            combined_extended = f"{seed}:{nonce}:{idx}".encode()
+            hash_extended = hashlib.sha256(combined_extended).digest().hex()
+            result += hash_extended
+            idx += 1
+        return result[:length]
+    else:
+        return hex_str[:length]
+
 
 def get_gpu_devices():
     """Get available GPU devices."""
@@ -41,7 +73,8 @@ def get_gpu_devices():
 
 def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing, 
                num_workers, total_attempts, counter_lock, found_solution, 
-               start_time, console_output_queue, device_idx=0, batch_size=50000):
+               start_time, console_output_queue, device_idx=0, batch_size=50000,
+               random_seed=0, random_length=0):
     """
     GPU-accelerated worker using batch processing with concurrent hashing.
     
@@ -51,6 +84,10 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
     
     For true GPU acceleration, consider using hashcat or implementing a full
     SHA-256 OpenCL/CUDA kernel.
+    
+    Args:
+        random_seed: Seed for deterministic randomness (0 = no randomness)
+        random_length: Number of random hex characters to append (0 = no randomness)
     """
     from concurrent.futures import ThreadPoolExecutor
     import os
@@ -66,7 +103,12 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
     
     def hash_and_check(nonce_val):
         """Hash a single nonce and check if it matches."""
-        input_str = f"{prefix}{nonce_val}"
+        # Create input string with prefix, nonce, and optional random data
+        if random_length > 0 and random_seed != 0:
+            random_part = generate_deterministic_random(nonce_val, random_seed, random_length)
+            input_str = f"{prefix}{nonce_val}{random_part}"
+        else:
+            input_str = f"{prefix}{nonce_val}"
         hash_result = hashlib.sha256(input_str.encode()).hexdigest()
         
         found = None
@@ -135,10 +177,15 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
 
 
 def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_workers, 
-           total_attempts, counter_lock, found_solution, start_time, console_output_queue):
+           total_attempts, counter_lock, found_solution, start_time, console_output_queue,
+           random_seed=0, random_length=0):
     """
     Worker function that increments nonces and checks for target zeroes.
     Each worker starts from a different nonce range to avoid collisions.
+    
+    Args:
+        random_seed: Seed for deterministic randomness (0 = no randomness)
+        random_length: Number of random hex characters to append (0 = no randomness)
     """
     local_attempts = 0
     
@@ -154,8 +201,13 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
         if found_solution['found']:
             return
         
-        # Create input string with prefix and nonce
-        input_str = f"{prefix}{nonce}"
+        # Create input string with prefix, nonce, and optional random data
+        if random_length > 0 and random_seed != 0:
+            random_part = generate_deterministic_random(nonce, random_seed, random_length)
+            input_str = f"{prefix}{nonce}{random_part}"
+        else:
+            input_str = f"{prefix}{nonce}"
+        
         check = input_str.encode()
         hash_result = hashlib.sha256(check).hexdigest()
         
@@ -353,7 +405,9 @@ def main(
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: CPU count)"),
     use_defaults: bool = typer.Option(False, "--default", help="Use default values without prompting"),
     use_gpu: bool = typer.Option(False, "--gpu", help="Force GPU acceleration (overrides auto-detection)"),
-    force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU mode (disable GPU acceleration)")
+    force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU mode (disable GPU acceleration)"),
+    random_seed: Optional[int] = typer.Option(None, "--random-seed", "-r", help="Seed for deterministic randomness (0 = disabled, default: auto-generate)"),
+    random_length: Optional[int] = typer.Option(None, "--random-length", "-l", help="Number of random hex characters to append to input (default: 16)")
 ):
     """
     Find a hash with leading or trailing zeroes using parallel processing.
@@ -371,7 +425,7 @@ def main(
         return
     
     # Otherwise, run the search
-    run_search(target_zeroes, prefix, check_leading, check_trailing, workers, use_defaults, use_gpu, force_cpu)
+    run_search(target_zeroes, prefix, check_leading, check_trailing, workers, use_defaults, use_gpu, force_cpu, random_seed, random_length)
 
 
 def run_search(
@@ -382,7 +436,9 @@ def run_search(
     workers: Optional[int],
     use_defaults: bool,
     use_gpu: bool,
-    force_cpu: bool
+    force_cpu: bool,
+    random_seed: Optional[int],
+    random_length: Optional[int]
 ):
     # Use defaults if flag is set
     if use_defaults:
@@ -418,6 +474,27 @@ def run_search(
         check_leading = False
     if check_trailing is None:
         check_trailing = False
+    
+    # Handle randomness parameters
+    use_randomness = False
+    final_random_seed = 0
+    final_random_length = 0
+    
+    # If random_length is set, enable randomness
+    if random_length is not None and random_length > 0:
+        use_randomness = True
+        final_random_length = random_length
+        
+        # Generate seed if not provided
+        if random_seed is None:
+            # Use a timestamp-based seed for reproducibility if desired, or use secrets for true randomness
+            final_random_seed = secrets.randbits(64)  # 64-bit random seed
+            console.print(f"[dim]Generated random seed: {final_random_seed}[/dim]")
+        else:
+            final_random_seed = random_seed
+    elif random_seed is not None:
+        # Seed provided but no length - ignore seed
+        console.print("[yellow]Warning: random-seed provided but random-length not set. Randomness disabled.[/yellow]")
     
     # Validate configuration
     if not check_leading and not check_trailing:
@@ -510,6 +587,10 @@ def run_search(
     config_table.add_row("[bold]Mode:[/bold]", mode_info)
     config_table.add_row("[bold]Workers:[/bold]", f"[green]{num_workers}[/green]")
     config_table.add_row("[bold]Prefix:[/bold]", f"[yellow]{prefix}[/yellow]")
+    if use_randomness:
+        config_table.add_row("[bold]Randomness:[/bold]", f"[cyan]Enabled (seed: {final_random_seed}, length: {final_random_length})[/cyan]")
+    else:
+        config_table.add_row("[bold]Randomness:[/bold]", "[dim]Disabled[/dim]")
     config_table.add_row("[bold]Target:[/bold]", f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)} zeroes")
     config_table.add_row("[bold]Expected:[/bold]", f"~[dim]{16**target_zeroes:,}[/dim] attempts (1 in {16**target_zeroes:,})")
     
@@ -628,7 +709,8 @@ def run_search(
                 target=worker_gpu,
                 args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
                       total_attempts_shared, counter_lock_shared, found_solution_shared, 
-                      start_time_shared, console_output_queue, device_idx)
+                      start_time_shared, console_output_queue, device_idx, 50000,
+                      final_random_seed, final_random_length)
             )
         else:
             # Use CPU worker
@@ -636,7 +718,7 @@ def run_search(
                 target=worker,
                 args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
                       total_attempts_shared, counter_lock_shared, found_solution_shared, 
-                      start_time_shared, console_output_queue)
+                      start_time_shared, console_output_queue, final_random_seed, final_random_length)
             )
         p.start()
         processes.append(p)
