@@ -264,13 +264,16 @@ def main(
         
         # Prompt for check type if neither is provided
         if check_leading is None and check_trailing is None:
-            check_type = typer.prompt(
-                "Check for (l)eading, (t)railing, or (b)oth zeroes?",
-                default="t",
-                type=typer.Choice(["l", "t", "b"], case_sensitive=False)
-            )
-            check_leading = check_type.lower() in ["l", "b"]
-            check_trailing = check_type.lower() in ["t", "b"]
+            while True:
+                check_type = typer.prompt(
+                    "Check for (l)eading, (t)railing, or (b)oth zeroes?",
+                    default="t"
+                ).lower().strip()
+                if check_type in ["l", "t", "b"]:
+                    break
+                console.print("[yellow]Please enter 'l', 't', or 'b'[/yellow]")
+            check_leading = check_type in ["l", "b"]
+            check_trailing = check_type in ["t", "b"]
     
     # If only one is provided via CLI, default the other to False
     if check_leading is None:
