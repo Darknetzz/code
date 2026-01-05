@@ -1,151 +1,248 @@
-import time
-import random
 import hashlib
-import string
+import time
 import multiprocessing
-from multiprocessing import Value, Lock
+import threading
+from multiprocessing import Value, Lock, Manager
+import typer
+from typing import Optional
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich import box
 
-# Shared counters for all processes
-total_attempts = Value('i', 0)
-max_leading = Value('i', 0)
-max_trailing = Value('i', 0)
-last_progress_milestone = Value('i', -1)  # Track last progress milestone printed (start at -1)
-counter_lock = Lock()
-start_time = Value('d', 0.0)  # Use shared Value so all processes see the same start time
-
-def worker(worker_id, target_zeroes):
+def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_workers, 
+           total_attempts, counter_lock, found_solution, start_time, console_output_queue):
     """
-    Worker function that creates a hash chain and checks for zeroes.
-    
-    Each worker maintains its own hash chain (iteratively hashing the previous hash)
-    and tracks local maximums for leading/trailing zeroes. When new records are found,
-    they're reported and checked against the global maximum.
+    Worker function that increments nonces and checks for target zeroes.
+    Each worker starts from a different nonce range to avoid collisions.
     """
     local_attempts = 0
-    worker_total_iterations = 0  # Track this worker's total iterations
-    local_max_leading = 0
-    local_max_trailing = 0
     
-    # Start with a random string to ensure each worker has a different starting point
-    rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
-    # Initialize the input string with the random starting string
-    input_string = rand_str
-    hash_obj = hashlib.sha256(input_string.encode())
-    hash_hex = hash_obj.hexdigest()
+    # Each worker starts from a different nonce offset and strides by num_workers
+    # This ensures workers don't collide: worker 0 checks 0, 4, 8... worker 1 checks 1, 5, 9...
+    nonce = worker_id
     
-    print(f"Worker {worker_id + 1} starting with: {hash_hex}")
+    target_leading = '0' * target_zeroes
+    target_trailing = '0' * target_zeroes
     
     while True:
-        # Instead of replacing, accumulate: append the hash to the input string
-        # This creates a growing input string that gets hashed each iteration
-        input_string += hash_hex
-        hash_obj = hashlib.sha256(input_string.encode())
-        hash_hex = hash_obj.hexdigest()
+        # Check if another worker found the solution
+        if found_solution['found']:
+            return
         
-        # Count leading zeroes (consecutive zeros from the start)
-        leading = len(hash_hex) - len(hash_hex.lstrip('0'))
-        
-        # Count trailing zeroes (consecutive zeros at the end)
-        trailing = len(hash_hex) - len(hash_hex.rstrip('0'))
+        # Create input string with prefix and nonce
+        input_str = f"{prefix}{nonce}"
+        check = input_str.encode()
+        hash_result = hashlib.sha256(check).hexdigest()
         
         local_attempts += 1
-        worker_total_iterations += 1
         
-        # Check if we found a new record for leading zeroes
-        if leading > local_max_leading:
-            local_max_leading = leading
+        # Check leading zeroes
+        if check_leading and hash_result.startswith(target_leading):
             with counter_lock:
-                # Only report if it's a new global record
-                if leading > max_leading.value:
-                    max_leading.value = leading
-                    # Calculate elapsed time and current total attempts across all workers
+                if not found_solution['found']:
+                    found_solution['found'] = True
+                    found_solution['hash'] = hash_result
+                    found_solution['input'] = input_str
+                    found_solution['zero_type'] = 'leading'
                     elapsed = time.time() - start_time.value
-                    # Include this worker's pending attempts in the total
                     current_total = total_attempts.value + local_attempts
-                    print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {leading} LEADING zeroes!")
-                    print(f"  Hash:   {hash_hex}")
-                    print(f"  Hash length: {len(hash_hex)} characters")
-                    print(f"  Input length: {len(input_string)} characters")
-                    print(f"  Worker iteration: {worker_total_iterations:,}")
-                    print(f"  Global total attempts: {current_total:,}\n")
-                    
-                    if leading >= target_zeroes:
-                        return
+                    # Send formatted output to queue for main process to display
+                    console_output_queue.put(('found', {
+                        'type': 'leading',
+                        'target': target_zeroes,
+                        'hash': hash_result,
+                        'input': input_str,
+                        'elapsed': elapsed,
+                        'worker': worker_id + 1,
+                        'attempts': current_total
+                    }))
+            return
         
-        # Check if we found a new record for trailing zeroes
-        if trailing > local_max_trailing:
-            local_max_trailing = trailing
+        # Check trailing zeroes
+        if check_trailing and hash_result.endswith(target_trailing):
             with counter_lock:
-                # Only report if it's a new global record
-                if trailing > max_trailing.value:
-                    max_trailing.value = trailing
-                    # Calculate elapsed time and current total attempts across all workers
+                if not found_solution['found']:
+                    found_solution['found'] = True
+                    found_solution['hash'] = hash_result
+                    found_solution['input'] = input_str
+                    found_solution['zero_type'] = 'trailing'
                     elapsed = time.time() - start_time.value
-                    # Include this worker's pending attempts in the total
                     current_total = total_attempts.value + local_attempts
-                    print(f"[{elapsed:.2f}s] Worker {worker_id + 1}: Found {trailing} TRAILING zeroes!")
-                    print(f"  Hash:   {hash_hex}")
-                    print(f"  Hash length: {len(hash_hex)} characters")
-                    print(f"  Input length: {len(input_string)} characters")
-                    print(f"  Worker iteration: {worker_total_iterations:,}")
-                    print(f"  Global total attempts: {current_total:,}\n")
-                    
-                    if trailing >= target_zeroes:
-                        return
+                    # Send formatted output to queue for main process to display
+                    console_output_queue.put(('found', {
+                        'type': 'trailing',
+                        'target': target_zeroes,
+                        'hash': hash_result,
+                        'input': input_str,
+                        'elapsed': elapsed,
+                        'worker': worker_id + 1,
+                        'attempts': current_total
+                    }))
+            return
+        
+        nonce += num_workers  # Stride by num_workers to maintain separation
         
         # Update global counter periodically (every 100k iterations)
         if local_attempts % 100000 == 0:
             with counter_lock:
-                # Update the global counter with this worker's contributions
                 total_attempts.value += local_attempts
                 
-                # Only print progress at 100M milestones (100M, 200M, 300M, etc.)
-                # Check if we've crossed a 100M boundary
+                # Send progress updates every 10M attempts
                 current_total = total_attempts.value
-                current_milestone = current_total // 100000000
-                
-                # Only print if:
-                # 1. We've reached a new milestone (current_milestone > last printed)
-                # 2. We're actually at or past the milestone threshold (current_total >= milestone * 100M)
-                # 3. The milestone is at least 1 (don't print at 100k, only at 100M+)
-                if (current_milestone > last_progress_milestone.value and 
-                    current_milestone >= 1 and 
-                    current_total >= (current_milestone * 100000000)):
-                    # Update the milestone counter FIRST to prevent other workers from printing
-                    last_progress_milestone.value = current_milestone
-                    
-                    # Calculate elapsed time and rate
-                    current_time = time.time()
-                    elapsed = current_time - start_time.value
-                    
-                    # Only print if we have valid timing data
-                    if elapsed > 0.001 and start_time.value > 0:
+                if current_total % 10000000 == 0 and current_total > 0:
+                    elapsed = time.time() - start_time.value
+                    if elapsed > 0.001:
                         rate = current_total / elapsed
-                        # Format rate appropriately
-                        if rate >= 1000:
-                            print(f"[{elapsed:.2f}s] Progress: {current_total:,} attempts ({rate:,.0f} hashes/sec)")
-                        else:
-                            print(f"[{elapsed:.2f}s] Progress: {current_total:,} attempts ({rate:,.2f} hashes/sec)")
+                        console_output_queue.put(('progress', {
+                            'elapsed': elapsed,
+                            'attempts': current_total,
+                            'rate': rate
+                        }))
                 
-                # Reset local counter after adding to global
                 local_attempts = 0
 
-def main():
-    target = 9  # Target number of zeroes
-    num_workers = multiprocessing.cpu_count()
+
+app = typer.Typer(help="Find hashes with leading or trailing zeroes using parallel processing")
+console = Console()
+
+
+@app.command()
+def main(
+    target_zeroes: Optional[int] = typer.Option(None, "--target", "-t", help="Target number of zeroes to find"),
+    prefix: Optional[str] = typer.Option(None, "--prefix", "-p", help="Prefix string to use before nonce"),
+    check_leading: Optional[bool] = typer.Option(None, "--leading/--no-leading", help="Check for leading zeroes"),
+    check_trailing: Optional[bool] = typer.Option(None, "--trailing/--no-trailing", help="Check for trailing zeroes"),
+    workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: CPU count)"),
+    use_defaults: bool = typer.Option(False, "--default", help="Use default values without prompting")
+):
+    """
+    Find a hash with leading or trailing zeroes using parallel processing.
     
-    print(f"Starting hash search with {num_workers} parallel workers")
-    print(f"Target: {target} leading or trailing zeroes")
-    print(f"Expected attempts: ~{16**target:,} (probability: 1 in {16**target:,})")
-    print("=" * 70 + "\n")
+    Prompts for any settings not provided via command-line arguments unless --default is used.
+    """
+    # Use defaults if flag is set
+    if use_defaults:
+        target_zeroes = target_zeroes or 6
+        prefix = prefix or "my_homelab_challenge_"
+        if check_leading is None and check_trailing is None:
+            check_leading = False
+            check_trailing = True
+    else:
+        # Prompt for target_zeroes if not provided
+        if target_zeroes is None:
+            target_zeroes = typer.prompt("Target number of zeroes", default=6, type=int)
+        
+        # Prompt for prefix if not provided
+        if prefix is None:
+            prefix = typer.prompt("Prefix string", default="my_homelab_challenge_")
+        
+        # Prompt for check type if neither is provided
+        if check_leading is None and check_trailing is None:
+            check_type = typer.prompt(
+                "Check for (l)eading, (t)railing, or (b)oth zeroes?",
+                default="t",
+                type=typer.Choice(["l", "t", "b"], case_sensitive=False)
+            )
+            check_leading = check_type.lower() in ["l", "b"]
+            check_trailing = check_type.lower() in ["t", "b"]
     
-    # Set the shared start time so all worker processes see the same value
-    start_time.value = time.time()
+    # If only one is provided via CLI, default the other to False
+    if check_leading is None:
+        check_leading = False
+    if check_trailing is None:
+        check_trailing = False
+    
+    # Validate configuration
+    if not check_leading and not check_trailing:
+        console.print("[bold red]Error:[/bold red] At least one of --leading or --trailing must be enabled")
+        raise typer.Exit(1)
+    
+    # Determine number of workers (use all CPU cores by default)
+    if workers is None:
+        num_workers = multiprocessing.cpu_count()
+    else:
+        num_workers = workers
+        if num_workers < 1:
+            console.print("[bold red]Error:[/bold red] Number of workers must be at least 1")
+            raise typer.Exit(1)
+    
+    # Initialize shared state (must be done in main process)
+    manager = Manager()
+    total_attempts_shared = Value('i', 0)
+    counter_lock_shared = Lock()
+    found_solution_shared = manager.dict()
+    found_solution_shared['found'] = False
+    found_solution_shared['hash'] = ''
+    found_solution_shared['input'] = ''
+    found_solution_shared['zero_type'] = ''
+    start_time_shared = Value('d', 0.0)
+    console_output_queue = manager.Queue()
+    
+    # Build configuration display with Rich
+    check_types = []
+    if check_leading:
+        check_types.append("[cyan]leading[/cyan]")
+    if check_trailing:
+        check_types.append("[cyan]trailing[/cyan]")
+    
+    config_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+    config_table.add_row("[bold]Workers:[/bold]", f"[green]{num_workers}[/green]")
+    config_table.add_row("[bold]Prefix:[/bold]", f"[yellow]{prefix}[/yellow]")
+    config_table.add_row("[bold]Target:[/bold]", f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)} zeroes")
+    config_table.add_row("[bold]Expected:[/bold]", f"~[dim]{16**target_zeroes:,}[/dim] attempts (1 in {16**target_zeroes:,})")
+    
+    console.print("\n")
+    console.print(Panel(config_table, title="[bold blue]Hash Search Configuration[/bold blue]", border_style="blue"))
+    console.print()
+    
+    # Set start time
+    start_time_shared.value = time.time()
+    
+    # Start a thread to monitor console output queue
+    output_thread_stop = threading.Event()
+    
+    def output_monitor():
+        import queue
+        while not output_thread_stop.is_set():
+            try:
+                msg_type, data = console_output_queue.get(timeout=0.5)
+                if msg_type == 'found':
+                    table = Table(show_header=False, box=box.DOUBLE, padding=(0, 1), border_style="green")
+                    table.add_row("[bold green]FOUND![/bold green]", f"{data['target']} {data['type'].upper()} zeroes")
+                    table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
+                    table.add_row("[bold]Input:[/bold]", f"[cyan]{data['input']}[/cyan]")
+                    table.add_row("[bold]Time:[/bold]", f"{data['elapsed']:.2f} seconds")
+                    table.add_row("[bold]Worker:[/bold]", f"{data['worker']}")
+                    table.add_row("[bold]Total attempts:[/bold]", f"{data['attempts']:,}")
+                    console.print("\n")
+                    console.print(Panel(table, title="[bold green]🎉 Solution Found![/bold green]", border_style="green"))
+                    console.print()
+                elif msg_type == 'progress':
+                    elapsed_text = f"[dim]{data['elapsed']:.2f}s[/dim]"
+                    attempts_text = f"[bold]{data['attempts']:,}[/bold] attempts"
+                    rate_text = f"[cyan]{data['rate']:,.0f}[/cyan] hashes/sec"
+                    console.print(f"{elapsed_text} Progress: {attempts_text} ({rate_text})")
+            except queue.Empty:
+                # Expected timeout, continue polling
+                continue
+            except Exception:
+                # Ignore other exceptions to prevent thread crash
+                pass
+    
+    output_thread = threading.Thread(target=output_monitor, daemon=True)
+    output_thread.start()
     
     # Create worker processes
     processes = []
     for i in range(num_workers):
-        p = multiprocessing.Process(target=worker, args=(i, target))
+        p = multiprocessing.Process(
+            target=worker,
+            args=(i, prefix, target_zeroes, check_leading, check_trailing, num_workers,
+                  total_attempts_shared, counter_lock_shared, found_solution_shared, 
+                  start_time_shared, console_output_queue)
+        )
         p.start()
         processes.append(p)
     
@@ -153,12 +250,28 @@ def main():
     for p in processes:
         p.join()
     
-    elapsed = time.time() - start_time.value
-    print(f"\nSearch completed in {elapsed:.2f} seconds")
-    print(f"Total attempts: {total_attempts.value:,}")
-    print(f"Max leading zeroes found: {max_leading.value}")
-    print(f"Max trailing zeroes found: {max_trailing.value}")
+    # Stop output monitor
+    output_thread_stop.set()
+    output_thread.join(timeout=1)
+    
+    # Print final summary with Rich
+    elapsed = time.time() - start_time_shared.value
+    summary_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+    summary_table.add_row("[bold]Search completed in:[/bold]", f"[green]{elapsed:.2f} seconds[/green]")
+    summary_table.add_row("[bold]Total attempts:[/bold]", f"[yellow]{total_attempts_shared.value:,}[/yellow]")
+    
+    if found_solution_shared['found']:
+        summary_table.add_row("[bold]Solution found:[/bold]", f"[green]{found_solution_shared['zero_type']} zeroes[/green]")
+        summary_table.add_row("[bold]Input:[/bold]", f"[cyan]{found_solution_shared['input']}[/cyan]")
+        summary_table.add_row("[bold]Hash:[/bold]", f"[yellow]{found_solution_shared['hash']}[/yellow]")
+    else:
+        summary_table.add_row("[bold]Status:[/bold]", "[red]No solution found (shouldn't happen if we found one)[/red]")
+    
+    console.print("\n")
+    console.print(Panel(summary_table, title="[bold blue]Final Summary[/bold blue]", border_style="blue"))
+    console.print()
+
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # Required for Windows
-    main()
+    app()
