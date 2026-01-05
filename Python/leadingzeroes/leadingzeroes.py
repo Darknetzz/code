@@ -2,6 +2,8 @@ import hashlib
 import time
 import multiprocessing
 import threading
+import signal
+import sys
 from multiprocessing import Value, Lock, Manager
 import typer
 from typing import Optional
@@ -9,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich import box
 
 # GPU support (optional)
@@ -229,6 +232,48 @@ console = Console()
 
 
 @app.command()
+def list_gpus():
+    """List available GPU devices for OpenCL acceleration."""
+    if not GPU_AVAILABLE:
+        console.print("[red]PyOpenCL is not installed.[/red]")
+        console.print("Install it with: [cyan]pip install pyopencl numpy[/cyan]")
+        return
+    
+    devices = get_gpu_devices()
+    if not devices:
+        console.print("[yellow]No GPU devices found.[/yellow]")
+        console.print("\nThis could mean:")
+        console.print("1. GPU drivers are not installed or outdated")
+        console.print("2. OpenCL runtime is not installed")
+        console.print("3. GPU is not compatible with OpenCL")
+        return
+    
+    table = Table(title="[bold blue]Available GPU Devices[/bold blue]", box=box.ROUNDED)
+    table.add_column("ID", style="cyan", justify="center")
+    table.add_column("Platform", style="green")
+    table.add_column("Device", style="yellow")
+    table.add_column("Type", style="magenta")
+    
+    for idx, (platform, device) in enumerate(devices):
+        device_type = "GPU"
+        if device.type == cl.device_type.CPU:
+            device_type = "CPU"
+        elif device.type == cl.device_type.ACCELERATOR:
+            device_type = "Accelerator"
+        
+        table.add_row(
+            str(idx),
+            platform.name,
+            device.name,
+            device_type
+        )
+    
+    console.print("\n")
+    console.print(table)
+    console.print()
+
+
+@app.command()
 def main(
     target_zeroes: Optional[int] = typer.Option(None, "--target", "-t", help="Target number of zeroes to find"),
     prefix: Optional[str] = typer.Option(None, "--prefix", "-p", help="Prefix string to use before nonce"),
@@ -236,14 +281,18 @@ def main(
     check_trailing: Optional[bool] = typer.Option(None, "--trailing/--no-trailing", help="Check for trailing zeroes"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: CPU count)"),
     use_defaults: bool = typer.Option(False, "--default", help="Use default values without prompting"),
-    use_gpu: bool = typer.Option(False, "--gpu", help="Use GPU acceleration (optimized batch processing)")
+    use_gpu: bool = typer.Option(False, "--gpu", help="Force GPU acceleration (overrides auto-detection)"),
+    force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU mode (disable GPU acceleration)")
 ):
     """
     Find a hash with leading or trailing zeroes using parallel processing.
     
     Prompts for any settings not provided via command-line arguments unless --default is used.
     
-    GPU mode uses optimized batch processing with concurrent hashing for better performance.
+    GPU acceleration is auto-detected and enabled by default if available. Use --cpu to force
+    CPU mode or --gpu to force GPU mode. GPU mode uses optimized batch processing with concurrent
+    hashing for better performance.
+    
     For true GPU SHA-256 acceleration, full OpenCL/CUDA kernel implementation would be required.
     """
     # Use defaults if flag is set
@@ -286,13 +335,55 @@ def main(
         console.print("[bold red]Error:[/bold red] At least one of --leading or --trailing must be enabled")
         raise typer.Exit(1)
     
-    # GPU support check
-    gpu_enabled = use_gpu
-    if use_gpu and not GPU_AVAILABLE:
-        console.print("[yellow]Warning:[/yellow] GPU support requested but PyOpenCL/numpy not available.")
-        console.print("Install with: [cyan]pip install pyopencl numpy[/cyan]")
-        console.print("Falling back to CPU mode.\n")
+    # GPU auto-detection
+    gpu_devices = []
+    gpu_enabled = False
+    
+    if force_cpu:
+        # Force CPU mode
         gpu_enabled = False
+        mode_info = "[dim]CPU (forced)[/dim]"
+    elif use_gpu:
+        # Force GPU mode (user requested)
+        if not GPU_AVAILABLE:
+            console.print("[yellow]Warning:[/yellow] GPU support requested but PyOpenCL/numpy not available.")
+            console.print("Install with: [cyan]pip install pyopencl numpy[/cyan]")
+            console.print("Falling back to CPU mode.\n")
+            gpu_enabled = False
+            mode_info = "[dim]CPU (GPU unavailable)[/dim]"
+        else:
+            gpu_devices = get_gpu_devices()
+            if not gpu_devices:
+                console.print("[yellow]Warning:[/yellow] GPU support requested but no GPU devices detected.")
+                console.print("For AMD GPUs:")
+                console.print("  - Install latest AMD Adrenalin drivers (includes OpenCL runtime)")
+                console.print("  - Download from: [cyan]https://www.amd.com/en/support[/cyan]")
+                console.print("  - Run [cyan]leadingzeroes list-gpus[/cyan] to verify detection")
+                console.print("Falling back to CPU mode.\n")
+                gpu_enabled = False
+                mode_info = "[dim]CPU (no GPU detected)[/dim]"
+            else:
+                gpu_enabled = True
+                mode_info = f"[green]GPU (forced, {len(gpu_devices)} device(s))[/green]"
+    else:
+        # Auto-detect GPU
+        if GPU_AVAILABLE:
+            gpu_devices = get_gpu_devices()
+            if gpu_devices:
+                gpu_enabled = True
+                mode_info = f"[green]GPU (auto-detected, {len(gpu_devices)} device(s))[/green]"
+                # Show which GPU was detected
+                if len(gpu_devices) == 1:
+                    _, device = gpu_devices[0]
+                    console.print(f"[green]✓ GPU detected:[/green] [cyan]{device.name}[/cyan]\n")
+                else:
+                    console.print(f"[green]✓ {len(gpu_devices)} GPU devices detected[/green]\n")
+            else:
+                gpu_enabled = False
+                mode_info = "[dim]CPU (no GPU detected)[/dim]"
+        else:
+            gpu_enabled = False
+            mode_info = "[dim]CPU (PyOpenCL not installed)[/dim]"
     
     # Determine number of workers (use all CPU cores by default)
     if workers is None:
@@ -327,8 +418,7 @@ def main(
         check_types.append("[cyan]trailing[/cyan]")
     
     config_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
-    mode_text = "[bold green]GPU[/bold green]" if gpu_enabled else "[dim]CPU[/dim]"
-    config_table.add_row("[bold]Mode:[/bold]", mode_text)
+    config_table.add_row("[bold]Mode:[/bold]", mode_info)
     config_table.add_row("[bold]Workers:[/bold]", f"[green]{num_workers}[/green]")
     config_table.add_row("[bold]Prefix:[/bold]", f"[yellow]{prefix}[/yellow]")
     config_table.add_row("[bold]Target:[/bold]", f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)} zeroes")
@@ -341,15 +431,59 @@ def main(
     # Set start time
     start_time_shared.value = time.time()
     
-    # Start a thread to monitor console output queue
-    output_thread_stop = threading.Event()
+    # Add shutdown flag for graceful exit
+    shutdown_flag = Value('i', 0)
     
-    def output_monitor():
+    # Signal handler for graceful shutdown
+    def signal_handler(signum, frame):
+        if shutdown_flag.value == 0:  # Only print once
+            shutdown_flag.value = 1
+            # Signal all workers to stop
+            found_solution_shared['found'] = True
+    
+    # Register signal handlers
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        if sys.platform != 'win32':
+            signal.signal(signal.SIGTERM, signal_handler)
+    except (ValueError, OSError):
+        # Signal handling may fail in some contexts (e.g., in threads)
+        pass
+    
+    # Create progress bar
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("•"),
+        TextColumn("[cyan]{task.completed:,}[/cyan] attempts"),
+        TextColumn("•"),
+        TextColumn("[green]{task.fields[rate]:,.0f}[/green] hashes/sec"),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False
+    )
+    
+    task_id = progress.add_task("[cyan]Searching for hash...", total=None, rate=0)
+    
+    # Start progress bar
+    progress.start()
+    
+    solution_found = False
+    
+    def update_progress():
+        """Update progress bar from queue messages."""
         import queue
-        while not output_thread_stop.is_set():
+        nonlocal solution_found
+        last_update = 0
+        while not solution_found and shutdown_flag.value == 0:
             try:
-                msg_type, data = console_output_queue.get(timeout=0.5)
+                msg_type, data = console_output_queue.get(timeout=0.1)
                 if msg_type == 'found':
+                    solution_found = True
+                    progress.stop()
                     table = Table(show_header=False, box=box.DOUBLE, padding=(0, 1), border_style="green")
                     table.add_row("[bold green]FOUND![/bold green]", f"{data['target']} {data['type'].upper()} zeroes")
                     table.add_row("[bold]Hash:[/bold]", f"[yellow]{data['hash']}[/yellow]")
@@ -361,25 +495,42 @@ def main(
                     console.print(Panel(table, title="[bold green]🎉 Solution Found![/bold green]", border_style="green"))
                     console.print()
                 elif msg_type == 'progress':
-                    elapsed_text = f"[dim]{data['elapsed']:.2f}s[/dim]"
-                    attempts_text = f"[bold]{data['attempts']:,}[/bold] attempts"
-                    rate_text = f"[cyan]{data['rate']:,.0f}[/cyan] hashes/sec"
-                    console.print(f"{elapsed_text} Progress: {attempts_text} ({rate_text})")
+                    # Update progress bar
+                    progress.update(
+                        task_id,
+                        completed=data['attempts'],
+                        rate=data['rate'],
+                        description="[cyan]Searching for hash..."
+                    )
+                    last_update = time.time()
                 elif msg_type == 'error':
                     console.print(f"[yellow]Warning:[/yellow] {data}")
             except queue.Empty:
-                # Expected timeout, continue polling
+                # Update progress with current stats periodically even without new message
+                current_time = time.time()
+                if current_time - last_update > 0.5:  # Update every 500ms
+                    if total_attempts_shared.value > 0:
+                        elapsed = time.time() - start_time_shared.value
+                        if elapsed > 0:
+                            rate = total_attempts_shared.value / elapsed
+                            progress.update(
+                                task_id,
+                                completed=total_attempts_shared.value,
+                                rate=rate,
+                                description="[cyan]Searching for hash..."
+                            )
+                            last_update = current_time
                 continue
             except Exception:
-                # Ignore other exceptions to prevent thread crash
                 pass
     
-    output_thread = threading.Thread(target=output_monitor, daemon=True)
-    output_thread.start()
+    # Start progress update thread
+    progress_thread = threading.Thread(target=update_progress, daemon=True)
+    progress_thread.start()
     
     # Create worker processes
     processes = []
-    gpu_devices = get_gpu_devices() if GPU_AVAILABLE else []
+    # Use gpu_devices from detection above (already set)
     for i in range(num_workers):
         if gpu_enabled:
             # Use GPU-accelerated worker
@@ -401,29 +552,73 @@ def main(
         p.start()
         processes.append(p)
     
-    # Wait for all processes to complete
-    for p in processes:
-        p.join()
+    # Wait for processes with graceful shutdown handling
+    try:
+        # Monitor for shutdown or completion
+        while any(p.is_alive() for p in processes) and not solution_found:
+            time.sleep(0.1)
+            # Check if we should shutdown
+            if shutdown_flag.value == 1:
+                console.print("\n[yellow]Interrupt received. Shutting down gracefully...[/yellow]")
+                break
+        
+        # Give processes a moment to finish
+        for p in processes:
+            if p.is_alive():
+                p.join(timeout=2)
+        
+        # Force terminate if still running (shouldn't happen with graceful shutdown)
+        if shutdown_flag.value == 1:
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=1)
+                    if p.is_alive():
+                        p.kill()
+    except KeyboardInterrupt:
+        # Handle keyboard interrupt during join
+        console.print("\n[yellow]Interrupt received. Shutting down...[/yellow]")
+        shutdown_flag.value = 1
+        found_solution_shared['found'] = True
+        for p in processes:
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=1)
+                if p.is_alive():
+                    p.kill()
     
-    # Stop output monitor
-    output_thread_stop.set()
-    output_thread.join(timeout=1)
+    # Stop progress bar if still running
+    if not solution_found:
+        progress.stop()
     
     # Print final summary with Rich
     elapsed = time.time() - start_time_shared.value
+    was_interrupted = shutdown_flag.value == 1 and not found_solution_shared['found']
+    
     summary_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
-    summary_table.add_row("[bold]Search completed in:[/bold]", f"[green]{elapsed:.2f} seconds[/green]")
+    
+    if was_interrupted:
+        summary_table.add_row("[bold]Status:[/bold]", "[yellow]Interrupted by user[/yellow]")
+        summary_table.add_row("[bold]Time elapsed:[/bold]", f"[dim]{elapsed:.2f} seconds[/dim]")
+    else:
+        summary_table.add_row("[bold]Search completed in:[/bold]", f"[green]{elapsed:.2f} seconds[/green]")
+    
     summary_table.add_row("[bold]Total attempts:[/bold]", f"[yellow]{total_attempts_shared.value:,}[/yellow]")
     
-    if found_solution_shared['found']:
+    if found_solution_shared['found'] and found_solution_shared['hash']:
         summary_table.add_row("[bold]Solution found:[/bold]", f"[green]{found_solution_shared['zero_type']} zeroes[/green]")
         summary_table.add_row("[bold]Input:[/bold]", f"[cyan]{found_solution_shared['input']}[/cyan]")
         summary_table.add_row("[bold]Hash:[/bold]", f"[yellow]{found_solution_shared['hash']}[/yellow]")
+    elif was_interrupted:
+        summary_table.add_row("[bold]Solution:[/bold]", "[dim]No solution found (search interrupted)[/dim]")
     else:
-        summary_table.add_row("[bold]Status:[/bold]", "[red]No solution found (shouldn't happen if we found one)[/red]")
+        summary_table.add_row("[bold]Solution:[/bold]", "[red]No solution found[/red]")
+    
+    title = "[bold yellow]Search Interrupted[/bold yellow]" if was_interrupted else "[bold blue]Final Summary[/bold blue]"
+    border_color = "yellow" if was_interrupted else "blue"
     
     console.print("\n")
-    console.print(Panel(summary_table, title="[bold blue]Final Summary[/bold blue]", border_style="blue"))
+    console.print(Panel(summary_table, title=title, border_style=border_color))
     console.print()
 
 
