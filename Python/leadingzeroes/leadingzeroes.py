@@ -232,7 +232,9 @@ console = Console()
 
 
 @app.command()
-def list_gpus():
+def list_gpus(
+    detailed: bool = typer.Option(False, "--detailed", "-d", help="Show detailed device information")
+):
     """List available GPU devices for OpenCL acceleration."""
     if not GPU_AVAILABLE:
         console.print("[red]PyOpenCL is not installed.[/red]")
@@ -248,33 +250,102 @@ def list_gpus():
         console.print("3. GPU is not compatible with OpenCL")
         return
     
-    table = Table(title="[bold blue]Available GPU Devices[/bold blue]", box=box.ROUNDED)
-    table.add_column("ID", style="cyan", justify="center")
-    table.add_column("Platform", style="green")
-    table.add_column("Device", style="yellow")
-    table.add_column("Type", style="magenta")
-    
-    for idx, (platform, device) in enumerate(devices):
-        device_type = "GPU"
-        if device.type == cl.device_type.CPU:
-            device_type = "CPU"
-        elif device.type == cl.device_type.ACCELERATOR:
-            device_type = "Accelerator"
+    if detailed:
+        # Show detailed information for each device
+        if not GPU_AVAILABLE:
+            console.print("[red]Cannot show detailed info: PyOpenCL not available[/red]")
+            return
         
-        table.add_row(
-            str(idx),
-            platform.name,
-            device.name,
-            device_type
-        )
-    
-    console.print("\n")
-    console.print(table)
-    console.print()
+        for idx, (platform, device) in enumerate(devices):
+            device_type = "GPU"
+            if device.type == cl.device_type.CPU:
+                device_type = "CPU"
+            elif device.type == cl.device_type.ACCELERATOR:
+                device_type = "Accelerator"
+            
+            # Get device properties
+            try:
+                memory = device.get_info(cl.device_info.GLOBAL_MEM_SIZE) / (1024**3)  # GB
+                compute_units = device.get_info(cl.device_info.MAX_COMPUTE_UNITS)
+                max_work_group_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+                opencl_version = device.get_info(cl.device_info.OPENCL_C_VERSION)
+            except:
+                memory = "N/A"
+                compute_units = "N/A"
+                max_work_group_size = "N/A"
+                opencl_version = "N/A"
+            
+            table = Table(
+                title=f"[bold blue]GPU Device {idx}[/bold blue]",
+                box=box.ROUNDED,
+                show_header=False
+            )
+            table.add_column("Property", style="cyan", width=25)
+            table.add_column("Value", style="yellow")
+            
+            table.add_row("Platform", platform.name)
+            table.add_row("Device Name", device.name)
+            table.add_row("Type", device_type)
+            table.add_row("Memory", f"{memory:.2f} GB" if isinstance(memory, float) else str(memory))
+            table.add_row("Compute Units", str(compute_units))
+            table.add_row("Max Work Group Size", str(max_work_group_size))
+            table.add_row("OpenCL Version", str(opencl_version))
+            
+            console.print("\n")
+            console.print(table)
+        
+        console.print()
+    else:
+        # Show summary table
+        table = Table(title="[bold blue]Available GPU Devices[/bold blue]", box=box.ROUNDED)
+        table.add_column("ID", style="cyan", justify="center")
+        table.add_column("Platform", style="green")
+        table.add_column("Device Name", style="yellow")
+        table.add_column("Type", style="magenta")
+        table.add_column("Architecture", style="dim")
+        
+        # Map common AMD GPU codenames
+        arch_map = {
+            "gfx1101": "RDNA 3 (RX 7800/7900 series)",
+            "gfx1100": "RDNA 3",
+            "gfx1102": "RDNA 3",
+            "gfx1036": "RDNA 2 (RX 6600/6700 series)",
+            "gfx1030": "RDNA 2",
+            "gfx1031": "RDNA 2",
+            "gfx1032": "RDNA 2",
+        }
+        
+        for idx, (platform, device) in enumerate(devices):
+            device_type = "GPU"
+            if device.type == cl.device_type.CPU:
+                device_type = "CPU"
+            elif device.type == cl.device_type.ACCELERATOR:
+                device_type = "Accelerator"
+            
+            # Try to identify architecture from device name
+            device_name = device.name.lower()
+            arch = "Unknown"
+            for codename, description in arch_map.items():
+                if codename in device_name:
+                    arch = description
+                    break
+            
+            table.add_row(
+                str(idx),
+                platform.name,
+                device.name,
+                device_type,
+                arch
+            )
+        
+        console.print("\n")
+        console.print(table)
+        console.print("\n[dim]Tip: Use --detailed flag for more information about each device[/dim]\n")
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     target_zeroes: Optional[int] = typer.Option(None, "--target", "-t", help="Target number of zeroes to find"),
     prefix: Optional[str] = typer.Option(None, "--prefix", "-p", help="Prefix string to use before nonce"),
     check_leading: Optional[bool] = typer.Option(None, "--leading/--no-leading", help="Check for leading zeroes"),
@@ -295,6 +366,24 @@ def main(
     
     For true GPU SHA-256 acceleration, full OpenCL/CUDA kernel implementation would be required.
     """
+    # If a subcommand was invoked, don't run the main search
+    if ctx.invoked_subcommand is not None:
+        return
+    
+    # Otherwise, run the search
+    run_search(target_zeroes, prefix, check_leading, check_trailing, workers, use_defaults, use_gpu, force_cpu)
+
+
+def run_search(
+    target_zeroes: Optional[int],
+    prefix: Optional[str],
+    check_leading: Optional[bool],
+    check_trailing: Optional[bool],
+    workers: Optional[int],
+    use_defaults: bool,
+    use_gpu: bool,
+    force_cpu: bool
+):
     # Use defaults if flag is set
     if use_defaults:
         target_zeroes = target_zeroes or 6
