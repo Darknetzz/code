@@ -551,23 +551,38 @@ def run_search(
     random_seed: Optional[int],
     random_length: Optional[int]
 ):
+    # Auto-enable recurring if --recurring-any is provided
+    if recurring_find_any and not check_recurring:
+        check_recurring = True
+    
+    # Auto-enable recurring if --recurring-any is provided (do this early)
+    if recurring_find_any and not check_recurring:
+        check_recurring = True
+    
     # Use defaults if flag is set
     if use_defaults:
-        target_zeroes = target_zeroes or 6
         prefix = prefix or "my_homelab_challenge_"
-        if check_leading is None and check_trailing is None:
+        # Only set target_zeroes if we're checking leading/trailing
+        if not check_recurring or check_leading or check_trailing:
+            target_zeroes = target_zeroes or 6
+        else:
+            target_zeroes = 0  # Not used for recurring-only mode
+        if check_leading is None and check_trailing is None and not check_recurring:
             check_leading = False
             check_trailing = True
     else:
-        # Prompt for target_zeroes if not provided
-        if target_zeroes is None:
-            target_zeroes = typer.prompt("Target number of zeroes", default=6, type=int)
-        
         # Prompt for prefix if not provided
         if prefix is None:
             prefix = typer.prompt("Prefix string", default="my_homelab_challenge_")
         
-        # Prompt for check type if neither is provided and recurring is not explicitly enabled
+        # Only prompt for target_zeroes if we're checking leading or trailing zeroes
+        only_recurring = check_recurring and not check_leading and not check_trailing
+        if target_zeroes is None and not only_recurring:
+            target_zeroes = typer.prompt("Target number of zeroes", default=6, type=int)
+        elif target_zeroes is None and only_recurring:
+            target_zeroes = 0  # Not used for recurring patterns, but need a value
+        
+        # Prompt for check type if none are explicitly set
         if check_leading is None and check_trailing is None and not check_recurring:
             while True:
                 check_type = typer.prompt(
@@ -581,10 +596,6 @@ def run_search(
             check_trailing = check_type in ["t", "b"]
             if check_type == "r":
                 check_recurring = True
-    
-    # Auto-enable recurring if --recurring-any is provided
-    if recurring_find_any and not check_recurring:
-        check_recurring = True
     
     # If only one is provided via CLI, default the other to False
     if check_leading is None:
