@@ -567,18 +567,24 @@ def run_search(
         if prefix is None:
             prefix = typer.prompt("Prefix string", default="my_homelab_challenge_")
         
-        # Prompt for check type if neither is provided
-        if check_leading is None and check_trailing is None:
+        # Prompt for check type if neither is provided and recurring is not explicitly enabled
+        if check_leading is None and check_trailing is None and not check_recurring:
             while True:
                 check_type = typer.prompt(
-                    "Check for (l)eading, (t)railing, or (b)oth zeroes?",
+                    "Check for (l)eading, (t)railing, (r)ecurring, or (b)oth zeroes?",
                     default="t"
                 ).lower().strip()
-                if check_type in ["l", "t", "b"]:
+                if check_type in ["l", "t", "r", "b"]:
                     break
-                console.print("[yellow]Please enter 'l', 't', or 'b'[/yellow]")
+                console.print("[yellow]Please enter 'l', 't', 'r', or 'b'[/yellow]")
             check_leading = check_type in ["l", "b"]
             check_trailing = check_type in ["t", "b"]
+            if check_type == "r":
+                check_recurring = True
+    
+    # Auto-enable recurring if --recurring-any is provided
+    if recurring_find_any and not check_recurring:
+        check_recurring = True
     
     # If only one is provided via CLI, default the other to False
     if check_leading is None:
