@@ -39,6 +39,18 @@ def find_longest_recurring(hash_str: str, min_length: int = 3, find_any: bool = 
     """
     if find_any:
         min_length = 2  # Override to find any repetition
+        # Ultra-fast path: just check for any 2 consecutive identical characters
+        for i in range(len(hash_str) - 1):
+            if hash_str[i] == hash_str[i + 1]:
+                # Found 2 consecutive, now find how many
+                char = hash_str[i]
+                length = 2
+                j = i + 2
+                while j < len(hash_str) and hash_str[j] == char:
+                    length += 1
+                    j += 1
+                return (length, 'same_char', char * length)
+        return (0, None, None)
     
     if len(hash_str) < min_length:
         return (0, None, None)
@@ -60,6 +72,10 @@ def find_longest_recurring(hash_str: str, min_length: int = 3, find_any: bool = 
             max_pattern = char * length
             max_type = 'same_char'
         i = j
+    
+    # For find_any mode, we already returned above, so skip expensive repeating check
+    if find_any:
+        return (max_len, max_type, max_pattern)
     
     # Check for repeating sequences (e.g., "ababab", "123123")
     for seq_len in range(1, len(hash_str) // 2 + 1):
@@ -211,13 +227,15 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
             found, zero_type, hash_result, input_str, pattern, pattern_length = result
             if found:
                 with counter_lock:
+                    # Add local attempts to global counter before reporting
+                    total_attempts.value += local_attempts
                     if not found_solution['found']:
                         found_solution['found'] = True
                         found_solution['hash'] = hash_result
                         found_solution['input'] = input_str
                         found_solution['zero_type'] = zero_type
                         elapsed = time.time() - start_time.value
-                        current_total = total_attempts.value + local_attempts
+                        current_total = total_attempts.value
                         found_data = {
                             'type': zero_type,
                             'target': target_zeroes if 'recurring' not in zero_type else pattern_length,
@@ -235,12 +253,13 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
         
         nonce += batch_size * num_workers
         
-        # Update counter periodically
-        if local_attempts % 100000 == 0:
+        # Update counter periodically (every 10k iterations for better progress updates)
+        if local_attempts % 10000 == 0:
             with counter_lock:
                 total_attempts.value += local_attempts
                 current_total = total_attempts.value
-                if current_total % 10000000 == 0 and current_total > 0:
+                # Send progress updates every 1M attempts (more frequent updates)
+                if current_total % 1000000 == 0 and current_total > 0:
                     elapsed = time.time() - start_time.value
                     if elapsed > 0.001:
                         rate = current_total / elapsed
@@ -294,13 +313,15 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
         # Check leading zeroes
         if check_leading and hash_result.startswith(target_leading):
             with counter_lock:
+                # Add local attempts to global counter before reporting
+                total_attempts.value += local_attempts
                 if not found_solution['found']:
                     found_solution['found'] = True
                     found_solution['hash'] = hash_result
                     found_solution['input'] = input_str
                     found_solution['zero_type'] = 'leading'
                     elapsed = time.time() - start_time.value
-                    current_total = total_attempts.value + local_attempts
+                    current_total = total_attempts.value
                     # Send formatted output to queue for main process to display
                     console_output_queue.put(('found', {
                         'type': 'leading',
@@ -316,13 +337,15 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
         # Check trailing zeroes
         if check_trailing and hash_result.endswith(target_trailing):
             with counter_lock:
+                # Add local attempts to global counter before reporting
+                total_attempts.value += local_attempts
                 if not found_solution['found']:
                     found_solution['found'] = True
                     found_solution['hash'] = hash_result
                     found_solution['input'] = input_str
                     found_solution['zero_type'] = 'trailing'
                     elapsed = time.time() - start_time.value
-                    current_total = total_attempts.value + local_attempts
+                    current_total = total_attempts.value
                     # Send formatted output to queue for main process to display
                     console_output_queue.put(('found', {
                         'type': 'trailing',
@@ -341,13 +364,15 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
             pattern_len, pattern_type, pattern = find_longest_recurring(hash_result, effective_min, recurring_find_any)
             if pattern_len >= effective_min:
                 with counter_lock:
+                    # Add local attempts to global counter before reporting
+                    total_attempts.value += local_attempts
                     if not found_solution['found']:
                         found_solution['found'] = True
                         found_solution['hash'] = hash_result
                         found_solution['input'] = input_str
                         found_solution['zero_type'] = f'recurring_{pattern_type}'
                         elapsed = time.time() - start_time.value
-                        current_total = total_attempts.value + local_attempts
+                        current_total = total_attempts.value
                         # Send formatted output to queue for main process to display
                         console_output_queue.put(('found', {
                             'type': f'recurring_{pattern_type}',
@@ -364,14 +389,14 @@ def worker(worker_id, prefix, target_zeroes, check_leading, check_trailing, num_
         
         nonce += num_workers  # Stride by num_workers to maintain separation
         
-        # Update global counter periodically (every 100k iterations)
-        if local_attempts % 100000 == 0:
+        # Update global counter periodically (every 10k iterations for better progress updates)
+        if local_attempts % 10000 == 0:
             with counter_lock:
                 total_attempts.value += local_attempts
                 
-                # Send progress updates every 10M attempts
+                # Send progress updates every 1M attempts (more frequent updates)
                 current_total = total_attempts.value
-                if current_total % 10000000 == 0 and current_total > 0:
+                if current_total % 1000000 == 0 and current_total > 0:
                     elapsed = time.time() - start_time.value
                     if elapsed > 0.001:
                         rate = current_total / elapsed
@@ -834,14 +859,16 @@ def run_search(
             except queue.Empty:
                 # Update progress with current stats periodically even without new message
                 current_time = time.time()
-                if current_time - last_update > 0.5:  # Update every 500ms
-                    if total_attempts_shared.value > 0:
+                if current_time - last_update > 0.2:  # Update every 200ms for smoother updates
+                    # Always read from shared counter for accurate progress
+                    attempts = total_attempts_shared.value
+                    if attempts > 0:
                         elapsed = time.time() - start_time_shared.value
                         if elapsed > 0:
-                            rate = total_attempts_shared.value / elapsed
+                            rate = attempts / elapsed
                             progress.update(
                                 task_id,
-                                completed=total_attempts_shared.value,
+                                completed=attempts,
                                 rate=rate,
                                 description="[cyan]Searching for hash..."
                             )
