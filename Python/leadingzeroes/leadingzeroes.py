@@ -5,19 +5,23 @@ import threading
 import signal
 import sys
 import secrets
-import os
-from pathlib import Path
 from multiprocessing import Value, Lock, Manager
 import typer
-from typing import Optional
+from typing import Optional, Any, TYPE_CHECKING
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich import box
 
 # GPU support (optional)
+cl: Any = None
+np: Any = None
+if TYPE_CHECKING:
+    # Help type checkers know the modules exist when available
+    import pyopencl as cl  # type: ignore
+    import numpy as np  # type: ignore
+
 try:
     import pyopencl as cl
     import numpy as np
@@ -276,7 +280,7 @@ def get_gpu_devices():
         for platform in platforms:
             for device in platform.get_devices(device_type=cl.device_type.GPU):
                 devices.append((platform, device))
-    except:
+    except Exception:
         pass
     
     return devices
@@ -306,7 +310,7 @@ def load_opencl_kernel(device_idx=0):
         kernel = program.sha256_kernel
         
         return ctx, queue, kernel
-    except Exception as e:
+    except Exception:
         # Kernel loading failed, return None
         # In debug mode, you could log the error here
         return None, None, None
@@ -335,7 +339,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
         if ctx is None or queue is None or kernel is None:
             # Kernel loading failed, fallback to CPU
             return
-    except Exception as e:
+    except Exception:
         # Kernel loading failed, exit worker gracefully
         return
     
@@ -397,7 +401,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
             output_array = np.empty(batch_size * 32, dtype=np.uint8)
             cl.enqueue_copy(queue, output_array, output_buf)
             queue.finish()
-        except Exception as e:
+        except Exception:
             # OpenCL error occurred, exit worker gracefully
             # The process will terminate and main process will handle it
             return
@@ -443,7 +447,7 @@ def worker_gpu(worker_id, prefix, target_zeroes, check_leading, check_trailing,
                         current_total = total_attempts.value
                         found_data = {
                             'type': zero_type,
-                            'target': target_zeroes if 'recurring' not in zero_type else pattern_length,
+                            'target': (pattern_length if (zero_type and isinstance(zero_type, str) and zero_type.startswith('recurring_')) else target_zeroes),
                             'hash': hash_hex,
                             'input': input_str,
                             'elapsed': elapsed,
@@ -659,7 +663,7 @@ def list_gpus(
                 compute_units = device.get_info(cl.device_info.MAX_COMPUTE_UNITS)
                 max_work_group_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
                 opencl_version = device.get_info(cl.device_info.OPENCL_C_VERSION)
-            except:
+            except Exception:
                 memory = "N/A"
                 compute_units = "N/A"
                 max_work_group_size = "N/A"
@@ -822,6 +826,10 @@ def run_search(
             check_leading = False
         if check_trailing is None:
             check_trailing = True
+
+    # Narrow types for the type checker: ensure these are not None from here on
+    assert prefix is not None
+    assert target_zeroes is not None
     
     # Validate that at least one check type is enabled
     if not check_leading and not check_trailing and not check_recurring:
@@ -913,9 +921,9 @@ def run_search(
         estimated_max_length = len(prefix.encode('utf-8')) + max_nonce_digits + final_random_length
         
         if estimated_max_length > 54:
-            console.print(f"[yellow]Warning:[/yellow] Input strings would exceed GPU kernel limit (54 bytes).")
+            console.print("[yellow]Warning:[/yellow] Input strings would exceed GPU kernel limit (54 bytes).")
             console.print(f"  Estimated length: {estimated_max_length} bytes (prefix: {len(prefix.encode('utf-8'))}, random: {final_random_length})")
-            console.print(f"  Falling back to CPU mode for compatibility.\n")
+            console.print("  Falling back to CPU mode for compatibility.\n")
             gpu_enabled = False
             mode_info = "[dim]CPU (input too long for GPU kernel)[/dim]"
         else:
@@ -956,7 +964,7 @@ def run_search(
     
     target_text = f"[magenta]{target_zeroes}[/magenta] {' or '.join(check_types)}"
     if check_recurring and (check_leading or check_trailing):
-        target_text += f" zeroes / recurring patterns"
+        target_text += " zeroes / recurring patterns"
     elif check_leading or check_trailing:
         target_text += " zeroes"
     else:
@@ -1065,7 +1073,7 @@ def run_search(
                 except (BrokenPipeError, OSError, ConnectionError):
                     # Worker processes crashed, exit monitor
                     break
-                except:
+                except Exception:
                     # Timeout or queue empty, continue
                     pass
             

@@ -3,7 +3,7 @@ import subprocess
 import shutil
 from pathlib import Path
 from rich.console import Console
-import time
+from datetime import datetime
 app = typer.Typer()
 console = Console()
 
@@ -11,7 +11,7 @@ console = Console()
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
 def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
-    prefix = f"[{time.now().strftime('%H:%M:%S')}]"
+    prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
     style  = ""
     type   = type.lower()
     
@@ -74,6 +74,37 @@ def main(
     # If a .spec file exists, use it directly to preserve custom settings
     if spec_file.exists():
         console.print(f"[green]✓ Found existing .spec file:[/green] {spec_file.name}")
+
+        # If the source file is newer than the spec, regenerate the spec
+        try:
+            src_mtime = file.stat().st_mtime
+            spec_mtime = spec_file.stat().st_mtime
+        except Exception:
+            src_mtime = None
+            spec_mtime = None
+
+        if src_mtime is not None and spec_mtime is not None and src_mtime > spec_mtime:
+            console.print("[yellow]⚠ Source is newer than .spec; regenerating .spec (backup saved)[/yellow]")
+            # Backup existing spec
+            backup_spec = spec_file.with_suffix(spec_file.suffix + ".bak")
+            try:
+                shutil.copy2(spec_file, backup_spec)
+            except Exception:
+                console.print("[red]✗ Failed to backup existing .spec; continuing without backup[/red]")
+
+            makespec_cmd = [
+                "pyi-makespec",
+                "--onefile",
+                f"--specpath={spec_path}",
+                str(file.resolve()),
+            ]
+            mk = subprocess.run(makespec_cmd, capture_output=True, text=True, cwd=str(base_dir))
+            if mk.returncode != 0:
+                console.print("[red]✗ pyi-makespec failed; using existing .spec[/red]")
+                console.print(mk.stderr, style="red")
+            else:
+                console.print("[green]✓ .spec regenerated[/green]")
+
         cmd = [
             "pyinstaller",
             f"--distpath={dist_path}",
