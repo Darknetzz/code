@@ -22,25 +22,24 @@ DEFAULT_HIGH_FREQUENCY = 20000.0
 DEFAULT_STEPS = 20
 
 DEFAULT_AMPLITUDE = 0.5  # Safe default amplitude (0.0 to 1.0)
-MAX_SAFE_AMPLITUDE = 0.7  # Maximum recommended amplitude
 
 # ============================================================================ #
 #                              FUNCTION: simple_tone                           #
 # ============================================================================ #
-def simple_tone(frequency: float = DEFAULT_FREQUENCY, duration: float = DEFAULT_DURATION, fs: int = DEFAULT_SAMPLE_RATE, amplitude: float = DEFAULT_AMPLITUDE):
+def simple_tone(frequency: float = DEFAULT_FREQUENCY, duration: float = DEFAULT_DURATION, sample_rate: int = DEFAULT_SAMPLE_RATE, amplitude: float = DEFAULT_AMPLITUDE):
     """Generate a simple sine wave tone.
     
     Args:
         frequency: Frequency in Hz
         duration: Duration in seconds
-        fs: Sample rate in Hz
+        sample_rate: Sample rate in Hz
         amplitude: Amplitude (0.0 to 1.0). Default 0.5 is safe. Higher values may cause hearing damage.
     """
     # Clamp amplitude to safe range
     amplitude = max(0.0, min(amplitude, 1.0))
     
     # Generate time axis
-    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
     # Generate a sine wave
     audio = amplitude * np.sin(2 * np.pi * frequency * t)
 
@@ -49,9 +48,9 @@ def simple_tone(frequency: float = DEFAULT_FREQUENCY, duration: float = DEFAULT_
 # ============================================================================ #
 #                            FUNCTION: generate_complex_tone                   #
 # ============================================================================ #
-def generate_complex_tone(fundamental, duration=DEFAULT_DURATION, fs=DEFAULT_SAMPLE_RATE):
+def generate_complex_tone(fundamental, duration=DEFAULT_DURATION, sample_rate=DEFAULT_SAMPLE_RATE):
     """Generate a complex tone with harmonics."""
-    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
     
     # We create a 'recipe' for the sound (Harmonic number, Amplitude)
     # Fundamental, Octave, Octave + Fifth, etc.
@@ -66,7 +65,7 @@ def generate_complex_tone(fundamental, duration=DEFAULT_DURATION, fs=DEFAULT_SAM
     audio = sum(amp * np.sin(2 * np.pi * fundamental * h * t) for h, amp in harmonics)
     
     # Apply a quick 'Envelope' to prevent clicking at start/end
-    fade = int(fs * DEFAULT_FADE_TIME * 2)  # Use 2x fade time for complex tone envelope
+    fade = int(sample_rate * DEFAULT_FADE_TIME * 2)  # Use 2x fade time for complex tone envelope
     envelope = np.ones_like(audio)
     envelope[:fade] = np.linspace(0, 1, fade) # Fade in
     envelope[-fade:] = np.linspace(1, 0, fade) # Fade out
@@ -74,11 +73,32 @@ def generate_complex_tone(fundamental, duration=DEFAULT_DURATION, fs=DEFAULT_SAM
     return audio * envelope
 
 # ============================================================================ #
+#                         FUNCTION: generate_tone                              #
+# ============================================================================ #
+def generate_tone(frequency: float, duration: float = DEFAULT_DURATION, 
+                  simple: bool = DEFAULT_SIMPLE, sample_rate: int = DEFAULT_SAMPLE_RATE) -> np.ndarray:
+    """Generate a tone (simple or complex) at the specified frequency.
+    
+    Args:
+        frequency: Frequency in Hz
+        duration: Duration in seconds
+        simple: Use simple sine wave (True) or complex tone (False)
+        sample_rate: Sample rate in Hz
+    
+    Returns:
+        Audio array
+    """
+    if simple:
+        return simple_tone(frequency, duration, sample_rate)
+    else:
+        return generate_complex_tone(frequency, duration, sample_rate)
+
+# ============================================================================ #
 #                              FUNCTION: play_tone                             #
 # ============================================================================ #
-def play_tone(tone, fs: int = DEFAULT_SAMPLE_RATE):
+def play_tone(tone, sample_rate: int = DEFAULT_SAMPLE_RATE):
     """Play a tone using sounddevice."""
-    sd.play(tone, fs)
+    sd.play(tone, sample_rate)
     sd.wait()
 
 # ============================================================================ #
@@ -139,131 +159,136 @@ def play_freq(
                 prefix = f"{output_prefix}[{i}/{len(frequencies)}] "
             typer.echo(f"{prefix}Playing {freq} Hz for {current_duration}s...")
         
-        if simple:
-            tone = simple_tone(freq, current_duration, sample_rate)
-        else:
-            tone = generate_complex_tone(freq, current_duration, sample_rate)
-        
+        tone = generate_tone(freq, current_duration, simple, sample_rate)
         play_tone(tone, sample_rate)
         
         if current_pause > 0:
             time.sleep(current_pause)
 
 # ============================================================================ #
-#                         FUNCTION: generate_sequence_with_fade                #
+#                            FUNCTION: generate_sequence                        #
 # ============================================================================ #
-def generate_sequence_with_fade(
+def generate_sequence(
     frequencies: List[float],
     duration: float = DEFAULT_DURATION,
     pause: float = DEFAULT_PAUSE,
     fade_time: float = DEFAULT_FADE_TIME,
     simple: bool = DEFAULT_SIMPLE,
-    fs: int = DEFAULT_SAMPLE_RATE
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    fade: bool = True
 ) -> np.ndarray:
-    """Generate a sequence of tones with smooth crossfade transitions.
+    """Generate a sequence of tones, optionally with smooth crossfade transitions.
     
     Args:
         frequencies: List of frequencies to play
         duration: Duration of each tone in seconds
-        pause: Pause between tones in seconds (can be negative for overlap)
-        fade_time: Time for fade-in/fade-out in seconds
+        pause: Pause between tones in seconds (can be negative for overlap when fade=True)
+        fade_time: Time for fade-in/fade-out in seconds (only used when fade=True)
         simple: Use simple sine wave (True) or complex tone (False)
-        fs: Sample rate in Hz
+        sample_rate: Sample rate in Hz
+        fade: Whether to use smooth crossfade transitions (default: True)
     
     Returns:
-        Combined audio array with smooth transitions
+        Combined audio array
     """
     if not frequencies:
         return np.array([])
     
     # Generate individual tones
-    tones = []
-    for freq in frequencies:
-        if simple:
-            tone = simple_tone(freq, duration, fs)
-        else:
-            tone = generate_complex_tone(freq, duration, fs)
-        tones.append(tone)
+    tones = [generate_tone(freq, duration, simple, sample_rate) for freq in frequencies]
     
-    # Calculate fade samples
-    fade_samples = int(fs * fade_time)
+    # Single tone: just return it
+    if len(tones) == 1:
+        return tones[0]
     
-    # Apply fade-in to first tone and fade-out to last tone
-    if len(tones) > 0:
-        # Fade in first tone
+    if fade:
+        # Use crossfade logic
+        # Calculate fade samples
+        fade_samples = int(sample_rate * fade_time)
+        
+        # Apply fade-in to first tone and fade-out to last tone
         if fade_samples > 0 and len(tones[0]) > fade_samples:
             fade_in = np.linspace(0, 1, fade_samples)
             tones[0][:fade_samples] *= fade_in
         
-        # Fade out last tone
         if fade_samples > 0 and len(tones[-1]) > fade_samples:
             fade_out = np.linspace(1, 0, fade_samples)
             tones[-1][-fade_samples:] *= fade_out
-    
-    # Combine tones with crossfade
-    if len(tones) == 1:
-        return tones[0]
-    
-    # Calculate pause samples (can be negative for overlap)
-    pause_samples = int(fs * pause)
-    
-    # Calculate total length
-    tone_length = len(tones[0])
-    total_length = tone_length + (len(tones) - 1) * (tone_length + pause_samples)
-    
-    # Create output array
-    output = np.zeros(total_length)
-    
-    # Place tones with crossfade
-    for i, tone in enumerate(tones):
-        start_idx = i * (tone_length + pause_samples)
-        end_idx = start_idx + len(tone)
         
-        if i > 0 and pause_samples < 0:
-            # Overlap: crossfade with previous tone
-            overlap = abs(pause_samples)
-            if overlap < fade_samples:
-                # Short overlap: simple crossfade
-                fade_out = np.linspace(1, 0, overlap)
-                fade_in = np.linspace(0, 1, overlap)
-                
-                # Fade out previous tone's end
-                prev_end = start_idx
-                prev_start = prev_end - overlap
-                if prev_start >= 0:
-                    output[prev_start:prev_end] *= fade_out
-                
-                # Fade in current tone's start
-                output[start_idx:start_idx + overlap] += tone[:overlap] * fade_in
-                output[start_idx + overlap:end_idx] += tone[overlap:]
-            else:
-                # Longer overlap: full crossfade
-                fade_out = np.linspace(1, 0, fade_samples)
-                fade_in = np.linspace(0, 1, fade_samples)
-                
-                # Fade out previous tone
-                prev_end = start_idx
-                prev_start = prev_end - fade_samples
-                if prev_start >= 0:
-                    output[prev_start:prev_end] *= fade_out
-                
-                # Fade in current tone
-                output[start_idx:start_idx + fade_samples] += tone[:fade_samples] * fade_in
-                output[start_idx + fade_samples:end_idx] += tone[fade_samples:]
-        else:
-            # No overlap or pause: just add the tone
-            if i > 0:
-                # Fade in at the start
-                if fade_samples > 0:
+        # Calculate pause samples (can be negative for overlap)
+        pause_samples = int(sample_rate * pause)
+        
+        # Calculate total length
+        tone_length = len(tones[0])
+        total_length = tone_length + (len(tones) - 1) * (tone_length + pause_samples)
+        
+        # Create output array
+        output = np.zeros(total_length)
+        
+        # Place tones with crossfade
+        for i, tone in enumerate(tones):
+            start_idx = i * (tone_length + pause_samples)
+            end_idx = start_idx + len(tone)
+            
+            if i > 0 and pause_samples < 0:
+                # Overlap: crossfade with previous tone
+                overlap = abs(pause_samples)
+                if overlap < fade_samples:
+                    # Short overlap: simple crossfade
+                    fade_out = np.linspace(1, 0, overlap)
+                    fade_in = np.linspace(0, 1, overlap)
+                    
+                    # Fade out previous tone's end
+                    prev_end = start_idx
+                    prev_start = prev_end - overlap
+                    if prev_start >= 0:
+                        output[prev_start:prev_end] *= fade_out
+                    
+                    # Fade in current tone's start
+                    output[start_idx:start_idx + overlap] += tone[:overlap] * fade_in
+                    output[start_idx + overlap:end_idx] += tone[overlap:]
+                else:
+                    # Longer overlap: full crossfade
+                    fade_out = np.linspace(1, 0, fade_samples)
                     fade_in = np.linspace(0, 1, fade_samples)
+                    
+                    # Fade out previous tone
+                    prev_end = start_idx
+                    prev_start = prev_end - fade_samples
+                    if prev_start >= 0:
+                        output[prev_start:prev_end] *= fade_out
+                    
+                    # Fade in current tone
                     output[start_idx:start_idx + fade_samples] += tone[:fade_samples] * fade_in
                     output[start_idx + fade_samples:end_idx] += tone[fade_samples:]
-                else:
-                    output[start_idx:end_idx] += tone
             else:
-                output[start_idx:end_idx] = tone
-    
-    return output
+                # No overlap or pause: just add the tone
+                if i > 0:
+                    # Fade in at the start
+                    if fade_samples > 0:
+                        fade_in = np.linspace(0, 1, fade_samples)
+                        output[start_idx:start_idx + fade_samples] += tone[:fade_samples] * fade_in
+                        output[start_idx + fade_samples:end_idx] += tone[fade_samples:]
+                    else:
+                        output[start_idx:end_idx] += tone
+                else:
+                    output[start_idx:end_idx] = tone
+        
+        return output
+    else:
+        # No fade: simple concatenation with pauses
+        pause_samples = max(0, int(sample_rate * pause))  # Ensure non-negative for no-fade
+        tone_length = len(tones[0])
+        total_length = tone_length + (len(tones) - 1) * (tone_length + pause_samples)
+        
+        output = np.zeros(total_length)
+        
+        for i, tone in enumerate(tones):
+            start_idx = i * (tone_length + pause_samples)
+            end_idx = start_idx + len(tone)
+            output[start_idx:end_idx] = tone
+        
+        return output
 
 # ============================================================================ #
 #                              CLI COMMANDS                                    #
@@ -279,14 +304,8 @@ def single(
     sample_rate: int = typer.Option(DEFAULT_SAMPLE_RATE, "--sample-rate", "-r", help="Sample rate in Hz")
 ):
     """Play a single tone at the specified frequency."""
-    typer.echo(f"Playing {'simple' if simple else 'complex'} tone at {frequency} Hz for {duration} seconds...")
-    
-    if simple:
-        tone = simple_tone(frequency, duration, sample_rate)
-    else:
-        tone = generate_complex_tone(frequency, duration, sample_rate)
-    
-    play_tone(tone, sample_rate)
+    play_freq(frequency, duration, pause=0.0, simple=simple, sample_rate=sample_rate,
+              show_output=True, output_prefix="")
     typer.echo("Done!")
 
 # ────────────────────────────── COMMAND: sequence ──────────────────────────── #
@@ -304,19 +323,12 @@ def sequence(
     typer.echo(f"Crossfade: {'enabled' if fade else 'disabled'}")
     typer.echo("")
     
-    if fade:
-        # Use smooth crossfade transitions
-        typer.echo(f"Generating sequence with smooth crossfade transitions ({len(frequencies)} tones)...")
-        combined_audio = generate_sequence_with_fade(
-            frequencies, duration, pause, DEFAULT_FADE_TIME, simple, sample_rate
-        )
-        typer.echo("Playing combined sequence...")
-        play_tone(combined_audio, sample_rate)
-    else:
-        # Use sequential playback with pauses
-        typer.echo("Using sequential playback (no crossfade)...")
-        play_freq(frequencies, duration, pause, simple, sample_rate, 
-                  show_output=True, output_prefix="  ")
+    typer.echo(f"Generating sequence ({len(frequencies)} tones)...")
+    combined_audio = generate_sequence(
+        frequencies, duration, pause, DEFAULT_FADE_TIME, simple, sample_rate, fade
+    )
+    typer.echo("Playing combined sequence...")
+    play_tone(combined_audio, sample_rate)
     
     typer.echo("Sequence complete!")
 
@@ -375,7 +387,6 @@ def hearing_test(
     # Round frequencies for display
     frequencies_rounded = [round(f, 2) for f in frequencies]
     
-    audible_count = 0
     for i, freq in enumerate(frequencies_rounded, 1):
         # Use simple tone for accurate frequency representation
         current_pause = pause if i < len(frequencies_rounded) else 0.0
@@ -383,7 +394,6 @@ def hearing_test(
                   show_output=True, output_prefix=f"[{i}/{steps}] ")
         
         typer.echo(" ✓")
-        audible_count += 1
     
     typer.echo("")
     typer.echo("=" * 60)
@@ -447,20 +457,13 @@ def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fa
     if isinstance(notes[0], (int, float)):
         # Simple format: list of frequencies
         frequencies = notes
-        if file_fade:
-            # Use smooth crossfade transitions
-            typer.echo(f"Generating sequence with smooth crossfade transitions ({len(frequencies)} tones)...")
-            combined_audio = generate_sequence_with_fade(
-                frequencies, default_duration, default_pause, DEFAULT_FADE_TIME, 
-                file_simple, file_sample_rate
-            )
-            typer.echo("Playing combined sequence...")
-            play_tone(combined_audio, file_sample_rate)
-        else:
-            # Use sequential playback
-            typer.echo("Using sequential playback (no crossfade)...")
-            play_freq(frequencies, default_duration, default_pause, file_simple, file_sample_rate,
-                      show_output=True, output_prefix="  ")
+        typer.echo(f"Generating sequence ({len(frequencies)} tones)...")
+        combined_audio = generate_sequence(
+            frequencies, default_duration, default_pause, DEFAULT_FADE_TIME, 
+            file_simple, file_sample_rate, fade=file_fade
+        )
+        typer.echo("Playing combined sequence...")
+        play_tone(combined_audio, file_sample_rate)
     else:
         # Detailed format: list of note objects - need individual handling for per-note settings
         # Crossfade not supported for detailed format due to per-note variations
