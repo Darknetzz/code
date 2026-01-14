@@ -1,0 +1,19 @@
+{
+  "name": "Happy Birthday",
+  "description": "First phrase of Happy Birthday song",
+  "notes": [
+    {"frequency": 261.63, "duration": 0.3, "pause": 0.05},
+    {"frequency": 261.63, "duration": 0.2, "pause": 0.05},
+    {"frequency": 293.66, "duration": 0.5, "pause": 0.1},
+    {"frequency": 261.63, "duration": 0.5, "pause": 0.1},
+    {"frequency": 349.23, "duration": 0.5, "pause": 0.1},
+    {"frequency": 329.63, "duration": 1.0, "pause": 0.2},
+    {"frequency": 261.63, "duration": 0.3, "pause": 0.05},
+    {"frequency": 261.63, "duration": 0.2, "pause": 0.05},
+    {"frequency": 293.66, "duration": 0.5, "pause": 0.1},
+    {"frequency": 261.63, "duration": 0.5, "pause": 0.1},
+    {"frequency": 392.00, "duration": 0.5, "pause": 0.1},
+    {"frequency": 349.23, "duration": 1.0, "pause": 0.2}
+  ],
+  "simple": false
+}

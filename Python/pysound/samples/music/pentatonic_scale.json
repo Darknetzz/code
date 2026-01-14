@@ -1,0 +1,8 @@
+{
+  "name": "Pentatonic Scale",
+  "description": "C major pentatonic scale (C-D-E-G-A)",
+  "notes": [261.63, 293.66, 329.63, 392.00, 440.00],
+  "duration": 0.6,
+  "pause": 0.1,
+  "simple": false
+}

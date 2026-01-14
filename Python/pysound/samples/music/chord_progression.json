@@ -1,0 +1,19 @@
+{
+  "name": "I-V-vi-IV Chord Progression",
+  "description": "Common chord progression in C major (C-G-Am-F)",
+  "notes": [
+    {"frequency": 261.63, "duration": 1.0, "pause": 0.2},
+    {"frequency": 329.63, "duration": 1.0, "pause": 0.2},
+    {"frequency": 392.00, "duration": 1.0, "pause": 0.3},
+    {"frequency": 392.00, "duration": 1.0, "pause": 0.2},
+    {"frequency": 493.88, "duration": 1.0, "pause": 0.2},
+    {"frequency": 587.33, "duration": 1.0, "pause": 0.3},
+    {"frequency": 329.63, "duration": 1.0, "pause": 0.2},
+    {"frequency": 392.00, "duration": 1.0, "pause": 0.2},
+    {"frequency": 440.00, "duration": 1.0, "pause": 0.3},
+    {"frequency": 349.23, "duration": 1.0, "pause": 0.2},
+    {"frequency": 392.00, "duration": 1.0, "pause": 0.2},
+    {"frequency": 440.00, "duration": 1.0, "pause": 0.3}
+  ],
+  "simple": false
+}

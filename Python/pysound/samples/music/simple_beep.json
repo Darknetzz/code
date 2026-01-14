@@ -1,0 +1,8 @@
+{
+  "name": "Simple Beep",
+  "description": "A simple beep sequence for testing",
+  "notes": [440.0, 440.0, 440.0],
+  "duration": 0.2,
+  "pause": 0.1,
+  "simple": true
+}

@@ -1,0 +1,8 @@
+{
+  "name": "C Major Chord",
+  "description": "C major triad (C-E-G)",
+  "notes": [261.63, 329.63, 392.00],
+  "duration": 2.0,
+  "pause": 0.2,
+  "simple": false
+}

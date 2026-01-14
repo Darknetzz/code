@@ -10,3 +10,4 @@ auth.py
 *.pyc
 __pycache__/
 build/
+hackcon2026/
