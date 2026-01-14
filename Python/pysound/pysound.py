@@ -301,10 +301,12 @@ def sequence(
 ):
     """Play a sequence of tones."""
     typer.echo(f"Playing sequence of {len(frequencies)} tones: {frequencies}")
+    typer.echo(f"Crossfade: {'enabled' if fade else 'disabled'}")
+    typer.echo("")
     
     if fade:
         # Use smooth crossfade transitions
-        typer.echo("Using smooth crossfade transitions...")
+        typer.echo(f"Generating sequence with smooth crossfade transitions ({len(frequencies)} tones)...")
         combined_audio = generate_sequence_with_fade(
             frequencies, duration, pause, DEFAULT_FADE_TIME, simple, sample_rate
         )
@@ -312,6 +314,7 @@ def sequence(
         play_tone(combined_audio, sample_rate)
     else:
         # Use sequential playback with pauses
+        typer.echo("Using sequential playback (no crossfade)...")
         play_freq(frequencies, duration, pause, simple, sample_rate, 
                   show_output=True, output_prefix="  ")
     
@@ -397,7 +400,7 @@ def hearing_test(
 # ============================================================================ #
 #                            FUNCTION: load_and_play_json                      #
 # ============================================================================ #
-def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fade: bool = False):
+def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fade: bool = True):
     """Load a JSON file and play the sequence defined in it.
     
     Supports two JSON formats:
@@ -430,6 +433,10 @@ def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fa
     typer.echo(f"Playing: {name}")
     if description:
         typer.echo(f"Description: {description}")
+    
+    # Show fade status
+    fade_status = "enabled" if file_fade else "disabled"
+    typer.echo(f"Crossfade: {fade_status}")
     typer.echo("")
     
     notes = data.get("notes", [])
@@ -442,7 +449,7 @@ def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fa
         frequencies = notes
         if file_fade:
             # Use smooth crossfade transitions
-            typer.echo("Using smooth crossfade transitions...")
+            typer.echo(f"Generating sequence with smooth crossfade transitions ({len(frequencies)} tones)...")
             combined_audio = generate_sequence_with_fade(
                 frequencies, default_duration, default_pause, DEFAULT_FADE_TIME, 
                 file_simple, file_sample_rate
@@ -451,6 +458,7 @@ def load_and_play_json(file_path: str, sample_rate: Optional[int] = None, use_fa
             play_tone(combined_audio, file_sample_rate)
         else:
             # Use sequential playback
+            typer.echo("Using sequential playback (no crossfade)...")
             play_freq(frequencies, default_duration, default_pause, file_simple, file_sample_rate,
                       show_output=True, output_prefix="  ")
     else:
