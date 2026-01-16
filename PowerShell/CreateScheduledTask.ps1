@@ -183,11 +183,6 @@ if (-not (Test-Administrator)) {
 # Get current user for default UserId
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
-# Set default UserId to current user if not provided
-if ([string]::IsNullOrWhiteSpace($UserId)) {
-    $UserId = $currentUser
-}
-
 # Interactive mode: Prompt for required parameters if not provided
 if ([string]::IsNullOrWhiteSpace($TaskName)) {
     $TaskName = Get-RequiredParameter -ParameterName "TaskName" -Prompt "Enter task name"
