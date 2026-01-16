@@ -293,10 +293,6 @@ $PrincipalParams = @{
     RunLevel = $RunLevel
 }
 
-if ($LogonType -eq "Password" -and $Password) {
-    $PrincipalParams['Password'] = $Password
-}
-
 $Principal = New-ScheduledTaskPrincipal @PrincipalParams
 
 # --- Define Settings ---
@@ -320,6 +316,11 @@ $RegisterParams = @{
 
 if (-not [string]::IsNullOrWhiteSpace($Description)) {
     $RegisterParams['Description'] = $Description
+}
+
+# Add password to Register-ScheduledTask if LogonType is Password
+if ($LogonType -eq "Password" -and $Password) {
+    $RegisterParams['Password'] = $Password
 }
 
 try {
