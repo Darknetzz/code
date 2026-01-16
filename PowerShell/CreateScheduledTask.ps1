@@ -165,12 +165,14 @@ function Get-RequiredParameter {
     return $value
 }
 
-# Function to prompt for secure password
-function Get-PasswordInput {
-    param([string]$Prompt)
+# Function to prompt for credentials using Windows credential dialog
+function Get-CredentialInput {
+    param([string]$UserId)
     
-    $securePassword = Read-Host -Prompt $Prompt -AsSecureString
-    return $securePassword
+    # Use Get-Credential to show Windows credential dialog
+    # Pre-fill username if provided
+    $credential = Get-Credential -Message "Enter credentials for the scheduled task" -UserName $UserId
+    return $credential
 }
 
 # Check for administrator privileges at the beginning
@@ -235,7 +237,19 @@ if ([string]::IsNullOrWhiteSpace($Description)) {
 
 # Handle password if LogonType is Password
 if ($LogonType -eq "Password" -and -not $Password) {
-    $Password = Get-PasswordInput -Prompt "Enter password for user '$UserId'"
+    $credential = Get-CredentialInput -UserId $UserId
+    if ($credential) {
+        # Update UserId if user entered a different username in credential dialog
+        if ($credential.UserName -ne $UserId) {
+            $UserId = $credential.UserName
+            Write-Host "Using user account: $UserId" -ForegroundColor Yellow
+        }
+        # Extract password from credential
+        $Password = $credential.Password
+    } else {
+        Write-Error "Credentials are required. Exiting." -ErrorAction Stop
+        exit 1
+    }
 }
 
 # --- Define the Action ---
@@ -319,8 +333,13 @@ if (-not [string]::IsNullOrWhiteSpace($Description)) {
 }
 
 # Add password to Register-ScheduledTask if LogonType is Password
+# Note: Register-ScheduledTask requires plain text password, not SecureString
 if ($LogonType -eq "Password" -and $Password) {
-    $RegisterParams['Password'] = $Password
+    # Convert SecureString to plain text (required by Register-ScheduledTask)
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+    $RegisterParams['Password'] = $plainPassword
 }
 
 try {
