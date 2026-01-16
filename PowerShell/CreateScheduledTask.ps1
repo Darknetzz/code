@@ -28,13 +28,14 @@
     Minutes between task repetitions (used if RepetitionIntervalHours is 0). Defaults to 0.
 
 .PARAMETER UserId
-    User account to run the task as. Defaults to "SYSTEM".
+    User account to run the task as. Defaults to current user. Use "SYSTEM" for system account.
 
 .PARAMETER Password
     Password for the user account (required if LogonType is 'Password').
 
 .PARAMETER LogonType
-    Logon type: 'ServiceAccount' (no password) or 'Password'. Defaults to 'ServiceAccount'.
+    Logon type: 'ServiceAccount' (no password) or 'Password'. 
+    Defaults to 'ServiceAccount' for SYSTEM/service accounts, 'Password' for regular users.
 
 .PARAMETER RunLevel
     Run level: 'Highest' (admin) or 'Limited'. Defaults to 'Highest'.
