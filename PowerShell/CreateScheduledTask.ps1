@@ -135,9 +135,9 @@ function Get-RequiredParameter {
     # Keep prompting until we get a non-empty value (unless AllowEmpty is set)
     while ([string]::IsNullOrWhiteSpace($value)) {
         if ($DefaultValue) {
-            $promptWithDefault = "${Prompt} (default: ${DefaultValue}): "
+            $promptWithDefault = "${Prompt} (default: ${DefaultValue})"
         } else {
-            $promptWithDefault = "${Prompt}: "
+            $promptWithDefault = $Prompt
         }
         
         $inputValue = Read-Host -Prompt $promptWithDefault
@@ -170,6 +170,13 @@ function Get-PasswordInput {
     
     $securePassword = Read-Host -Prompt $Prompt -AsSecureString
     return $securePassword
+}
+
+# Check for administrator privileges at the beginning
+if (-not (Test-Administrator)) {
+    Write-Warning "This script requires administrator privileges to create scheduled tasks."
+    Write-Warning "Please run PowerShell as Administrator and try again."
+    exit 1
 }
 
 # Interactive mode: Prompt for required parameters if not provided
