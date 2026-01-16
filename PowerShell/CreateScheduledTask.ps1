@@ -260,10 +260,6 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
     $WorkingDirectory = Read-Host -Prompt "Enter working directory (optional, press Enter to skip)"
 }
 
-if ([string]::IsNullOrWhiteSpace($Description)) {
-    $Description = Read-Host -Prompt "Enter task description (optional, press Enter to skip)"
-}
-
 # Prompt for trigger options if in interactive mode
 if ($isInteractiveMode) {
     Write-Host "`n--- Schedule Configuration ---" -ForegroundColor Cyan
