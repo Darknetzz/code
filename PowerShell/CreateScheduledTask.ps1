@@ -318,22 +318,31 @@ $SettingsParams = @{
 
 $Settings = New-ScheduledTaskSettingsSet @SettingsParams
 
-# --- Register the Task ---
-$RegisterParams = @{
-    TaskName = $TaskName
+# --- Create the Task Object ---
+# When using -Principal with password, we need to create the task object first
+$TaskParams = @{
     Action = $Action
     Trigger = $Trigger
     Principal = $Principal
     Settings = $Settings
-    Force = $Force
 }
 
 if (-not [string]::IsNullOrWhiteSpace($Description)) {
-    $RegisterParams['Description'] = $Description
+    $TaskParams['Description'] = $Description
+}
+
+$Task = New-ScheduledTask @TaskParams
+
+# --- Register the Task ---
+$RegisterParams = @{
+    TaskName = $TaskName
+    InputObject = $Task
+    Force = $Force
 }
 
 # Add password to Register-ScheduledTask if LogonType is Password
 # Note: Register-ScheduledTask requires plain text password, not SecureString
+# When using -InputObject with -Principal, we must use -Password parameter
 if ($LogonType -eq "Password" -and $Password) {
     # Convert SecureString to plain text (required by Register-ScheduledTask)
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
