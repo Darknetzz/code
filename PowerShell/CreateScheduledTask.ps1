@@ -70,6 +70,17 @@
     
 .EXAMPLE
     .\CreateScheduledTask.ps1 -TaskName "HourlySync" -Execute "php.exe" -Argument "-f worker.php" -WorkingDirectory "C:\Scripts" -RepetitionIntervalHours 1
+    
+.EXAMPLE
+    # Run PowerShell script every hour at the top of each hour (09:00, 10:00, 11:00, etc.)
+    $nextWholeHour = (Get-Date).Date.AddHours([Math]::Ceiling((Get-Date).TimeOfDay.TotalHours))
+    .\CreateScheduledTask.ps1 -TaskName "OLGALicRelease" `
+        -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Script\OLGALicRelease.ps1" `
+        -WorkingDirectory "C:\Script" `
+        -TriggerType "Once" `
+        -TriggerTime $nextWholeHour.ToString("HH:mm") `
+        -RepetitionIntervalHours 1
 #>
 
 [CmdletBinding()]
