@@ -114,6 +114,13 @@ param(
     [bool]$Force = $true
 )
 
+# Function to check if running as administrator
+function Test-Administrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 # Function to prompt for input if value is missing
 function Get-RequiredParameter {
     param(
@@ -191,12 +198,13 @@ $Action = New-ScheduledTaskAction @ActionParams
 $Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
 
 # Set repetition if interval is specified
+# Note: RepetitionInterval and RepetitionDuration must be set on the Repetition property
 if ($RepetitionIntervalHours -gt 0) {
-    $Trigger.RepetitionInterval = New-TimeSpan -Hours $RepetitionIntervalHours
-    $Trigger.RepetitionDuration = [TimeSpan]::MaxValue
+    $Trigger.Repetition.Interval = New-TimeSpan -Hours $RepetitionIntervalHours
+    $Trigger.Repetition.Duration = [TimeSpan]::MaxValue
 } elseif ($RepetitionIntervalMinutes -gt 0) {
-    $Trigger.RepetitionInterval = New-TimeSpan -Minutes $RepetitionIntervalMinutes
-    $Trigger.RepetitionDuration = [TimeSpan]::MaxValue
+    $Trigger.Repetition.Interval = New-TimeSpan -Minutes $RepetitionIntervalMinutes
+    $Trigger.Repetition.Duration = [TimeSpan]::MaxValue
 }
 
 # --- Define the Principal (Security Context) ---
@@ -235,10 +243,22 @@ if (-not [string]::IsNullOrWhiteSpace($Description)) {
     $RegisterParams['Description'] = $Description
 }
 
+# Check for administrator privileges
+if (-not (Test-Administrator)) {
+    Write-Warning "This script requires administrator privileges to create scheduled tasks."
+    Write-Warning "Please run PowerShell as Administrator and try again."
+    exit 1
+}
+
 try {
     Register-ScheduledTask @RegisterParams
     Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
 } catch {
-    Write-Error "Failed to create scheduled task: $_"
+    $errorMessage = $_.Exception.Message
+    if ($errorMessage -like "*Access is denied*") {
+        Write-Error "Access denied. Please ensure you are running PowerShell as Administrator." -ErrorAction Stop
+    } else {
+        Write-Error "Failed to create scheduled task: $errorMessage" -ErrorAction Stop
+    }
     exit 1
 }
