@@ -121,26 +121,46 @@ function Test-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Function to prompt for input if value is missing
+# Function to prompt for input if value is missing (with reprompting on empty input)
 function Get-RequiredParameter {
     param(
         [string]$ParameterName,
         [string]$Prompt,
-        [string]$DefaultValue = $null
+        [string]$DefaultValue = $null,
+        [switch]$AllowEmpty = $false
     )
     
     $value = Get-Variable -Name $ParameterName -ValueOnly -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrWhiteSpace($value)) {
+    
+    # Keep prompting until we get a non-empty value (unless AllowEmpty is set)
+    while ([string]::IsNullOrWhiteSpace($value)) {
         if ($DefaultValue) {
             $promptWithDefault = "${Prompt} (default: ${DefaultValue}): "
         } else {
             $promptWithDefault = "${Prompt}: "
         }
-        $value = Read-Host -Prompt $promptWithDefault
-        if ([string]::IsNullOrWhiteSpace($value) -and $DefaultValue) {
+        
+        $inputValue = Read-Host -Prompt $promptWithDefault
+        
+        # If user entered something, use it
+        if (-not [string]::IsNullOrWhiteSpace($inputValue)) {
+            $value = $inputValue
+        }
+        # If user pressed Enter and there's a default, use it
+        elseif ($DefaultValue) {
             $value = $DefaultValue
         }
+        # If AllowEmpty is set, allow empty value
+        elseif ($AllowEmpty) {
+            return ""
+        }
+        # Otherwise, reprompt
+        else {
+            Write-Warning "This field is required. Please enter a value."
+            continue
+        }
     }
+    
     return $value
 }
 
