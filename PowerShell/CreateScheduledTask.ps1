@@ -85,14 +85,14 @@ param(
     [int]$RepetitionIntervalMinutes = 0,
     
     [Parameter(Mandatory = $false)]
-    [string]$UserId = "SYSTEM",
+    [string]$UserId,
     
     [Parameter(Mandatory = $false)]
     [SecureString]$Password,
     
     [Parameter(Mandatory = $false)]
     [ValidateSet('ServiceAccount', 'Password')]
-    [string]$LogonType = "ServiceAccount",
+    [string]$LogonType,
     
     [Parameter(Mandatory = $false)]
     [ValidateSet('Highest', 'Limited')]
@@ -179,6 +179,14 @@ if (-not (Test-Administrator)) {
     exit 1
 }
 
+# Get current user for default UserId
+$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+
+# Set default UserId to current user if not provided
+if ([string]::IsNullOrWhiteSpace($UserId)) {
+    $UserId = $currentUser
+}
+
 # Interactive mode: Prompt for required parameters if not provided
 if ([string]::IsNullOrWhiteSpace($TaskName)) {
     $TaskName = Get-RequiredParameter -ParameterName "TaskName" -Prompt "Enter task name"
@@ -186,6 +194,23 @@ if ([string]::IsNullOrWhiteSpace($TaskName)) {
 
 if ([string]::IsNullOrWhiteSpace($Execute)) {
     $Execute = Get-RequiredParameter -ParameterName "Execute" -Prompt "Enter path to executable"
+}
+
+# Prompt for UserId if not provided (with current user as default)
+if ([string]::IsNullOrWhiteSpace($UserId)) {
+    $UserId = Get-RequiredParameter -ParameterName "UserId" -Prompt "Enter user account to run task as" -DefaultValue $currentUser
+}
+
+# Set LogonType default based on UserId
+# SYSTEM and other service accounts use ServiceAccount, regular users need Password
+if ([string]::IsNullOrWhiteSpace($LogonType)) {
+    if ($UserId -eq "SYSTEM" -or $UserId -eq "NT AUTHORITY\SYSTEM" -or 
+        $UserId -eq "LocalService" -or $UserId -eq "NT AUTHORITY\LocalService" -or
+        $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService") {
+        $LogonType = "ServiceAccount"
+    } else {
+        $LogonType = "Password"
+    }
 }
 
 # Validate required parameters before proceeding
