@@ -301,13 +301,6 @@ if (-not [string]::IsNullOrWhiteSpace($Description)) {
     $RegisterParams['Description'] = $Description
 }
 
-# Check for administrator privileges
-if (-not (Test-Administrator)) {
-    Write-Warning "This script requires administrator privileges to create scheduled tasks."
-    Write-Warning "Please run PowerShell as Administrator and try again."
-    exit 1
-}
-
 try {
     Register-ScheduledTask @RegisterParams
     Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
