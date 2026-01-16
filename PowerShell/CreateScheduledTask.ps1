@@ -318,48 +318,74 @@ $SettingsParams = @{
 
 $Settings = New-ScheduledTaskSettingsSet @SettingsParams
 
-# --- Create the Task Object ---
-# When using -Principal with password, we need to create the task object first
-$TaskParams = @{
-    Action = $Action
-    Trigger = $Trigger
-    Principal = $Principal
-    Settings = $Settings
-}
-
-if (-not [string]::IsNullOrWhiteSpace($Description)) {
-    $TaskParams['Description'] = $Description
-}
-
-$Task = New-ScheduledTask @TaskParams
-
 # --- Register the Task ---
-$RegisterParams = @{
-    TaskName = $TaskName
-    InputObject = $Task
-    Force = $Force
-}
-
-# Add password to Register-ScheduledTask if LogonType is Password
-# Note: Register-ScheduledTask requires plain text password, not SecureString
-# When using -InputObject with -Principal, we must use -Password parameter
+# When using password authentication, use -User and -Password with Principal for RunLevel
 if ($LogonType -eq "Password" -and $Password) {
     # Convert SecureString to plain text (required by Register-ScheduledTask)
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
     $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
-    $RegisterParams['Password'] = $plainPassword
+    
+    # Use direct parameters with -User and -Password
+    # Principal is still included to set RunLevel and other Principal settings
+    $RegisterParams = @{
+        TaskName = $TaskName
+        Action = $Action
+        Trigger = $Trigger
+        Principal = $Principal
+        Settings = $Settings
+        User = $UserId
+        Password = $plainPassword
+        Force = $Force
+    }
+    
+    if (-not [string]::IsNullOrWhiteSpace($Description)) {
+        $RegisterParams['Description'] = $Description
+    }
+} else {
+    # For ServiceAccount, we can use InputObject approach
+    $TaskParams = @{
+        Action = $Action
+        Trigger = $Trigger
+        Principal = $Principal
+        Settings = $Settings
+    }
+    
+    if (-not [string]::IsNullOrWhiteSpace($Description)) {
+        $TaskParams['Description'] = $Description
+    }
+    
+    $Task = New-ScheduledTask @TaskParams
+    
+    $RegisterParams = @{
+        TaskName = $TaskName
+        InputObject = $Task
+        Force = $Force
+    }
 }
 
 try {
-    Register-ScheduledTask @RegisterParams
+    Register-ScheduledTask @RegisterParams -ErrorAction Stop
     Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
 } catch {
     $errorMessage = $_.Exception.Message
-    if ($errorMessage -like "*Access is denied*") {
-        Write-Error "Access denied. Please ensure you are running PowerShell as Administrator." -ErrorAction Stop
+    
+    # Check if task was actually created despite the error
+    $taskExists = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($taskExists) {
+        Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
+        Write-Warning "Error message: $errorMessage"
+        Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
     } else {
-        Write-Error "Failed to create scheduled task: $errorMessage" -ErrorAction Stop
+        # Task was not created, report the error
+        if ($errorMessage -like "*Access is denied*") {
+            Write-Error "Access denied. Please ensure you are running PowerShell as Administrator." -ErrorAction Stop
+        } elseif ($errorMessage -like "*variant structure*" -or $errorMessage -like "*invalid data*") {
+            Write-Error "Failed to create scheduled task due to invalid data structure: $errorMessage" -ErrorAction Stop
+            Write-Error "This may be caused by an issue with the password or task configuration." -ErrorAction Stop
+        } else {
+            Write-Error "Failed to create scheduled task: $errorMessage" -ErrorAction Stop
+        }
+        exit 1
     }
-    exit 1
 }
