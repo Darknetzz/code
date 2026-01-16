@@ -34,8 +34,9 @@
     Password for the user account (required if LogonType is 'Password').
 
 .PARAMETER LogonType
-    Logon type: 'ServiceAccount' (no password) or 'Password'. 
-    Defaults to 'ServiceAccount' for SYSTEM/service accounts, 'Password' for regular users.
+    Logon type: 'ServiceAccount' (no password), 'Password' (requires password, runs when not logged in), 
+    or 'Interactive' (no password, runs only when user is logged in). 
+    Defaults to 'ServiceAccount' for SYSTEM/service accounts, 'Interactive' for current user, 'Password' for other users.
 
 .PARAMETER RunLevel
     Run level: 'Highest' (admin) or 'Limited'. Defaults to 'Highest'.
@@ -92,7 +93,7 @@ param(
     [SecureString]$Password,
     
     [Parameter(Mandatory = $false)]
-    [ValidateSet('ServiceAccount', 'Password')]
+    [ValidateSet('ServiceAccount', 'Password', 'Interactive')]
     [string]$LogonType,
     
     [Parameter(Mandatory = $false)]
@@ -200,12 +201,16 @@ if ([string]::IsNullOrWhiteSpace($UserId)) {
 }
 
 # Set LogonType default based on UserId
-# SYSTEM and other service accounts use ServiceAccount, regular users need Password
+# SYSTEM and other service accounts use ServiceAccount
+# Current user uses Interactive (no password needed, runs when logged in)
+# Other users use Password (requires password, runs when not logged in)
 if ([string]::IsNullOrWhiteSpace($LogonType)) {
     if ($UserId -eq "SYSTEM" -or $UserId -eq "NT AUTHORITY\SYSTEM" -or 
         $UserId -eq "LocalService" -or $UserId -eq "NT AUTHORITY\LocalService" -or
         $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService") {
         $LogonType = "ServiceAccount"
+    } elseif ($UserId -eq $currentUser) {
+        $LogonType = "Interactive"
     } else {
         $LogonType = "Password"
     }
@@ -235,7 +240,7 @@ if ([string]::IsNullOrWhiteSpace($Description)) {
     $Description = Read-Host -Prompt "Enter task description (optional, press Enter to skip)"
 }
 
-# Handle password if LogonType is Password
+# Handle password if LogonType is Password (Interactive doesn't need password)
 if ($LogonType -eq "Password" -and -not $Password) {
     $credential = Get-CredentialInput -UserId $UserId
     if ($credential) {
@@ -321,6 +326,7 @@ $Settings = New-ScheduledTaskSettingsSet @SettingsParams
 # --- Register the Task ---
 # When using password authentication, register with -User and -Password first,
 # then update Principal settings separately to avoid parameter conflicts
+# Interactive and ServiceAccount can use Principal directly (no password needed)
 if ($LogonType -eq "Password" -and $Password) {
     # Convert SecureString to plain text (required by Register-ScheduledTask)
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
