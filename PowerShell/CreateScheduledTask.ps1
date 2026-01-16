@@ -382,7 +382,8 @@ if ($LogonType -eq "Password" -and $Password) {
         }
     }
 } else {
-    # For ServiceAccount, we can use InputObject approach
+    # For ServiceAccount and Interactive, we can use InputObject approach with Principal
+    # (no password needed)
     $TaskParams = @{
         Action = $Action
         Trigger = $Trigger
