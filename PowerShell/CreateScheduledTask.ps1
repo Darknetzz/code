@@ -181,6 +181,17 @@ if ([string]::IsNullOrWhiteSpace($Execute)) {
     $Execute = Get-RequiredParameter -ParameterName "Execute" -Prompt "Enter path to executable"
 }
 
+# Validate required parameters before proceeding
+if ([string]::IsNullOrWhiteSpace($TaskName)) {
+    Write-Error "Task name is required. Exiting." -ErrorAction Stop
+    exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($Execute)) {
+    Write-Error "Executable path is required. Exiting." -ErrorAction Stop
+    exit 1
+}
+
 # Prompt for optional parameters if not provided (only in interactive mode)
 if ([string]::IsNullOrWhiteSpace($Argument)) {
     $Argument = Read-Host -Prompt "Enter arguments (optional, press Enter to skip)"
@@ -218,13 +229,49 @@ $Action = New-ScheduledTaskAction @ActionParams
 $Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
 
 # Set repetition if interval is specified
-# Note: RepetitionInterval and RepetitionDuration must be set on the Repetition property
-if ($RepetitionIntervalHours -gt 0) {
-    $Trigger.Repetition.Interval = New-TimeSpan -Hours $RepetitionIntervalHours
-    $Trigger.Repetition.Duration = [TimeSpan]::MaxValue
-} elseif ($RepetitionIntervalMinutes -gt 0) {
-    $Trigger.Repetition.Interval = New-TimeSpan -Minutes $RepetitionIntervalMinutes
-    $Trigger.Repetition.Duration = [TimeSpan]::MaxValue
+# Note: Repetition properties must be set on the CIMInstance
+if ($RepetitionIntervalHours -gt 0 -or $RepetitionIntervalMinutes -gt 0) {
+    $repetitionInterval = if ($RepetitionIntervalHours -gt 0) {
+        New-TimeSpan -Hours $RepetitionIntervalHours
+    } else {
+        New-TimeSpan -Minutes $RepetitionIntervalMinutes
+    }
+    
+    try {
+        # Get the CIMInstance from the trigger
+        $cimInstance = $Trigger.CimInstance
+        
+        # Create or get the Repetition pattern
+        $repetitionPattern = $cimInstance.CimInstanceProperties['Repetition'].Value
+        if ($null -eq $repetitionPattern) {
+            $repetitionPattern = New-CimInstance -ClassName MSFT_TaskRepetitionPattern -ClientOnly
+        }
+        
+        # Set the interval and duration
+        $repetitionPattern.Interval = $repetitionInterval
+        $repetitionPattern.Duration = "PT0H"  # Indefinite (ISO 8601 duration format)
+        
+        # Update the CIMInstance
+        $cimInstance.CimInstanceProperties['Repetition'].Value = $repetitionPattern
+    } catch {
+        # Fallback: Try setting properties directly if CIMInstance approach fails
+        try {
+            # Some PowerShell versions support direct property setting
+            $Trigger | Add-Member -MemberType NoteProperty -Name "Repetition" -Value @{
+                Interval = $repetitionInterval
+                Duration = [TimeSpan]::MaxValue
+            } -Force -ErrorAction SilentlyContinue
+            
+            # Or try the Repetition property if it exists
+            if ($Trigger.PSObject.Properties['Repetition']) {
+                $Trigger.Repetition.Interval = $repetitionInterval
+                $Trigger.Repetition.Duration = [TimeSpan]::MaxValue
+            }
+        } catch {
+            Write-Warning "Could not set repetition interval: $($_.Exception.Message)"
+            Write-Warning "Task will run once per day without repetition."
+        }
+    }
 }
 
 # --- Define the Principal (Security Context) ---
