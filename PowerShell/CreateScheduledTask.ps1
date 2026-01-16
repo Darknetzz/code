@@ -18,8 +18,17 @@
 .PARAMETER WorkingDirectory
     Working directory for the task. Optional but recommended for scripts using relative paths.
 
+.PARAMETER TriggerType
+    Type of trigger: 'Daily', 'Weekly', 'Monthly', 'Once', 'AtStartup', 'AtLogon', 'OnIdle'. Defaults to 'Daily'.
+
 .PARAMETER TriggerTime
-    Time to start the task (e.g., "12:00am", "3am", "15:00"). Defaults to "12:00am".
+    Time to start the task (e.g., "12:00am", "3am", "15:00"). Required for Daily, Weekly, Monthly, Once. Defaults to "12:00am".
+
+.PARAMETER DaysOfWeek
+    Days of week for Weekly trigger (e.g., "Monday,Wednesday,Friday" or "Monday"). Optional.
+
+.PARAMETER DaysOfMonth
+    Days of month for Monthly trigger (e.g., "1,15" or "1"). Optional.
 
 .PARAMETER RepetitionIntervalHours
     Hours between task repetitions. Set to 0 to disable repetition. Defaults to 1.
@@ -78,7 +87,17 @@ param(
     [string]$WorkingDirectory,
     
     [Parameter(Mandatory = $false)]
+    [ValidateSet('Daily', 'Weekly', 'Monthly', 'Once', 'AtStartup', 'AtLogon', 'OnIdle')]
+    [string]$TriggerType = "Daily",
+    
+    [Parameter(Mandatory = $false)]
     [string]$TriggerTime = "12:00am",
+    
+    [Parameter(Mandatory = $false)]
+    [string]$DaysOfWeek,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$DaysOfMonth,
     
     [Parameter(Mandatory = $false)]
     [int]$RepetitionIntervalHours = 1,
@@ -186,12 +205,17 @@ if (-not (Test-Administrator)) {
 # Get current user for default UserId
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
+# Track if we're in interactive mode (user is being prompted)
+$isInteractiveMode = $false
+
 # Interactive mode: Prompt for required parameters if not provided
 if ([string]::IsNullOrWhiteSpace($TaskName)) {
+    $isInteractiveMode = $true
     $TaskName = Get-RequiredParameter -ParameterName "TaskName" -Prompt "Enter task name"
 }
 
 if ([string]::IsNullOrWhiteSpace($Execute)) {
+    $isInteractiveMode = $true
     $Execute = Get-RequiredParameter -ParameterName "Execute" -Prompt "Enter path to executable"
 }
 
@@ -240,6 +264,55 @@ if ([string]::IsNullOrWhiteSpace($Description)) {
     $Description = Read-Host -Prompt "Enter task description (optional, press Enter to skip)"
 }
 
+# Prompt for trigger options if in interactive mode
+if ($isInteractiveMode) {
+    Write-Host "`n--- Schedule Configuration ---" -ForegroundColor Cyan
+    Write-Host "Trigger types: Daily, Weekly, Monthly, Once, AtStartup, AtLogon, OnIdle"
+    $triggerTypeInput = Read-Host -Prompt "Enter trigger type (default: Daily)"
+    if (-not [string]::IsNullOrWhiteSpace($triggerTypeInput)) {
+        $TriggerType = $triggerTypeInput
+    }
+    
+    # Prompt for trigger time if needed for time-based triggers
+    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
+        $triggerTimeInput = Read-Host -Prompt "Enter trigger time (e.g., 12:00am, 3pm, 15:00) (default: 12:00am)"
+        if (-not [string]::IsNullOrWhiteSpace($triggerTimeInput)) {
+            $TriggerTime = $triggerTimeInput
+        }
+    }
+    
+    # Prompt for days of week if Weekly trigger
+    if ($TriggerType -eq "Weekly") {
+        $daysOfWeekInput = Read-Host -Prompt "Enter days of week (e.g., Monday,Wednesday,Friday or press Enter for today)"
+        if (-not [string]::IsNullOrWhiteSpace($daysOfWeekInput)) {
+            $DaysOfWeek = $daysOfWeekInput
+        } elseif ([string]::IsNullOrWhiteSpace($DaysOfWeek)) {
+            $DaysOfWeek = (Get-Date).DayOfWeek
+        }
+    }
+    
+    # Prompt for days of month if Monthly trigger
+    if ($TriggerType -eq "Monthly") {
+        $daysOfMonthInput = Read-Host -Prompt "Enter days of month (e.g., 1,15 or press Enter for 1st)"
+        if (-not [string]::IsNullOrWhiteSpace($daysOfMonthInput)) {
+            $DaysOfMonth = $daysOfMonthInput
+        } elseif ([string]::IsNullOrWhiteSpace($DaysOfMonth)) {
+            $DaysOfMonth = "1"
+        }
+    }
+    
+    # Prompt for repetition interval
+    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
+        $repeatInput = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, press Enter for 1 hour)"
+        if (-not [string]::IsNullOrWhiteSpace($repeatInput)) {
+            if ([int]::TryParse($repeatInput, [ref]$null)) {
+                $RepetitionIntervalHours = [int]$repeatInput
+                $RepetitionIntervalMinutes = 0
+            }
+        }
+    }
+}
+
 # Handle password if LogonType is Password (Interactive doesn't need password)
 if ($LogonType -eq "Password" -and -not $Password) {
     $credential = Get-CredentialInput -UserId $UserId
@@ -273,12 +346,98 @@ if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
 $Action = New-ScheduledTaskAction @ActionParams
 
 # --- Define the Trigger ---
-$Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
+# Create trigger based on TriggerType
+switch ($TriggerType) {
+    "Daily" {
+        $Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
+    }
+    "Weekly" {
+        if ([string]::IsNullOrWhiteSpace($DaysOfWeek)) {
+            # Default to current day of week if not specified
+            $DaysOfWeek = (Get-Date).DayOfWeek.ToString()
+        }
+        # Convert day names to DayOfWeek enum values
+        $daysOfWeekArray = $DaysOfWeek -split ',' | ForEach-Object {
+            $dayName = $_.Trim()
+            # Try to parse as DayOfWeek enum, case-insensitive
+            try {
+                [System.DayOfWeek]$dayName
+            } catch {
+                # If parsing fails, try to match common variations
+                $dayNameLower = $dayName.ToLower()
+                switch ($dayNameLower) {
+                    { $_ -match "^mon" } { [System.DayOfWeek]::Monday }
+                    { $_ -match "^tue" } { [System.DayOfWeek]::Tuesday }
+                    { $_ -match "^wed" } { [System.DayOfWeek]::Wednesday }
+                    { $_ -match "^thu" } { [System.DayOfWeek]::Thursday }
+                    { $_ -match "^fri" } { [System.DayOfWeek]::Friday }
+                    { $_ -match "^sat" } { [System.DayOfWeek]::Saturday }
+                    { $_ -match "^sun" } { [System.DayOfWeek]::Sunday }
+                    default { [System.DayOfWeek]::Monday }
+                }
+            }
+        }
+        $Trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $daysOfWeekArray -At $TriggerTime
+    }
+    "Monthly" {
+        if ([string]::IsNullOrWhiteSpace($DaysOfMonth)) {
+            # Default to first day of month if not specified
+            $DaysOfMonth = "1"
+        }
+        $daysOfMonthArray = $DaysOfMonth -split ',' | ForEach-Object { [int]$_.Trim() }
+        $Trigger = New-ScheduledTaskTrigger -Monthly -DaysOfMonth $daysOfMonthArray -At $TriggerTime
+    }
+    "Once" {
+        # Parse TriggerTime as DateTime if it's a future date/time, otherwise use today + time
+        try {
+            $triggerDateTime = [DateTime]::Parse($TriggerTime)
+            if ($triggerDateTime -lt (Get-Date)) {
+                # If time is in the past, assume it's just a time and use today
+                $triggerDateTime = (Get-Date).Date.Add($triggerDateTime.TimeOfDay)
+                if ($triggerDateTime -lt (Get-Date)) {
+                    # If still in the past, use tomorrow
+                    $triggerDateTime = $triggerDateTime.AddDays(1)
+                }
+            }
+        } catch {
+            # If parsing fails, treat as time string and use today
+            $triggerDateTime = (Get-Date).Date
+            $timeMatch = $TriggerTime -match "(\d{1,2}):(\d{2})\s*(am|pm)?"
+            if ($timeMatch) {
+                $hours = [int]$matches[1]
+                $minutes = [int]$matches[2]
+                $ampm = $matches[3]
+                if ($ampm -eq "pm" -and $hours -ne 12) { $hours += 12 }
+                if ($ampm -eq "am" -and $hours -eq 12) { $hours = 0 }
+                $triggerDateTime = $triggerDateTime.AddHours($hours).AddMinutes($minutes)
+                if ($triggerDateTime -lt (Get-Date)) {
+                    $triggerDateTime = $triggerDateTime.AddDays(1)
+                }
+            } else {
+                $triggerDateTime = (Get-Date).AddMinutes(1)
+            }
+        }
+        $Trigger = New-ScheduledTaskTrigger -Once -At $triggerDateTime
+    }
+    "AtStartup" {
+        $Trigger = New-ScheduledTaskTrigger -AtStartup
+    }
+    "AtLogon" {
+        $Trigger = New-ScheduledTaskTrigger -AtLogon
+    }
+    "OnIdle" {
+        $Trigger = New-ScheduledTaskTrigger -OnIdle
+    }
+    default {
+        $Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
+    }
+}
 
-# Set repetition if interval is specified
+# Set repetition if interval is specified (only for time-based triggers)
 # Note: RepetitionInterval/RepetitionDuration only work with -Once triggers,
 # so we create a temporary -Once trigger and copy its Repetition property
-if ($RepetitionIntervalHours -gt 0 -or $RepetitionIntervalMinutes -gt 0) {
+if (($RepetitionIntervalHours -gt 0 -or $RepetitionIntervalMinutes -gt 0) -and 
+    $TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
     $repetitionInterval = if ($RepetitionIntervalHours -gt 0) {
         New-TimeSpan -Hours $RepetitionIntervalHours
     } else {
@@ -293,15 +452,15 @@ if ($RepetitionIntervalHours -gt 0 -or $RepetitionIntervalMinutes -gt 0) {
             -At "00:00" `
             -RepetitionInterval $repetitionInterval
         
-        # Copy the Repetition property from temp trigger to daily trigger
+        # Copy the Repetition property from temp trigger to the actual trigger
         if ($tempTrigger.Repetition) {
             $Trigger.Repetition = $tempTrigger.Repetition
         } else {
-            Write-Warning "Could not set repetition interval. Task will run once per day without repetition."
+            Write-Warning "Could not set repetition interval. Task will run without repetition."
         }
     } catch {
         Write-Warning "Could not set repetition interval: $($_.Exception.Message)"
-        Write-Warning "Task will run once per day without repetition."
+        Write-Warning "Task will run without repetition."
     }
 }
 
