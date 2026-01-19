@@ -364,6 +364,7 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
                   $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService")) {
             if ($RunWhenUserNotLoggedOn) {
                 $LogonType = "Password"
+                Write-Host "Note: You will be prompted for your password. The task will run even when you're not logged in." -ForegroundColor Yellow
             } else {
                 $LogonType = "Interactive"
             }
@@ -379,6 +380,7 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
             $compatibilityInput -in @('At', 'V1', 'Vista', 'Win7', 'Win8')) {
             $Compatibility = $compatibilityInput
         }
+        # If empty input, $Compatibility already defaults to "Win8" from parameter declaration
     }
 }
 
@@ -579,6 +581,9 @@ $SettingsParams = @{
 
 $Settings = New-ScheduledTaskSettingsSet @SettingsParams
 
+# Verify compatibility was set correctly
+Write-Verbose "Setting task compatibility to: $Compatibility" -Verbose
+
 # --- Register the Task ---
 # When using password authentication, register with -User and -Password first,
 # then update Principal settings separately to avoid parameter conflicts
@@ -617,7 +622,10 @@ if ($LogonType -eq "Password" -and $Password) {
         # Update Principal settings (RunLevel, etc.) after registration
         Set-ScheduledTask -TaskName $TaskName -Principal $Principal -ErrorAction Stop
         
+        # Verify compatibility was set
+        $taskSettings = (Get-ScheduledTask -TaskName $TaskName).Settings
         Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
+        Write-Host "Task compatibility set to: $($taskSettings.Compatibility)" -ForegroundColor Cyan
     } catch {
         $errorMessage = $_.Exception.Message
         
@@ -626,6 +634,10 @@ if ($LogonType -eq "Password" -and $Password) {
         if ($taskExists) {
             Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
             Write-Warning "Error message: $errorMessage"
+            if ($errorMessage -like "*password*" -or $errorMessage -like "*user name*") {
+                Write-Host "Note: Password validation errors can sometimes occur even when the task is created successfully." -ForegroundColor Yellow
+                Write-Host "      Please verify the task in Task Scheduler and test it to ensure it runs correctly." -ForegroundColor Yellow
+            }
             Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
         } else {
             # Task was not created, report the error
@@ -661,7 +673,11 @@ if ($LogonType -eq "Password" -and $Password) {
     
     try {
         Register-ScheduledTask @RegisterParams -ErrorAction Stop
+        
+        # Verify compatibility was set
+        $taskSettings = (Get-ScheduledTask -TaskName $TaskName).Settings
         Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
+        Write-Host "Task compatibility set to: $($taskSettings.Compatibility)" -ForegroundColor Cyan
     } catch {
         $errorMessage = $_.Exception.Message
         
@@ -670,6 +686,10 @@ if ($LogonType -eq "Password" -and $Password) {
         if ($taskExists) {
             Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
             Write-Warning "Error message: $errorMessage"
+            if ($errorMessage -like "*password*" -or $errorMessage -like "*user name*") {
+                Write-Host "Note: Password validation errors can sometimes occur even when the task is created successfully." -ForegroundColor Yellow
+                Write-Host "      Please verify the task in Task Scheduler and test it to ensure it runs correctly." -ForegroundColor Yellow
+            }
             Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
         } else {
             # Task was not created, report the error
