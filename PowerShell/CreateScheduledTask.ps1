@@ -136,8 +136,15 @@ param(
     [string]$LogonType,
     
     [Parameter(Mandatory = $false)]
+    [bool]$RunWhenUserNotLoggedOn,
+    
+    [Parameter(Mandatory = $false)]
     [ValidateSet('Highest', 'Limited')]
     [string]$RunLevel = "Highest",
+    
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('At', 'V1', 'Vista', 'Win7', 'Win8')]
+    [string]$Compatibility = "Win8",
     
     [Parameter(Mandatory = $false)]
     [bool]$AllowStartIfOnBatteries = $true,
@@ -244,15 +251,23 @@ if ([string]::IsNullOrWhiteSpace($UserId)) {
     $UserId = Get-RequiredParameter -ParameterName "UserId" -Prompt "Enter user account to run task as" -DefaultValue $currentUser
 }
 
-# Set LogonType default based on UserId
+# Set LogonType default based on UserId and RunWhenUserNotLoggedOn
 # SYSTEM and other service accounts use ServiceAccount
-# Current user uses Interactive (no password needed, runs when logged in)
+# If RunWhenUserNotLoggedOn is set, use it to determine LogonType
+# Otherwise, current user uses Interactive (no password needed, runs when logged in)
 # Other users use Password (requires password, runs when not logged in)
 if ([string]::IsNullOrWhiteSpace($LogonType)) {
     if ($UserId -eq "SYSTEM" -or $UserId -eq "NT AUTHORITY\SYSTEM" -or 
         $UserId -eq "LocalService" -or $UserId -eq "NT AUTHORITY\LocalService" -or
         $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService") {
         $LogonType = "ServiceAccount"
+    } elseif ($PSBoundParameters.ContainsKey('RunWhenUserNotLoggedOn')) {
+        # RunWhenUserNotLoggedOn was explicitly set
+        if ($RunWhenUserNotLoggedOn) {
+            $LogonType = "Password"
+        } else {
+            $LogonType = "Interactive"
+        }
     } elseif ($UserId -eq $currentUser) {
         $LogonType = "Interactive"
     } else {
@@ -330,6 +345,39 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
         # Hourly automatically uses 1 hour repetition (can be overridden via parameter)
         if ($RepetitionIntervalHours -eq 1 -and $RepetitionIntervalMinutes -eq 0) {
             Write-Host "Hourly trigger will repeat every hour." -ForegroundColor Cyan
+        }
+    }
+    
+    # Prompt for run when user not logged on
+    if (-not $PSBoundParameters.ContainsKey('RunWhenUserNotLoggedOn')) {
+        Write-Host "`n--- Security Options ---" -ForegroundColor Cyan
+        $runWhenNotLoggedOnInput = Read-Host -Prompt "Run task whether user is logged on or not? (Y/N, default: N)"
+        if (-not [string]::IsNullOrWhiteSpace($runWhenNotLoggedOnInput)) {
+            $RunWhenUserNotLoggedOn = $runWhenNotLoggedOnInput -match '^[Yy]'
+        } else {
+            $RunWhenUserNotLoggedOn = $false
+        }
+        # Re-evaluate LogonType if it wasn't explicitly set as a parameter and RunWhenUserNotLoggedOn was set interactively
+        if (-not $PSBoundParameters.ContainsKey('LogonType') -and 
+            -not ($UserId -eq "SYSTEM" -or $UserId -eq "NT AUTHORITY\SYSTEM" -or 
+                  $UserId -eq "LocalService" -or $UserId -eq "NT AUTHORITY\LocalService" -or
+                  $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService")) {
+            if ($RunWhenUserNotLoggedOn) {
+                $LogonType = "Password"
+            } else {
+                $LogonType = "Interactive"
+            }
+        }
+    }
+    
+    # Prompt for compatibility version
+    if (-not $PSBoundParameters.ContainsKey('Compatibility')) {
+        Write-Host "`n--- Compatibility ---" -ForegroundColor Cyan
+        Write-Host "Compatibility options: At, V1, Vista, Win7, Win8 (Win8 recommended for Windows 10/11)"
+        $compatibilityInput = Read-Host -Prompt "Enter compatibility version (default: Win8)"
+        if (-not [string]::IsNullOrWhiteSpace($compatibilityInput) -and 
+            $compatibilityInput -in @('At', 'V1', 'Vista', 'Win7', 'Win8')) {
+            $Compatibility = $compatibilityInput
         }
     }
 }
@@ -526,6 +574,7 @@ $SettingsParams = @{
     AllowStartIfOnBatteries = $AllowStartIfOnBatteries
     DontStopIfGoingOnBatteries = $DontStopIfGoingOnBatteries
     ExecutionTimeLimit = (New-TimeSpan -Hours $ExecutionTimeLimitHours)
+    Compatibility = $Compatibility
 }
 
 $Settings = New-ScheduledTaskSettingsSet @SettingsParams
