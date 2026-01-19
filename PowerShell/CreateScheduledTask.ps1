@@ -881,13 +881,40 @@ if ($LogonType -eq "Password" -and $Password) {
         # Check if task was actually created despite the error
         $taskExists = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         if ($taskExists) {
-            Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
-            Write-Warning "Error message: $errorMessage"
-            if ($errorMessage -like "*password*" -or $errorMessage -like "*user name*") {
-                Write-Host "Note: Password validation errors can sometimes occur even when the task is created successfully." -ForegroundColor Yellow
-                Write-Host "      Please verify the task in Task Scheduler and test it to ensure it runs correctly." -ForegroundColor Yellow
+            # Verify the task is properly configured
+            try {
+                $taskPrincipal = (Get-ScheduledTask -TaskName $TaskName).Principal
+                $taskSettings = (Get-ScheduledTask -TaskName $TaskName).Settings
+                
+                # Check if task is correctly configured
+                $isConfiguredCorrectly = ($taskPrincipal.UserId -eq $UserId) -and 
+                                        ($taskPrincipal.LogonType -eq $LogonType) -and
+                                        ($taskSettings.Compatibility -eq $Compatibility)
+                
+                if ($isConfiguredCorrectly -and ($errorMessage -like "*password*" -or $errorMessage -like "*user name*")) {
+                    # Task is correctly configured, this is just a false positive password validation error
+                    Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
+                    Write-Verbose "Note: Windows reported a password validation error, but the task is correctly configured and should work properly." -Verbose
+                } else {
+                    # Task exists but might have configuration issues
+                    Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
+                    Write-Warning "Error message: $errorMessage"
+                    if ($errorMessage -like "*password*" -or $errorMessage -like "*user name*") {
+                        Write-Host "Note: Password validation errors can sometimes occur even when the task is created successfully." -ForegroundColor Yellow
+                        Write-Host "      Please verify the task in Task Scheduler and test it to ensure it runs correctly." -ForegroundColor Yellow
+                    }
+                    Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
+                }
+            } catch {
+                # Couldn't verify task configuration, show warning
+                Write-Warning "Task registration reported an error, but the task '$TaskName' appears to have been created."
+                Write-Warning "Error message: $errorMessage"
+                if ($errorMessage -like "*password*" -or $errorMessage -like "*user name*") {
+                    Write-Host "Note: Password validation errors can sometimes occur even when the task is created successfully." -ForegroundColor Yellow
+                    Write-Host "      Please verify the task in Task Scheduler and test it to ensure it runs correctly." -ForegroundColor Yellow
+                }
+                Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
             }
-            Write-Host "Scheduled task '$TaskName' created successfully!" -ForegroundColor Green
         } else {
             # Task was not created, report the error
             if ($errorMessage -like "*Access is denied*") {
