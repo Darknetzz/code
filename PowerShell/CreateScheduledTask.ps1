@@ -19,10 +19,10 @@
     Working directory for the task. Optional but recommended for scripts using relative paths.
 
 .PARAMETER TriggerType
-    Type of trigger: 'Daily', 'Weekly', 'Monthly', 'Once', 'AtStartup', 'AtLogon', 'OnIdle'. Defaults to 'Daily'.
+    Type of trigger: 'Daily', 'Weekly', 'Monthly', 'Once', 'Hourly', 'AtStartup', 'AtLogon', 'OnIdle'. Defaults to 'Daily'.
 
 .PARAMETER TriggerTime
-    Time to start the task (e.g., "12:00am", "3am", "15:00"). Required for Daily, Weekly, Monthly, Once. Defaults to "12:00am".
+    Time to start the task (e.g., "12:00am", "3am", "15:00"). Required for Daily, Weekly, Monthly, Once, Hourly. Defaults to "12:00am". For Hourly, defaults to next whole hour if not specified.
 
 .PARAMETER DaysOfWeek
     Days of week for Weekly trigger (e.g., "Monday,Wednesday,Friday" or "Monday"). Optional.
@@ -98,7 +98,7 @@ param(
     [string]$WorkingDirectory,
     
     [Parameter(Mandatory = $false)]
-    [ValidateSet('Daily', 'Weekly', 'Monthly', 'Once', 'AtStartup', 'AtLogon', 'OnIdle')]
+    [ValidateSet('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly', 'AtStartup', 'AtLogon', 'OnIdle')]
     [string]$TriggerType = "Daily",
     
     [Parameter(Mandatory = $false)]
@@ -271,17 +271,17 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
     $WorkingDirectory = Read-Host -Prompt "Enter working directory (optional, press Enter to skip)"
 }
 
-# Prompt for trigger options if in interactive mode
-if ($isInteractiveMode) {
-    Write-Host "`n--- Schedule Configuration ---" -ForegroundColor Cyan
-    Write-Host "Trigger types: Daily, Weekly, Monthly, Once, AtStartup, AtLogon, OnIdle"
-    $triggerTypeInput = Read-Host -Prompt "Enter trigger type (default: Daily)"
-    if (-not [string]::IsNullOrWhiteSpace($triggerTypeInput)) {
-        $TriggerType = $triggerTypeInput
-    }
-    
-    # Prompt for trigger time if needed for time-based triggers
-    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
+    # Prompt for trigger options if in interactive mode
+    if ($isInteractiveMode) {
+        Write-Host "`n--- Schedule Configuration ---" -ForegroundColor Cyan
+        Write-Host "Trigger types: Daily, Weekly, Monthly, Once, Hourly, AtStartup, AtLogon, OnIdle"
+        $triggerTypeInput = Read-Host -Prompt "Enter trigger type (default: Daily)"
+        if (-not [string]::IsNullOrWhiteSpace($triggerTypeInput)) {
+            $TriggerType = $triggerTypeInput
+        }
+        
+        # Prompt for trigger time if needed for time-based triggers
+        if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
         $triggerTimeInput = Read-Host -Prompt "Enter trigger time (e.g., 12:00am, 3pm, 15:00) (default: 12:00am)"
         if (-not [string]::IsNullOrWhiteSpace($triggerTimeInput)) {
             $TriggerTime = $triggerTimeInput
@@ -309,13 +309,16 @@ if ($isInteractiveMode) {
     }
     
     # Prompt for repetition interval
-    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
-        $repeatInput = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, press Enter for 1 hour)"
+    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
+        $defaultRepeat = if ($TriggerType -eq 'Hourly') { "1" } else { "1" }
+        $repeatInput = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, press Enter for $defaultRepeat hour)"
         if (-not [string]::IsNullOrWhiteSpace($repeatInput)) {
             if ([int]::TryParse($repeatInput, [ref]$null)) {
                 $RepetitionIntervalHours = [int]$repeatInput
                 $RepetitionIntervalMinutes = 0
             }
+        } elseif ($TriggerType -eq 'Hourly' -and $RepetitionIntervalHours -eq 1) {
+            # Hourly defaults to 1 hour repetition (already set)
         }
     }
 }
@@ -426,6 +429,33 @@ switch ($TriggerType) {
         }
         $Trigger = New-ScheduledTaskTrigger -Once -At $triggerDateTime
     }
+    "Hourly" {
+        # Parse TriggerTime to determine start time, default to next whole hour
+        try {
+            $triggerDateTime = [DateTime]::Parse($TriggerTime)
+            if ($triggerDateTime -lt (Get-Date)) {
+                # If time is in the past, assume it's just a time and use today
+                $triggerDateTime = (Get-Date).Date.Add($triggerDateTime.TimeOfDay)
+                if ($triggerDateTime -lt (Get-Date)) {
+                    # If still in the past, use tomorrow
+                    $triggerDateTime = $triggerDateTime.AddDays(1)
+                }
+            }
+        } catch {
+            # If parsing fails, default to next whole hour
+            $now = Get-Date
+            $nextHour = $now.Date.AddHours([Math]::Ceiling($now.TimeOfDay.TotalHours))
+            if ($nextHour -le $now) {
+                $nextHour = $nextHour.AddHours(1)
+            }
+            $triggerDateTime = $nextHour
+        }
+        $Trigger = New-ScheduledTaskTrigger -Once -At $triggerDateTime
+        # Default to 1 hour repetition for Hourly if not explicitly set
+        if ($RepetitionIntervalHours -eq 1 -and $RepetitionIntervalMinutes -eq 0) {
+            $RepetitionIntervalHours = 1
+        }
+    }
     "AtStartup" {
         $Trigger = New-ScheduledTaskTrigger -AtStartup
     }
@@ -444,7 +474,7 @@ switch ($TriggerType) {
 # Note: RepetitionInterval/RepetitionDuration only work with -Once triggers,
 # so we create a temporary -Once trigger and copy its Repetition property
 if (($RepetitionIntervalHours -gt 0 -or $RepetitionIntervalMinutes -gt 0) -and 
-    $TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
+    $TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
     $repetitionInterval = if ($RepetitionIntervalHours -gt 0) {
         New-TimeSpan -Hours $RepetitionIntervalHours
     } else {
