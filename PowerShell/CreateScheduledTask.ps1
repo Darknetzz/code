@@ -48,8 +48,8 @@
     Defaults to 'ServiceAccount' for SYSTEM/service accounts, 'Interactive' for current user, 'Password' for other users.
 
 .PARAMETER RunWhenUserNotLoggedOn
-    Run task whether user is logged on or not. If true, uses 'Password' logon type (requires password). 
-    If false, uses 'Interactive' logon type (runs only when logged in). 
+    Run task whether user is logged on or not. If true, uses 'Password' logon type (requires password, runs in Session 0 - no visible windows). 
+    If false, uses 'Interactive' logon type (runs only when logged in, windows will be visible). 
     Overrides LogonType default behavior if LogonType is not explicitly set.
 
 .PARAMETER RunLevel
@@ -351,6 +351,8 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
     # Prompt for run when user not logged on
     if (-not $PSBoundParameters.ContainsKey('RunWhenUserNotLoggedOn')) {
         Write-Host "`n--- Security Options ---" -ForegroundColor Cyan
+        Write-Host "Y = Run whether user is logged on or not (runs in background, no visible windows, requires password)" -ForegroundColor Gray
+        Write-Host "N = Run only when user is logged on (windows will be visible, no password needed)" -ForegroundColor Gray
         $runWhenNotLoggedOnInput = Read-Host -Prompt "Run task whether user is logged on or not? (Y/N, default: N)"
         if (-not [string]::IsNullOrWhiteSpace($runWhenNotLoggedOnInput)) {
             $RunWhenUserNotLoggedOn = $runWhenNotLoggedOnInput -match '^[Yy]'
@@ -365,8 +367,10 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
             if ($RunWhenUserNotLoggedOn) {
                 $LogonType = "Password"
                 Write-Host "Note: You will be prompted for your password. The task will run even when you're not logged in." -ForegroundColor Yellow
+                Write-Host "      IMPORTANT: Windows will NOT be visible - the task runs in a non-interactive session (Session 0)." -ForegroundColor Yellow
             } else {
                 $LogonType = "Interactive"
+                Write-Host "Note: Task will only run when you are logged in. Windows will be visible." -ForegroundColor Cyan
             }
         }
     }
