@@ -8,7 +8,10 @@ Connect to an LHP server and send commands.
 import asyncio
 import ssl
 import sys
+import typer
 from protocol import LHPProtocol
+
+app = typer.Typer(help="Lab Hop Protocol (LHP) Client - Connect to LHP server and send commands")
 
 
 async def send_packet(host, port, cmd_id, data, use_tls=False, certfile=None):
@@ -138,82 +141,65 @@ async def interactive_client(host, port, use_tls=False, certfile=None):
         sys.exit(1)
 
 
-if __name__ == "__main__":
-    import argparse
+@app.command()
+def main(
+    host: str = typer.Argument(..., help="Server hostname or IP address"),
+    port: int = typer.Argument(..., help="Server port"),
+    tls: bool = typer.Option(False, "--tls", help="Enable TLS encryption"),
+    certfile: str = typer.Option(None, "--certfile", help="Path to SSL certificate file (for TLS verification)"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode (send multiple commands)"),
+    cmd: int = typer.Option(None, "--cmd", help="Command ID to send (0-255). Use with --data"),
+    data: str = typer.Option(None, "--data", help="Payload data to send (use with --cmd)"),
+):
+    """
+    Connect to LHP server and send commands.
     
-    parser = argparse.ArgumentParser(
-        description="Lab Hop Protocol (LHP) Client - Connect to LHP server and send commands"
-    )
-    parser.add_argument(
-        "host",
-        type=str,
-        help="Server hostname or IP address"
-    )
-    parser.add_argument(
-        "port",
-        type=int,
-        help="Server port"
-    )
-    parser.add_argument(
-        "--tls",
-        action="store_true",
-        help="Enable TLS encryption"
-    )
-    parser.add_argument(
-        "--certfile",
-        type=str,
-        help="Path to SSL certificate file (for TLS verification)"
-    )
-    parser.add_argument(
-        "--interactive",
-        "-i",
-        action="store_true",
-        help="Interactive mode (send multiple commands)"
-    )
-    parser.add_argument(
-        "--cmd",
-        type=int,
-        help="Command ID to send (0-255). Use with --data"
-    )
-    parser.add_argument(
-        "--data",
-        type=str,
-        help="Payload data to send (use with --cmd)"
-    )
+    Examples:
     
-    args = parser.parse_args()
+        # Interactive mode:
+        python client.py localhost 8888 --interactive
+        python client.py localhost 8888 -i
     
-    if args.cmd is not None and args.interactive:
-        parser.error("Cannot use --cmd/--data with --interactive")
+        # Send single command:
+        python client.py localhost 8888 --cmd 1 --data "Hello World"
+        python client.py localhost 8888 --cmd 2 --data "reboot"
     
-    if args.cmd is not None and args.data is None:
-        args.data = ""  # Empty payload
+        # With TLS:
+        python client.py localhost 8888 --tls --interactive
+    """
+    if cmd is not None and interactive:
+        typer.echo("Error: Cannot use --cmd/--data with --interactive", err=True)
+        raise typer.Exit(1)
     
-    if args.interactive:
+    if interactive:
         asyncio.run(interactive_client(
-            args.host,
-            args.port,
-            use_tls=args.tls,
-            certfile=args.certfile
+            host,
+            port,
+            use_tls=tls,
+            certfile=certfile
         ))
-    elif args.cmd is not None:
+    elif cmd is not None:
         asyncio.run(send_packet(
-            args.host,
-            args.port,
-            args.cmd,
-            args.data or "",
-            use_tls=args.tls,
-            certfile=args.certfile
+            host,
+            port,
+            cmd,
+            data or "",
+            use_tls=tls,
+            certfile=certfile
         ))
     else:
-        parser.print_help()
-        print("\nExamples:")
-        print("  # Interactive mode:")
-        print("  python client.py localhost 8888 --interactive")
-        print("  python client.py localhost 8888 -i")
-        print("\n  # Send single command:")
-        print("  python client.py localhost 8888 --cmd 1 --data 'Hello World'")
-        print("  python client.py localhost 8888 --cmd 2 --data 'reboot'")
-        print("\n  # With TLS:")
-        print("  python client.py localhost 8888 --tls --interactive")
-        sys.exit(1)
+        typer.echo("Error: Must specify either --interactive or --cmd", err=True)
+        typer.echo("\nExamples:")
+        typer.echo("  # Interactive mode:")
+        typer.echo("  python client.py localhost 8888 --interactive")
+        typer.echo("  python client.py localhost 8888 -i")
+        typer.echo("\n  # Send single command:")
+        typer.echo("  python client.py localhost 8888 --cmd 1 --data 'Hello World'")
+        typer.echo("  python client.py localhost 8888 --cmd 2 --data 'reboot'")
+        typer.echo("\n  # With TLS:")
+        typer.echo("  python client.py localhost 8888 --tls --interactive")
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()

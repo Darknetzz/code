@@ -5,11 +5,13 @@ Lab Hop Protocol (LHP) Server
 Start an LHP server that listens for connections and processes commands.
 """
 
-import argparse
 import asyncio
 import ssl
+import typer
 
 from protocol import LHPAsyncProtocol
+
+app = typer.Typer(help="Lab Hop Protocol (LHP) Server with replay protection and TLS support")
 
 
 async def _server_main(use_tls=False, certfile=None, keyfile=None, host='0.0.0.0', port=8888):
@@ -42,55 +44,32 @@ async def _server_main(use_tls=False, certfile=None, keyfile=None, host='0.0.0.0
         await server.serve_forever()
 
 
-def main():
-    """Main entry point for the server."""
-    parser = argparse.ArgumentParser(
-        description="Lab Hop Protocol (LHP) Server with replay protection and TLS support"
-    )
-    parser.add_argument(
-        "--tls",
-        action="store_true",
-        help="Enable TLS encryption (requires --certfile and --keyfile)"
-    )
-    parser.add_argument(
-        "--certfile",
-        type=str,
-        help="Path to SSL certificate file (required with --tls)"
-    )
-    parser.add_argument(
-        "--keyfile",
-        type=str,
-        help="Path to SSL private key file (required with --tls)"
-    )
-    parser.add_argument(
-        "--host",
-        type=str,
-        default="0.0.0.0",
-        help="Host to bind to (default: 0.0.0.0)"
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8888,
-        help="Port to listen on (default: 8888)"
-    )
-    
-    args = parser.parse_args()
-    
-    if args.tls and (not args.certfile or not args.keyfile):
-        parser.error("--certfile and --keyfile are required when --tls is used")
+@app.command()
+def main(
+    tls: bool = typer.Option(False, "--tls", help="Enable TLS encryption (requires --certfile and --keyfile)"),
+    certfile: str = typer.Option(None, "--certfile", help="Path to SSL certificate file (required with --tls)"),
+    keyfile: str = typer.Option(None, "--keyfile", help="Path to SSL private key file (required with --tls)"),
+    host: str = typer.Option("0.0.0.0", "--host", help="Host to bind to (default: 0.0.0.0)"),
+    port: int = typer.Option(8888, "--port", help="Port to listen on (default: 8888)"),
+):
+    """
+    Start the LHP server.
+    """
+    if tls and (not certfile or not keyfile):
+        typer.echo("Error: --certfile and --keyfile are required when --tls is used", err=True)
+        raise typer.Exit(1)
     
     try:
         asyncio.run(_server_main(
-            use_tls=args.tls,
-            certfile=args.certfile,
-            keyfile=args.keyfile,
-            host=args.host,
-            port=args.port
+            use_tls=tls,
+            certfile=certfile,
+            keyfile=keyfile,
+            host=host,
+            port=port
         ))
     except KeyboardInterrupt:
         print("\n✓ Server stopped")
 
 
 if __name__ == "__main__":
-    main()
+    app()
