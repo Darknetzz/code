@@ -47,8 +47,17 @@
     or 'Interactive' (no password, runs only when user is logged in). 
     Defaults to 'ServiceAccount' for SYSTEM/service accounts, 'Interactive' for current user, 'Password' for other users.
 
+.PARAMETER RunWhenUserNotLoggedOn
+    Run task whether user is logged on or not. If true, uses 'Password' logon type (requires password). 
+    If false, uses 'Interactive' logon type (runs only when logged in). 
+    Overrides LogonType default behavior if LogonType is not explicitly set.
+
 .PARAMETER RunLevel
     Run level: 'Highest' (admin) or 'Limited'. Defaults to 'Highest'.
+
+.PARAMETER Compatibility
+    Task Scheduler compatibility version: 'At', 'V1', 'Vista', 'Win7', 'Win8'. 
+    Use 'Win8' for Windows 10/11 compatibility. Defaults to 'Win8'.
 
 .PARAMETER AllowStartIfOnBatteries
     Allow task to start on battery power. Defaults to $true.
@@ -308,17 +317,19 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
         }
     }
     
-    # Prompt for repetition interval
-    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
-        $defaultRepeat = if ($TriggerType -eq 'Hourly') { "1" } else { "1" }
-        $repeatInput = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, press Enter for $defaultRepeat hour)"
+    # Prompt for repetition interval (skip for Hourly since it's implicit)
+    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once')) {
+        $repeatInput = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, press Enter for 1 hour)"
         if (-not [string]::IsNullOrWhiteSpace($repeatInput)) {
             if ([int]::TryParse($repeatInput, [ref]$null)) {
                 $RepetitionIntervalHours = [int]$repeatInput
                 $RepetitionIntervalMinutes = 0
             }
-        } elseif ($TriggerType -eq 'Hourly' -and $RepetitionIntervalHours -eq 1) {
-            # Hourly defaults to 1 hour repetition (already set)
+        }
+    } elseif ($TriggerType -eq 'Hourly') {
+        # Hourly automatically uses 1 hour repetition (can be overridden via parameter)
+        if ($RepetitionIntervalHours -eq 1 -and $RepetitionIntervalMinutes -eq 0) {
+            Write-Host "Hourly trigger will repeat every hour." -ForegroundColor Cyan
         }
     }
 }
