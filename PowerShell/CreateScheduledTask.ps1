@@ -405,6 +405,227 @@ if ($LogonType -eq "Password" -and -not $Password) {
     }
 }
 
+# Function to calculate first run time based on trigger type
+function Get-FirstRunTime {
+    param(
+        [string]$TriggerType,
+        [string]$TriggerTime
+    )
+    
+    $now = Get-Date
+    
+    switch ($TriggerType) {
+        "Daily" {
+            try {
+                $triggerDateTime = [DateTime]::Parse($TriggerTime)
+                if ($triggerDateTime -lt $now) {
+                    $triggerDateTime = $now.Date.Add($triggerDateTime.TimeOfDay)
+                    if ($triggerDateTime -lt $now) {
+                        $triggerDateTime = $triggerDateTime.AddDays(1)
+                    }
+                }
+                return $triggerDateTime
+            } catch {
+                $triggerDateTime = $now.Date
+                $timeMatch = $TriggerTime -match "(\d{1,2}):(\d{2})\s*(am|pm)?"
+                if ($timeMatch) {
+                    $hours = [int]$matches[1]
+                    $minutes = [int]$matches[2]
+                    $ampm = $matches[3]
+                    if ($ampm -eq "pm" -and $hours -ne 12) { $hours += 12 }
+                    if ($ampm -eq "am" -and $hours -eq 12) { $hours = 0 }
+                    $triggerDateTime = $triggerDateTime.AddHours($hours).AddMinutes($minutes)
+                    if ($triggerDateTime -lt $now) {
+                        $triggerDateTime = $triggerDateTime.AddDays(1)
+                    }
+                } else {
+                    $triggerDateTime = $now.AddDays(1).Date
+                }
+                return $triggerDateTime
+            }
+        }
+        "Once" {
+            try {
+                $triggerDateTime = [DateTime]::Parse($TriggerTime)
+                if ($triggerDateTime -lt $now) {
+                    $triggerDateTime = $now.Date.Add($triggerDateTime.TimeOfDay)
+                    if ($triggerDateTime -lt $now) {
+                        $triggerDateTime = $triggerDateTime.AddDays(1)
+                    }
+                }
+                return $triggerDateTime
+            } catch {
+                $triggerDateTime = $now.Date
+                $timeMatch = $TriggerTime -match "(\d{1,2}):(\d{2})\s*(am|pm)?"
+                if ($timeMatch) {
+                    $hours = [int]$matches[1]
+                    $minutes = [int]$matches[2]
+                    $ampm = $matches[3]
+                    if ($ampm -eq "pm" -and $hours -ne 12) { $hours += 12 }
+                    if ($ampm -eq "am" -and $hours -eq 12) { $hours = 0 }
+                    $triggerDateTime = $triggerDateTime.AddHours($hours).AddMinutes($minutes)
+                    if ($triggerDateTime -lt $now) {
+                        $triggerDateTime = $triggerDateTime.AddDays(1)
+                    }
+                } else {
+                    $triggerDateTime = $now.AddMinutes(1)
+                }
+                return $triggerDateTime
+            }
+        }
+        "Hourly" {
+            try {
+                $triggerDateTime = [DateTime]::Parse($TriggerTime)
+                if ($triggerDateTime -lt $now) {
+                    $triggerDateTime = $now.Date.Add($triggerDateTime.TimeOfDay)
+                    if ($triggerDateTime -lt $now) {
+                        $triggerDateTime = $triggerDateTime.AddDays(1)
+                    }
+                }
+            } catch {
+                $triggerDateTime = $now.Date.AddHours([Math]::Ceiling($now.TimeOfDay.TotalHours))
+                if ($triggerDateTime -le $now) {
+                    $triggerDateTime = $triggerDateTime.AddHours(1)
+                }
+            }
+            return $triggerDateTime
+        }
+        "Weekly" {
+            # For Weekly, show the trigger time - actual first run depends on days of week
+            try {
+                $triggerDateTime = [DateTime]::Parse($TriggerTime)
+                return $triggerDateTime
+            } catch {
+                $triggerDateTime = $now.Date
+                $timeMatch = $TriggerTime -match "(\d{1,2}):(\d{2})\s*(am|pm)?"
+                if ($timeMatch) {
+                    $hours = [int]$matches[1]
+                    $minutes = [int]$matches[2]
+                    $ampm = $matches[3]
+                    if ($ampm -eq "pm" -and $hours -ne 12) { $hours += 12 }
+                    if ($ampm -eq "am" -and $hours -eq 12) { $hours = 0 }
+                    $triggerDateTime = $triggerDateTime.AddHours($hours).AddMinutes($minutes)
+                }
+                return $triggerDateTime
+            }
+        }
+        "Monthly" {
+            # For Monthly, show the trigger time - actual first run depends on days of month
+            try {
+                $triggerDateTime = [DateTime]::Parse($TriggerTime)
+                return $triggerDateTime
+            } catch {
+                $triggerDateTime = $now.Date
+                $timeMatch = $TriggerTime -match "(\d{1,2}):(\d{2})\s*(am|pm)?"
+                if ($timeMatch) {
+                    $hours = [int]$matches[1]
+                    $minutes = [int]$matches[2]
+                    $ampm = $matches[3]
+                    if ($ampm -eq "pm" -and $hours -ne 12) { $hours += 12 }
+                    if ($ampm -eq "am" -and $hours -eq 12) { $hours = 0 }
+                    $triggerDateTime = $triggerDateTime.AddHours($hours).AddMinutes($minutes)
+                }
+                return $triggerDateTime
+            }
+        }
+        default {
+            return $now.AddMinutes(1)
+        }
+    }
+}
+
+# Show summary and prompt for confirmation
+Write-Host "`n" -NoNewline
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "         TASK SUMMARY" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Task Name: " -NoNewline
+Write-Host $TaskName -ForegroundColor Yellow
+Write-Host "Execute: " -NoNewline
+Write-Host $Execute -ForegroundColor Yellow
+if (-not [string]::IsNullOrWhiteSpace($Argument)) {
+    Write-Host "Arguments: " -NoNewline
+    Write-Host $Argument -ForegroundColor Yellow
+}
+if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+    Write-Host "Working Directory: " -NoNewline
+    Write-Host $WorkingDirectory -ForegroundColor Yellow
+}
+Write-Host "User Account: " -NoNewline
+Write-Host $UserId -ForegroundColor Yellow
+Write-Host "Logon Type: " -NoNewline
+Write-Host $LogonType -ForegroundColor Yellow
+if ($LogonType -eq "Password") {
+    Write-Host "  (Runs whether user is logged on or not - no visible windows)" -ForegroundColor Gray
+} elseif ($LogonType -eq "Interactive") {
+    Write-Host "  (Runs only when user is logged on - windows will be visible)" -ForegroundColor Gray
+}
+Write-Host "Run Level: " -NoNewline
+Write-Host $RunLevel -ForegroundColor Yellow
+Write-Host "Compatibility: " -NoNewline
+Write-Host $Compatibility -ForegroundColor Yellow
+
+Write-Host "`n--- Schedule ---" -ForegroundColor Cyan
+Write-Host "Trigger Type: " -NoNewline
+Write-Host $TriggerType -ForegroundColor Yellow
+
+# Calculate first run time
+$firstRunTime = Get-FirstRunTime -TriggerType $TriggerType -TriggerTime $TriggerTime
+if ($TriggerType -in @('Daily', 'Once', 'Hourly')) {
+    Write-Host "First Run: " -NoNewline
+    Write-Host $firstRunTime.ToString("yyyy-MM-dd HH:mm:ss") -ForegroundColor Green
+} else {
+    Write-Host "Trigger Time: " -NoNewline
+    Write-Host $firstRunTime.ToString("HH:mm:ss") -ForegroundColor Green
+    if ($TriggerType -eq "Weekly") {
+        Write-Host "  (First run will be on the next specified day of week)" -ForegroundColor Gray
+    } elseif ($TriggerType -eq "Monthly") {
+        Write-Host "  (First run will be on the next specified day of month)" -ForegroundColor Gray
+    }
+}
+
+# Show repetition info
+if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
+    if ($RepetitionIntervalHours -gt 0) {
+        Write-Host "Repeat: " -NoNewline
+        if ($RepetitionIntervalHours -eq 1) {
+            Write-Host "Every 1 hour" -ForegroundColor Green
+        } else {
+            Write-Host "Every $RepetitionIntervalHours hours" -ForegroundColor Green
+        }
+    } elseif ($RepetitionIntervalMinutes -gt 0) {
+        Write-Host "Repeat: " -NoNewline
+        if ($RepetitionIntervalMinutes -eq 1) {
+            Write-Host "Every 1 minute" -ForegroundColor Green
+        } else {
+            Write-Host "Every $RepetitionIntervalMinutes minutes" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "Repeat: " -NoNewline
+        Write-Host "No repetition" -ForegroundColor Gray
+    }
+    
+    # Show additional trigger details
+    if ($TriggerType -eq "Weekly" -and -not [string]::IsNullOrWhiteSpace($DaysOfWeek)) {
+        Write-Host "Days of Week: " -NoNewline
+        Write-Host $DaysOfWeek -ForegroundColor Yellow
+    }
+    if ($TriggerType -eq "Monthly" -and -not [string]::IsNullOrWhiteSpace($DaysOfMonth)) {
+        Write-Host "Days of Month: " -NoNewline
+        Write-Host $DaysOfMonth -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Trigger: " -NoNewline
+    Write-Host $TriggerType -ForegroundColor Yellow
+}
+
+Write-Host "========================================" -ForegroundColor Cyan
+$confirm = Read-Host "`nCreate this scheduled task? (Y/N)"
+if ($confirm -notmatch '^[Yy]') {
+    Write-Host "Task creation cancelled." -ForegroundColor Yellow
+    exit 0
+}
+
 # --- Define the Action ---
 $ActionParams = @{
     Execute = $Execute
