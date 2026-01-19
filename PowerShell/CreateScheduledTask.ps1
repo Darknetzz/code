@@ -275,7 +275,9 @@ if ([string]::IsNullOrWhiteSpace($LogonType)) {
             $LogonType = "Interactive"
         }
     } elseif ($UserId -eq $currentUser) {
-        $LogonType = "Interactive"
+        # Default to Password (run whether logged on or not) for current user
+        # This matches the interactive prompt default of Y
+        $LogonType = "Password"
     } else {
         $LogonType = "Password"
     }
@@ -359,11 +361,11 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
         Write-Host "`n--- Security Options ---" -ForegroundColor Cyan
         Write-Host "Y = Run whether user is logged on or not (runs in background, no visible windows, requires password)" -ForegroundColor Gray
         Write-Host "N = Run only when user is logged on (windows will be visible, no password needed)" -ForegroundColor Gray
-        $runWhenNotLoggedOnInput = Read-Host -Prompt "Run task whether user is logged on or not? (Y/N, default: N)"
+        $runWhenNotLoggedOnInput = Read-Host -Prompt "Run task whether user is logged on or not? (Y/N, default: Y)"
         if (-not [string]::IsNullOrWhiteSpace($runWhenNotLoggedOnInput)) {
             $RunWhenUserNotLoggedOn = $runWhenNotLoggedOnInput -match '^[Yy]'
         } else {
-            $RunWhenUserNotLoggedOn = $false
+            $RunWhenUserNotLoggedOn = $true
         }
         # Re-evaluate LogonType if it wasn't explicitly set as a parameter and RunWhenUserNotLoggedOn was set interactively
         if (-not $PSBoundParameters.ContainsKey('LogonType') -and 
@@ -551,102 +553,257 @@ function Get-FirstRunTime {
     }
 }
 
-# Show summary and prompt for confirmation
-Write-Host "`n" -NoNewline
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "         TASK SUMMARY" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Task Name: " -NoNewline
-Write-Host $TaskName -ForegroundColor Yellow
-Write-Host "Execute: " -NoNewline
-Write-Host $Execute -ForegroundColor Yellow
-if (-not [string]::IsNullOrWhiteSpace($Argument)) {
-    Write-Host "Arguments: " -NoNewline
-    Write-Host $Argument -ForegroundColor Yellow
-}
-if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
-    Write-Host "Working Directory: " -NoNewline
-    Write-Host $WorkingDirectory -ForegroundColor Yellow
-}
-Write-Host "User Account: " -NoNewline
-Write-Host $UserId -ForegroundColor Yellow
-Write-Host "Logon Type: " -NoNewline
-Write-Host $LogonType -ForegroundColor Yellow
-if ($LogonType -eq "Password") {
-    Write-Host "  (Runs whether user is logged on or not - no visible windows)" -ForegroundColor Gray
-} elseif ($LogonType -eq "Interactive") {
-    Write-Host "  (Runs only when user is logged on - windows will be visible)" -ForegroundColor Gray
-}
-Write-Host "Run Level: " -NoNewline
-Write-Host $RunLevel -ForegroundColor Yellow
-Write-Host "Compatibility: " -NoNewline
-Write-Host $Compatibility -ForegroundColor Yellow
-Write-Host "Wake To Run: " -NoNewline
-if ($WakeToRun) {
-    Write-Host "Yes" -ForegroundColor Green
-} else {
-    Write-Host "No" -ForegroundColor Gray
-}
-
-Write-Host "`n--- Schedule ---" -ForegroundColor Cyan
-Write-Host "Trigger Type: " -NoNewline
-Write-Host $TriggerType -ForegroundColor Yellow
-
-# Calculate first run time
-$firstRunTime = Get-FirstRunTime -TriggerType $TriggerType -TriggerTime $TriggerTime
-if ($TriggerType -in @('Daily', 'Once', 'Hourly')) {
-    Write-Host "First Run: " -NoNewline
-    Write-Host $firstRunTime.ToString("yyyy-MM-dd HH:mm:ss") -ForegroundColor Green
-} else {
-    Write-Host "Trigger Time: " -NoNewline
-    Write-Host $firstRunTime.ToString("HH:mm:ss") -ForegroundColor Green
-    if ($TriggerType -eq "Weekly") {
-        Write-Host "  (First run will be on the next specified day of week)" -ForegroundColor Gray
-    } elseif ($TriggerType -eq "Monthly") {
-        Write-Host "  (First run will be on the next specified day of month)" -ForegroundColor Gray
+# Function to display task summary
+function Show-TaskSummary {
+    Write-Host "`n" -NoNewline
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "         TASK SUMMARY" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "1. Task Name: " -NoNewline
+    Write-Host $TaskName -ForegroundColor Yellow
+    Write-Host "2. Execute: " -NoNewline
+    Write-Host $Execute -ForegroundColor Yellow
+    if (-not [string]::IsNullOrWhiteSpace($Argument)) {
+        Write-Host "3. Arguments: " -NoNewline
+        Write-Host $Argument -ForegroundColor Yellow
+    } else {
+        Write-Host "3. Arguments: " -NoNewline
+        Write-Host "(none)" -ForegroundColor Gray
     }
-}
+    if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        Write-Host "4. Working Directory: " -NoNewline
+        Write-Host $WorkingDirectory -ForegroundColor Yellow
+    } else {
+        Write-Host "4. Working Directory: " -NoNewline
+        Write-Host "(none)" -ForegroundColor Gray
+    }
+    Write-Host "5. User Account: " -NoNewline
+    Write-Host $UserId -ForegroundColor Yellow
+    Write-Host "6. Logon Type: " -NoNewline
+    Write-Host $LogonType -ForegroundColor Yellow
+    if ($LogonType -eq "Password") {
+        Write-Host "   (Runs whether user is logged on or not - no visible windows)" -ForegroundColor Gray
+    } elseif ($LogonType -eq "Interactive") {
+        Write-Host "   (Runs only when user is logged on - windows will be visible)" -ForegroundColor Gray
+    }
+    Write-Host "7. Run Level: " -NoNewline
+    Write-Host $RunLevel -ForegroundColor Yellow
+    Write-Host "8. Compatibility: " -NoNewline
+    Write-Host $Compatibility -ForegroundColor Yellow
+    Write-Host "9. Wake To Run: " -NoNewline
+    if ($WakeToRun) {
+        Write-Host "Yes" -ForegroundColor Green
+    } else {
+        Write-Host "No" -ForegroundColor Gray
+    }
 
-# Show repetition info
-if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
-    if ($RepetitionIntervalHours -gt 0) {
-        Write-Host "Repeat: " -NoNewline
-        if ($RepetitionIntervalHours -eq 1) {
-            Write-Host "Every 1 hour" -ForegroundColor Green
-        } else {
-            Write-Host "Every $RepetitionIntervalHours hours" -ForegroundColor Green
+    Write-Host "`n--- Schedule ---" -ForegroundColor Cyan
+    Write-Host "10. Trigger Type: " -NoNewline
+    Write-Host $TriggerType -ForegroundColor Yellow
+
+    # Calculate first run time
+    $firstRunTime = Get-FirstRunTime -TriggerType $TriggerType -TriggerTime $TriggerTime
+    if ($TriggerType -in @('Daily', 'Once', 'Hourly')) {
+        Write-Host "11. First Run: " -NoNewline
+        Write-Host $firstRunTime.ToString("yyyy-MM-dd HH:mm:ss") -ForegroundColor Green
+    } else {
+        Write-Host "11. Trigger Time: " -NoNewline
+        Write-Host $firstRunTime.ToString("HH:mm:ss") -ForegroundColor Green
+        if ($TriggerType -eq "Weekly") {
+            Write-Host "    (First run will be on the next specified day of week)" -ForegroundColor Gray
+        } elseif ($TriggerType -eq "Monthly") {
+            Write-Host "    (First run will be on the next specified day of month)" -ForegroundColor Gray
         }
-    } elseif ($RepetitionIntervalMinutes -gt 0) {
-        Write-Host "Repeat: " -NoNewline
-        if ($RepetitionIntervalMinutes -eq 1) {
-            Write-Host "Every 1 minute" -ForegroundColor Green
+    }
+
+    # Show repetition info
+    if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
+        Write-Host "12. Repeat: " -NoNewline
+        if ($RepetitionIntervalHours -gt 0) {
+            if ($RepetitionIntervalHours -eq 1) {
+                Write-Host "Every 1 hour" -ForegroundColor Green
+            } else {
+                Write-Host "Every $RepetitionIntervalHours hours" -ForegroundColor Green
+            }
+        } elseif ($RepetitionIntervalMinutes -gt 0) {
+            if ($RepetitionIntervalMinutes -eq 1) {
+                Write-Host "Every 1 minute" -ForegroundColor Green
+            } else {
+                Write-Host "Every $RepetitionIntervalMinutes minutes" -ForegroundColor Green
+            }
         } else {
-            Write-Host "Every $RepetitionIntervalMinutes minutes" -ForegroundColor Green
+            Write-Host "No repetition" -ForegroundColor Gray
+        }
+        
+        # Show additional trigger details
+        if ($TriggerType -eq "Weekly" -and -not [string]::IsNullOrWhiteSpace($DaysOfWeek)) {
+            Write-Host "13. Days of Week: " -NoNewline
+            Write-Host $DaysOfWeek -ForegroundColor Yellow
+        }
+        if ($TriggerType -eq "Monthly" -and -not [string]::IsNullOrWhiteSpace($DaysOfMonth)) {
+            Write-Host "13. Days of Month: " -NoNewline
+            Write-Host $DaysOfMonth -ForegroundColor Yellow
         }
     } else {
-        Write-Host "Repeat: " -NoNewline
-        Write-Host "No repetition" -ForegroundColor Gray
+        Write-Host "12. Trigger: " -NoNewline
+        Write-Host $TriggerType -ForegroundColor Yellow
     }
-    
-    # Show additional trigger details
-    if ($TriggerType -eq "Weekly" -and -not [string]::IsNullOrWhiteSpace($DaysOfWeek)) {
-        Write-Host "Days of Week: " -NoNewline
-        Write-Host $DaysOfWeek -ForegroundColor Yellow
-    }
-    if ($TriggerType -eq "Monthly" -and -not [string]::IsNullOrWhiteSpace($DaysOfMonth)) {
-        Write-Host "Days of Month: " -NoNewline
-        Write-Host $DaysOfMonth -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "Trigger: " -NoNewline
-    Write-Host $TriggerType -ForegroundColor Yellow
+
+    Write-Host "========================================" -ForegroundColor Cyan
 }
 
-Write-Host "========================================" -ForegroundColor Cyan
-$confirm = Read-Host "`nCreate this scheduled task? (Y/N)"
-if ($confirm -notmatch '^[Yy]') {
-    Write-Host "Task creation cancelled." -ForegroundColor Yellow
-    exit 0
+# Function to edit a specific option
+function Edit-Option {
+    param([int]$OptionNumber)
+    
+    switch ($OptionNumber) {
+        1 {
+            $newValue = Read-Host -Prompt "Enter new task name (current: $TaskName)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                $script:TaskName = $newValue
+            }
+        }
+        2 {
+            $newValue = Read-Host -Prompt "Enter new executable path (current: $Execute)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                $script:Execute = $newValue
+            }
+        }
+        3 {
+            $newValue = Read-Host -Prompt "Enter new arguments (current: $Argument, press Enter to clear)"
+            $script:Argument = $newValue
+        }
+        4 {
+            $newValue = Read-Host -Prompt "Enter new working directory (current: $WorkingDirectory, press Enter to clear)"
+            $script:WorkingDirectory = $newValue
+        }
+        5 {
+            $newValue = Read-Host -Prompt "Enter new user account (current: $UserId)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                $script:UserId = $newValue
+                # Re-evaluate LogonType based on new UserId
+                if ([string]::IsNullOrWhiteSpace($LogonType) -or -not $PSBoundParameters.ContainsKey('LogonType')) {
+                    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+                    if ($UserId -eq "SYSTEM" -or $UserId -eq "NT AUTHORITY\SYSTEM" -or 
+                        $UserId -eq "LocalService" -or $UserId -eq "NT AUTHORITY\LocalService" -or
+                        $UserId -eq "NetworkService" -or $UserId -eq "NT AUTHORITY\NetworkService") {
+                        $script:LogonType = "ServiceAccount"
+                    } elseif ($UserId -eq $currentUser) {
+                        $script:LogonType = "Password"
+                    } else {
+                        $script:LogonType = "Password"
+                    }
+                }
+            }
+        }
+        6 {
+            Write-Host "Logon Type options: ServiceAccount, Password, Interactive"
+            $newValue = Read-Host -Prompt "Enter new logon type (current: $LogonType)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue) -and $newValue -in @('ServiceAccount', 'Password', 'Interactive')) {
+                $script:LogonType = $newValue
+                if ($newValue -eq "Password") {
+                    $script:RunWhenUserNotLoggedOn = $true
+                } elseif ($newValue -eq "Interactive") {
+                    $script:RunWhenUserNotLoggedOn = $false
+                }
+            }
+        }
+        7 {
+            $newValue = Read-Host -Prompt "Enter new run level (Highest/Limited, current: $RunLevel)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue) -and $newValue -in @('Highest', 'Limited')) {
+                $script:RunLevel = $newValue
+            }
+        }
+        8 {
+            Write-Host "Compatibility options: At, V1, Vista, Win7, Win8"
+            $newValue = Read-Host -Prompt "Enter new compatibility (current: $Compatibility)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue) -and $newValue -in @('At', 'V1', 'Vista', 'Win7', 'Win8')) {
+                $script:Compatibility = $newValue
+            }
+        }
+        9 {
+            $newValue = Read-Host -Prompt "Wake to run? (Y/N, current: $(if ($WakeToRun) { 'Y' } else { 'N' }))"
+            if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                $script:WakeToRun = $newValue -match '^[Yy]'
+            } else {
+                $script:WakeToRun = -not $WakeToRun
+            }
+        }
+        10 {
+            Write-Host "Trigger types: Daily, Weekly, Monthly, Once, Hourly, AtStartup, AtLogon, OnIdle"
+            $newValue = Read-Host -Prompt "Enter new trigger type (current: $TriggerType)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue) -and $newValue -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly', 'AtStartup', 'AtLogon', 'OnIdle')) {
+                $script:TriggerType = $newValue
+            }
+        }
+        11 {
+            $newValue = Read-Host -Prompt "Enter new trigger time (e.g., 12:00am, 3pm, 15:00, current: $TriggerTime)"
+            if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                $script:TriggerTime = $newValue
+            }
+        }
+        12 {
+            if ($TriggerType -in @('Daily', 'Weekly', 'Monthly', 'Once', 'Hourly')) {
+                $currentRepeat = if ($RepetitionIntervalHours -gt 0) { "$RepetitionIntervalHours hours" } elseif ($RepetitionIntervalMinutes -gt 0) { "$RepetitionIntervalMinutes minutes" } else { "No repetition" }
+                $newValue = Read-Host -Prompt "Enter repetition interval in hours (0 to disable, current: $currentRepeat)"
+                if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                    if ([int]::TryParse($newValue, [ref]$null)) {
+                        $script:RepetitionIntervalHours = [int]$newValue
+                        $script:RepetitionIntervalMinutes = 0
+                    }
+                }
+            }
+        }
+        13 {
+            if ($TriggerType -eq "Weekly") {
+                $newValue = Read-Host -Prompt "Enter days of week (e.g., Monday,Wednesday,Friday, current: $DaysOfWeek)"
+                if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                    $script:DaysOfWeek = $newValue
+                }
+            } elseif ($TriggerType -eq "Monthly") {
+                $newValue = Read-Host -Prompt "Enter days of month (e.g., 1,15, current: $DaysOfMonth)"
+                if (-not [string]::IsNullOrWhiteSpace($newValue)) {
+                    $script:DaysOfMonth = $newValue
+                }
+            }
+        }
+        default {
+            Write-Host "Invalid option number." -ForegroundColor Red
+        }
+    }
+}
+
+# Show summary and prompt for confirmation with option to edit
+$confirmed = $false
+while (-not $confirmed) {
+    Show-TaskSummary
+    Write-Host "`nOptions:" -ForegroundColor Cyan
+    Write-Host "  Enter number (1-13) to edit that option" -ForegroundColor Gray
+    Write-Host "  Y or Enter = Create task" -ForegroundColor Gray
+    Write-Host "  N = Cancel" -ForegroundColor Gray
+    $confirm = Read-Host "`nCreate this scheduled task? (Y/N/1-13, default: Y)"
+    
+    if ([string]::IsNullOrWhiteSpace($confirm) -or $confirm -match '^[Yy]') {
+        $confirmed = $true
+    } elseif ($confirm -match '^[Nn]') {
+        Write-Host "Task creation cancelled." -ForegroundColor Yellow
+        exit 0
+    } elseif ($confirm -match '^\d+$') {
+        $optionNum = [int]$confirm
+        if ($optionNum -ge 1 -and $optionNum -le 13) {
+            Edit-Option -OptionNumber $optionNum
+            # Re-evaluate LogonType if UserId or RunWhenUserNotLoggedOn changed
+            if ($optionNum -eq 5 -or ($optionNum -eq 6 -and $LogonType -eq "Password")) {
+                # LogonType will be updated in Edit-Option for option 5 and 6
+            }
+        } else {
+            Write-Host "Invalid option number. Please enter 1-13." -ForegroundColor Red
+            Start-Sleep -Seconds 1
+        }
+    } else {
+        Write-Host "Invalid input. Please enter Y, N, or a number 1-13." -ForegroundColor Red
+        Start-Sleep -Seconds 1
+    }
 }
 
 # --- Define the Action ---
