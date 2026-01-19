@@ -65,6 +65,9 @@
 .PARAMETER DontStopIfGoingOnBatteries
     Don't stop task when going on battery. Defaults to $true.
 
+.PARAMETER WakeToRun
+    Wake the computer to run this task. Defaults to $false.
+
 .PARAMETER ExecutionTimeLimitHours
     Maximum execution time in hours before task is killed. Defaults to 1.
 
@@ -151,6 +154,9 @@ param(
     
     [Parameter(Mandatory = $false)]
     [bool]$DontStopIfGoingOnBatteries = $true,
+    
+    [Parameter(Mandatory = $false)]
+    [bool]$WakeToRun = $false,
     
     [Parameter(Mandatory = $false)]
     [int]$ExecutionTimeLimitHours = 1,
@@ -386,6 +392,17 @@ if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
         }
         # If empty input, $Compatibility already defaults to "Win8" from parameter declaration
     }
+    
+    # Prompt for wake to run
+    if (-not $PSBoundParameters.ContainsKey('WakeToRun')) {
+        Write-Host "`n--- Power Options ---" -ForegroundColor Cyan
+        $wakeToRunInput = Read-Host -Prompt "Wake the computer to run this task? (Y/N, default: N)"
+        if (-not [string]::IsNullOrWhiteSpace($wakeToRunInput)) {
+            $WakeToRun = $wakeToRunInput -match '^[Yy]'
+        } else {
+            $WakeToRun = $false
+        }
+    }
 }
 
 # Handle password if LogonType is Password (Interactive doesn't need password)
@@ -564,6 +581,12 @@ Write-Host "Run Level: " -NoNewline
 Write-Host $RunLevel -ForegroundColor Yellow
 Write-Host "Compatibility: " -NoNewline
 Write-Host $Compatibility -ForegroundColor Yellow
+Write-Host "Wake To Run: " -NoNewline
+if ($WakeToRun) {
+    Write-Host "Yes" -ForegroundColor Green
+} else {
+    Write-Host "No" -ForegroundColor Gray
+}
 
 Write-Host "`n--- Schedule ---" -ForegroundColor Cyan
 Write-Host "Trigger Type: " -NoNewline
@@ -802,6 +825,7 @@ $SettingsParams = @{
     DontStopIfGoingOnBatteries = $DontStopIfGoingOnBatteries
     ExecutionTimeLimit = (New-TimeSpan -Hours $ExecutionTimeLimitHours)
     Compatibility = $Compatibility
+    WakeToRun = $WakeToRun
 }
 
 $Settings = New-ScheduledTaskSettingsSet @SettingsParams
