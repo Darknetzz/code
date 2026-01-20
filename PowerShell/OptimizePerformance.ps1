@@ -876,6 +876,457 @@ function Optimize-NetworkSettings {
 
 <#
 .SYNOPSIS
+    Optimizes Windows visual effects for better performance.
+
+.DESCRIPTION
+    Disables unnecessary visual effects and animations to improve system
+    responsiveness and reduce GPU/CPU usage. Configures Windows to prioritize
+    performance over visual appearance.
+
+.EXAMPLE
+    Optimize-VisualEffects
+#>
+function Optimize-VisualEffects {
+    Write-Log "Optimizing visual effects for performance..."
+    
+    try {
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+        
+        # Get current value
+        $currentValue = (Get-ItemProperty -Path $regPath -Name "VisualFXSetting" -ErrorAction SilentlyContinue).VisualFXSetting
+        if (-not $currentValue) { $currentValue = "Not set (default: 2 - Let Windows decide)" }
+        
+        if ($script:WhatIf) {
+            Write-Log "Would set VisualFXSetting to 2 (Adjust for best performance)" "INFO"
+        }
+        else {
+            # Set to "Adjust for best performance" (value 2)
+            Set-ItemProperty -Path $regPath -Name "VisualFXSetting" -Value 2 -ErrorAction SilentlyContinue
+            Write-Log "Visual effects set to 'Adjust for best performance'"
+        }
+        
+        Add-ChangeLog -Category "Registry" -Item "Visual Effects: VisualFXSetting" `
+            -PreviousValue "$currentValue" `
+            -NewValue "2 (Adjust for best performance)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"VisualFXSetting`" -Value $currentValue' or change in System Properties > Advanced > Performance Settings"
+        
+        # Additional visual effect optimizations via registry
+        $advancedPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        
+        $visualSettings = @{
+            "ListviewAlphaSelect" = 0          # Disable transparent selection
+            "ListviewShadow" = 0                # Disable list view shadows
+            "TaskbarAnimations" = 0             # Disable taskbar animations
+            "MinAnimate" = 0                    # Disable window animations
+        }
+        
+        foreach ($setting in $visualSettings.GetEnumerator()) {
+            $current = (Get-ItemProperty -Path $advancedPath -Name $setting.Key -ErrorAction SilentlyContinue).($setting.Key)
+            if (-not $current) { $current = "Not set (default: varies)" }
+            
+            if (-not $script:WhatIf) {
+                Set-ItemProperty -Path $advancedPath -Name $setting.Key -Value $setting.Value -ErrorAction SilentlyContinue
+            }
+            
+            Add-ChangeLog -Category "Registry" -Item "Visual Effects: $($setting.Key)" `
+                -PreviousValue "$current" `
+                -NewValue "$($setting.Value) (Disabled)" `
+                -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$advancedPath`" -Name `"$($setting.Key)`" -Value $current' or change in System Properties > Advanced > Performance Settings"
+        }
+        
+        Write-Log "Visual effects optimized"
+    }
+    catch {
+        Write-Log "Error optimizing visual effects: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Optimizes processor scheduling for better application performance.
+
+.DESCRIPTION
+    Configures Windows to prioritize foreground applications over background
+    services, improving responsiveness of active programs.
+
+.EXAMPLE
+    Optimize-ProcessorScheduling
+#>
+function Optimize-ProcessorScheduling {
+    Write-Log "Optimizing processor scheduling..."
+    
+    try {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl"
+        
+        # Get current value (0 = Background services, 1 = Programs)
+        $currentValue = (Get-ItemProperty -Path $regPath -Name "Win32PrioritySeparation" -ErrorAction SilentlyContinue).Win32PrioritySeparation
+        if (-not $currentValue) { $currentValue = "Not set (default: 2 - Balanced)" }
+        
+        # Set to prioritize programs (value 26 hex = 38 decimal for best performance)
+        $newValue = 38
+        
+        if ($script:WhatIf) {
+            Write-Log "Would set Win32PrioritySeparation to $newValue (Prioritize programs)" "INFO"
+        }
+        else {
+            Set-ItemProperty -Path $regPath -Name "Win32PrioritySeparation" -Value $newValue -Type DWord -ErrorAction SilentlyContinue
+            Write-Log "Processor scheduling optimized for programs"
+        }
+        
+        Add-ChangeLog -Category "Registry" -Item "Processor Scheduling: Win32PrioritySeparation" `
+            -PreviousValue "$currentValue" `
+            -NewValue "$newValue (Prioritize programs)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"Win32PrioritySeparation`" -Value $currentValue' or change in System Properties > Advanced > Performance Settings > Advanced tab"
+        
+        Write-Log "Processor scheduling optimized"
+    }
+    catch {
+        Write-Log "Error optimizing processor scheduling: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Optimizes Prefetch and Superfetch settings for better performance.
+
+.DESCRIPTION
+    Configures Prefetch and Superfetch (SysMain) settings based on drive type.
+    For SSDs, disables Superfetch as it's not beneficial and can cause wear.
+    For HDDs, enables these features for better performance.
+
+.EXAMPLE
+    Optimize-PrefetchSettings
+#>
+function Optimize-PrefetchSettings {
+    Write-Log "Optimizing Prefetch and Superfetch settings..."
+    
+    try {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
+        
+        # Check if system drive is SSD
+        $systemDrive = $env:SystemDrive
+        $isSSD = $false
+        
+        try {
+            $disk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq (Get-Partition -DriveLetter $systemDrive[0]).DiskNumber } | Select-Object -First 1
+            if ($disk -and $disk.MediaType -eq "SSD") {
+                $isSSD = $true
+            }
+        }
+        catch {
+            # If we can't determine, assume it might be SSD and optimize conservatively
+            Write-Log "Could not determine drive type, applying conservative settings" "INFO"
+        }
+        
+        # Get current values
+        $currentEnablePrefetcher = (Get-ItemProperty -Path $regPath -Name "EnablePrefetcher" -ErrorAction SilentlyContinue).EnablePrefetcher
+        $currentEnableSuperfetch = (Get-ItemProperty -Path $regPath -Name "EnableSuperfetch" -ErrorAction SilentlyContinue).EnableSuperfetch
+        
+        if (-not $currentEnablePrefetcher) { $currentEnablePrefetcher = "Not set (default: 3)" }
+        if (-not $currentEnableSuperfetch) { $currentEnableSuperfetch = "Not set (default: 3)" }
+        
+        if ($isSSD) {
+            # For SSDs: Disable Superfetch, keep Prefetcher at 1 (application prefetch only)
+            $prefetcherValue = 1
+            $superfetchValue = 0
+            
+            if ($script:WhatIf) {
+                Write-Log "SSD detected. Would set EnablePrefetcher to $prefetcherValue and EnableSuperfetch to $superfetchValue" "INFO"
+            }
+            else {
+                Set-ItemProperty -Path $regPath -Name "EnablePrefetcher" -Value $prefetcherValue -Type DWord -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $regPath -Name "EnableSuperfetch" -Value $superfetchValue -Type DWord -ErrorAction SilentlyContinue
+                Write-Log "Prefetch/Superfetch optimized for SSD (Superfetch disabled, Prefetcher optimized)"
+            }
+        }
+        else {
+            # For HDDs: Enable both for better performance
+            $prefetcherValue = 3
+            $superfetchValue = 3
+            
+            if ($script:WhatIf) {
+                Write-Log "HDD detected. Would set EnablePrefetcher to $prefetcherValue and EnableSuperfetch to $superfetchValue" "INFO"
+            }
+            else {
+                Set-ItemProperty -Path $regPath -Name "EnablePrefetcher" -Value $prefetcherValue -Type DWord -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $regPath -Name "EnableSuperfetch" -Value $superfetchValue -Type DWord -ErrorAction SilentlyContinue
+                Write-Log "Prefetch/Superfetch optimized for HDD (both enabled)"
+            }
+        }
+        
+        Add-ChangeLog -Category "Registry" -Item "Prefetch: EnablePrefetcher" `
+            -PreviousValue "$currentEnablePrefetcher" `
+            -NewValue "$prefetcherValue" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"EnablePrefetcher`" -Value $currentEnablePrefetcher'"
+        
+        Add-ChangeLog -Category "Registry" -Item "Superfetch: EnableSuperfetch" `
+            -PreviousValue "$currentEnableSuperfetch" `
+            -NewValue "$superfetchValue" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"EnableSuperfetch`" -Value $currentEnableSuperfetch'"
+        
+        Write-Log "Prefetch/Superfetch settings optimized"
+    }
+    catch {
+        Write-Log "Error optimizing Prefetch/Superfetch settings: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Optimizes Windows Update delivery optimization settings.
+
+.DESCRIPTION
+    Configures Windows Update to reduce bandwidth usage and improve performance
+    by limiting peer-to-peer update delivery and optimizing update scheduling.
+
+.EXAMPLE
+    Optimize-WindowsUpdateSettings
+#>
+function Optimize-WindowsUpdateSettings {
+    Write-Log "Optimizing Windows Update settings..."
+    
+    try {
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config"
+        
+        # Get current values
+        $currentDownloadMode = (Get-ItemProperty -Path $regPath -Name "DODownloadMode" -ErrorAction SilentlyContinue).DODownloadMode
+        if (-not $currentDownloadMode) { $currentDownloadMode = "Not set (default: 1 - LAN only)" }
+        
+        # Set to 0 = Download from Microsoft only (no peer-to-peer)
+        # This reduces bandwidth and improves privacy
+        $newDownloadMode = 0
+        
+        if ($script:WhatIf) {
+            Write-Log "Would set DODownloadMode to $newDownloadMode (Download from Microsoft only)" "INFO"
+        }
+        else {
+            Set-ItemProperty -Path $regPath -Name "DODownloadMode" -Value $newDownloadMode -Type DWord -ErrorAction SilentlyContinue
+            Write-Log "Windows Update delivery optimization configured"
+        }
+        
+        Add-ChangeLog -Category "Registry" -Item "Windows Update: DODownloadMode" `
+            -PreviousValue "$currentDownloadMode" `
+            -NewValue "$newDownloadMode (Download from Microsoft only)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"DODownloadMode`" -Value $currentDownloadMode' or change in Settings > Update & Security > Delivery Optimization"
+        
+        Write-Log "Windows Update settings optimized"
+    }
+    catch {
+        Write-Log "Error optimizing Windows Update settings: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Disables unnecessary background apps to improve performance.
+
+.DESCRIPTION
+    Configures Windows to prevent apps from running in the background, reducing
+    CPU, memory, and battery usage. This improves system responsiveness.
+
+.EXAMPLE
+    Optimize-BackgroundApps
+#>
+function Optimize-BackgroundApps {
+    Write-Log "Optimizing background app settings..."
+    
+    try {
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications"
+        
+        # Get all background apps
+        $backgroundApps = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
+        
+        $disabledCount = 0
+        foreach ($app in $backgroundApps) {
+            $appName = $app.PSChildName
+            $currentValue = (Get-ItemProperty -Path $app.PSPath -Name "Disabled" -ErrorAction SilentlyContinue).Disabled
+            
+            if (-not $currentValue -or $currentValue -eq 0) {
+                if ($script:WhatIf) {
+                    Write-Log "Would disable background app: $appName" "INFO"
+                }
+                else {
+                    Set-ItemProperty -Path $app.PSPath -Name "Disabled" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+                    $disabledCount++
+                }
+            }
+        }
+        
+        # Also set global setting to disable background apps
+        $globalPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications"
+        $globalDisabled = (Get-ItemProperty -Path $globalPath -Name "GlobalUserDisabled" -ErrorAction SilentlyContinue).GlobalUserDisabled
+        if (-not $globalDisabled) { $globalDisabled = "Not set (default: 0 - Enabled)" }
+        
+        if ($script:WhatIf) {
+            Write-Log "Would set GlobalUserDisabled to 1 (Disable all background apps)" "INFO"
+        }
+        else {
+            Set-ItemProperty -Path $globalPath -Name "GlobalUserDisabled" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+            Write-Log "Disabled $disabledCount background app(s) and set global policy"
+        }
+        
+        Add-ChangeLog -Category "Registry" -Item "Background Apps: GlobalUserDisabled" `
+            -PreviousValue "$globalDisabled" `
+            -NewValue "1 (All background apps disabled)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$globalPath`" -Name `"GlobalUserDisabled`" -Value 0' or change in Settings > Privacy > Background apps"
+        
+        Write-Log "Background app settings optimized"
+    }
+    catch {
+        Write-Log "Error optimizing background apps: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Optimizes System Restore settings to reduce disk usage.
+
+.DESCRIPTION
+    Configures System Restore to use less disk space while maintaining protection.
+    Reduces the maximum disk space allocated to restore points.
+
+.EXAMPLE
+    Optimize-SystemRestore
+#>
+function Optimize-SystemRestore {
+    Write-Log "Optimizing System Restore settings..."
+    
+    try {
+        # Get all drives with System Restore enabled
+        $restoreDrives = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
+        
+        # Use vssadmin to configure restore point space
+        # Set to use 5% of disk space (default is often 10-15%)
+        $drives = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
+        
+        foreach ($drive in $drives) {
+            $driveLetter = $drive.DriveLetter
+            $drivePath = "$driveLetter`:"
+            
+            try {
+                # Get current restore point size (in MB)
+                $currentSize = (vssadmin list ShadowStorage /For=$drivePath 2>&1 | Select-String "Maximum Shadow Copy Storage space" | ForEach-Object { ($_ -split ':')[1].Trim() })
+                
+                if ($script:WhatIf) {
+                    Write-Log "Would optimize System Restore space for drive $driveLetter`: (set to 5% of disk)" "INFO"
+                }
+                else {
+                    # Set to 5% of disk space
+                    vssadmin Resize ShadowStorage /For=$drivePath /On=$drivePath /MaxSize=5% 2>&1 | Out-Null
+                    Write-Log "System Restore optimized for drive $driveLetter`:"
+                }
+                
+                Add-ChangeLog -Category "SystemRestore" -Item "System Restore: $driveLetter`:" `
+                    -PreviousValue "$currentSize (varies)" `
+                    -NewValue "5% of disk space" `
+                    -RevertInstructions "To revert: Run 'vssadmin Resize ShadowStorage /For=$drivePath /On=$drivePath /MaxSize=10%' or change in System Properties > System Protection"
+            }
+            catch {
+                Write-Log "Could not optimize System Restore for drive $driveLetter`: $_" "WARNING"
+            }
+        }
+        
+        Write-Log "System Restore settings optimized"
+    }
+    catch {
+        Write-Log "Error optimizing System Restore: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
+    Optimizes additional registry settings for performance.
+
+.DESCRIPTION
+    Applies various registry tweaks that can improve system performance:
+    - Disables Windows tips and suggestions
+    - Optimizes file system settings
+    - Improves file copy performance
+    - Reduces telemetry overhead
+
+.EXAMPLE
+    Optimize-AdditionalRegistrySettings
+#>
+function Optimize-AdditionalRegistrySettings {
+    Write-Log "Optimizing additional registry settings..."
+    
+    try {
+        $optimizations = @(
+            @{
+                Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+                Name = "SystemPaneSuggestionsEnabled"
+                Value = 0
+                Type = "DWord"
+                Description = "Disable Windows tips and suggestions"
+            },
+            @{
+                Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+                Name = "SoftLandingEnabled"
+                Value = 0
+                Type = "DWord"
+                Description = "Disable soft landing (feature suggestions)"
+            },
+            @{
+                Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+                Name = "SubscribedContent-338393Enabled"
+                Value = 0
+                Type = "DWord"
+                Description = "Disable content delivery"
+            },
+            @{
+                Path = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+                Name = "LongPathsEnabled"
+                Value = 1
+                Type = "DWord"
+                Description = "Enable long file paths (improves compatibility)"
+            },
+            @{
+                Path = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+                Name = "NtfsDisableLastAccessUpdate"
+                Value = 1
+                Type = "DWord"
+                Description = "Disable last access time updates (improves file system performance)"
+            },
+            @{
+                Path = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+                Name = "IRPStackSize"
+                Value = 30
+                Type = "DWord"
+                Description = "Increase IRP stack size (improves network file copy performance)"
+            }
+        )
+        
+        foreach ($opt in $optimizations) {
+            # Ensure registry path exists
+            if (-not (Test-Path $opt.Path)) {
+                New-Item -Path $opt.Path -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+            
+            $currentValue = (Get-ItemProperty -Path $opt.Path -Name $opt.Name -ErrorAction SilentlyContinue).($opt.Name)
+            if (-not $currentValue) { $currentValue = "Not set (default: varies)" }
+            
+            if ($script:WhatIf) {
+                Write-Log "Would set $($opt.Path)\$($opt.Name) to $($opt.Value) - $($opt.Description)" "INFO"
+            }
+            else {
+                Set-ItemProperty -Path $opt.Path -Name $opt.Name -Value $opt.Value -Type $opt.Type -ErrorAction SilentlyContinue
+            }
+            
+            Add-ChangeLog -Category "Registry" -Item "$($opt.Description): $($opt.Name)" `
+                -PreviousValue "$currentValue" `
+                -NewValue "$($opt.Value)" `
+                -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$($opt.Path)`" -Name `"$($opt.Name)`" -Value $currentValue' or delete the registry value to restore default"
+        }
+        
+        Write-Log "Additional registry settings optimized"
+    }
+    catch {
+        Write-Log "Error optimizing additional registry settings: $_" "WARNING"
+    }
+}
+
+<#
+.SYNOPSIS
     Collects and logs system information for diagnostic purposes.
 
 .DESCRIPTION
