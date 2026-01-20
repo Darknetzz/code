@@ -1,5 +1,4 @@
 ####################################################################
-#   Scripted by Kristian Røste
 #   
 #   Info: 
 #   This script optimizes Windows performance by:
@@ -28,7 +27,17 @@ $ErrorActionPreference = "Continue"
 $script:LogPath = $LogPath
 $script:Verbose = $Verbose
 
-# Initialize log file
+<#
+.SYNOPSIS
+    Initializes the log file for the performance optimization script.
+
+.DESCRIPTION
+    Creates the log file if it doesn't exist and writes an initial timestamp entry
+    marking the start of the performance optimization process.
+
+.EXAMPLE
+    Initialize-Log
+#>
 function Initialize-Log {
     if (!(Test-Path $script:LogPath)) {
         New-Item -Path $script:LogPath -ItemType File -Force | Out-Null
@@ -37,6 +46,27 @@ function Initialize-Log {
     Add-Content -Path $script:LogPath -Value "`n========== Performance Optimization Started: $timestamp =========="
 }
 
+<#
+.SYNOPSIS
+    Writes a message to the log file with timestamp and severity level.
+
+.DESCRIPTION
+    Logs messages with timestamps and severity levels (INFO, WARNING, ERROR).
+    Optionally displays messages to the console based on verbosity settings or severity.
+
+.PARAMETER Message
+    The message text to log.
+
+.PARAMETER Level
+    The severity level of the message. Valid values: INFO, WARNING, ERROR.
+    Default is "INFO".
+
+.EXAMPLE
+    Write-Log "Operation completed successfully"
+    
+.EXAMPLE
+    Write-Log "An error occurred" "ERROR"
+#>
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -47,12 +77,47 @@ function Write-Log {
     }
 }
 
+<#
+.SYNOPSIS
+    Checks if the current PowerShell session is running with administrator privileges.
+
+.DESCRIPTION
+    Verifies whether the current user has administrator rights by checking
+    the WindowsPrincipal role membership.
+
+.OUTPUTS
+    System.Boolean
+    Returns $true if running as administrator, $false otherwise.
+
+.EXAMPLE
+    if (Test-Administrator) { Write-Host "Running as admin" }
+#>
 function Test-Administrator {
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Clean temporary files and caches
+<#
+.SYNOPSIS
+    Cleans temporary files and caches from various system locations.
+
+.DESCRIPTION
+    Removes temporary files from multiple locations including:
+    - User temp directories (TEMP, TMP, LocalAppData\Temp)
+    - Windows temp directory
+    - Internet cache and web cache
+    - Recent files folder
+    
+    Calculates and reports the total amount of disk space freed.
+
+.OUTPUTS
+    System.Int64
+    Returns the total number of bytes freed from all cleaned locations.
+
+.EXAMPLE
+    $freed = Clear-TemporaryFiles
+    Write-Host "Freed $([math]::Round($freed / 1MB, 2)) MB"
+#>
 function Clear-TemporaryFiles {
     Write-Log "Starting temporary files cleanup..."
     $cleaned = 0
@@ -94,7 +159,18 @@ function Clear-TemporaryFiles {
     return $cleaned
 }
 
-# Clear Windows Update cache
+<#
+.SYNOPSIS
+    Clears the Windows Update cache to free disk space and resolve update issues.
+
+.DESCRIPTION
+    Stops Windows Update related services, removes cached update files from
+    the SoftwareDistribution folder, and restarts the services. This can help
+    resolve update problems and free significant disk space.
+
+.EXAMPLE
+    Clear-WindowsUpdateCache
+#>
 function Clear-WindowsUpdateCache {
     Write-Log "Clearing Windows Update cache..."
     try {
@@ -119,7 +195,17 @@ function Clear-WindowsUpdateCache {
     }
 }
 
-# Clear DNS cache
+<#
+.SYNOPSIS
+    Flushes the DNS resolver cache.
+
+.DESCRIPTION
+    Clears the local DNS cache by executing ipconfig /flushdns. This can help
+    resolve DNS-related connectivity issues and ensure fresh DNS lookups.
+
+.EXAMPLE
+    Clear-DNSCache
+#>
 function Clear-DNSCache {
     Write-Log "Clearing DNS cache..."
     try {
@@ -131,7 +217,18 @@ function Clear-DNSCache {
     }
 }
 
-# Optimize disk performance
+<#
+.SYNOPSIS
+    Optimizes disk performance by defragmenting and trimming all fixed drives.
+
+.DESCRIPTION
+    Performs disk optimization on all fixed (non-removable) drives by running
+    defragmentation and TRIM operations. This improves disk read/write performance
+    and can extend SSD lifespan.
+
+.EXAMPLE
+    Optimize-DiskPerformance
+#>
 function Optimize-DiskPerformance {
     Write-Log "Starting disk optimization..."
     
@@ -157,7 +254,21 @@ function Optimize-DiskPerformance {
     }
 }
 
-# Optimize power settings for performance
+<#
+.SYNOPSIS
+    Optimizes Windows power settings for maximum performance.
+
+.DESCRIPTION
+    Configures power settings to prioritize performance over power saving:
+    - Activates or creates High Performance power plan
+    - Disables USB selective suspend
+    - Disables hard disk sleep mode
+    
+    These settings may increase power consumption but improve system responsiveness.
+
+.EXAMPLE
+    Optimize-PowerSettings
+#>
 function Optimize-PowerSettings {
     Write-Log "Optimizing power settings for performance..."
     
@@ -195,7 +306,22 @@ function Optimize-PowerSettings {
     }
 }
 
-# Optimize Windows services
+<#
+.SYNOPSIS
+    Disables unnecessary Windows services to improve system performance.
+
+.DESCRIPTION
+    Disables and stops services that are typically not needed for most users:
+    - Fax service
+    - Windows Search (WSearch)
+    - Remote Registry
+    
+    These services consume system resources even when not in use. Modify the
+    $servicesToDisable array to customize which services are disabled.
+
+.EXAMPLE
+    Optimize-WindowsServices
+#>
 function Optimize-WindowsServices {
     Write-Log "Optimizing Windows services..."
     
@@ -221,7 +347,20 @@ function Optimize-WindowsServices {
     }
 }
 
-# Optimize memory
+<#
+.SYNOPSIS
+    Optimizes system memory by clearing standby memory and forcing garbage collection.
+
+.DESCRIPTION
+    Performs memory optimization by:
+    - Clearing standby memory using SetProcessWorkingSetSize API
+    - Forcing .NET garbage collection to free managed memory
+    
+    This can help free up memory that's being held but not actively used.
+
+.EXAMPLE
+    Optimize-Memory
+#>
 function Optimize-Memory {
     Write-Log "Optimizing memory..."
     
@@ -248,7 +387,20 @@ public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimu
     }
 }
 
-# Optimize network settings
+<#
+.SYNOPSIS
+    Optimizes TCP/IP network settings for better network performance.
+
+.DESCRIPTION
+    Modifies TCP/IP registry settings to improve network performance:
+    - Disables Nagle's algorithm (TCPNoDelay = 1)
+    - Sets TcpAckFrequency to 1 for immediate ACK responses
+    
+    These changes can reduce network latency, especially for interactive applications.
+
+.EXAMPLE
+    Optimize-NetworkSettings
+#>
 function Optimize-NetworkSettings {
     Write-Log "Optimizing network settings..."
     
@@ -265,7 +417,21 @@ function Optimize-NetworkSettings {
     }
 }
 
-# Get system information
+<#
+.SYNOPSIS
+    Collects and logs system information for diagnostic purposes.
+
+.DESCRIPTION
+    Retrieves and logs key system information including:
+    - Operating system version
+    - CPU model and name
+    - Total and available physical memory
+    
+    This information is written to the log file for reference.
+
+.EXAMPLE
+    Get-SystemInfo
+#>
 function Get-SystemInfo {
     Write-Log "Collecting system information..."
     
@@ -279,8 +445,163 @@ function Get-SystemInfo {
     Write-Log "Available Memory: $([math]::Round($os.FreePhysicalMemory / 1MB, 2)) GB"
 }
 
-# Main execution
+<#
+.SYNOPSIS
+    Displays an interactive menu for selecting optimization options.
+
+.DESCRIPTION
+    Shows a numbered menu allowing users to select which optimizations
+    to perform. Returns a hashtable with boolean values for each optimization category.
+
+.OUTPUTS
+    System.Collections.Hashtable
+    Returns a hashtable with keys: Cleanup, DiskOptimization, PowerOptimization, 
+    ServiceOptimization, Memory, NetworkSettings, and Verbose.
+
+.EXAMPLE
+    $options = Show-InteractiveMenu
+#>
+function Show-InteractiveMenu {
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  Performance Optimization Menu" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+    
+    Write-Host "Select which optimizations to perform:" -ForegroundColor Yellow
+    Write-Host "Enter numbers separated by commas (e.g., 1,2,3) or 'all' for everything`n" -ForegroundColor Gray
+    
+    $menuItems = @(
+        @{ Key = "Cleanup"; Description = "Clean temporary files, Windows Update cache, and DNS cache" },
+        @{ Key = "DiskOptimization"; Description = "Optimize disk performance (defragmentation and TRIM)" },
+        @{ Key = "PowerOptimization"; Description = "Optimize power settings (High Performance plan)" },
+        @{ Key = "ServiceOptimization"; Description = "Disable unnecessary Windows services" },
+        @{ Key = "Memory"; Description = "Optimize memory (clear standby memory)" },
+        @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" },
+        @{ Key = "Verbose"; Description = "Show verbose output during execution" }
+    )
+    
+    # Display menu
+    for ($i = 0; $i -lt $menuItems.Count; $i++) {
+        Write-Host "  [$($i + 1)] $($menuItems[$i].Description)" -ForegroundColor White
+    }
+    
+    Write-Host "`n  [A] Run all optimizations" -ForegroundColor Green
+    Write-Host "  [Q] Quit`n" -ForegroundColor Red
+    
+    # Get user input
+    $userInput = Read-Host "Enter your selection"
+    
+    if ($userInput -eq 'Q' -or $userInput -eq 'q') {
+        Write-Host "`nExiting..." -ForegroundColor Yellow
+        exit 0
+    }
+    
+    # Initialize all options to false
+    $options = @{
+        Cleanup = $false
+        DiskOptimization = $false
+        PowerOptimization = $false
+        ServiceOptimization = $false
+        Memory = $false
+        NetworkSettings = $false
+        Verbose = $false
+    }
+    
+    # Handle 'all' or 'a' input
+    if ($userInput -eq 'A' -or $userInput -eq 'a' -or $userInput -eq 'all' -or $userInput -eq 'ALL') {
+        foreach ($key in $options.Keys) {
+            if ($key -ne 'Verbose') {
+                $options[$key] = $true
+            }
+        }
+        Write-Host "`nEnable verbose output? (Y/N): " -NoNewline -ForegroundColor Yellow
+        $verboseInput = Read-Host
+        $options['Verbose'] = ($verboseInput -eq 'Y' -or $verboseInput -eq 'y')
+        return $options
+    }
+    
+    # Parse comma-separated numbers
+    $selections = $userInput -split ',' | ForEach-Object { $_.Trim() }
+    
+    foreach ($selection in $selections) {
+        $num = 0
+        if ([int]::TryParse($selection, [ref]$num)) {
+            if ($num -ge 1 -and $num -le $menuItems.Count) {
+                $selectedKey = $menuItems[$num - 1].Key
+                $options[$selectedKey] = $true
+            }
+        }
+    }
+    
+    # If nothing was selected, ask again
+    $hasSelection = $options.Values | Where-Object { $_ -eq $true }
+    if (-not $hasSelection) {
+        Write-Host "`nNo valid selections made. Please try again.`n" -ForegroundColor Red
+        return Show-InteractiveMenu
+    }
+    
+    return $options
+}
+
+<#
+.SYNOPSIS
+    Main execution function that orchestrates all performance optimization tasks.
+
+.DESCRIPTION
+    Coordinates the execution of all optimization functions based on script parameters.
+    Performs administrator privilege check, initializes logging, and executes optimization
+    tasks in sequence. Respects skip flags to allow selective optimization.
+
+.PARAMETER SkipCleanup
+    When specified, skips temporary file cleanup, Windows Update cache clearing, and DNS cache clearing.
+
+.PARAMETER SkipDiskOptimization
+    When specified, skips disk defragmentation and optimization.
+
+.PARAMETER SkipPowerOptimization
+    When specified, skips power settings optimization.
+
+.PARAMETER SkipServiceOptimization
+    When specified, skips Windows services optimization.
+
+.PARAMETER RunCleanup
+    When specified, runs cleanup operations (overrides SkipCleanup).
+
+.PARAMETER RunDiskOptimization
+    When specified, runs disk optimization (overrides SkipDiskOptimization).
+
+.PARAMETER RunPowerOptimization
+    When specified, runs power optimization (overrides SkipPowerOptimization).
+
+.PARAMETER RunServiceOptimization
+    When specified, runs service optimization (overrides SkipServiceOptimization).
+
+.PARAMETER RunMemory
+    When specified, runs memory optimization.
+
+.PARAMETER RunNetworkSettings
+    When specified, runs network settings optimization.
+
+.EXAMPLE
+    Main
+    Runs all optimization tasks.
+
+.EXAMPLE
+    Main -SkipCleanup
+    Runs all optimizations except cleanup tasks.
+#>
 function Main {
+    param(
+        [switch]$SkipCleanup,
+        [switch]$SkipDiskOptimization,
+        [switch]$SkipPowerOptimization,
+        [switch]$SkipServiceOptimization,
+        [switch]$RunCleanup,
+        [switch]$RunDiskOptimization,
+        [switch]$RunPowerOptimization,
+        [switch]$RunServiceOptimization,
+        [switch]$RunMemory,
+        [switch]$RunNetworkSettings
+    )
     Initialize-Log
     
     if (-not (Test-Administrator)) {
@@ -291,30 +612,88 @@ function Main {
     Write-Log "Starting performance optimization..."
     Get-SystemInfo
     
-    if (-not $SkipCleanup) {
+    # Determine what to run based on parameters
+    # If Run* parameters are provided, use those; otherwise use Skip* logic (default is to run)
+    $shouldCleanup = if ($PSBoundParameters.ContainsKey('RunCleanup')) { $RunCleanup } 
+                     elseif ($PSBoundParameters.ContainsKey('SkipCleanup')) { -not $SkipCleanup }
+                     else { $true }
+    
+    $shouldDiskOptimize = if ($PSBoundParameters.ContainsKey('RunDiskOptimization')) { $RunDiskOptimization }
+                          elseif ($PSBoundParameters.ContainsKey('SkipDiskOptimization')) { -not $SkipDiskOptimization }
+                          else { $true }
+    
+    $shouldPowerOptimize = if ($PSBoundParameters.ContainsKey('RunPowerOptimization')) { $RunPowerOptimization }
+                           elseif ($PSBoundParameters.ContainsKey('SkipPowerOptimization')) { -not $SkipPowerOptimization }
+                           else { $true }
+    
+    $shouldServiceOptimize = if ($PSBoundParameters.ContainsKey('RunServiceOptimization')) { $RunServiceOptimization }
+                             elseif ($PSBoundParameters.ContainsKey('SkipServiceOptimization')) { -not $SkipServiceOptimization }
+                             else { $true }
+    
+    $shouldOptimizeMemory = if ($PSBoundParameters.ContainsKey('RunMemory')) { $RunMemory }
+                            else { $true }
+    
+    $shouldOptimizeNetwork = if ($PSBoundParameters.ContainsKey('RunNetworkSettings')) { $RunNetworkSettings }
+                             else { $true }
+    
+    if ($shouldCleanup) {
         Clear-TemporaryFiles
         Clear-WindowsUpdateCache
         Clear-DNSCache
     }
     
-    if (-not $SkipDiskOptimization) {
+    if ($shouldDiskOptimize) {
         Optimize-DiskPerformance
     }
     
-    if (-not $SkipPowerOptimization) {
+    if ($shouldPowerOptimize) {
         Optimize-PowerSettings
     }
     
-    if (-not $SkipServiceOptimization) {
+    if ($shouldServiceOptimize) {
         Optimize-WindowsServices
     }
     
-    Optimize-Memory
-    Optimize-NetworkSettings
+    if ($shouldOptimizeMemory) {
+        Optimize-Memory
+    }
+    
+    if ($shouldOptimizeNetwork) {
+        Optimize-NetworkSettings
+    }
     
     Write-Log "Performance optimization completed successfully!"
     Write-Host "`nOptimization complete! Check log file: $script:LogPath" -ForegroundColor Green
 }
 
-# Run main function
-Main
+# Check if any skip parameters were explicitly provided via command line
+$hasSkipParameters = $PSBoundParameters.ContainsKey('SkipCleanup') -or 
+                     $PSBoundParameters.ContainsKey('SkipDiskOptimization') -or 
+                     $PSBoundParameters.ContainsKey('SkipPowerOptimization') -or 
+                     $PSBoundParameters.ContainsKey('SkipServiceOptimization') -or
+                     $PSBoundParameters.ContainsKey('Verbose') -or
+                     $PSBoundParameters.ContainsKey('LogPath')
+
+# If no parameters provided, show interactive menu
+if (-not $hasSkipParameters) {
+    $menuOptions = Show-InteractiveMenu
+    
+    # Set script variables based on menu selection
+    $script:Verbose = $menuOptions.Verbose
+    
+    # Run Main with selected options
+    $mainParams = @{}
+    if ($menuOptions.Cleanup) { $mainParams['RunCleanup'] = $true } else { $mainParams['SkipCleanup'] = $true }
+    if ($menuOptions.DiskOptimization) { $mainParams['RunDiskOptimization'] = $true } else { $mainParams['SkipDiskOptimization'] = $true }
+    if ($menuOptions.PowerOptimization) { $mainParams['RunPowerOptimization'] = $true } else { $mainParams['SkipPowerOptimization'] = $true }
+    if ($menuOptions.ServiceOptimization) { $mainParams['RunServiceOptimization'] = $true } else { $mainParams['SkipServiceOptimization'] = $true }
+    if ($menuOptions.Memory) { $mainParams['RunMemory'] = $true }
+    if ($menuOptions.NetworkSettings) { $mainParams['RunNetworkSettings'] = $true }
+    
+    Main @mainParams
+}
+else {
+    # Run with provided parameters
+    Main -SkipCleanup:$SkipCleanup -SkipDiskOptimization:$SkipDiskOptimization `
+         -SkipPowerOptimization:$SkipPowerOptimization -SkipServiceOptimization:$SkipServiceOptimization
+}
