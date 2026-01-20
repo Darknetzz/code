@@ -692,29 +692,34 @@ function Main {
     Write-Log "Starting performance optimization..."
     Get-SystemInfo
     
+    # Determine if we're in menu mode (any Run* parameter) vs command-line mode (only Skip* parameters)
+    $isMenuMode = $PSBoundParameters.ContainsKey('RunCleanup') -or 
+                  $PSBoundParameters.ContainsKey('RunDiskOptimization') -or 
+                  $PSBoundParameters.ContainsKey('RunPowerOptimization') -or 
+                  $PSBoundParameters.ContainsKey('RunServiceOptimization') -or
+                  $PSBoundParameters.ContainsKey('RunMemory') -or 
+                  $PSBoundParameters.ContainsKey('RunNetworkSettings')
+    
     # Determine what to run based on parameters
-    # If Run* parameters are provided, use those; otherwise use Skip* logic (default is to run)
-    $shouldCleanup = if ($PSBoundParameters.ContainsKey('RunCleanup')) { $RunCleanup } 
-                     elseif ($PSBoundParameters.ContainsKey('SkipCleanup')) { -not $SkipCleanup }
-                     else { $true }
-    
-    $shouldDiskOptimize = if ($PSBoundParameters.ContainsKey('RunDiskOptimization')) { $RunDiskOptimization }
-                          elseif ($PSBoundParameters.ContainsKey('SkipDiskOptimization')) { -not $SkipDiskOptimization }
-                          else { $true }
-    
-    $shouldPowerOptimize = if ($PSBoundParameters.ContainsKey('RunPowerOptimization')) { $RunPowerOptimization }
-                           elseif ($PSBoundParameters.ContainsKey('SkipPowerOptimization')) { -not $SkipPowerOptimization }
-                           else { $true }
-    
-    $shouldServiceOptimize = if ($PSBoundParameters.ContainsKey('RunServiceOptimization')) { $RunServiceOptimization }
-                             elseif ($PSBoundParameters.ContainsKey('SkipServiceOptimization')) { -not $SkipServiceOptimization }
-                             else { $true }
-    
-    $shouldOptimizeMemory = if ($PSBoundParameters.ContainsKey('RunMemory')) { $RunMemory }
-                            else { $true }
-    
-    $shouldOptimizeNetwork = if ($PSBoundParameters.ContainsKey('RunNetworkSettings')) { $RunNetworkSettings }
-                             else { $true }
+    # In menu mode: default to false (only run what's explicitly selected)
+    # In command-line mode: default to true (run everything unless skipped)
+    if ($isMenuMode) {
+        $shouldCleanup = $PSBoundParameters.ContainsKey('RunCleanup') -and $RunCleanup
+        $shouldDiskOptimize = $PSBoundParameters.ContainsKey('RunDiskOptimization') -and $RunDiskOptimization
+        $shouldPowerOptimize = $PSBoundParameters.ContainsKey('RunPowerOptimization') -and $RunPowerOptimization
+        $shouldServiceOptimize = $PSBoundParameters.ContainsKey('RunServiceOptimization') -and $RunServiceOptimization
+        $shouldOptimizeMemory = $PSBoundParameters.ContainsKey('RunMemory') -and $RunMemory
+        $shouldOptimizeNetwork = $PSBoundParameters.ContainsKey('RunNetworkSettings') -and $RunNetworkSettings
+    }
+    else {
+        # Command-line mode: use Skip* logic (default is to run everything)
+        $shouldCleanup = if ($PSBoundParameters.ContainsKey('SkipCleanup')) { -not $SkipCleanup } else { $true }
+        $shouldDiskOptimize = if ($PSBoundParameters.ContainsKey('SkipDiskOptimization')) { -not $SkipDiskOptimization } else { $true }
+        $shouldPowerOptimize = if ($PSBoundParameters.ContainsKey('SkipPowerOptimization')) { -not $SkipPowerOptimization } else { $true }
+        $shouldServiceOptimize = if ($PSBoundParameters.ContainsKey('SkipServiceOptimization')) { -not $SkipServiceOptimization } else { $true }
+        $shouldOptimizeMemory = $true  # Memory and network always run in command-line mode unless skipped
+        $shouldOptimizeNetwork = $true
+    }
     
     if ($shouldCleanup) {
         Clear-TemporaryFiles
@@ -761,12 +766,12 @@ if (-not $hasSkipParameters) {
     # Set script variables based on menu selection
     $script:Verbose = $menuOptions.Verbose
     
-    # Run Main with selected options
+    # Run Main with selected options (only pass Run* parameters for selected items)
     $mainParams = @{}
-    if ($menuOptions.Cleanup) { $mainParams['RunCleanup'] = $true } else { $mainParams['SkipCleanup'] = $true }
-    if ($menuOptions.DiskOptimization) { $mainParams['RunDiskOptimization'] = $true } else { $mainParams['SkipDiskOptimization'] = $true }
-    if ($menuOptions.PowerOptimization) { $mainParams['RunPowerOptimization'] = $true } else { $mainParams['SkipPowerOptimization'] = $true }
-    if ($menuOptions.ServiceOptimization) { $mainParams['RunServiceOptimization'] = $true } else { $mainParams['SkipServiceOptimization'] = $true }
+    if ($menuOptions.Cleanup) { $mainParams['RunCleanup'] = $true }
+    if ($menuOptions.DiskOptimization) { $mainParams['RunDiskOptimization'] = $true }
+    if ($menuOptions.PowerOptimization) { $mainParams['RunPowerOptimization'] = $true }
+    if ($menuOptions.ServiceOptimization) { $mainParams['RunServiceOptimization'] = $true }
     if ($menuOptions.Memory) { $mainParams['RunMemory'] = $true }
     if ($menuOptions.NetworkSettings) { $mainParams['RunNetworkSettings'] = $true }
     
