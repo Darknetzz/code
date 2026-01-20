@@ -70,7 +70,6 @@ function Clear-TemporaryFiles {
     foreach ($path in $tempPaths) {
         if (Test-Path $path) {
             try {
-                $files = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | Measure-Object
                 $sizeBefore = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
                     Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
                 
@@ -145,7 +144,7 @@ function Optimize-DiskPerformance {
             
             # Run disk cleanup
             try {
-                $result = Optimize-Volume -DriveLetter $driveLetter -Defrag -ReTrim -ErrorAction SilentlyContinue
+                Optimize-Volume -DriveLetter $driveLetter -Defrag -ReTrim -ErrorAction SilentlyContinue | Out-Null
                 Write-Log "Drive $driveLetter optimization completed"
             }
             catch {
