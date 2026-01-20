@@ -11,3 +11,4 @@ auth.py
 __pycache__/
 build/
 hackcon2026/
+*.log
