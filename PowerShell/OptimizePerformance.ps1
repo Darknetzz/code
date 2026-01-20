@@ -479,6 +479,134 @@ function Get-CurrentPowerPlan {
 
 <#
 .SYNOPSIS
+    Displays detailed help information about each optimization option.
+
+.DESCRIPTION
+    Shows comprehensive information about what each optimization does,
+    what it affects, and any important considerations.
+
+.EXAMPLE
+    Show-Help
+#>
+function Show-Help {
+    Clear-Host
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  Optimization Help & Information" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+    
+    $helpItems = @(
+        @{
+            Number = "1"
+            Name = "Cleanup"
+            Description = "Clean temporary files, Windows Update cache, and DNS cache"
+            Details = @(
+                "Removes temporary files from multiple locations:",
+                "  • User temp directories (TEMP, TMP, LocalAppData\Temp)",
+                "  • Windows temp directory",
+                "  • Internet cache and web cache",
+                "  • Recent files folder",
+                "",
+                "Also clears:",
+                "  • Windows Update cache (requires stopping update services)",
+                "  • DNS resolver cache",
+                "",
+                "Impact: Frees disk space, may resolve update issues, ensures fresh DNS lookups.",
+                "Safe: Yes - only removes temporary/cached files."
+            )
+        },
+        @{
+            Number = "2"
+            Name = "Disk Optimization"
+            Description = "Optimize disk performance (defragmentation and TRIM)"
+            Details = @(
+                "Performs disk optimization on all fixed (non-removable) drives:",
+                "  • Defragmentation for HDDs (improves read/write performance)",
+                "  • TRIM for SSDs (extends lifespan and maintains performance)",
+                "",
+                "Impact: Improves disk read/write performance, can extend SSD lifespan.",
+                "Time: Can take several minutes to hours depending on disk size and fragmentation.",
+                "Safe: Yes - standard Windows maintenance operation."
+            )
+        },
+        @{
+            Number = "3"
+            Name = "Power Settings Optimization"
+            Description = "Optimize power settings (High Performance plan)"
+            Details = @(
+                "Configures power settings to prioritize performance:",
+                "  • Activates or creates High Performance power plan",
+                "  • Disables USB selective suspend",
+                "  • Disables hard disk sleep mode",
+                "",
+                "Impact: Improves system responsiveness, may increase power consumption.",
+                "Note: On laptops, this will reduce battery life.",
+                "Reversible: Yes - you can change power plan back in Windows settings.",
+                "Safe: Yes - only changes power management settings."
+            )
+        },
+        @{
+            Number = "4"
+            Name = "Service Optimization"
+            Description = "Disable unnecessary Windows services"
+            Details = @(
+                "Disables and stops services that are typically not needed:",
+                "  • Fax service",
+                "  • Windows Search (WSearch) - disables Start menu search",
+                "  • Remote Registry",
+                "",
+                "Impact: Frees system resources, reduces background CPU/memory usage.",
+                "Warning: Disabling Windows Search will disable Start menu search functionality.",
+                "Reversible: Yes - services can be re-enabled in Services.msc.",
+                "Safe: Yes - these services are rarely used by most users."
+            )
+        },
+        @{
+            Number = "5"
+            Name = "Memory Optimization"
+            Description = "Optimize memory (clear standby memory)"
+            Details = @(
+                "Performs memory optimization:",
+                "  • Clears standby memory using SetProcessWorkingSetSize API",
+                "  • Forces .NET garbage collection to free managed memory",
+                "",
+                "Impact: Frees up memory that's being held but not actively used.",
+                "Note: This is a temporary optimization - memory will be used again as needed.",
+                "Safe: Yes - standard memory management operation."
+            )
+        },
+        @{
+            Number = "6"
+            Name = "Network Settings Optimization"
+            Description = "Optimize network settings (TCP/IP tuning)"
+            Details = @(
+                "Modifies TCP/IP registry settings for better performance:",
+                "  • Disables Nagle's algorithm (TCPNoDelay = 1)",
+                "  • Sets TcpAckFrequency to 1 for immediate ACK responses",
+                "",
+                "Impact: Reduces network latency, especially for interactive applications.",
+                "Note: Changes are made to Windows registry.",
+                "Reversible: Yes - registry values can be reset.",
+                "Safe: Yes - these are standard TCP/IP optimizations."
+            )
+        }
+    )
+    
+    foreach ($item in $helpItems) {
+        Write-Host "[$($item.Number)] $($item.Name)" -ForegroundColor Yellow
+        Write-Host "  $($item.Description)" -ForegroundColor White
+        Write-Host ""
+        foreach ($detail in $item.Details) {
+            Write-Host "  $detail" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    Write-Host "Press any key to return to the menu..." -ForegroundColor Cyan
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+<#
+.SYNOPSIS
     Displays an interactive menu for selecting optimization options.
 
 .DESCRIPTION
@@ -520,6 +648,7 @@ function Show-InteractiveMenu {
     }
     
     Write-Host "`n  [A] Run all optimizations" -ForegroundColor Green
+    Write-Host "  [H] Help - Show detailed information about each option" -ForegroundColor Cyan
     Write-Host "  [Q] Quit`n" -ForegroundColor Red
     
     # Get user input
@@ -528,6 +657,13 @@ function Show-InteractiveMenu {
     if ($userInput -eq 'Q' -or $userInput -eq 'q') {
         Write-Host "`nExiting..." -ForegroundColor Yellow
         exit 0
+    }
+    
+    # Handle help/info request
+    if ($userInput -eq 'H' -or $userInput -eq 'h' -or $userInput -eq 'help' -or $userInput -eq 'HELP') {
+        Show-Help
+        # Return to menu after showing help
+        return Show-InteractiveMenu
     }
     
     # Initialize all options to false
