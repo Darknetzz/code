@@ -510,8 +510,7 @@ function Show-InteractiveMenu {
         @{ Key = "PowerOptimization"; Description = "Optimize power settings (High Performance plan)$powerPlanDisplay" },
         @{ Key = "ServiceOptimization"; Description = "Disable unnecessary Windows services" },
         @{ Key = "Memory"; Description = "Optimize memory (clear standby memory)" },
-        @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" },
-        @{ Key = "Verbose"; Description = "Show verbose output during execution" }
+        @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" }
     )
     
     # Display menu
@@ -582,11 +581,17 @@ function Show-InteractiveMenu {
     }
     
     # If nothing was selected, ask again
-    $hasSelection = $options.Values | Where-Object { $_ -eq $true }
+    $hasSelection = ($options.Cleanup -or $options.DiskOptimization -or $options.PowerOptimization -or 
+                     $options.ServiceOptimization -or $options.Memory -or $options.NetworkSettings)
     if (-not $hasSelection) {
         Write-Host "`nNo valid selections made. Please try again.`n" -ForegroundColor Red
         return Show-InteractiveMenu
     }
+    
+    # Ask about verbose output
+    Write-Host ""
+    $verboseInput = Read-Host "Enable verbose output during execution? (Y/N)"
+    $options['Verbose'] = ($verboseInput -eq 'Y' -or $verboseInput -eq 'y')
     
     # Show confirmation with selected options
     Write-Host "`n========================================" -ForegroundColor Cyan
