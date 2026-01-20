@@ -447,6 +447,37 @@ function Get-SystemInfo {
 
 <#
 .SYNOPSIS
+    Gets the current active Windows power plan name.
+
+.DESCRIPTION
+    Retrieves the name of the currently active power plan using powercfg.
+
+.OUTPUTS
+    System.String
+    Returns the name of the current power plan, or "Unknown" if unable to determine.
+
+.EXAMPLE
+    $currentPlan = Get-CurrentPowerPlan
+#>
+function Get-CurrentPowerPlan {
+    try {
+        $powerCfgOutput = powercfg -list 2>&1
+        $activePlan = $powerCfgOutput | Select-String "^\s+\*" | Select-Object -First 1
+        
+        if ($activePlan) {
+            # Extract the plan name (everything after the GUID)
+            $planName = ($activePlan -split '\s+', 4)[3]
+            return $planName.Trim()
+        }
+        return "Unknown"
+    }
+    catch {
+        return "Unknown"
+    }
+}
+
+<#
+.SYNOPSIS
     Displays an interactive menu for selecting optimization options.
 
 .DESCRIPTION
@@ -469,10 +500,14 @@ function Show-InteractiveMenu {
     Write-Host "Select which optimizations to perform:" -ForegroundColor Yellow
     Write-Host "Enter numbers separated by commas (e.g., 1,2,3) or 'all' for everything`n" -ForegroundColor Gray
     
+    # Get current power plan for display
+    $currentPowerPlan = Get-CurrentPowerPlan
+    $powerPlanDisplay = if ($currentPowerPlan -ne "Unknown") { " (Current: $currentPowerPlan)" } else { "" }
+    
     $menuItems = @(
         @{ Key = "Cleanup"; Description = "Clean temporary files, Windows Update cache, and DNS cache" },
         @{ Key = "DiskOptimization"; Description = "Optimize disk performance (defragmentation and TRIM)" },
-        @{ Key = "PowerOptimization"; Description = "Optimize power settings (High Performance plan)" },
+        @{ Key = "PowerOptimization"; Description = "Optimize power settings (High Performance plan)$powerPlanDisplay" },
         @{ Key = "ServiceOptimization"; Description = "Disable unnecessary Windows services" },
         @{ Key = "Memory"; Description = "Optimize memory (clear standby memory)" },
         @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" },
@@ -516,6 +551,20 @@ function Show-InteractiveMenu {
         Write-Host "`nEnable verbose output? (Y/N): " -NoNewline -ForegroundColor Yellow
         $verboseInput = Read-Host
         $options['Verbose'] = ($verboseInput -eq 'Y' -or $verboseInput -eq 'y')
+        
+        # Show confirmation
+        Write-Host "`n========================================" -ForegroundColor Cyan
+        Write-Host "  Selected Optimizations" -ForegroundColor Cyan
+        Write-Host "========================================`n" -ForegroundColor Cyan
+        Write-Host "  ✓ All optimizations selected`n" -ForegroundColor Green
+        $confirm = Read-Host "Proceed with all optimizations? (Y/N)"
+        
+        if ($confirm -ne 'Y' -and $confirm -ne 'y') {
+            Write-Host "`nOperation cancelled. Exiting..." -ForegroundColor Yellow
+            exit 0
+        }
+        
+        Write-Host "`nStarting optimizations...`n" -ForegroundColor Green
         return $options
     }
     
@@ -538,6 +587,37 @@ function Show-InteractiveMenu {
         Write-Host "`nNo valid selections made. Please try again.`n" -ForegroundColor Red
         return Show-InteractiveMenu
     }
+    
+    # Show confirmation with selected options
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  Selected Optimizations" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+    
+    $selectedItems = @()
+    foreach ($item in $menuItems) {
+        if ($options[$item.Key]) {
+            $selectedItems += "  ✓ $($item.Description)"
+        }
+    }
+    
+    if ($selectedItems.Count -eq 0) {
+        Write-Host "  No optimizations selected.`n" -ForegroundColor Yellow
+    }
+    else {
+        foreach ($item in $selectedItems) {
+            Write-Host $item -ForegroundColor Green
+        }
+    }
+    
+    Write-Host ""
+    $confirm = Read-Host "Proceed with these optimizations? (Y/N)"
+    
+    if ($confirm -ne 'Y' -and $confirm -ne 'y') {
+        Write-Host "`nOperation cancelled. Exiting..." -ForegroundColor Yellow
+        exit 0
+    }
+    
+    Write-Host "`nStarting optimizations...`n" -ForegroundColor Green
     
     return $options
 }
