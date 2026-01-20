@@ -20,15 +20,21 @@ param(
     [switch]$SkipPowerOptimization,
     [switch]$SkipServiceOptimization,
     [switch]$Silent,
-    [string]$LogPath = (Join-Path (Get-Location).Path "OptimizePerformance.log")
+    [switch]$WhatIf,
+    [switch]$Rollback,
+    [string]$LogPath = (Join-Path (Get-Location).Path "OptimizePerformance.log"),
+    [string]$ChangeLogPath = (Join-Path (Get-Location).Path "OptimizePerformance_Changes.json")
 )
 
 $ErrorActionPreference = "Continue"
 $script:LogPath = $LogPath
 # Verbose is on by default, unless -Silent is specified
 $script:Verbose = -not $Silent
+# WhatIf mode - show what would happen without making changes
+$script:WhatIf = $WhatIf
 # Change log to track all modifications for potential rollback
 $script:ChangeLog = @()
+$script:ChangeLogPath = $ChangeLogPath
 
 <#
 .SYNOPSIS
@@ -94,7 +100,12 @@ function Add-ChangeLog {
     }
     
     $script:ChangeLog += $change
-    Write-Log "CHANGE: $Category - $Item : '$PreviousValue' → '$NewValue'" "INFO"
+    if ($script:WhatIf) {
+        Write-Log "CHANGE (WHAT IF): $Category - $Item : '$PreviousValue' → '$NewValue'" "INFO"
+    }
+    else {
+        Write-Log "CHANGE: $Category - $Item : '$PreviousValue' → '$NewValue'" "INFO"
+    }
 }
 
 <#
@@ -113,7 +124,7 @@ function Add-ChangeLog {
 #>
 function Save-ChangeLog {
     param(
-        [string]$FilePath = (Join-Path (Get-Location).Path "OptimizePerformance_Changes.json")
+        [string]$FilePath = $script:ChangeLogPath
     )
     
     if ($script:ChangeLog.Count -gt 0) {
@@ -136,11 +147,161 @@ function Save-ChangeLog {
 
 <#
 .SYNOPSIS
+    Restores system settings from a change log file.
+
+.DESCRIPTION
+    Reads a change log JSON file and attempts to revert all recorded changes
+    by executing the revert instructions for each change.
+
+.PARAMETER ChangeLogPath
+    Path to the change log JSON file. Defaults to script's default change log path.
+
+.PARAMETER WhatIf
+    If specified, shows what would be reverted without actually reverting.
+
+.EXAMPLE
+    Restore-FromChangeLog
+    
+.EXAMPLE
+    Restore-FromChangeLog -ChangeLogPath "C:\Path\To\Changes.json" -WhatIf
+#>
+function Restore-FromChangeLog {
+    param(
+        [string]$ChangeLogPath = $script:ChangeLogPath,
+        [switch]$WhatIf
+    )
+    
+    if (-not (Test-Path $ChangeLogPath)) {
+        Write-Host "Change log file not found: $ChangeLogPath" -ForegroundColor Red
+        return $false
+    }
+    
+    try {
+        $changeLogData = Get-Content -Path $ChangeLogPath -Raw | ConvertFrom-Json
+        $changes = $changeLogData.Changes
+        
+        if ($changes.Count -eq 0) {
+            Write-Host "No changes found in change log." -ForegroundColor Yellow
+            return $false
+        }
+        
+        Write-Host "`n========================================" -ForegroundColor Cyan
+        Write-Host "  Rollback Operation" -ForegroundColor Cyan
+        Write-Host "========================================`n" -ForegroundColor Cyan
+        
+        if ($WhatIf) {
+            Write-Host "WHAT IF: The following changes would be reverted:`n" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "Reverting $($changes.Count) change(s)...`n" -ForegroundColor Yellow
+        }
+        
+        $successCount = 0
+        $failCount = 0
+        
+        foreach ($change in $changes) {
+            Write-Host "[$($change.Category)] $($change.Item)" -ForegroundColor White
+            Write-Host "  Current: $($change.NewValue) → Reverting to: $($change.PreviousValue)" -ForegroundColor Gray
+            
+            if ($WhatIf) {
+                Write-Host "  Would execute: $($change.RevertInstructions)" -ForegroundColor Cyan
+                Write-Host ""
+                continue
+            }
+            
+            # Extract and execute PowerShell commands from revert instructions
+            try {
+                # Check if it's a registry change
+                if ($change.Category -eq "Registry") {
+                    # Parse registry revert command
+                    if ($change.RevertInstructions -match "Set-ItemProperty") {
+                        # Extract the command and execute it
+                        $command = $change.RevertInstructions -replace "To revert: ", ""
+                        Invoke-Expression $command
+                        Write-Host "  ✓ Reverted successfully" -ForegroundColor Green
+                        $successCount++
+                    }
+                    elseif ($change.RevertInstructions -match "delete the registry value") {
+                        # Delete registry value to restore default
+                        if ($change.Item -match "TcpAckFrequency") {
+                            Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpAckFrequency" -ErrorAction SilentlyContinue
+                        }
+                        elseif ($change.Item -match "TCPNoDelay") {
+                            Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TCPNoDelay" -ErrorAction SilentlyContinue
+                        }
+                        Write-Host "  ✓ Reverted successfully (restored default)" -ForegroundColor Green
+                        $successCount++
+                    }
+                }
+                # Check if it's a service change
+                elseif ($change.Category -eq "Services") {
+                    if ($change.RevertInstructions -match "Set-Service.*-StartupType (\w+)") {
+                        $startupType = $matches[1]
+                        $serviceName = ($change.Item -replace "Service: ", "").Trim()
+                        Set-Service -Name $serviceName -StartupType $startupType -ErrorAction Stop
+                        if ($change.PreviousValue -match "Status: Running") {
+                            Start-Service -Name $serviceName -ErrorAction Stop
+                        }
+                        Write-Host "  ✓ Reverted successfully" -ForegroundColor Green
+                        $successCount++
+                    }
+                }
+                # Check if it's a power settings change
+                elseif ($change.Category -eq "PowerSettings") {
+                    if ($change.Item -match "Active Power Plan") {
+                        # Extract GUID from previous value
+                        if ($change.PreviousValue -match "GUID: ([a-f0-9\-]+)") {
+                            $previousGuid = $matches[1]
+                            powercfg -setactive $previousGuid
+                            Write-Host "  ✓ Reverted successfully" -ForegroundColor Green
+                            $successCount++
+                        }
+                    }
+                    elseif ($change.RevertInstructions -match "powercfg -set\w+valueindex") {
+                        # Extract powercfg command
+                        $command = ($change.RevertInstructions -split "To revert: ")[1] -split " or " | Select-Object -First 1
+                        Invoke-Expression $command
+                        Write-Host "  ✓ Reverted successfully" -ForegroundColor Green
+                        $successCount++
+                    }
+                }
+                # Files cannot be restored
+                elseif ($change.Category -eq "Files") {
+                    Write-Host "  ⚠ Cannot revert: $($change.RevertInstructions)" -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "  ⚠ Manual revert required: $($change.RevertInstructions)" -ForegroundColor Yellow
+                }
+            }
+            catch {
+                Write-Host "  ✗ Failed to revert: $_" -ForegroundColor Red
+                $failCount++
+            }
+            Write-Host ""
+        }
+        
+        if (-not $WhatIf) {
+            Write-Host "========================================" -ForegroundColor Cyan
+            Write-Host "Rollback Summary: $successCount succeeded, $failCount failed" -ForegroundColor $(if ($failCount -eq 0) { "Green" } else { "Yellow" })
+            Write-Host "========================================`n" -ForegroundColor Cyan
+        }
+        
+        return $true
+    }
+    catch {
+        Write-Host "Error reading change log: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
+<#
+.SYNOPSIS
     Writes a message to the log file with timestamp and severity level.
 
 .DESCRIPTION
     Logs messages with timestamps and severity levels (INFO, WARNING, ERROR).
     Optionally displays messages to the console based on verbosity settings or severity.
+    In WhatIf mode, prefixes messages with [WHAT IF].
 
 .PARAMETER Message
     The message text to log.
@@ -158,10 +319,17 @@ function Save-ChangeLog {
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "[$timestamp] [$Level] $Message"
+    $prefix = if ($script:WhatIf) { "[WHAT IF] " } else { "" }
+    $logMessage = "[$timestamp] [$Level] $prefix$Message"
     Add-Content -Path $script:LogPath -Value $logMessage
     if ($script:Verbose -or $Level -eq "ERROR" -or $Level -eq "WARNING") {
-        Write-Host $logMessage -ForegroundColor $(if ($Level -eq "ERROR") { "Red" } elseif ($Level -eq "WARNING") { "Yellow" } else { "Green" })
+        $color = if ($Level -eq "ERROR") { "Red" } elseif ($Level -eq "WARNING") { "Yellow" } else { "Green" }
+        if ($script:WhatIf) {
+            Write-Host "[WHAT IF] $Message" -ForegroundColor Cyan
+        }
+        else {
+            Write-Host $logMessage -ForegroundColor $color
+        }
     }
 }
 
@@ -220,21 +388,34 @@ function Clear-TemporaryFiles {
         "$env:APPDATA\Microsoft\Windows\Recent"
     )
     
+    $totalPaths = $tempPaths.Count
+    $currentPath = 0
+    
     foreach ($path in $tempPaths) {
+        $currentPath++
+        $percentComplete = [math]::Round(($currentPath / $totalPaths) * 100)
+        Write-Progress -Activity "Cleaning Temporary Files" -Status "Processing: $path" -PercentComplete $percentComplete
+        
         if (Test-Path $path) {
             try {
                 $sizeBefore = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
                     Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
                 
-                Remove-Item -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
-                
-                $sizeAfter = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
-                    Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                
-                $freed = $sizeBefore - $sizeAfter
-                if ($freed -gt 0) {
-                    $cleaned += $freed
-                    Write-Log "Cleaned $([math]::Round($freed / 1MB, 2)) MB from $path"
+                if ($script:WhatIf) {
+                    Write-Log "Would clean $([math]::Round($sizeBefore / 1MB, 2)) MB from $path" "INFO"
+                    $cleaned += $sizeBefore
+                }
+                else {
+                    Remove-Item -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    
+                    $sizeAfter = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+                        Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                    
+                    $freed = $sizeBefore - $sizeAfter
+                    if ($freed -gt 0) {
+                        $cleaned += $freed
+                        Write-Log "Cleaned $([math]::Round($freed / 1MB, 2)) MB from $path"
+                    }
                 }
             }
             catch {
@@ -243,7 +424,14 @@ function Clear-TemporaryFiles {
         }
     }
     
-    Write-Log "Temporary files cleanup completed. Total freed: $([math]::Round($cleaned / 1MB, 2)) MB"
+    Write-Progress -Activity "Cleaning Temporary Files" -Completed
+    
+    if ($script:WhatIf) {
+        Write-Log "Temporary files cleanup (WHAT IF). Would free: $([math]::Round($cleaned / 1MB, 2)) MB"
+    }
+    else {
+        Write-Log "Temporary files cleanup completed. Total freed: $([math]::Round($cleaned / 1MB, 2)) MB"
+    }
     
     if ($cleaned -gt 0) {
         Add-ChangeLog -Category "Files" -Item "Temporary Files Cleanup" `
@@ -269,38 +457,53 @@ function Clear-TemporaryFiles {
 #>
 function Clear-WindowsUpdateCache {
     Write-Log "Clearing Windows Update cache..."
+    Write-Progress -Activity "Clearing Windows Update Cache" -Status "Analyzing cache size..." -PercentComplete 0
+    
     try {
         $updateCache = "$env:WINDIR\SoftwareDistribution"
         $cacheSize = 0
         
         if (Test-Path $updateCache) {
+            Write-Progress -Activity "Clearing Windows Update Cache" -Status "Calculating cache size..." -PercentComplete 25
             $cacheSize = (Get-ChildItem -Path $updateCache -Recurse -ErrorAction SilentlyContinue | 
                 Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         }
         
-        Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name cryptSvc -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name msiserver -Force -ErrorAction SilentlyContinue
-        
-        if (Test-Path $updateCache) {
-            Remove-Item -Path "$updateCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Log "Windows Update cache cleared"
+        if ($script:WhatIf) {
+            Write-Progress -Activity "Clearing Windows Update Cache" -Status "WHAT IF: Would clear cache..." -PercentComplete 50
+            Write-Log "Would clear Windows Update cache ($([math]::Round($cacheSize / 1MB, 2)) MB)" "INFO"
+        }
+        else {
+            Write-Progress -Activity "Clearing Windows Update Cache" -Status "Stopping services..." -PercentComplete 30
+            Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+            Stop-Service -Name cryptSvc -Force -ErrorAction SilentlyContinue
+            Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
+            Stop-Service -Name msiserver -Force -ErrorAction SilentlyContinue
             
-            if ($cacheSize -gt 0) {
-                Add-ChangeLog -Category "Files" -Item "Windows Update Cache" `
-                    -PreviousValue "Update cache files ($([math]::Round($cacheSize / 1MB, 2)) MB)" `
-                    -NewValue "Cleared" `
-                    -RevertInstructions "Note: Windows Update cache cannot be restored. Windows will re-download updates as needed. This may cause longer update times on next check."
+            Write-Progress -Activity "Clearing Windows Update Cache" -Status "Removing cache files..." -PercentComplete 60
+            if (Test-Path $updateCache) {
+                Remove-Item -Path "$updateCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Log "Windows Update cache cleared"
             }
+            
+            Write-Progress -Activity "Clearing Windows Update Cache" -Status "Restarting services..." -PercentComplete 80
+            Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+            Start-Service -Name cryptSvc -ErrorAction SilentlyContinue
+            Start-Service -Name bits -ErrorAction SilentlyContinue
+            Start-Service -Name msiserver -ErrorAction SilentlyContinue
         }
         
-        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-        Start-Service -Name cryptSvc -ErrorAction SilentlyContinue
-        Start-Service -Name bits -ErrorAction SilentlyContinue
-        Start-Service -Name msiserver -ErrorAction SilentlyContinue
+        Write-Progress -Activity "Clearing Windows Update Cache" -Completed
+        
+        if ($cacheSize -gt 0) {
+            Add-ChangeLog -Category "Files" -Item "Windows Update Cache" `
+                -PreviousValue "Update cache files ($([math]::Round($cacheSize / 1MB, 2)) MB)" `
+                -NewValue "Cleared" `
+                -RevertInstructions "Note: Windows Update cache cannot be restored. Windows will re-download updates as needed. This may cause longer update times on next check."
+        }
     }
     catch {
+        Write-Progress -Activity "Clearing Windows Update Cache" -Completed
         Write-Log "Error clearing Windows Update cache: $_" "WARNING"
     }
 }
@@ -319,8 +522,13 @@ function Clear-WindowsUpdateCache {
 function Clear-DNSCache {
     Write-Log "Clearing DNS cache..."
     try {
-        ipconfig /flushdns | Out-Null
-        Write-Log "DNS cache cleared successfully"
+        if ($script:WhatIf) {
+            Write-Log "Would flush DNS cache" "INFO"
+        }
+        else {
+            ipconfig /flushdns | Out-Null
+            Write-Log "DNS cache cleared successfully"
+        }
     }
     catch {
         Write-Log "Error clearing DNS cache: $_" "ERROR"
@@ -344,22 +552,41 @@ function Optimize-DiskPerformance {
     
     try {
         $drives = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
+        $totalDrives = $drives.Count
+        $currentDrive = 0
+        
+        if ($totalDrives -eq 0) {
+            Write-Log "No fixed drives found to optimize" "WARNING"
+            return
+        }
         
         foreach ($drive in $drives) {
+            $currentDrive++
             $driveLetter = $drive.DriveLetter
-            Write-Log "Optimizing drive $driveLetter..."
+            $percentComplete = [math]::Round(($currentDrive / $totalDrives) * 100)
             
-            # Run disk cleanup
-            try {
-                Optimize-Volume -DriveLetter $driveLetter -Defrag -ReTrim -ErrorAction SilentlyContinue | Out-Null
-                Write-Log "Drive $driveLetter optimization completed"
+            Write-Progress -Activity "Optimizing Disks" -Status "Optimizing drive $driveLetter`:" -PercentComplete $percentComplete -CurrentOperation "Defragmenting and trimming..."
+            Write-Log "Optimizing drive $driveLetter`:..."
+
+            if ($script:WhatIf) {
+                Write-Log "Would optimize drive $driveLetter`: (defragmentation and TRIM)" "INFO"
             }
-            catch {
-                Write-Log "Could not optimize drive $driveLetter (may require manual defragmentation): $_" "WARNING"
+            else {
+                # Run disk cleanup
+                try {
+                    Optimize-Volume -DriveLetter $driveLetter -Defrag -ReTrim -ErrorAction SilentlyContinue | Out-Null
+                    Write-Log "Drive $driveLetter` optimization completed"
+                }
+                catch {
+                    Write-Log "Could not optimize drive $driveLetter` (may require manual defragmentation): $_" "WARNING"
+                }
             }
         }
+        
+        Write-Progress -Activity "Optimizing Disks" -Completed
     }
     catch {
+        Write-Progress -Activity "Optimizing Disks" -Completed
         Write-Log "Error during disk optimization: $_" "ERROR"
     }
 }
@@ -393,8 +620,13 @@ function Optimize-PowerSettings {
         
         if ($highPerf) {
             $highPerfGuid = $highPerf.Trim()
-            powercfg -setactive $highPerfGuid
-            Write-Log "Power plan set to High Performance"
+            if (-not $script:WhatIf) {
+                powercfg -setactive $highPerfGuid
+                Write-Log "Power plan set to High Performance"
+            }
+            else {
+                Write-Log "Would set power plan to High Performance (GUID: $highPerfGuid)" "INFO"
+            }
             
             Add-ChangeLog -Category "PowerSettings" -Item "Active Power Plan" `
                 -PreviousValue "$currentPlan (GUID: $currentGuid)" `
@@ -406,8 +638,13 @@ function Optimize-PowerSettings {
             $guid = powercfg -duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
             if ($guid) {
                 $newGuid = ($guid -split '\s+')[-1].Trim()
-                powercfg -setactive $newGuid
-                Write-Log "High Performance power plan created and activated"
+                if (-not $script:WhatIf) {
+                    powercfg -setactive $newGuid
+                    Write-Log "High Performance power plan created and activated"
+                }
+                else {
+                    Write-Log "Would create and activate High Performance power plan (GUID: $newGuid)" "INFO"
+                }
                 
                 Add-ChangeLog -Category "PowerSettings" -Item "Active Power Plan" `
                     -PreviousValue "$currentPlan (GUID: $currentGuid)" `
@@ -417,8 +654,13 @@ function Optimize-PowerSettings {
         }
         
         # Disable USB selective suspend
-        powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
-        powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+        if (-not $script:WhatIf) {
+            powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+            powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+        }
+        else {
+            Write-Log "Would disable USB selective suspend (AC and Battery)" "INFO"
+        }
         
         Add-ChangeLog -Category "PowerSettings" -Item "USB Selective Suspend (AC Power)" `
             -PreviousValue "Enabled (varies)" `
@@ -431,8 +673,13 @@ function Optimize-PowerSettings {
             -RevertInstructions "To revert: Run 'powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 1' or change in Power Options > Advanced settings > USB settings"
         
         # Disable hard disk sleep
-        powercfg -setacvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
-        powercfg -setdcvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
+        if (-not $script:WhatIf) {
+            powercfg -setacvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
+            powercfg -setdcvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
+        }
+        else {
+            Write-Log "Would disable hard disk sleep (AC and Battery)" "INFO"
+        }
         
         Add-ChangeLog -Category "PowerSettings" -Item "Hard Disk Sleep (AC Power)" `
             -PreviousValue "Enabled (varies by timeout)" `
@@ -444,7 +691,9 @@ function Optimize-PowerSettings {
             -NewValue "Never (0 minutes)" `
             -RevertInstructions "To revert: Run 'powercfg -setdcvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e <previous-value>' or change in Power Options > Advanced settings > Hard disk"
         
-        powercfg -setactive SCHEME_CURRENT
+        if (-not $script:WhatIf) {
+            powercfg -setactive SCHEME_CURRENT
+        }
         Write-Log "Power settings optimized"
     }
     catch {
@@ -478,7 +727,14 @@ function Optimize-WindowsServices {
         "RemoteRegistry"
     )
     
+    $totalServices = $servicesToDisable.Count
+    $currentService = 0
+    
     foreach ($serviceName in $servicesToDisable) {
+        $currentService++
+        $percentComplete = [math]::Round(($currentService / $totalServices) * 100)
+        Write-Progress -Activity "Optimizing Services" -Status "Processing: $serviceName" -PercentComplete $percentComplete
+        
         try {
             $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
             if ($service) {
@@ -486,9 +742,14 @@ function Optimize-WindowsServices {
                 $previousStatus = $service.Status
                 
                 if ($service.Status -eq "Running") {
-                    Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
-                    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-                    Write-Log "Disabled service: $serviceName"
+                    if ($script:WhatIf) {
+                        Write-Log "Would disable and stop service: $serviceName" "INFO"
+                    }
+                    else {
+                        Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
+                        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+                        Write-Log "Disabled service: $serviceName"
+                    }
                     
                     Add-ChangeLog -Category "Services" -Item "Service: $serviceName" `
                         -PreviousValue "Startup: $previousStartupType, Status: $previousStatus" `
@@ -496,8 +757,13 @@ function Optimize-WindowsServices {
                         -RevertInstructions "To revert: Run 'Set-Service -Name $serviceName -StartupType $previousStartupType' and 'Start-Service -Name $serviceName' in PowerShell as Administrator, or use Services.msc"
                 }
                 elseif ($previousStartupType -ne "Disabled") {
-                    Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Log "Set service startup type to Disabled: $serviceName"
+                    if ($script:WhatIf) {
+                        Write-Log "Would set service startup type to Disabled: $serviceName" "INFO"
+                    }
+                    else {
+                        Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
+                        Write-Log "Set service startup type to Disabled: $serviceName"
+                    }
                     
                     Add-ChangeLog -Category "Services" -Item "Service: $serviceName" `
                         -PreviousValue "Startup: $previousStartupType, Status: $previousStatus" `
@@ -510,6 +776,8 @@ function Optimize-WindowsServices {
             Write-Log "Could not modify service $serviceName : $_" "WARNING"
         }
     }
+    
+    Write-Progress -Activity "Optimizing Services" -Completed
 }
 
 <#
@@ -580,8 +848,14 @@ function Optimize-NetworkSettings {
         if (-not $currentTcpNoDelay) { $currentTcpNoDelay = "Not set (default: 0)" }
         
         # Disable Nagle's algorithm for better network performance
-        Set-ItemProperty -Path $regPath -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $regPath -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+        if ($script:WhatIf) {
+            Write-Log "Would set TcpAckFrequency to 1 (current: $currentTcpAckFrequency)" "INFO"
+            Write-Log "Would set TCPNoDelay to 1 (current: $currentTcpNoDelay)" "INFO"
+        }
+        else {
+            Set-ItemProperty -Path $regPath -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $regPath -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+        }
         
         Add-ChangeLog -Category "Registry" -Item "TCP/IP: TcpAckFrequency" `
             -PreviousValue "$currentTcpAckFrequency" `
@@ -1302,7 +1576,12 @@ function Main {
         Optimize-NetworkSettings
     }
     
-    Write-Log "Performance optimization completed successfully!"
+    if ($script:WhatIf) {
+        Write-Log "Performance optimization (WHAT IF) completed successfully!"
+    }
+    else {
+        Write-Log "Performance optimization completed successfully!"
+    }
     
     # Save change log and display summary
     if ($script:ChangeLog.Count -gt 0) {
@@ -1310,9 +1589,21 @@ function Main {
         Write-Log "Total changes recorded: $($script:ChangeLog.Count)"
         
         Write-Host "`n========================================" -ForegroundColor Cyan
-        Write-Host "  Optimization Summary" -ForegroundColor Cyan
+        if ($script:WhatIf) {
+            Write-Host "  Optimization Summary (WHAT IF)" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "  Optimization Summary" -ForegroundColor Cyan
+        }
         Write-Host "========================================`n" -ForegroundColor Cyan
-        Write-Host "Total changes made: $($script:ChangeLog.Count)" -ForegroundColor Yellow
+        
+        if ($script:WhatIf) {
+            Write-Host "Total changes that WOULD be made: $($script:ChangeLog.Count)" -ForegroundColor Yellow
+            Write-Host "(No actual changes were made - this was a dry run)`n" -ForegroundColor Cyan
+        }
+        else {
+            Write-Host "Total changes made: $($script:ChangeLog.Count)" -ForegroundColor Yellow
+        }
         
         # Group changes by category
         $changesByCategory = $script:ChangeLog | Group-Object -Property Category
@@ -1323,11 +1614,34 @@ function Main {
             }
         }
         
-        Write-Host "`nDetailed change log saved to: $changeLogPath" -ForegroundColor Green
-        Write-Host "This file contains instructions for reverting each change if needed.`n" -ForegroundColor Yellow
+        if (-not $script:WhatIf) {
+            Write-Host "`nDetailed change log saved to: $changeLogPath" -ForegroundColor Green
+            Write-Host "This file contains instructions for reverting each change if needed." -ForegroundColor Yellow
+            Write-Host "To rollback changes, run: .\OptimizePerformance.ps1 -Rollback`n" -ForegroundColor Cyan
+        }
+        else {
+            Write-Host "`nChange log would be saved to: $changeLogPath`n" -ForegroundColor Gray
+        }
     }
     
-    Write-Host "Optimization complete! Check log file: $script:LogPath" -ForegroundColor Green
+    if ($script:WhatIf) {
+        Write-Host "WHAT IF mode complete! No changes were made. Check log file: $script:LogPath" -ForegroundColor Cyan
+    }
+    else {
+        Write-Host "Optimization complete! Check log file: $script:LogPath" -ForegroundColor Green
+    }
+}
+
+# Handle Rollback mode first
+if ($Rollback) {
+    if (-not (Test-Administrator)) {
+        Write-Host "Rollback requires administrator privileges. Please run as administrator." -ForegroundColor Red
+        exit 1
+    }
+    
+    $whatIfFlag = if ($WhatIf) { $true } else { $false }
+    Restore-FromChangeLog -ChangeLogPath $ChangeLogPath -WhatIf:$whatIfFlag
+    exit 0
 }
 
 # Check if any skip parameters were explicitly provided via command line
@@ -1337,6 +1651,13 @@ $hasSkipParameters = $PSBoundParameters.ContainsKey('SkipCleanup') -or
                      $PSBoundParameters.ContainsKey('SkipServiceOptimization') -or
                      $PSBoundParameters.ContainsKey('Silent') -or
                      $PSBoundParameters.ContainsKey('LogPath')
+
+# Show WhatIf banner if in WhatIf mode
+if ($WhatIf) {
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  WHAT IF MODE - No changes will be made" -ForegroundColor Yellow
+    Write-Host "========================================`n" -ForegroundColor Cyan
+}
 
 # If no parameters provided, show interactive menu
 if (-not $hasSkipParameters) {
