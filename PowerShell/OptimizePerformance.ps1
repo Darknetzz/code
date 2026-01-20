@@ -448,6 +448,152 @@ function Get-SystemInfo {
 
 <#
 .SYNOPSIS
+    Gets memory information including standby memory that can be freed.
+
+.DESCRIPTION
+    Retrieves current memory statistics including total, available, and standby memory.
+
+.OUTPUTS
+    System.Collections.Hashtable
+    Returns a hashtable with TotalGB, AvailableGB, StandbyGB, and other memory metrics.
+
+.EXAMPLE
+    $memInfo = Get-MemoryInfo
+#>
+function Get-MemoryInfo {
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem
+        $cs = Get-CimInstance Win32_ComputerSystem
+        
+        $totalGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
+        $availableGB = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+        
+        # Try to get standby memory using Get-Counter (more accurate)
+        $standbyGB = 0
+        try {
+            $standbyCounter = Get-Counter "\Memory\Standby Cache Reserve Bytes" -ErrorAction SilentlyContinue
+            if ($standbyCounter) {
+                $standbyBytes = $standbyCounter.CounterSamples[0].CookedValue
+                $standbyGB = [math]::Round($standbyBytes / 1GB, 2)
+            }
+        }
+        catch {
+            # Fallback: estimate standby as difference between total and available
+            $usedGB = $totalGB - $availableGB
+            $standbyGB = [math]::Round($usedGB * 0.3, 2)  # Rough estimate: 30% of used memory
+        }
+        
+        return @{
+            TotalGB = $totalGB
+            AvailableGB = $availableGB
+            StandbyGB = $standbyGB
+            UsedGB = [math]::Round($totalGB - $availableGB, 2)
+        }
+    }
+    catch {
+        return @{
+            TotalGB = 0
+            AvailableGB = 0
+            StandbyGB = 0
+            UsedGB = 0
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Estimates disk space that can be freed by cleanup operations.
+
+.DESCRIPTION
+    Calculates the total size of temporary files and caches that can be cleaned.
+
+.OUTPUTS
+    System.Double
+    Returns estimated disk space in MB that can be freed.
+
+.EXAMPLE
+    $spaceToFree = Get-EstimatedCleanupSpace
+#>
+function Get-EstimatedCleanupSpace {
+    $totalSize = 0
+    $tempPaths = @(
+        $env:TEMP,
+        $env:TMP,
+        "$env:LOCALAPPDATA\Temp",
+        "$env:WINDIR\Temp",
+        "$env:LOCALAPPDATA\Microsoft\Windows\INetCache",
+        "$env:LOCALAPPDATA\Microsoft\Windows\WebCache",
+        "$env:APPDATA\Microsoft\Windows\Recent"
+    )
+    
+    foreach ($path in $tempPaths) {
+        if (Test-Path $path) {
+            try {
+                $size = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+                    Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                if ($size) {
+                    $totalSize += $size
+                }
+            }
+            catch {
+                # Ignore errors
+            }
+        }
+    }
+    
+    # Also estimate Windows Update cache
+    $updateCache = "$env:WINDIR\SoftwareDistribution"
+    if (Test-Path $updateCache) {
+        try {
+            $size = (Get-ChildItem -Path $updateCache -Recurse -ErrorAction SilentlyContinue | 
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+            if ($size) {
+                $totalSize += $size
+            }
+        }
+        catch {
+            # Ignore errors
+        }
+    }
+    
+    return [math]::Round($totalSize / 1MB, 2)
+}
+
+<#
+.SYNOPSIS
+    Gets information about services that will be disabled.
+
+.DESCRIPTION
+    Returns a list of services that are currently running and will be disabled.
+
+.OUTPUTS
+    System.Array
+    Returns an array of service names that are running and will be disabled.
+
+.EXAMPLE
+    $services = Get-ServicesToDisable
+#>
+function Get-ServicesToDisable {
+    $servicesToDisable = @("Fax", "WSearch", "RemoteRegistry")
+    $runningServices = @()
+    
+    foreach ($serviceName in $servicesToDisable) {
+        try {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            if ($service -and $service.Status -eq "Running") {
+                $runningServices += $serviceName
+            }
+        }
+        catch {
+            # Ignore errors
+        }
+    }
+    
+    return $runningServices
+}
+
+<#
+.SYNOPSIS
     Gets the current active Windows power plan name.
 
 .DESCRIPTION
@@ -687,11 +833,34 @@ function Show-InteractiveMenu {
         # Verbose is on by default (unless -Silent was passed, which is handled at script level)
         $options['Verbose'] = $script:Verbose
         
-        # Show confirmation
+        # Show confirmation with details
         Write-Host "`n========================================" -ForegroundColor Cyan
         Write-Host "  Selected Optimizations" -ForegroundColor Cyan
         Write-Host "========================================`n" -ForegroundColor Cyan
         Write-Host "  ✓ All optimizations selected`n" -ForegroundColor Green
+        
+        # Show summary information
+        $estimatedSpace = Get-EstimatedCleanupSpace
+        if ($estimatedSpace -gt 0) {
+            Write-Host "  • Estimated disk space to free: $estimatedSpace MB" -ForegroundColor Yellow
+        }
+        
+        $memInfo = Get-MemoryInfo
+        if ($memInfo.StandbyGB -gt 0) {
+            Write-Host "  • Estimated memory to free: ~$($memInfo.StandbyGB) GB" -ForegroundColor Yellow
+        }
+        
+        $currentPlan = Get-CurrentPowerPlan
+        if ($currentPlan -ne "Unknown") {
+            Write-Host "  • Power plan: $currentPlan → High Performance" -ForegroundColor Yellow
+        }
+        
+        $runningServices = Get-ServicesToDisable
+        if ($runningServices.Count -gt 0) {
+            Write-Host "  • Services to disable: $($runningServices.Count) service(s)" -ForegroundColor Yellow
+        }
+        
+        Write-Host ""
         $confirm = Read-Host "Proceed with all optimizations? (Y/N)"
         
         if ($confirm -ne 'Y' -and $confirm -ne 'y') {
@@ -727,25 +896,88 @@ function Show-InteractiveMenu {
     # Verbose is on by default (unless -Silent was passed, which is handled at script level)
     $options['Verbose'] = $script:Verbose
     
-    # Show confirmation with selected options
+    # Show confirmation with selected options and detailed information
     Write-Host "`n========================================" -ForegroundColor Cyan
     Write-Host "  Selected Optimizations" -ForegroundColor Cyan
     Write-Host "========================================`n" -ForegroundColor Cyan
     
-    $selectedItems = @()
-    foreach ($item in $menuItems) {
-        if ($options[$item.Key]) {
-            $selectedItems += "  ✓ $($item.Description)"
+    $hasAnySelection = $false
+    
+    # Show detailed info for each selected optimization
+    if ($options.Cleanup) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Clean temporary files, Windows Update cache, and DNS cache" -ForegroundColor Green
+        $estimatedSpace = Get-EstimatedCleanupSpace
+        if ($estimatedSpace -gt 0) {
+            Write-Host "    Estimated space to free: $estimatedSpace MB" -ForegroundColor Yellow
         }
+        else {
+            Write-Host "    Note: Scanning for cleanup opportunities..." -ForegroundColor Gray
+        }
+        Write-Host ""
     }
     
-    if ($selectedItems.Count -eq 0) {
-        Write-Host "  No optimizations selected.`n" -ForegroundColor Yellow
-    }
-    else {
-        foreach ($item in $selectedItems) {
-            Write-Host $item -ForegroundColor Green
+    if ($options.DiskOptimization) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize disk performance (defragmentation and TRIM)" -ForegroundColor Green
+        try {
+            $drives = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
+            $driveList = ($drives | ForEach-Object { "$($_.DriveLetter):" }) -join ", "
+            if ($driveList) {
+                Write-Host "    Drives to optimize: $driveList" -ForegroundColor Yellow
+            }
         }
+        catch {
+            Write-Host "    Note: Will optimize all fixed drives" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    if ($options.PowerOptimization) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize power settings (High Performance plan)" -ForegroundColor Green
+        $currentPlan = Get-CurrentPowerPlan
+        Write-Host "    Current plan: $currentPlan → Will change to: High Performance" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.ServiceOptimization) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Disable unnecessary Windows services" -ForegroundColor Green
+        $runningServices = Get-ServicesToDisable
+        if ($runningServices.Count -gt 0) {
+            Write-Host "    Services to disable: $($runningServices -join ', ')" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "    Note: No target services are currently running" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    if ($options.Memory) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize memory (clear standby memory)" -ForegroundColor Green
+        $memInfo = Get-MemoryInfo
+        if ($memInfo.StandbyGB -gt 0) {
+            Write-Host "    Current memory: $($memInfo.TotalGB) GB total, $($memInfo.AvailableGB) GB available" -ForegroundColor Yellow
+            Write-Host "    Estimated standby memory to clear: ~$($memInfo.StandbyGB) GB" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "    Current memory: $($memInfo.TotalGB) GB total, $($memInfo.AvailableGB) GB available" -ForegroundColor Yellow
+            Write-Host "    Note: Will clear standby memory and force garbage collection" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    if ($options.NetworkSettings) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize network settings (TCP/IP tuning)" -ForegroundColor Green
+        Write-Host "    Will disable Nagle's algorithm and optimize TCP ACK frequency" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if (-not $hasAnySelection) {
+        Write-Host "  No optimizations selected.`n" -ForegroundColor Yellow
     }
     
     Write-Host ""
