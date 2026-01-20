@@ -8,7 +8,14 @@
 #   - Optimizing power settings
 #   - Cleaning Windows Update cache
 #   - Optimizing memory
-#   - Managing startup programs
+#   - Optimizing network settings (TCP/IP tuning)
+#   - Disabling unnecessary visual effects
+#   - Optimizing processor scheduling
+#   - Optimizing Prefetch/Superfetch settings
+#   - Optimizing Windows Update delivery
+#   - Disabling background apps
+#   - Optimizing System Restore settings
+#   - Applying additional registry optimizations
 #
 ####################################################################
 
@@ -1192,9 +1199,6 @@ function Optimize-SystemRestore {
     Write-Log "Optimizing System Restore settings..."
     
     try {
-        # Get all drives with System Restore enabled
-        $restoreDrives = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
-        
         # Use vssadmin to configure restore point space
         # Set to use 5% of disk space (default is often 10-15%)
         $drives = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
@@ -1641,6 +1645,115 @@ function Show-Help {
                 "Reversible: Yes - registry values can be reset.",
                 "Safe: Yes - these are standard TCP/IP optimizations."
             )
+        },
+        @{
+            Number = "7"
+            Name = "Visual Effects Optimization"
+            Description = "Disable unnecessary visual effects and animations"
+            Details = @(
+                "Disables visual effects to improve performance:",
+                "  • Sets visual effects to 'Adjust for best performance'",
+                "  • Disables window animations",
+                "  • Disables taskbar animations",
+                "  • Disables transparent selection and shadows",
+                "",
+                "Impact: Improves system responsiveness, reduces GPU/CPU usage.",
+                "Note: Windows will look less visually appealing but more responsive.",
+                "Reversible: Yes - can be changed in System Properties.",
+                "Safe: Yes - only affects visual appearance."
+            )
+        },
+        @{
+            Number = "8"
+            Name = "Processor Scheduling Optimization"
+            Description = "Prioritize programs over background services"
+            Details = @(
+                "Configures processor scheduling:",
+                "  • Sets Windows to prioritize foreground applications",
+                "  • Improves responsiveness of active programs",
+                "",
+                "Impact: Better performance for active applications.",
+                "Note: Background services may run slightly slower.",
+                "Reversible: Yes - can be changed in System Properties.",
+                "Safe: Yes - standard performance optimization."
+            )
+        },
+        @{
+            Number = "9"
+            Name = "Prefetch/Superfetch Optimization"
+            Description = "Optimize Prefetch and Superfetch for drive type"
+            Details = @(
+                "Configures Prefetch and Superfetch based on drive type:",
+                "  • For SSDs: Disables Superfetch, optimizes Prefetcher",
+                "  • For HDDs: Enables both for better performance",
+                "",
+                "Impact: Reduces unnecessary disk activity on SSDs, improves HDD performance.",
+                "Note: Automatically detects drive type.",
+                "Reversible: Yes - registry values can be reset.",
+                "Safe: Yes - standard Windows optimization."
+            )
+        },
+        @{
+            Number = "10"
+            Name = "Windows Update Optimization"
+            Description = "Optimize Windows Update delivery settings"
+            Details = @(
+                "Configures Windows Update delivery:",
+                "  • Disables peer-to-peer update delivery",
+                "  • Downloads updates from Microsoft only",
+                "",
+                "Impact: Reduces bandwidth usage, improves privacy.",
+                "Note: Updates may download slightly slower but more secure.",
+                "Reversible: Yes - can be changed in Settings.",
+                "Safe: Yes - only affects update delivery method."
+            )
+        },
+        @{
+            Number = "11"
+            Name = "Background Apps Optimization"
+            Description = "Disable unnecessary background apps"
+            Details = @(
+                "Disables apps from running in the background:",
+                "  • Prevents apps from consuming resources when not in use",
+                "  • Reduces CPU, memory, and battery usage",
+                "",
+                "Impact: Improves system responsiveness, saves battery.",
+                "Note: Some apps may not receive notifications when disabled.",
+                "Reversible: Yes - can be changed in Settings > Privacy.",
+                "Safe: Yes - apps can be re-enabled individually."
+            )
+        },
+        @{
+            Number = "12"
+            Name = "System Restore Optimization"
+            Description = "Optimize System Restore disk space usage"
+            Details = @(
+                "Configures System Restore settings:",
+                "  • Reduces maximum disk space for restore points",
+                "  • Sets to 5% of disk space (default is often 10-15%)",
+                "",
+                "Impact: Frees disk space while maintaining protection.",
+                "Note: Fewer restore points may be stored.",
+                "Reversible: Yes - can be changed in System Properties.",
+                "Safe: Yes - only reduces space allocation."
+            )
+        },
+        @{
+            Number = "13"
+            Name = "Additional Registry Optimizations"
+            Description = "Apply additional performance registry tweaks"
+            Details = @(
+                "Applies various registry optimizations:",
+                "  • Disables Windows tips and suggestions",
+                "  • Disables last access time updates (improves file system performance)",
+                "  • Enables long file paths",
+                "  • Improves network file copy performance",
+                "",
+                "Impact: Reduces overhead, improves file system and network performance.",
+                "Note: Multiple registry changes are made.",
+                "Reversible: Yes - all changes are logged.",
+                "Safe: Yes - standard performance tweaks."
+            )
         }
     )
     
@@ -1692,7 +1805,14 @@ function Show-InteractiveMenu {
         @{ Key = "PowerOptimization"; Description = "Optimize power settings (High Performance plan)$powerPlanDisplay" },
         @{ Key = "ServiceOptimization"; Description = "Disable unnecessary Windows services" },
         @{ Key = "Memory"; Description = "Optimize memory (clear standby memory)" },
-        @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" }
+        @{ Key = "NetworkSettings"; Description = "Optimize network settings (TCP/IP tuning)" },
+        @{ Key = "VisualEffects"; Description = "Disable unnecessary visual effects and animations" },
+        @{ Key = "ProcessorScheduling"; Description = "Prioritize programs over background services" },
+        @{ Key = "PrefetchSettings"; Description = "Optimize Prefetch/Superfetch for drive type" },
+        @{ Key = "WindowsUpdateSettings"; Description = "Optimize Windows Update delivery settings" },
+        @{ Key = "BackgroundApps"; Description = "Disable unnecessary background apps" },
+        @{ Key = "SystemRestore"; Description = "Optimize System Restore disk space usage" },
+        @{ Key = "AdditionalRegistry"; Description = "Apply additional performance registry tweaks" }
     )
     
     # Display menu
@@ -1727,6 +1847,13 @@ function Show-InteractiveMenu {
         ServiceOptimization = $false
         Memory = $false
         NetworkSettings = $false
+        VisualEffects = $false
+        ProcessorScheduling = $false
+        PrefetchSettings = $false
+        WindowsUpdateSettings = $false
+        BackgroundApps = $false
+        SystemRestore = $false
+        AdditionalRegistry = $false
         Verbose = $false
     }
     
@@ -1794,7 +1921,10 @@ function Show-InteractiveMenu {
     
     # If nothing was selected, ask again
     $hasSelection = ($options.Cleanup -or $options.DiskOptimization -or $options.PowerOptimization -or 
-                     $options.ServiceOptimization -or $options.Memory -or $options.NetworkSettings)
+                     $options.ServiceOptimization -or $options.Memory -or $options.NetworkSettings -or
+                     $options.VisualEffects -or $options.ProcessorScheduling -or $options.PrefetchSettings -or
+                     $options.WindowsUpdateSettings -or $options.BackgroundApps -or $options.SystemRestore -or
+                     $options.AdditionalRegistry)
     if (-not $hasSelection) {
         Write-Host "`nNo valid selections made. Please try again.`n" -ForegroundColor Red
         return Show-InteractiveMenu
@@ -1883,6 +2013,55 @@ function Show-InteractiveMenu {
         Write-Host ""
     }
     
+    if ($options.VisualEffects) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Disable unnecessary visual effects and animations" -ForegroundColor Green
+        Write-Host "    Will set visual effects to 'Adjust for best performance'" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.ProcessorScheduling) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Prioritize programs over background services" -ForegroundColor Green
+        Write-Host "    Will optimize processor scheduling for foreground applications" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.PrefetchSettings) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize Prefetch/Superfetch for drive type" -ForegroundColor Green
+        Write-Host "    Will automatically configure based on SSD/HDD detection" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.WindowsUpdateSettings) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize Windows Update delivery settings" -ForegroundColor Green
+        Write-Host "    Will disable peer-to-peer update delivery" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.BackgroundApps) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Disable unnecessary background apps" -ForegroundColor Green
+        Write-Host "    Will disable all background app execution" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.SystemRestore) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Optimize System Restore disk space usage" -ForegroundColor Green
+        Write-Host "    Will reduce restore point space to 5% of disk" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    if ($options.AdditionalRegistry) {
+        $hasAnySelection = $true
+        Write-Host "  ✓ Apply additional performance registry tweaks" -ForegroundColor Green
+        Write-Host "    Will apply various registry optimizations for performance" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
     if (-not $hasAnySelection) {
         Write-Host "  No optimizations selected.`n" -ForegroundColor Yellow
     }
@@ -1959,6 +2138,13 @@ function Main {
         [switch]$RunServiceOptimization,
         [switch]$RunMemory,
         [switch]$RunNetworkSettings,
+        [switch]$RunVisualEffects,
+        [switch]$RunProcessorScheduling,
+        [switch]$RunPrefetchSettings,
+        [switch]$RunWindowsUpdateSettings,
+        [switch]$RunBackgroundApps,
+        [switch]$RunSystemRestore,
+        [switch]$RunAdditionalRegistry,
         [switch]$FromMenu
     )
     Initialize-Log
@@ -1978,7 +2164,14 @@ function Main {
                   $PSBoundParameters.ContainsKey('RunPowerOptimization') -or 
                   $PSBoundParameters.ContainsKey('RunServiceOptimization') -or
                   $PSBoundParameters.ContainsKey('RunMemory') -or 
-                  $PSBoundParameters.ContainsKey('RunNetworkSettings')
+                  $PSBoundParameters.ContainsKey('RunNetworkSettings') -or
+                  $PSBoundParameters.ContainsKey('RunVisualEffects') -or
+                  $PSBoundParameters.ContainsKey('RunProcessorScheduling') -or
+                  $PSBoundParameters.ContainsKey('RunPrefetchSettings') -or
+                  $PSBoundParameters.ContainsKey('RunWindowsUpdateSettings') -or
+                  $PSBoundParameters.ContainsKey('RunBackgroundApps') -or
+                  $PSBoundParameters.ContainsKey('RunSystemRestore') -or
+                  $PSBoundParameters.ContainsKey('RunAdditionalRegistry')
     
     # Determine what to run based on parameters
     # In menu mode: default to false (only run what's explicitly selected)
@@ -1990,6 +2183,13 @@ function Main {
         $shouldServiceOptimize = $PSBoundParameters.ContainsKey('RunServiceOptimization') -and $RunServiceOptimization
         $shouldOptimizeMemory = $PSBoundParameters.ContainsKey('RunMemory') -and $RunMemory
         $shouldOptimizeNetwork = $PSBoundParameters.ContainsKey('RunNetworkSettings') -and $RunNetworkSettings
+        $shouldOptimizeVisualEffects = $PSBoundParameters.ContainsKey('RunVisualEffects') -and $RunVisualEffects
+        $shouldOptimizeProcessorScheduling = $PSBoundParameters.ContainsKey('RunProcessorScheduling') -and $RunProcessorScheduling
+        $shouldOptimizePrefetch = $PSBoundParameters.ContainsKey('RunPrefetchSettings') -and $RunPrefetchSettings
+        $shouldOptimizeWindowsUpdate = $PSBoundParameters.ContainsKey('RunWindowsUpdateSettings') -and $RunWindowsUpdateSettings
+        $shouldOptimizeBackgroundApps = $PSBoundParameters.ContainsKey('RunBackgroundApps') -and $RunBackgroundApps
+        $shouldOptimizeSystemRestore = $PSBoundParameters.ContainsKey('RunSystemRestore') -and $RunSystemRestore
+        $shouldOptimizeAdditionalRegistry = $PSBoundParameters.ContainsKey('RunAdditionalRegistry') -and $RunAdditionalRegistry
     }
     else {
         # Command-line mode: use Skip* logic (default is to run everything)
@@ -1999,6 +2199,13 @@ function Main {
         $shouldServiceOptimize = if ($PSBoundParameters.ContainsKey('SkipServiceOptimization')) { -not $SkipServiceOptimization } else { $true }
         $shouldOptimizeMemory = $true  # Memory and network always run in command-line mode unless skipped
         $shouldOptimizeNetwork = $true
+        $shouldOptimizeVisualEffects = $true
+        $shouldOptimizeProcessorScheduling = $true
+        $shouldOptimizePrefetch = $true
+        $shouldOptimizeWindowsUpdate = $true
+        $shouldOptimizeBackgroundApps = $true
+        $shouldOptimizeSystemRestore = $true
+        $shouldOptimizeAdditionalRegistry = $true
     }
     
     if ($shouldCleanup) {
@@ -2025,6 +2232,34 @@ function Main {
     
     if ($shouldOptimizeNetwork) {
         Optimize-NetworkSettings
+    }
+    
+    if ($shouldOptimizeVisualEffects) {
+        Optimize-VisualEffects
+    }
+    
+    if ($shouldOptimizeProcessorScheduling) {
+        Optimize-ProcessorScheduling
+    }
+    
+    if ($shouldOptimizePrefetch) {
+        Optimize-PrefetchSettings
+    }
+    
+    if ($shouldOptimizeWindowsUpdate) {
+        Optimize-WindowsUpdateSettings
+    }
+    
+    if ($shouldOptimizeBackgroundApps) {
+        Optimize-BackgroundApps
+    }
+    
+    if ($shouldOptimizeSystemRestore) {
+        Optimize-SystemRestore
+    }
+    
+    if ($shouldOptimizeAdditionalRegistry) {
+        Optimize-AdditionalRegistrySettings
     }
     
     if ($script:WhatIf) {
@@ -2125,6 +2360,13 @@ if (-not $hasSkipParameters) {
     if ($menuOptions.ServiceOptimization) { $mainParams['RunServiceOptimization'] = $true }
     if ($menuOptions.Memory) { $mainParams['RunMemory'] = $true }
     if ($menuOptions.NetworkSettings) { $mainParams['RunNetworkSettings'] = $true }
+    if ($menuOptions.VisualEffects) { $mainParams['RunVisualEffects'] = $true }
+    if ($menuOptions.ProcessorScheduling) { $mainParams['RunProcessorScheduling'] = $true }
+    if ($menuOptions.PrefetchSettings) { $mainParams['RunPrefetchSettings'] = $true }
+    if ($menuOptions.WindowsUpdateSettings) { $mainParams['RunWindowsUpdateSettings'] = $true }
+    if ($menuOptions.BackgroundApps) { $mainParams['RunBackgroundApps'] = $true }
+    if ($menuOptions.SystemRestore) { $mainParams['RunSystemRestore'] = $true }
+    if ($menuOptions.AdditionalRegistry) { $mainParams['RunAdditionalRegistry'] = $true }
     
     Main @mainParams
 }
