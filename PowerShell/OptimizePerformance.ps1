@@ -19,13 +19,14 @@ param(
     [switch]$SkipDiskOptimization,
     [switch]$SkipPowerOptimization,
     [switch]$SkipServiceOptimization,
-    [switch]$Verbose,
+    [switch]$Silent,
     [string]$LogPath = (Join-Path (Get-Location).Path "OptimizePerformance.log")
 )
 
 $ErrorActionPreference = "Continue"
 $script:LogPath = $LogPath
-$script:Verbose = $Verbose
+# Verbose is on by default, unless -Silent is specified
+$script:Verbose = -not $Silent
 
 <#
 .SYNOPSIS
@@ -547,9 +548,8 @@ function Show-InteractiveMenu {
                 $options[$key] = $true
             }
         }
-        Write-Host "`nEnable verbose output? (Y/N): " -NoNewline -ForegroundColor Yellow
-        $verboseInput = Read-Host
-        $options['Verbose'] = ($verboseInput -eq 'Y' -or $verboseInput -eq 'y')
+        # Verbose is on by default (unless -Silent was passed, which is handled at script level)
+        $options['Verbose'] = $script:Verbose
         
         # Show confirmation
         Write-Host "`n========================================" -ForegroundColor Cyan
@@ -588,10 +588,8 @@ function Show-InteractiveMenu {
         return Show-InteractiveMenu
     }
     
-    # Ask about verbose output
-    Write-Host ""
-    $verboseInput = Read-Host "Enable verbose output during execution? (Y/N)"
-    $options['Verbose'] = ($verboseInput -eq 'Y' -or $verboseInput -eq 'y')
+    # Verbose is on by default (unless -Silent was passed, which is handled at script level)
+    $options['Verbose'] = $script:Verbose
     
     # Show confirmation with selected options
     Write-Host "`n========================================" -ForegroundColor Cyan
@@ -763,15 +761,15 @@ $hasSkipParameters = $PSBoundParameters.ContainsKey('SkipCleanup') -or
                      $PSBoundParameters.ContainsKey('SkipDiskOptimization') -or 
                      $PSBoundParameters.ContainsKey('SkipPowerOptimization') -or 
                      $PSBoundParameters.ContainsKey('SkipServiceOptimization') -or
-                     $PSBoundParameters.ContainsKey('Verbose') -or
+                     $PSBoundParameters.ContainsKey('Silent') -or
                      $PSBoundParameters.ContainsKey('LogPath')
 
 # If no parameters provided, show interactive menu
 if (-not $hasSkipParameters) {
     $menuOptions = Show-InteractiveMenu
     
-    # Set script variables based on menu selection
-    $script:Verbose = $menuOptions.Verbose
+    # Verbose is already set at script level based on -Silent parameter
+    # Menu respects the existing script:Verbose value
     
     # Run Main with selected options (only pass Run* parameters for selected items)
     $mainParams = @{ FromMenu = $true }
