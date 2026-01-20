@@ -680,7 +680,8 @@ function Main {
         [switch]$RunPowerOptimization,
         [switch]$RunServiceOptimization,
         [switch]$RunMemory,
-        [switch]$RunNetworkSettings
+        [switch]$RunNetworkSettings,
+        [switch]$FromMenu
     )
     Initialize-Log
     
@@ -692,8 +693,9 @@ function Main {
     Write-Log "Starting performance optimization..."
     Get-SystemInfo
     
-    # Determine if we're in menu mode (any Run* parameter) vs command-line mode (only Skip* parameters)
-    $isMenuMode = $PSBoundParameters.ContainsKey('RunCleanup') -or 
+    # Determine if we're in menu mode (FromMenu flag or any Run* parameter) vs command-line mode (only Skip* parameters)
+    $isMenuMode = $FromMenu -or 
+                  $PSBoundParameters.ContainsKey('RunCleanup') -or 
                   $PSBoundParameters.ContainsKey('RunDiskOptimization') -or 
                   $PSBoundParameters.ContainsKey('RunPowerOptimization') -or 
                   $PSBoundParameters.ContainsKey('RunServiceOptimization') -or
@@ -767,7 +769,7 @@ if (-not $hasSkipParameters) {
     $script:Verbose = $menuOptions.Verbose
     
     # Run Main with selected options (only pass Run* parameters for selected items)
-    $mainParams = @{}
+    $mainParams = @{ FromMenu = $true }
     if ($menuOptions.Cleanup) { $mainParams['RunCleanup'] = $true }
     if ($menuOptions.DiskOptimization) { $mainParams['RunDiskOptimization'] = $true }
     if ($menuOptions.PowerOptimization) { $mainParams['RunPowerOptimization'] = $true }
