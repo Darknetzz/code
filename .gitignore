@@ -12,3 +12,4 @@ __pycache__/
 build/
 hackcon2026/
 *.log
+PowerShell/OptimizePerformance_Changes.json
