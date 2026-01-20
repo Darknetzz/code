@@ -27,6 +27,8 @@ $ErrorActionPreference = "Continue"
 $script:LogPath = $LogPath
 # Verbose is on by default, unless -Silent is specified
 $script:Verbose = -not $Silent
+# Change log to track all modifications for potential rollback
+$script:ChangeLog = @()
 
 <#
 .SYNOPSIS
@@ -45,6 +47,91 @@ function Initialize-Log {
     }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $script:LogPath -Value "`n========== Performance Optimization Started: $timestamp =========="
+}
+
+<#
+.SYNOPSIS
+    Records a change to the change log for potential rollback.
+
+.DESCRIPTION
+    Adds a detailed change record to the change log, including what was changed,
+    the previous value, new value, and how to revert it.
+
+.PARAMETER Category
+    The category of change (e.g., "PowerSettings", "Services", "Registry", "Files").
+
+.PARAMETER Item
+    The specific item that was changed (e.g., "Power Plan", "Windows Search Service").
+
+.PARAMETER PreviousValue
+    The value before the change.
+
+.PARAMETER NewValue
+    The value after the change.
+
+.PARAMETER RevertInstructions
+    Detailed instructions on how to revert this change.
+
+.EXAMPLE
+    Add-ChangeLog -Category "PowerSettings" -Item "Power Plan" -PreviousValue "Balanced" -NewValue "High Performance" -RevertInstructions "Run: powercfg -setactive <previous-guid>"
+#>
+function Add-ChangeLog {
+    param(
+        [string]$Category,
+        [string]$Item,
+        [string]$PreviousValue,
+        [string]$NewValue,
+        [string]$RevertInstructions
+    )
+    
+    $change = @{
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Category = $Category
+        Item = $Item
+        PreviousValue = $PreviousValue
+        NewValue = $NewValue
+        RevertInstructions = $RevertInstructions
+    }
+    
+    $script:ChangeLog += $change
+    Write-Log "CHANGE: $Category - $Item : '$PreviousValue' → '$NewValue'" "INFO"
+}
+
+<#
+.SYNOPSIS
+    Saves the change log to a file for reference and potential rollback.
+
+.DESCRIPTION
+    Writes all recorded changes to a JSON file that can be used to understand
+    what was changed and how to revert it.
+
+.PARAMETER FilePath
+    Optional path to save the change log. Defaults to "OptimizePerformance_Changes.json" in the script directory.
+
+.EXAMPLE
+    Save-ChangeLog
+#>
+function Save-ChangeLog {
+    param(
+        [string]$FilePath = (Join-Path (Get-Location).Path "OptimizePerformance_Changes.json")
+    )
+    
+    if ($script:ChangeLog.Count -gt 0) {
+        try {
+            $changeLogData = @{
+                Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                TotalChanges = $script:ChangeLog.Count
+                Changes = $script:ChangeLog
+            }
+            
+            $changeLogData | ConvertTo-Json -Depth 10 | Out-File -FilePath $FilePath -Encoding UTF8
+            Write-Log "Change log saved to: $FilePath" "INFO"
+            return $FilePath
+        }
+        catch {
+            Write-Log "Error saving change log: $_" "WARNING"
+        }
+    }
 }
 
 <#
@@ -157,6 +244,14 @@ function Clear-TemporaryFiles {
     }
     
     Write-Log "Temporary files cleanup completed. Total freed: $([math]::Round($cleaned / 1MB, 2)) MB"
+    
+    if ($cleaned -gt 0) {
+        Add-ChangeLog -Category "Files" -Item "Temporary Files Cleanup" `
+            -PreviousValue "Various temporary files and caches" `
+            -NewValue "Cleaned ($([math]::Round($cleaned / 1MB, 2)) MB freed)" `
+            -RevertInstructions "Note: Temporary files cannot be restored. They will be recreated automatically as needed by applications."
+    }
+    
     return $cleaned
 }
 
@@ -175,15 +270,29 @@ function Clear-TemporaryFiles {
 function Clear-WindowsUpdateCache {
     Write-Log "Clearing Windows Update cache..."
     try {
+        $updateCache = "$env:WINDIR\SoftwareDistribution"
+        $cacheSize = 0
+        
+        if (Test-Path $updateCache) {
+            $cacheSize = (Get-ChildItem -Path $updateCache -Recurse -ErrorAction SilentlyContinue | 
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        }
+        
         Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
         Stop-Service -Name cryptSvc -Force -ErrorAction SilentlyContinue
         Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
         Stop-Service -Name msiserver -Force -ErrorAction SilentlyContinue
         
-        $updateCache = "$env:WINDIR\SoftwareDistribution"
         if (Test-Path $updateCache) {
             Remove-Item -Path "$updateCache\*" -Recurse -Force -ErrorAction SilentlyContinue
             Write-Log "Windows Update cache cleared"
+            
+            if ($cacheSize -gt 0) {
+                Add-ChangeLog -Category "Files" -Item "Windows Update Cache" `
+                    -PreviousValue "Update cache files ($([math]::Round($cacheSize / 1MB, 2)) MB)" `
+                    -NewValue "Cleared" `
+                    -RevertInstructions "Note: Windows Update cache cannot be restored. Windows will re-download updates as needed. This may cause longer update times on next check."
+            }
         }
         
         Start-Service -Name wuauserv -ErrorAction SilentlyContinue
@@ -274,20 +383,36 @@ function Optimize-PowerSettings {
     Write-Log "Optimizing power settings for performance..."
     
     try {
+        # Get current power plan before changing
+        $currentPlan = Get-CurrentPowerPlan
+        $powerCfgList = powercfg -list
+        $currentGuid = ($powerCfgList | Select-String "^\s+\*" | ForEach-Object { ($_ -split '\s+')[3] }).Trim()
+        
         # Set power plan to High Performance
         $highPerf = powercfg -list | Select-String "High performance" | ForEach-Object { ($_ -split '\s+')[3] }
         
         if ($highPerf) {
-            powercfg -setactive $highPerf
+            $highPerfGuid = $highPerf.Trim()
+            powercfg -setactive $highPerfGuid
             Write-Log "Power plan set to High Performance"
+            
+            Add-ChangeLog -Category "PowerSettings" -Item "Active Power Plan" `
+                -PreviousValue "$currentPlan (GUID: $currentGuid)" `
+                -NewValue "High Performance (GUID: $highPerfGuid)" `
+                -RevertInstructions "To revert: Run 'powercfg -setactive $currentGuid' or change in Windows Settings > System > Power & battery > Power mode"
         }
         else {
             # Create high performance plan if it doesn't exist
             $guid = powercfg -duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
             if ($guid) {
-                $guid = ($guid -split '\s+')[-1]
-                powercfg -setactive $guid
+                $newGuid = ($guid -split '\s+')[-1].Trim()
+                powercfg -setactive $newGuid
                 Write-Log "High Performance power plan created and activated"
+                
+                Add-ChangeLog -Category "PowerSettings" -Item "Active Power Plan" `
+                    -PreviousValue "$currentPlan (GUID: $currentGuid)" `
+                    -NewValue "High Performance (GUID: $newGuid) [Created]" `
+                    -RevertInstructions "To revert: Run 'powercfg -setactive $currentGuid' or change in Windows Settings > System > Power & battery > Power mode"
             }
         }
         
@@ -295,9 +420,29 @@ function Optimize-PowerSettings {
         powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
         powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
         
+        Add-ChangeLog -Category "PowerSettings" -Item "USB Selective Suspend (AC Power)" `
+            -PreviousValue "Enabled (varies)" `
+            -NewValue "Disabled" `
+            -RevertInstructions "To revert: Run 'powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 1' or change in Power Options > Advanced settings > USB settings"
+        
+        Add-ChangeLog -Category "PowerSettings" -Item "USB Selective Suspend (Battery)" `
+            -PreviousValue "Enabled (varies)" `
+            -NewValue "Disabled" `
+            -RevertInstructions "To revert: Run 'powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 1' or change in Power Options > Advanced settings > USB settings"
+        
         # Disable hard disk sleep
         powercfg -setacvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
         powercfg -setdcvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e 0
+        
+        Add-ChangeLog -Category "PowerSettings" -Item "Hard Disk Sleep (AC Power)" `
+            -PreviousValue "Enabled (varies by timeout)" `
+            -NewValue "Never (0 minutes)" `
+            -RevertInstructions "To revert: Run 'powercfg -setacvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e <previous-value>' or change in Power Options > Advanced settings > Hard disk"
+        
+        Add-ChangeLog -Category "PowerSettings" -Item "Hard Disk Sleep (Battery)" `
+            -PreviousValue "Enabled (varies by timeout)" `
+            -NewValue "Never (0 minutes)" `
+            -RevertInstructions "To revert: Run 'powercfg -setdcvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 6738e2c4-e8a5-4a42-b16a-e040e769756e <previous-value>' or change in Power Options > Advanced settings > Hard disk"
         
         powercfg -setactive SCHEME_CURRENT
         Write-Log "Power settings optimized"
@@ -336,10 +481,29 @@ function Optimize-WindowsServices {
     foreach ($serviceName in $servicesToDisable) {
         try {
             $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-            if ($service -and $service.Status -eq "Running") {
-                Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
-                Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-                Write-Log "Disabled service: $serviceName"
+            if ($service) {
+                $previousStartupType = $service.StartType
+                $previousStatus = $service.Status
+                
+                if ($service.Status -eq "Running") {
+                    Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
+                    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+                    Write-Log "Disabled service: $serviceName"
+                    
+                    Add-ChangeLog -Category "Services" -Item "Service: $serviceName" `
+                        -PreviousValue "Startup: $previousStartupType, Status: $previousStatus" `
+                        -NewValue "Startup: Disabled, Status: Stopped" `
+                        -RevertInstructions "To revert: Run 'Set-Service -Name $serviceName -StartupType $previousStartupType' and 'Start-Service -Name $serviceName' in PowerShell as Administrator, or use Services.msc"
+                }
+                elseif ($previousStartupType -ne "Disabled") {
+                    Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-Log "Set service startup type to Disabled: $serviceName"
+                    
+                    Add-ChangeLog -Category "Services" -Item "Service: $serviceName" `
+                        -PreviousValue "Startup: $previousStartupType, Status: $previousStatus" `
+                        -NewValue "Startup: Disabled, Status: $previousStatus" `
+                        -RevertInstructions "To revert: Run 'Set-Service -Name $serviceName -StartupType $previousStartupType' in PowerShell as Administrator, or use Services.msc"
+                }
             }
         }
         catch {
@@ -406,10 +570,28 @@ function Optimize-NetworkSettings {
     Write-Log "Optimizing network settings..."
     
     try {
-        # Disable Nagle's algorithm for better network performance
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+        
+        # Get current values before changing
+        $currentTcpAckFrequency = (Get-ItemProperty -Path $regPath -Name "TcpAckFrequency" -ErrorAction SilentlyContinue).TcpAckFrequency
+        $currentTcpNoDelay = (Get-ItemProperty -Path $regPath -Name "TCPNoDelay" -ErrorAction SilentlyContinue).TCPNoDelay
+        
+        if (-not $currentTcpAckFrequency) { $currentTcpAckFrequency = "Not set (default: 2)" }
+        if (-not $currentTcpNoDelay) { $currentTcpNoDelay = "Not set (default: 0)" }
+        
+        # Disable Nagle's algorithm for better network performance
         Set-ItemProperty -Path $regPath -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $regPath -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
+        
+        Add-ChangeLog -Category "Registry" -Item "TCP/IP: TcpAckFrequency" `
+            -PreviousValue "$currentTcpAckFrequency" `
+            -NewValue "1 (Immediate ACK)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"TcpAckFrequency`" -Value $currentTcpAckFrequency' in PowerShell as Administrator, or delete the registry value to restore default"
+        
+        Add-ChangeLog -Category "Registry" -Item "TCP/IP: TCPNoDelay" `
+            -PreviousValue "$currentTcpNoDelay" `
+            -NewValue "1 (Nagle's algorithm disabled)" `
+            -RevertInstructions "To revert: Run 'Set-ItemProperty -Path `"$regPath`" -Name `"TCPNoDelay`" -Value $currentTcpNoDelay' in PowerShell as Administrator, or delete the registry value to restore default"
         
         Write-Log "Network settings optimized"
     }
@@ -1121,7 +1303,31 @@ function Main {
     }
     
     Write-Log "Performance optimization completed successfully!"
-    Write-Host "`nOptimization complete! Check log file: $script:LogPath" -ForegroundColor Green
+    
+    # Save change log and display summary
+    if ($script:ChangeLog.Count -gt 0) {
+        $changeLogPath = Save-ChangeLog
+        Write-Log "Total changes recorded: $($script:ChangeLog.Count)"
+        
+        Write-Host "`n========================================" -ForegroundColor Cyan
+        Write-Host "  Optimization Summary" -ForegroundColor Cyan
+        Write-Host "========================================`n" -ForegroundColor Cyan
+        Write-Host "Total changes made: $($script:ChangeLog.Count)" -ForegroundColor Yellow
+        
+        # Group changes by category
+        $changesByCategory = $script:ChangeLog | Group-Object -Property Category
+        foreach ($category in $changesByCategory) {
+            Write-Host "`n  $($category.Name): $($category.Count) change(s)" -ForegroundColor White
+            foreach ($change in $category.Group) {
+                Write-Host "    • $($change.Item): $($change.PreviousValue) → $($change.NewValue)" -ForegroundColor Gray
+            }
+        }
+        
+        Write-Host "`nDetailed change log saved to: $changeLogPath" -ForegroundColor Green
+        Write-Host "This file contains instructions for reverting each change if needed.`n" -ForegroundColor Yellow
+    }
+    
+    Write-Host "Optimization complete! Check log file: $script:LogPath" -ForegroundColor Green
 }
 
 # Check if any skip parameters were explicitly provided via command line
