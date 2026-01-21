@@ -121,6 +121,7 @@ keris> exit
 
 - [Language Specification](SPECIFICATION.md) - Complete language reference
 - [Tutorial](docs/tutorial.md) - Learn Keris step by step
+- [Keris vs Python Comparison](docs/COMPARISON.md) - Detailed comparison with Python
 - [Examples](examples/) - Example programs
 
 ## Standard Library
