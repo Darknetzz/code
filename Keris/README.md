@@ -128,58 +128,58 @@ keris> exit
 ### I/O
 
 ```keris
-print("Hello")           // Print to stdout
-let input = read_line()  // Read from stdin
-let num = read_number()  // Read a number
+print("Hello")           # Print to stdout
+let input = read_line()  # Read from stdin
+let num = read_number()  # Read a number
 ```
 
 ### Math
 
 ```keris
-math.sqrt(16)        // 4.0
-math.pow(2, 3)       // 8.0
-math.max(1, 2, 3)    // 3
-math.pi              // 3.14159...
+math.sqrt(16)        # 4.0
+math.pow(2, 3)       # 8.0
+math.max(1, 2, 3)    # 3
+math.pi              # 3.14159...
 ```
 
 ### String
 
 ```keris
-str.len("hello")                    // 5
-str.upper("hello")                  // "HELLO"
-str.split("a,b,c", ",")             // ["a", "b", "c"]
-str.join(["a", "b", "c"], ",")      // "a,b,c"
+str.len("hello")                    # 5
+str.upper("hello")                  # "HELLO"
+str.split("a,b,c", ",")             # ["a", "b", "c"]
+str.join(["a", "b", "c"], ",")      # "a,b,c"
 ```
 
 ### List
 
 ```keris
 let lst = [1, 2, 3]
-list.append(lst, 4)      // [1, 2, 3, 4]
-list.pop(lst)            // 4
-list.len(lst)            // 3
-list.contains(lst, 2)    // true
+list.append(lst, 4)      # [1, 2, 3, 4]
+list.pop(lst)            # 4
+list.len(lst)            # 3
+list.contains(lst, 2)    # true
 ```
 
 ### Dict
 
 ```keris
 let d = {"a": 1, "b": 2}
-dict.keys(d)             // ["a", "b"]
-dict.values(d)           // [1, 2]
-dict.len(d)              // 2
-dict.contains(d, "a")    // true
+dict.keys(d)             # ["a", "b"]
+dict.values(d)           # [1, 2]
+dict.len(d)              # 2
+dict.contains(d, "a")    # true
 ```
 
 ### Type
 
 ```keris
-type.of(42)        // "number"
-type.of("hello")   // "string"
-type.of(true)      // "boolean"
-type.of(nil)       // "nil"
-type.of([1, 2])    // "list"
-type.of({"a": 1})  // "dict"
+type.of(42)        # "number"
+type.of("hello")   # "string"
+type.of(true)      # "boolean"
+type.of(nil)       # "nil"
+type.of([1, 2])    # "list"
+type.of({"a": 1})  # "dict"
 ```
 
 ## Examples

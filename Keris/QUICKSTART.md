@@ -66,7 +66,7 @@ def add(a, b) {
     return a + b
 }
 
-print(add(5, 3))  // 8
+print(add(5, 3))  # 8
 ```
 
 ### Control Flow
@@ -96,7 +96,7 @@ for num in numbers {
 }
 
 list.append(numbers, 6)
-print(list.len(numbers))  // 6
+print(list.len(numbers))  # 6
 ```
 
 ### Dictionaries
@@ -107,7 +107,7 @@ let person = {
     "age": 30
 }
 
-print(person["name"])  // "Alice"
+print(person["name"])  # "Alice"
 person["city"] = "New York"
 ```
 

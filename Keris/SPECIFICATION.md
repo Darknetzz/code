@@ -17,7 +17,8 @@ Keris is a general-purpose, dynamically-typed, interpreted programming language 
 ### Comments
 
 ```keris
-// Single-line comment
+# Single-line comment (preferred)
+// Single-line comment (also supported)
 
 /*
   Multi-line comment

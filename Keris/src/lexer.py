@@ -62,7 +62,7 @@ class Lexer:
                 self.add_token(TokenType.STAR)
         elif char == '/':
             if self.match('/'):
-                # Single-line comment
+                # Single-line comment (//)
                 while self.peek() != '\n' and not self.is_at_end():
                     self.advance()
             elif self.match('*'):
@@ -70,6 +70,10 @@ class Lexer:
                 self.scan_multiline_comment()
             else:
                 self.add_token(TokenType.SLASH)
+        elif char == '#':
+            # Single-line comment (#)
+            while self.peek() != '\n' and not self.is_at_end():
+                self.advance()
         elif char == '%':
             self.add_token(TokenType.PERCENT)
         elif char == '!':
