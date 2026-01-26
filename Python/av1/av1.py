@@ -934,10 +934,12 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         # AMD (AMF)
         # -usage 0: Generic Transcoding
         # -quality 70: Balanced quality preset (0=high_quality, 30=quality, 70=balanced, 100=speed)
-        # -profile 1: Main profile
-        # -rc 2: Peak Constrained Variable Bitrate (for VBR with maxrate)
-        command.extend(["-usage", "0", "-quality", "70", "-profile", "1", "-rc", "2"])
-        command.extend(bitrate_args)
+        # -profile:v 1: Main profile (must use :v suffix to disambiguate from audio profile)
+        # -rc 1: Latency Constrained Variable Bitrate (doesn't require maxrate)
+        # Note: AMD AV1 AMF may not support -maxrate/-bufsize, so we only use -b:v
+        command.extend(["-usage", "0", "-quality", "70", "-profile:v", "1", "-rc", "1"])
+        # AMD AV1 AMF only supports -b:v, not -maxrate/-bufsize
+        command.extend(["-b:v", str(target_bitrate_int)])
         
     else:
         # CPU (SVT-AV1)
@@ -946,9 +948,13 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         # Use only target bitrate for CPU encoder (SVT-AV1 handles rate control internally)
         command.extend(["-b:v", str(target_bitrate_int)])
 
-    # Audio: Copy or convert to Opus
-    # Preserve multi-channel audio if present, otherwise use stereo
-    command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
+    # Audio: Convert to Opus
+    # libopus doesn't support 5.1(side) layout, so we need to remap channels
+    # Use channelmap to convert 5.1(side) -> 5.1 (maps side channels SL/SR to back channels BL/BR)
+    # This works for 5.1(side) inputs. For other layouts, FFmpeg will handle conversion
+    # If the input is not 6-channel, the filter may be ignored or cause an error, but libopus
+    # should handle other channel counts (stereo, mono) natively
+    command.extend(["-af", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR", "-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
 
     if not _SUPPRESS_OUTPUT:
         cprint(f"🎬 Converting: {filename}", "info")
@@ -1538,8 +1544,24 @@ def convert_videos(
     Supports recursive subdirectory traversal when recursive=True.
     """
     if os.path.isfile(input_path):
-        # Single file - no batch summary needed
-        convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv)
+        # Single file - set up progress context for progress bar
+        global _PROGRESS_CONTEXT
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[cyan]{task.fields[fps]}"),
+            TextColumn("[yellow]{task.fields[eta]}"),
+            TextColumn("[blue]Size: {task.fields[size]}"),
+            TextColumn("[green]Saved: {task.fields[saved]}"),
+            transient=False,
+        ) as progress:
+            _PROGRESS_CONTEXT = progress
+            try:
+                convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv, show_progress=True)
+            finally:
+                _PROGRESS_CONTEXT = None
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
