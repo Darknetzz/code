@@ -1,12 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules
 
+# Collect all rich._unicode_data submodules to fix PyInstaller packaging issues
+rich_unicode_submodules = collect_submodules('rich._unicode_data')
 
 a = Analysis(
     ['av1.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=rich_unicode_submodules,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
