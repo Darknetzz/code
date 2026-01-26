@@ -932,9 +932,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         
     elif hw_type == "amd":
         # AMD (AMF)
-        # -usage transcoding: Optimization for transcoding workloads
-        # -quality balanced: AMF defaults
-        command.extend(["-usage", "transcoding", "-quality", "balanced", "-profile:v", "main"])
+        # -usage 0: Generic Transcoding
+        # -quality 70: Balanced quality preset (0=high_quality, 30=quality, 70=balanced, 100=speed)
+        # -profile 1: Main profile
+        # -rc 2: Peak Constrained Variable Bitrate (for VBR with maxrate)
+        command.extend(["-usage", "0", "-quality", "70", "-profile", "1", "-rc", "2"])
         command.extend(bitrate_args)
         
     else:
