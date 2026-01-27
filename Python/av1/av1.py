@@ -470,6 +470,26 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
     
     return None
 
+
+def get_audio_channels(file_path: str) -> Optional[int]:
+    """Returns the number of channels in the first audio stream, or None if unavailable."""
+    try:
+        cmd = [
+            FFPROBE_CMD, "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=channels",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            file_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
+        val = result.stdout.strip()
+        if val.isdigit():
+            return int(val)
+    except Exception:
+        pass
+    return None
+
+
 # ============================================================================ #
 #                       FUNCTION: check_encoder_support                        #
 # ============================================================================ #
@@ -895,6 +915,12 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     if ACTIVE_ENCODER["hw_type"] == "vaapi":
         # VAAPI: scale -> format -> hwupload (upload to hardware)
         filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+    elif ACTIVE_ENCODER["hw_type"] == "amd":
+        # AMF AV1 requires 64x16 resolution alignment; scale to aligned dimensions to avoid -22
+        filter_chain = (
+            f"scale='trunc(min({MAX_VIDEO_WIDTH},iw)/64)*64':'trunc(trunc(min({MAX_VIDEO_WIDTH},iw)/64)*64*ih/iw/16)*16',"
+            f"format={pix_fmt}"
+        )
     else:
         # Other encoders: just scale and format
         filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
@@ -911,8 +937,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     command.extend(["-c:v", encoder_name])
 
-    # Universal Metadata
-    command.extend(["-metadata", "major_brand=mp42", "-metadata", "compatible_brands=mp42av01iso2mp41"])
+    # Container-specific metadata (MP4/MOV only; MKV muxer can reject these and cause -22)
+    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
+        command.extend(["-metadata", "major_brand=mp42", "-metadata", "compatible_brands=mp42av01iso2mp41"])
     if codec == "hevc":
         command.extend(["-tag:v", "hvc1"])
 
@@ -933,10 +960,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         command.extend(bitrate_args)
         
     elif hw_type == "amd":
-        # AMD (AMF) – use string values per AMF Encoder docs (av1_amf rejects numeric -profile/-rc)
-        # -usage transcoding, -quality balanced, -profile:v main, -rc vbr_latency
+        # AMD (AMF) – numeric values (usage=0 transcoding, quality=70 balanced, profile=1 main, rc=1 vbr_latency)
+        # -align 3 (none): accept any resolution; default can fail with -22 on some drivers
         # Note: AMD AV1 AMF only reliably supports -b:v; -maxrate/-bufsize are not used
-        command.extend(["-usage", "transcoding", "-quality", "balanced", "-profile:v", "main", "-rc", "vbr_latency"])
+        command.extend(["-usage", "0", "-quality", "70", "-profile:v", "1", "-rc", "1", "-align", "3"])
         command.extend(["-b:v", str(target_bitrate_int)])
         
     else:
@@ -947,12 +974,12 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         command.extend(["-b:v", str(target_bitrate_int)])
 
     # Audio: Convert to Opus
-    # libopus doesn't support 5.1(side) layout, so we need to remap channels
-    # Use channelmap to convert 5.1(side) -> 5.1 (maps side channels SL/SR to back channels BL/BR)
-    # This works for 5.1(side) inputs. For other layouts, FFmpeg will handle conversion
-    # If the input is not 6-channel, the filter may be ignored or cause an error, but libopus
-    # should handle other channel counts (stereo, mono) natively
-    command.extend(["-af", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR", "-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
+    # Only use 5.1(side)->5.1 channelmap when source has exactly 6 channels; otherwise FFmpeg returns -22
+    audio_channels = get_audio_channels(input_path)
+    if audio_channels == 6:
+        command.extend(["-af", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR", "-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
+    else:
+        command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
 
     if not _SUPPRESS_OUTPUT:
         cprint(f"🎬 Converting: {filename}", "info")
