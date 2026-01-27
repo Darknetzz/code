@@ -900,7 +900,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
     
     command.extend(["-vf", filter_chain])
-    command.extend(["-movflags", "+faststart"])
+    # movflags +faststart only applies to MP4/MOV; with MKV it causes "Invalid argument" (-22)
+    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
+        command.extend(["-movflags", "+faststart"])
 
     # --- ENCODER SPECIFIC SETTINGS ---
     encoder_name = ACTIVE_ENCODER["encoder"]
@@ -931,14 +933,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         command.extend(bitrate_args)
         
     elif hw_type == "amd":
-        # AMD (AMF)
-        # -usage 0: Generic Transcoding
-        # -quality 70: Balanced quality preset (0=high_quality, 30=quality, 70=balanced, 100=speed)
-        # -profile:v 1: Main profile (must use :v suffix to disambiguate from audio profile)
-        # -rc 1: Latency Constrained Variable Bitrate (doesn't require maxrate)
-        # Note: AMD AV1 AMF may not support -maxrate/-bufsize, so we only use -b:v
-        command.extend(["-usage", "0", "-quality", "70", "-profile:v", "1", "-rc", "1"])
-        # AMD AV1 AMF only supports -b:v, not -maxrate/-bufsize
+        # AMD (AMF) – use string values per AMF Encoder docs (av1_amf rejects numeric -profile/-rc)
+        # -usage transcoding, -quality balanced, -profile:v main, -rc vbr_latency
+        # Note: AMD AV1 AMF only reliably supports -b:v; -maxrate/-bufsize are not used
+        command.extend(["-usage", "transcoding", "-quality", "balanced", "-profile:v", "main", "-rc", "vbr_latency"])
         command.extend(["-b:v", str(target_bitrate_int)])
         
     else:
