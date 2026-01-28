@@ -12,23 +12,20 @@ import (
 	"hash"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-const usage = `hashsum — file checksum (hash) utility
-
-Usage:
-  hashsum [options] [file...]
-
-Options:
-`
+var progName string
 
 func main() {
+	progName = filepath.Base(os.Args[0])
+
 	algo := flag.String("a", "sha256", "Hash algorithm: md5, sha1, sha256, sha512")
 	quiet := flag.Bool("q", false, "Quiet: print only the hash")
 	check := flag.String("c", "", "Verify hashes from FILE (one line per \"hash  path\")")
 	flag.Usage = func() {
-		fmt.Fprint(flag.CommandLine.Output(), usage)
+		fmt.Fprintf(flag.CommandLine.Output(), "%s — file checksum (hash) utility\n\nUsage:\n  %s [options] [file...]\n\nOptions:\n", progName, progName)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -46,7 +43,7 @@ func main() {
 	ok := true
 	for _, path := range args {
 		if err := hashFile(path, *algo, *quiet); err != nil {
-			fmt.Fprintf(os.Stderr, "hashsum: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
 			ok = false
 		}
 	}
@@ -78,7 +75,7 @@ func hashFile(path, algo string, quiet bool) error {
 func hashStdin(algo string, quiet bool) {
 	sum, err := hashReader(os.Stdin, algo)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hashsum: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
 		os.Exit(1)
 	}
 	if quiet {
@@ -117,7 +114,7 @@ func newHasher(algo string) (hash.Hash, error) {
 func runCheck(checkPath, algo string, quiet bool) int {
 	f, err := os.Open(checkPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hashsum: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
 		return 1
 	}
 	defer f.Close()
@@ -136,14 +133,14 @@ func runCheck(checkPath, algo string, quiet bool) int {
 		want, path := parts[0], parts[1]
 		file, err := os.Open(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "hashsum: %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "%s: %s: %v\n", progName, path, err)
 			failed++
 			continue
 		}
 		got, err := hashReader(file, algo)
 		file.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "hashsum: %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "%s: %s: %v\n", progName, path, err)
 			failed++
 			continue
 		}
@@ -157,7 +154,7 @@ func runCheck(checkPath, algo string, quiet bool) int {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "hashsum: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
 		return 1
 	}
 	if failed > 0 {
