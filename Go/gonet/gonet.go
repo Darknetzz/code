@@ -864,7 +864,7 @@ func runIP(args []string) int {
 			fmt.Fprintf(os.Stderr, "%s ip: public: %v\n", progName, err)
 			anyErr = true
 		} else {
-			fmt.Println(pub)
+			fmt.Printf("Public:   %s\n", pub)
 		}
 	}
 	if showInternal {
@@ -874,7 +874,7 @@ func runIP(args []string) int {
 			anyErr = true
 		} else {
 			for _, ip := range ips {
-				fmt.Println(ip)
+				fmt.Printf("Internal: %s\n", ip)
 			}
 		}
 	}
