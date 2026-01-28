@@ -14,6 +14,7 @@
 //	gonet cert <host:port>
 //	gonet urlencode [-d] [string]
 //	gonet jwt-decode <token>
+//	gonet ip [options]
 package main
 
 import (
@@ -34,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +81,8 @@ func main() {
 		exitCode = runURLEncode(args)
 	case "jwt-decode", "jwt":
 		exitCode = runJWTDecode(args)
+	case "ip", "myip":
+		exitCode = runIP(args)
 	case "help", "-h", "--help":
 		if len(args) > 0 {
 			printCommandHelp(args[0])
@@ -110,6 +114,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  cert         Show TLS cert info for host:port\n")
 	fmt.Fprintf(os.Stderr, "  urlencode    Encode or decode URL query segment\n")
 	fmt.Fprintf(os.Stderr, "  jwt-decode   Decode JWT payload (no verify)\n")
+	fmt.Fprintf(os.Stderr, "  ip           Show public and/or local IP addresses\n")
 	fmt.Fprintf(os.Stderr, "\n  %s help <command>\n", progName)
 }
 
@@ -139,6 +144,8 @@ func printCommandHelp(cmd string) {
 		printURLEncodeUsage()
 	case "jwt-decode", "jwt":
 		printJWTDecodeUsage()
+	case "ip", "myip":
+		printIPUsage()
 	default:
 		fmt.Fprintf(os.Stderr, "%s: unknown command %q\n", progName, cmd)
 	}
@@ -826,4 +833,119 @@ func runJWTDecode(args []string) int {
 	}
 	fmt.Println(out.String())
 	return 0
+}
+
+// ---- IP (public / local) ----
+var ipifyURLs = []string{"https://api.ipify.org", "https://icanhazip.com"}
+
+func printIPUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s ip [options]\n\n", progName)
+	fmt.Fprintf(os.Stderr, "  Show public (external) and/or local (internal) IP addresses.\n\n")
+	fmt.Fprintf(os.Stderr, "Options:\n")
+	fmt.Fprintf(os.Stderr, "  -public    Only show public IP\n")
+	fmt.Fprintf(os.Stderr, "  -internal  Only show local interface IPs\n")
+}
+
+func runIP(args []string) int {
+	fs := flag.NewFlagSet("ip", flag.ExitOnError)
+	publicOnly := fs.Bool("public", false, "Only public IP")
+	internalOnly := fs.Bool("internal", false, "Only local IPs")
+	fs.Usage = func() { printIPUsage() }
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	showPublic := *publicOnly || (!*publicOnly && !*internalOnly)
+	showInternal := *internalOnly || (!*publicOnly && !*internalOnly)
+
+	anyErr := false
+	if showPublic {
+		pub, err := getPublicIP()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s ip: public: %v\n", progName, err)
+			anyErr = true
+		} else {
+			fmt.Println(pub)
+		}
+	}
+	if showInternal {
+		ips := getLocalIPs()
+		if len(ips) == 0 {
+			fmt.Fprintf(os.Stderr, "%s ip: no local IPs found\n", progName)
+			anyErr = true
+		} else {
+			for _, ip := range ips {
+				fmt.Println(ip)
+			}
+		}
+	}
+	if anyErr {
+		return 1
+	}
+	return 0
+}
+
+func getPublicIP() (string, error) {
+	client := newHTTPClient(true, 10*time.Second)
+	for _, u := range ipifyURLs {
+		resp, err := client.Get(u)
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			continue
+		}
+		b, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		ip := strings.TrimSpace(string(b))
+		if net.ParseIP(ip) != nil {
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("could not get public IP from any service")
+}
+
+func getLocalIPs() []string {
+	seen := make(map[string]struct{})
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			ipNet, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipNet.IP
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+			s := ip.String()
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
 }

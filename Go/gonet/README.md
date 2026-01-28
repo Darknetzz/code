@@ -1,6 +1,6 @@
 # gonet
 
-Network CLI tools — DNS, whois, port check, ping, HTTP headers/download, static server, cert info, URL encode, JWT decode.
+Network CLI tools — DNS, whois, port check, ping, HTTP headers/download, static server, cert info, URL encode, JWT decode, public/local IP.
 
 ## Usage
 
@@ -30,6 +30,7 @@ go build -o gonet .
 | `cert`         | TLS cert info for host:port (subject, issuer, expiry, SANs) |
 | `urlencode`    | Encode or `-d` decode URL query segment (stdin or args) |
 | `jwt-decode`   | Decode JWT payload (no verification) |
+| `ip`, `myip`   | Show public and/or local IPs; `-public` or `-internal` for one only |
 
 ## Examples
 
@@ -47,4 +48,7 @@ gonet serve -port 9000 .
 gonet cert github.com:443
 echo "hello world" | gonet urlencode
 gonet jwt-decode "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+gonet ip
+gonet ip -public
+gonet ip -internal
 ```
