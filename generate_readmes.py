@@ -186,7 +186,7 @@ def build_subdir_readme(
                     desc += f" See {sub_link} for details."
             elif sub_readme.is_file() and desc != "—":
                 desc += f" See {sub_link} for details."
-            lines.append(f"| **{sub.name}** | {desc} |")
+            lines.append(f"| [{sub.name}]({sub.name}/) | {desc} |")
         lines.append("")
 
     # Optional footer for Go
