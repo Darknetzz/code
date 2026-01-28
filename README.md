@@ -1,13 +1,12 @@
 # code
-Different scripts in different languages for different purposes.
 
-I will create a readme for every folder, maybe.
+Different scripts in different languages for different purposes.
 
 ## Index
 
-| Directory   |
-|-------------|
-| [Go](Go/)   |
+| Directory |
+|-----------|
+| [Go](Go/) |
 | [Lua](Lua/) |
 | [PHP](PHP/) |
 | [PowerShell](PowerShell/) |
