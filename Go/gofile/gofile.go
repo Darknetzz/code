@@ -11,6 +11,8 @@
 //	gofile head [options] [path]...
 //	gofile tail [options] [path]...
 //	gofile realpath <path>
+//	gofile symlink <target> <linkpath>
+//	gofile readlink <path>...
 //	gofile copy [options] <src> <dst>
 //	gofile move <src> <dst>
 //	gofile remove [options] <path>...
@@ -66,6 +68,10 @@ func main() {
 		exitCode = runTail(args)
 	case "realpath", "real":
 		exitCode = runRealpath(args)
+	case "symlink", "link":
+		exitCode = runSymlink(args)
+	case "readlink":
+		exitCode = runReadlink(args)
 	case "copy", "cp":
 		exitCode = runCopy(args)
 	case "move", "mv":
@@ -104,6 +110,9 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  head         First N lines or bytes\n")
 	fmt.Fprintf(os.Stderr, "  tail         Last N lines or bytes\n")
 	fmt.Fprintf(os.Stderr, "  realpath     Resolve to absolute path\n")
+	fmt.Fprintf(os.Stderr, "\nSymlinks:\n")
+	fmt.Fprintf(os.Stderr, "  symlink      Create symbolic link (target -> linkpath)\n")
+	fmt.Fprintf(os.Stderr, "  readlink     Print symlink target(s)\n")
 	fmt.Fprintf(os.Stderr, "\nManage:\n")
 	fmt.Fprintf(os.Stderr, "  copy         Copy file(s) to destination\n")
 	fmt.Fprintf(os.Stderr, "  move         Move file(s)\n")
@@ -133,6 +142,10 @@ func printCommandHelp(cmd string) {
 		printTailUsage()
 	case "realpath", "real":
 		printRealpathUsage()
+	case "symlink", "link":
+		printSymlinkUsage()
+	case "readlink":
+		printReadlinkUsage()
 	case "copy", "cp":
 		printCopyUsage()
 	case "move", "mv":
@@ -224,7 +237,7 @@ func printFileInfo(path string, long bool) error {
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return err
 	}
@@ -235,14 +248,22 @@ func printFileInfo(path string, long bool) error {
 	} else if mode&os.ModeSymlink != 0 {
 		kind = "symlink"
 	}
+	target, _ := os.Readlink(path)
 	if long {
 		fmt.Printf("path:   %s\n", path)
+		if kind == "symlink" && target != "" {
+			fmt.Printf("target: %s\n", target)
+		}
 		fmt.Printf("size:   %d (%s)\n", info.Size(), formatSize(info.Size()))
 		fmt.Printf("mode:   %s\n", mode.String())
 		fmt.Printf("mtime:  %s\n", info.ModTime().Format(time.RFC3339))
 		fmt.Printf("type:   %s\n", kind)
 	} else {
-		fmt.Printf("%s  %s  %s  %s\n", path, formatSize(info.Size()), mode.String(), info.ModTime().Format("2006-01-02 15:04:05"))
+		if kind == "symlink" && target != "" {
+			fmt.Printf("%s  %s  %s  %s -> %s\n", path, formatSize(info.Size()), mode.String(), info.ModTime().Format("2006-01-02 15:04:05"), target)
+		} else {
+			fmt.Printf("%s  %s  %s  %s\n", path, formatSize(info.Size()), mode.String(), info.ModTime().Format("2006-01-02 15:04:05"))
+		}
 	}
 	return nil
 }
@@ -708,6 +729,79 @@ func runRealpath(args []string) int {
 		abs = resolved
 	}
 	fmt.Println(abs)
+	return 0
+}
+
+// ---- symlink ----
+
+func printSymlinkUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s symlink <target> <linkpath>\n", progName)
+	fmt.Fprintf(os.Stderr, "  Create symbolic link linkpath -> target.\n")
+	fmt.Fprintf(os.Stderr, "  On Windows may require elevated privileges or Developer Mode.\n")
+}
+
+func runSymlink(args []string) int {
+	if len(args) != 2 {
+		printSymlinkUsage()
+		return 1
+	}
+	target, linkpath := args[0], args[1]
+	if err := os.Symlink(target, linkpath); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
+		return 1
+	}
+	return 0
+}
+
+// ---- readlink ----
+
+func printReadlinkUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s readlink [-f] <path>...\n", progName)
+	fmt.Fprintf(os.Stderr, "  Print symlink target (non-symlinks skipped).\n")
+	fmt.Fprintf(os.Stderr, "  -f  Resolve to final realpath and print (one path only)\n")
+}
+
+func runReadlink(args []string) int {
+	fs := flag.NewFlagSet("readlink", flag.ExitOnError)
+	follow := fs.Bool("f", false, "Resolve to final realpath")
+	fs.Usage = func() { printReadlinkUsage() }
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	paths := fs.Args()
+	if len(paths) == 0 {
+		printReadlinkUsage()
+		return 1
+	}
+	if *follow {
+		if len(paths) != 1 {
+			fmt.Fprintf(os.Stderr, "%s: -f requires exactly one path\n", progName)
+			return 1
+		}
+		resolved, err := filepath.EvalSymlinks(paths[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
+			return 1
+		}
+		abs, _ := filepath.Abs(resolved)
+		fmt.Println(abs)
+		return 0
+	}
+	ok := true
+	for _, p := range paths {
+		target, err := os.Readlink(p)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", progName, err)
+				ok = false
+			}
+			continue
+		}
+		fmt.Println(target)
+	}
+	if !ok {
+		return 1
+	}
 	return 0
 }
 

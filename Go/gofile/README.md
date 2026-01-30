@@ -1,6 +1,6 @@
 # gofile
 
-CLI to inspect and manage files — stat, hash, MIME type, size, list, cat, head/tail, realpath, copy, move, remove, mkdir, touch.
+CLI to inspect and manage files — stat, hash, MIME type, size, list, cat, head/tail, realpath, symlink/readlink, copy, move, remove, mkdir, touch.
 
 ## Usage
 
@@ -30,6 +30,13 @@ go build -o gofile .
 | `tail`    | Last N lines (default 10) or `-c N` bytes |
 | `realpath`| Resolve to absolute path (follows symlinks) |
 
+### Symlinks
+
+| Command   | Description |
+|-----------|-------------|
+| `symlink` | Create symbolic link: `symlink <target> <linkpath>` |
+| `readlink`| Print symlink target(s); `-f` resolve to final realpath (one path) |
+
 ### Manage
 
 | Command   | Description |
@@ -40,7 +47,7 @@ go build -o gofile .
 | `mkdir`   | Create directory; `-p` parents |
 | `touch`   | Create empty file or update mtime |
 
-Aliases: `stat`→info, `ls`→list, `cp`→copy, `mv`→move, `rm`→remove, `real`→realpath, `mime`→type.
+Aliases: `stat`→info, `ls`→list, `link`→symlink, `cp`→copy, `mv`→move, `rm`→remove, `real`→realpath, `mime`→type.
 
 ## Examples
 
@@ -54,6 +61,9 @@ gofile cat config.json
 gofile head -n 20 log.txt
 gofile tail -c 1024 data.bin
 gofile realpath ../other
+gofile symlink /path/to/target mylink
+gofile readlink mylink
+gofile readlink -f mylink
 gofile copy -r src/ backup/
 gofile move old.txt new.txt
 gofile remove -rf tmp/
