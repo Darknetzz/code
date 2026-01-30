@@ -90,7 +90,9 @@ function Grant-SeServiceLogonRight {
     $tempCfg = [System.IO.Path]::GetTempPath() + [Guid]::NewGuid().ToString() + '.inf'
     try {
         & secedit /export /cfg $tempCfg /areas USER_RIGHTS | Out-Null
-        $content = Get-Content $tempCfg -Raw
+        if ($LASTEXITCODE -ne 0) { throw "secedit export failed (exit code $LASTEXITCODE)." }
+        # secedit exports .inf as Unicode (UTF-16)
+        $content = Get-Content -Path $tempCfg -Raw -Encoding Unicode
         if ($content -match "(\[Privilege Rights\][\s\S]*?)($rightName\s*=\s*)([^\r\n]*)") {
             $rightLine = $Matches[2] + $Matches[3]
             if ($rightLine -match [regex]::Escape("*$sidValue")) {
@@ -99,9 +101,10 @@ function Grant-SeServiceLogonRight {
             }
             $newRightLine = $rightLine.TrimEnd() + ",*$sidValue"
             $content = $content -replace [regex]::Escape($rightLine), $newRightLine
-            Set-Content -Path $tempCfg -Value $content -NoNewline
+            Set-Content -Path $tempCfg -Value $content -NoNewline -Encoding Unicode
             $sysDb = Join-Path $env:windir 'security\database\secedit.sdb'
             & secedit /configure /db $sysDb /cfg $tempCfg /areas USER_RIGHTS | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "secedit configure failed (exit code $LASTEXITCODE)." }
             Write-Host "Granted '$rightName' to '$AccountName'."
         } else {
             throw "Could not find $rightName in exported security policy."
@@ -111,9 +114,11 @@ function Grant-SeServiceLogonRight {
     }
 }
 
-# Normalize .\UserName to local machine name for consistency
+# Normalize to COMPUTERNAME\user for consistency (local account resolution)
 if ($UserName -match '^\.\\(.+)$') {
     $UserName = "$env:COMPUTERNAME\$($Matches[1])"
+} elseif ($UserName -notmatch '\\') {
+    $UserName = "$env:COMPUTERNAME\$UserName"
 }
 
 if ($All) {
