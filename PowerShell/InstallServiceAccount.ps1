@@ -14,8 +14,8 @@
     Requires elevation (Run as Administrator).
 
 .PARAMETER UserName
-    Name of the local user account to configure (e.g., DOMAIN\UserName or .\UserName for local).
-    For local users, .\UserName or just UserName can be used.
+    Account to configure. Format: DOMAIN\Username. If omitted, you are prompted.
+    If you omit DOMAIN (e.g. .\Username or just Username), the local computer name is used.
 
 .PARAMETER SetAsAdmin
     Add user to local Administrators. $true = do it, $false = skip. If not specified, prompts.
@@ -30,8 +30,11 @@
     Apply all three configurations without prompting (equivalent to -SetAsAdmin -AllowRDP -AllowLogonAsService).
 
 .EXAMPLE
+    .\InstallServiceAccount.ps1
+    Prompts for account (DOMAIN\Username) and for each step.
+.EXAMPLE
     .\InstallServiceAccount.ps1 -UserName ".\MyServiceAccount"
-    Prompts for each step.
+    Prompts for each step only.
 .EXAMPLE
     .\InstallServiceAccount.ps1 -UserName ".\svc" -All
     Applies admin, RDP, and logon-as-service without prompts.
@@ -45,7 +48,7 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$UserName,
 
     [Parameter()]
@@ -112,6 +115,14 @@ function Grant-SeServiceLogonRight {
     } finally {
         if (Test-Path $tempCfg) { Remove-Item $tempCfg -Force }
     }
+}
+
+# Prompt for UserName if not provided
+if (-not $UserName) {
+    Write-Host "Format: DOMAIN\Username. If DOMAIN is not provided (e.g. .\MyUser or just MyUser), defaults to $env:COMPUTERNAME\<username you enter>."
+    $UserName = Read-Host "Enter account (DOMAIN\Username)"
+    $UserName = $UserName.Trim()
+    if (-not $UserName) { throw "UserName is required." }
 }
 
 # Normalize to COMPUTERNAME\user for consistency (local account resolution)
