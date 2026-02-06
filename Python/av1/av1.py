@@ -745,7 +745,10 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
         # Suppress interactive prompt when _NO_PROMPT is enabled
         if _NO_PROMPT:
             return False
-        resp = safe_input(f"Delete original file?\n{original_path}\n[y/N/a]: ").strip().lower()
+        # Print question and path explicitly so [y/N/a] is always visible (Rich may not
+        # display multi-line prompts correctly on all terminals)
+        console.print(f"Delete original file?\n{original_path}")
+        resp = safe_input("[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
