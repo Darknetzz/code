@@ -265,6 +265,14 @@ def run(
     """
     Crawl a URL and download matching files (e.g. PDFs).
     Use --follow to crawl subpages that match a regex before collecting file links.
+
+    Examples:
+
+      pycrawl run https://example.com/docs -o ./downloads
+
+      pycrawl run https://example.com/index -f "example.com/section/" -e pdf
+
+      pycrawl run https://example.com/files --extensions "pdf,zip" --overwrite
     """
     ext_tuple = tuple("." + x.strip().lstrip(".") for x in extensions.split(",") if x.strip())
     if not ext_tuple:
@@ -340,7 +348,15 @@ def list_urls(
         help="Comma-separated extensions to list.",
     ),
 ):
-    """List all file URLs that would be downloaded (dry run)."""
+    """
+    List all file URLs that would be downloaded (dry run).
+
+    Examples:
+
+      pycrawl list-urls https://example.com/docs
+
+      pycrawl list-urls https://example.com/index -f "example.com/section/" -e pdf
+    """
     ext_tuple = tuple("." + x.strip().lstrip(".") for x in extensions.split(",") if x.strip()) or DEFAULT_EXTENSIONS
     follow_pattern = follow or None
     session = _make_session()
