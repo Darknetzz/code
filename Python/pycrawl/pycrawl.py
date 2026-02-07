@@ -106,6 +106,12 @@ def filename_from_url(url: str) -> str:
     return path.split("/")[-1] or "index"
 
 
+def subdir_from_page_url(page_url: str) -> str:
+    """Default subdir name from a page URL: last path segment (for grouping by section)."""
+    path = urlparse(page_url).path.rstrip("/")
+    return path.split("/")[-1] or "index"
+
+
 def download_file(
     session: requests.Session,
     url: str,
@@ -261,10 +267,18 @@ def run(
         "--overwrite",
         help="Re-download and overwrite existing files.",
     ),
+    no_subdirs: bool = typer.Option(
+        False,
+        "--no-subdirs",
+        "--flat",
+        help="Put all files in the output directory; do not create subdirs per page.",
+    ),
 ):
     """
     Crawl a URL and download matching files (e.g. PDFs).
     Use --follow to crawl subpages that match a regex before collecting file links.
+    When --follow is set, files are grouped into subdirs by page by default; use
+    --no-subdirs to save everything in the output directory.
 
     Examples:
 
@@ -273,34 +287,69 @@ def run(
       pycrawl run https://example.com/index -f "example.com/section/" -e pdf
 
       pycrawl run https://example.com/files --extensions "pdf,zip" --overwrite
+
+      pycrawl run https://example.com/index -f "section/" --no-subdirs -o ./flat
     """
     ext_tuple = tuple("." + x.strip().lstrip(".") for x in extensions.split(",") if x.strip())
     if not ext_tuple:
         ext_tuple = DEFAULT_EXTENSIONS
 
     follow_pattern: str | re.Pattern | None = re.compile(follow) if follow else None
+    use_subdirs = follow_pattern and not no_subdirs
+    subdir_from_url_cb: Callable[[str], str] | None = subdir_from_page_url if use_subdirs else None
 
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    )
+    # Rich can fail in PyInstaller/frozen builds (missing rich._unicode_data.unicode17-0-0)
+    use_rich = True
+    try:
+        _progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        )
+        with _progress:
+            _tid = _progress.add_task("Test", total=1)
+            _progress.update(_tid, description="Test", completed=1, total=1)
+    except Exception:
+        use_rich = False
 
     downloaded_list: list[str] = []
     failed_list: list[str] = []
 
-    with progress:
-        task_id = progress.add_task("Crawling and downloading…", total=None)
+    if use_rich:
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        )
+        with progress:
+            task_id = progress.add_task("Crawling and downloading…", total=None)
 
-        def on_progress(asset_url: str, cur: int, tot: int) -> None:
-            progress.update(
-                task_id,
-                description=f"[{cur}/{tot}] {filename_from_url(asset_url)}",
-                total=tot,
-                completed=cur,
+            def on_progress(asset_url: str, cur: int, tot: int) -> None:
+                progress.update(
+                    task_id,
+                    description=f"[{cur}/{tot}] {filename_from_url(asset_url)}",
+                    total=tot,
+                    completed=cur,
+                )
+
+            followed_pages, downloaded_list, failed_list = crawl_and_download(
+                url,
+                out,
+                session=_make_session(),
+                follow_pattern=follow_pattern,
+                extensions=ext_tuple,
+                delay_sec=delay,
+                overwrite=overwrite,
+                subdir_from_url=subdir_from_url_cb,
+                on_progress=on_progress,
             )
+    else:
+        def on_progress(asset_url: str, cur: int, tot: int) -> None:
+            print(f"  [{cur}/{tot}] {filename_from_url(asset_url)}", flush=True)
 
         followed_pages, downloaded_list, failed_list = crawl_and_download(
             url,
@@ -310,23 +359,38 @@ def run(
             extensions=ext_tuple,
             delay_sec=delay,
             overwrite=overwrite,
+            subdir_from_url=subdir_from_url_cb,
             on_progress=on_progress,
         )
 
     # Summary
-    table = Table(title="Summary")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Count", justify="right", style="green")
-    table.add_row("Pages crawled", str(len(followed_pages)))
-    table.add_row("Files downloaded", str(len(downloaded_list)))
-    table.add_row("Failed", str(len(failed_list)))
-    console.print(Panel(table, title="Crawl complete", border_style="green"))
-    if failed_list:
-        console.print("[red]Failed URLs (first 10):[/]")
-        for u in failed_list[:10]:
-            console.print(f"  {u}")
-        if len(failed_list) > 10:
-            console.print(f"  ... and {len(failed_list) - 10} more.")
+    if use_rich:
+        try:
+            table = Table(title="Summary")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Count", justify="right", style="green")
+            table.add_row("Pages crawled", str(len(followed_pages)))
+            table.add_row("Files downloaded", str(len(downloaded_list)))
+            table.add_row("Failed", str(len(failed_list)))
+            console.print(Panel(table, title="Crawl complete", border_style="green"))
+            if failed_list:
+                console.print("[red]Failed URLs (first 10):[/]")
+                for u in failed_list[:10]:
+                    console.print(f"  {u}")
+                if len(failed_list) > 10:
+                    console.print(f"  ... and {len(failed_list) - 10} more.")
+        except Exception:
+            use_rich = False
+    if not use_rich:
+        print(f"Pages crawled: {len(followed_pages)}")
+        print(f"Files downloaded: {len(downloaded_list)}")
+        print(f"Failed: {len(failed_list)}")
+        if failed_list:
+            print("Failed URLs (first 10):")
+            for u in failed_list[:10]:
+                print(f"  {u}")
+            if len(failed_list) > 10:
+                print(f"  ... and {len(failed_list) - 10} more.")
 
 
 @app.command("list-urls")
