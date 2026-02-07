@@ -30,6 +30,8 @@ DEFAULT_USER_AGENT = (
 )
 DEFAULT_DELAY_SEC = 0.5
 DEFAULT_EXTENSIONS = (".pdf",)
+CDX_API = "https://web.archive.org/cdx/search/cdx"
+WAYBACK_BASE = "https://web.archive.org/web"
 
 # ---------------------------------------------------------------------------
 # Reusable crawler core
@@ -168,6 +170,51 @@ def download_file(
         return False
 
 
+# ---------------------------------------------------------------------------
+# Wayback Machine (web.archive.org) helpers
+# ---------------------------------------------------------------------------
+
+
+def get_wayback_first_timestamp(
+    session: requests.Session,
+    url: str,
+    from_date: str,
+    *,
+    delay_sec: float = 0.3,
+) -> str | None:
+    """
+    Query CDX API for the first (oldest) capture of url on or after from_date.
+    from_date: YYYYMMDD. Returns timestamp (14 chars) or None.
+    """
+    try:
+        params = {
+            "url": url,
+            "from": from_date,
+            "output": "json",
+            "limit": "1",
+            "reverse": "1",  # ascending time -> first capture
+        }
+        r = session.get(CDX_API, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        if not data or len(data) < 2:
+            return None
+        # Row 0 = header, row 1 = first record. Columns: urlkey, timestamp, original, ...
+        row = data[1]
+        if len(row) < 2:
+            return None
+        return row[1]
+    except (requests.RequestException, ValueError, IndexError):
+        return None
+    finally:
+        time.sleep(delay_sec)
+
+
+def wayback_download_url(original_url: str, timestamp: str) -> str:
+    """Build Wayback URL for raw document (identity, not wrapper)."""
+    return f"{WAYBACK_BASE}/{timestamp}id_/{original_url}"
+
+
 def _normalize_subdir(subdir: str) -> str:
     return subdir.strip("/").replace("/", os.sep)
 
@@ -255,6 +302,100 @@ def crawl_and_download(
     return (followed, downloaded, failed)
 
 
+def crawl_and_download_wayback(
+    start_url: str,
+    wayback_out_dir: Path,
+    from_date: str,
+    *,
+    session: requests.Session | None = None,
+    follow_pattern: str | re.Pattern | None = None,
+    extensions: tuple[str, ...] = DEFAULT_EXTENSIONS,
+    only_download_pattern: str | re.Pattern | None = None,
+    delay_sec: float = DEFAULT_DELAY_SEC,
+    cdx_delay_sec: float = 0.3,
+    overwrite: bool = False,
+    subdir_from_url: Callable[[str], str] | None = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Discover file URLs from the live start_url (same as crawl_and_download), then
+    download the first Wayback Machine capture on or after from_date (YYYYMMDD)
+    for each file into wayback_out_dir. Use this to compare with current scrapes.
+    Returns (followed_pages, downloaded_urls, failed_urls).
+    """
+    session = session or _make_session()
+    followed: list[str] = []
+    downloaded: list[str] = []
+    failed: list[str] = []
+
+    pages_to_process: list[str] = [start_url]
+    if follow_pattern:
+        html = fetch_html(session, start_url)
+        if html:
+            to_follow, _ = extract_links(
+                html,
+                start_url,
+                follow_pattern=follow_pattern,
+                extension_filter=(),
+            )
+            pages_to_process.extend(to_follow)
+        time.sleep(delay_sec)
+
+    to_download: list[tuple[str, str]] = []
+    for page_url in pages_to_process:
+        if page_url != start_url:
+            time.sleep(delay_sec)
+        html = fetch_html(session, page_url)
+        if not html:
+            continue
+        _, page_assets = extract_links(
+            html,
+            page_url,
+            follow_pattern=follow_pattern,
+            extension_filter=extensions,
+            only_download_pattern=only_download_pattern,
+        )
+        for asset_url in page_assets:
+            to_download.append((page_url, asset_url))
+        followed.append(page_url)
+
+    seen = set()
+    unique_downloads: list[tuple[str, str]] = []
+    for page_url, asset_url in to_download:
+        if asset_url not in seen:
+            seen.add(asset_url)
+            unique_downloads.append((page_url, asset_url))
+
+    total = len(unique_downloads)
+    for idx, (page_url, asset_url) in enumerate(unique_downloads, 1):
+        if on_progress:
+            on_progress(asset_url, idx, total)
+        timestamp = get_wayback_first_timestamp(
+            session, asset_url, from_date, delay_sec=cdx_delay_sec
+        )
+        if not timestamp:
+            failed.append(asset_url)
+            time.sleep(delay_sec)
+            continue
+        wayback_url = wayback_download_url(asset_url, timestamp)
+        subdir = (subdir_from_url(page_url) or "").strip() if subdir_from_url else ""
+        name = filename_from_url(asset_url)
+        ext = Path(name).suffix.lower() or None
+        if subdir:
+            dest = wayback_out_dir / _normalize_subdir(subdir) / name
+        else:
+            dest = wayback_out_dir / name
+        if download_file(
+            session, wayback_url, dest, overwrite=overwrite, expected_extension=ext
+        ):
+            downloaded.append(asset_url)
+        else:
+            failed.append(asset_url)
+        time.sleep(delay_sec)
+
+    return (followed, downloaded, failed)
+
+
 # ---------------------------------------------------------------------------
 # CLI (Typer + Rich)
 # ---------------------------------------------------------------------------
@@ -315,6 +456,17 @@ def run(
         "-c",
         help="Cookie header (e.g. from browser after passing age gate). Enables PDF downloads on gated sites.",
     ),
+    wayback_from: str | None = typer.Option(
+        None,
+        "--wayback-from",
+        help="Scrape from Wayback Machine: first capture on or after this date (YYYYMMDD). Saves to --wayback-out for comparison with current files.",
+    ),
+    wayback_out: Path | None = typer.Option(
+        None,
+        "--wayback-out",
+        path_type=Path,
+        help="Output directory for Wayback scrapes (used with --wayback-from). Default: <out>_wayback.",
+    ),
 ):
     """
     Crawl a URL and download matching files (e.g. PDFs).
@@ -323,6 +475,8 @@ def run(
     --no-subdirs to save everything in the output directory.
     For .pdf and .zip, responses are checked for correct magic bytes; wrong type
     (e.g. HTML gate) is counted as failed. Use --cookie if the site requires verification.
+    Use --wayback-from YYYYMMDD to download the first archived version from web.archive.org
+    into a separate directory (--wayback-out) so you can compare with current scrapes.
 
     Examples:
 
@@ -333,7 +487,13 @@ def run(
       pycrawl run https://example.com/files --extensions "pdf,zip" --overwrite
 
       pycrawl run https://example.com/index -f "section/" --no-subdirs -o ./flat
+
+      pycrawl run https://example.com/docs -o ./current --wayback-from 20250101 --wayback-out ./archive
     """
+    if wayback_from and not re.match(r"^\d{8}$", wayback_from):
+        console.print("[red]--wayback-from must be YYYYMMDD (e.g. 20250101)[/red]")
+        raise typer.Exit(1)
+
     ext_tuple = tuple("." + x.strip().lstrip(".") for x in extensions.split(",") if x.strip())
     if not ext_tuple:
         ext_tuple = DEFAULT_EXTENSIONS
@@ -345,6 +505,11 @@ def run(
     session = _make_session()
     if cookie:
         session.headers["Cookie"] = cookie.strip()
+
+    use_wayback = wayback_from is not None
+    if use_wayback:
+        wayback_out_dir = (wayback_out or (out.parent / (out.name + "_wayback"))).resolve()
+        wayback_out_dir.mkdir(parents=True, exist_ok=True)
 
     time_started = datetime.now()
 
@@ -376,7 +541,10 @@ def run(
             console=console,
         )
         with progress:
-            task_id = progress.add_task("Crawling and downloading...", total=None)
+            task_id = progress.add_task(
+                "Wayback crawl..." if use_wayback else "Crawling and downloading...",
+                total=None,
+            )
 
             def on_progress(asset_url: str, cur: int, tot: int) -> None:
                 progress.update(
@@ -386,6 +554,49 @@ def run(
                     completed=cur,
                 )
 
+            if use_wayback:
+                followed_pages, downloaded_list, failed_list = crawl_and_download_wayback(
+                    url,
+                    wayback_out_dir,
+                    wayback_from,
+                    session=session,
+                    follow_pattern=follow_pattern,
+                    extensions=ext_tuple,
+                    delay_sec=delay,
+                    overwrite=overwrite,
+                    subdir_from_url=subdir_from_url_cb,
+                    on_progress=on_progress,
+                )
+            else:
+                followed_pages, downloaded_list, failed_list = crawl_and_download(
+                    url,
+                    out,
+                    session=session,
+                    follow_pattern=follow_pattern,
+                    extensions=ext_tuple,
+                    delay_sec=delay,
+                    overwrite=overwrite,
+                    subdir_from_url=subdir_from_url_cb,
+                    on_progress=on_progress,
+                )
+    else:
+        def on_progress(asset_url: str, cur: int, tot: int) -> None:
+            print(f"  [{cur}/{tot}] {filename_from_url(asset_url)}", flush=True)
+
+        if use_wayback:
+            followed_pages, downloaded_list, failed_list = crawl_and_download_wayback(
+                url,
+                wayback_out_dir,
+                wayback_from,
+                session=session,
+                follow_pattern=follow_pattern,
+                extensions=ext_tuple,
+                delay_sec=delay,
+                overwrite=overwrite,
+                subdir_from_url=subdir_from_url_cb,
+                on_progress=on_progress,
+            )
+        else:
             followed_pages, downloaded_list, failed_list = crawl_and_download(
                 url,
                 out,
@@ -397,21 +608,6 @@ def run(
                 subdir_from_url=subdir_from_url_cb,
                 on_progress=on_progress,
             )
-    else:
-        def on_progress(asset_url: str, cur: int, tot: int) -> None:
-            print(f"  [{cur}/{tot}] {filename_from_url(asset_url)}", flush=True)
-
-        followed_pages, downloaded_list, failed_list = crawl_and_download(
-            url,
-            out,
-            session=session,
-            follow_pattern=follow_pattern,
-            extensions=ext_tuple,
-            delay_sec=delay,
-            overwrite=overwrite,
-            subdir_from_url=subdir_from_url_cb,
-            on_progress=on_progress,
-        )
 
     time_completed = datetime.now()
     elapsed = time_completed - time_started
@@ -429,7 +625,15 @@ def run(
             table.add_row("Time started", time_started.strftime("%Y-%m-%d %H:%M:%S"))
             table.add_row("Time completed", time_completed.strftime("%Y-%m-%d %H:%M:%S"))
             table.add_row("Time elapsed", elapsed_str)
-            console.print(Panel(table, title="Crawl complete", border_style="green"))
+            if use_wayback:
+                table.add_row("Saved to", str(wayback_out_dir))
+            console.print(
+                Panel(
+                    table,
+                    title="Wayback crawl complete" if use_wayback else "Crawl complete",
+                    border_style="green",
+                )
+            )
             if failed_list:
                 console.print("[red]Failed URLs (first 10):[/]")
                 for u in failed_list[:10]:
@@ -445,6 +649,8 @@ def run(
         print(f"Time started: {time_started.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"Time completed: {time_completed.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"Time elapsed: {elapsed_str}")
+        if use_wayback:
+            print(f"Saved to: {wayback_out_dir}")
         if failed_list:
             print("Failed URLs (first 10):")
             for u in failed_list[:10]:
