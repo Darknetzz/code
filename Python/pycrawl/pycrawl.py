@@ -112,21 +112,53 @@ def subdir_from_page_url(page_url: str) -> str:
     return path.split("/")[-1] or "index"
 
 
+# Magic bytes for response validation (only when extension is known)
+_PDF_MAGIC = b"%PDF-"
+_ZIP_MAGIC = b"PK"
+
+
+def _response_matches_extension(ext: str, content_type: str | None, first_bytes: bytes) -> bool:
+    """True if the response looks like the given file extension."""
+    ext = ext.lower()
+    if ext == ".pdf":
+        if first_bytes.startswith(_PDF_MAGIC):
+            return True
+        if content_type:
+            ct = content_type.split(";")[0].strip().lower()
+            if ct in ("application/pdf", "application/octet-stream"):
+                return True
+        return False
+    if ext == ".zip":
+        return first_bytes.startswith(_ZIP_MAGIC)
+    # Unknown extension: no validation
+    return True
+
+
 def download_file(
     session: requests.Session,
     url: str,
     dest_path: Path,
     *,
     overwrite: bool = False,
+    expected_extension: str | None = None,
 ) -> bool:
-    """Stream download url to dest_path. Returns True on success."""
+    """Stream download url to dest_path. Returns True on success.
+    When expected_extension is .pdf or .zip, refuses to save if the response
+    does not match that type (e.g. HTML gate). Other extensions are not validated."""
     if dest_path.exists() and not overwrite:
         return True
     try:
         r = session.get(url, stream=True)
         r.raise_for_status()
+        content_type = r.headers.get("Content-Type")
+        first_chunk = next(r.iter_content(chunk_size=8192), None) or b""
+        if expected_extension and not _response_matches_extension(
+            expected_extension, content_type, first_chunk
+        ):
+            return False
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         with open(dest_path, "wb") as f:
+            f.write(first_chunk)
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
@@ -206,11 +238,14 @@ def crawl_and_download(
             on_progress(asset_url, idx, total)
         subdir = (subdir_from_url(page_url) or "").strip() if subdir_from_url else ""
         name = filename_from_url(asset_url)
+        ext = Path(name).suffix.lower() or None
         if subdir:
             dest = out_dir / _normalize_subdir(subdir) / name
         else:
             dest = out_dir / name
-        if download_file(session, asset_url, dest, overwrite=overwrite):
+        if download_file(
+            session, asset_url, dest, overwrite=overwrite, expected_extension=ext
+        ):
             downloaded.append(asset_url)
         else:
             failed.append(asset_url)
@@ -273,12 +308,20 @@ def run(
         "--flat",
         help="Put all files in the output directory; do not create subdirs per page.",
     ),
+    cookie: str | None = typer.Option(
+        None,
+        "--cookie",
+        "-c",
+        help="Cookie header (e.g. from browser after passing age gate). Enables PDF downloads on gated sites.",
+    ),
 ):
     """
     Crawl a URL and download matching files (e.g. PDFs).
     Use --follow to crawl subpages that match a regex before collecting file links.
     When --follow is set, files are grouped into subdirs by page by default; use
     --no-subdirs to save everything in the output directory.
+    For .pdf and .zip, responses are checked for correct magic bytes; wrong type
+    (e.g. HTML gate) is counted as failed. Use --cookie if the site requires verification.
 
     Examples:
 
@@ -297,6 +340,10 @@ def run(
     follow_pattern: str | re.Pattern | None = re.compile(follow) if follow else None
     use_subdirs = follow_pattern and not no_subdirs
     subdir_from_url_cb: Callable[[str], str] | None = subdir_from_page_url if use_subdirs else None
+
+    session = _make_session()
+    if cookie:
+        session.headers["Cookie"] = cookie.strip()
 
     # Rich can fail in PyInstaller/frozen builds (missing rich._unicode_data.unicode17-0-0)
     use_rich = True
@@ -339,7 +386,7 @@ def run(
             followed_pages, downloaded_list, failed_list = crawl_and_download(
                 url,
                 out,
-                session=_make_session(),
+                session=session,
                 follow_pattern=follow_pattern,
                 extensions=ext_tuple,
                 delay_sec=delay,
@@ -354,7 +401,7 @@ def run(
         followed_pages, downloaded_list, failed_list = crawl_and_download(
             url,
             out,
-            session=_make_session(),
+            session=session,
             follow_pattern=follow_pattern,
             extensions=ext_tuple,
             delay_sec=delay,
