@@ -5,6 +5,7 @@ Uses Typer + Rich. Supports custom start URL, link patterns, and file types.
 
 from __future__ import annotations
 
+import csv
 import os
 import re
 import time
@@ -339,6 +340,7 @@ def crawl_and_download_wayback(
     followed: list[str] = []
     downloaded: list[str] = []
     failed: list[str] = []
+    capture_metadata: list[tuple[str, str, str]] = []  # (relative_path, url, timestamp)
 
     pages_to_process: list[str] = [start_url]
     if follow_pattern:
@@ -402,9 +404,31 @@ def crawl_and_download_wayback(
         ):
             downloaded.append(asset_url)
             _set_file_mtime_from_wayback_timestamp(dest, timestamp)
+            try:
+                rel = dest.relative_to(wayback_out_dir)
+            except ValueError:
+                rel = Path(dest.name)
+            capture_metadata.append((str(rel).replace(os.sep, "/"), asset_url, timestamp))
         else:
             failed.append(asset_url)
         time.sleep(delay_sec)
+
+    # Write manifest of capture dates
+    if capture_metadata:
+        manifest_path = wayback_out_dir / "wayback_capture_dates.csv"
+        try:
+            with open(manifest_path, "w", encoding="utf-8", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["file", "url", "capture_timestamp", "capture_date"])
+                for rel_path, url, ts in capture_metadata:
+                    try:
+                        dt = datetime.strptime(ts[:14], "%Y%m%d%H%M%S")
+                        date_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        date_str = ts
+                    w.writerow([rel_path, url, ts, date_str])
+        except OSError:
+            pass
 
     return (followed, downloaded, failed)
 
