@@ -260,7 +260,7 @@ def pdf_cmd(
         Path,
         typer.Option(".", "--out", "-o", path_type=Path, help="Output directory."),
     ] = Path("."),
-    pdf_format: Annotated[
+    fmt: Annotated[
         str,
         typer.Option("png", "--format", "-f", help="Output format: png, jpg, jpeg, webp, bmp, tiff."),
     ] = "png",
@@ -328,7 +328,7 @@ def pdf_cmd(
                 ok, fail = _convert_pdf_to_images(
                     pdf_path,
                     out_dir,
-                    pdf_format,
+                    fmt,
                     dpi=dpi,
                     jpeg_quality=quality,
                     first_page=first,
@@ -345,7 +345,7 @@ def pdf_cmd(
             ok, fail = _convert_pdf_to_images(
                 pdf_path,
                 out_dir,
-                pdf_format,
+                fmt,
                 dpi=dpi,
                 jpeg_quality=quality,
                 first_page=first,
