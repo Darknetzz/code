@@ -259,7 +259,7 @@ def pdf_cmd(
         Path,
         typer.Option(".", "--out", "-o", path_type=Path, help="Output directory."),
     ] = Path("."),
-    format: Annotated[
+    fmt: Annotated[
         str,
         typer.Option("png", "--format", "-f", help="Output format: png, jpg, jpeg, webp, bmp, tiff."),
     ] = "png",
@@ -326,7 +326,7 @@ def pdf_cmd(
                 ok, fail = _convert_pdf_to_images(
                     pdf_path,
                     out_dir,
-                    format,
+                    fmt,
                     dpi=dpi,
                     jpeg_quality=quality,
                     first_page=first,
@@ -343,7 +343,7 @@ def pdf_cmd(
             ok, fail = _convert_pdf_to_images(
                 pdf_path,
                 out_dir,
-                format,
+                fmt,
                 dpi=dpi,
                 jpeg_quality=quality,
                 first_page=first,
@@ -377,7 +377,7 @@ def img_cmd(
         Path,
         typer.Option(".", "--out", "-o", path_type=Path, help="Output directory."),
     ] = Path("."),
-    format: Annotated[
+    fmt: Annotated[
         str,
         typer.Option("png", "--format", "-f", help="Output format: png, jpg, webp, bmp, tiff."),
     ] = "png",
@@ -446,9 +446,9 @@ def img_cmd(
         raise typer.Exit(0)
 
     out_dir = out.resolve()
-    fmt = format.lower().lstrip(".")
-    if fmt == "jpg":
-        fmt = "jpeg"
+    fmt_ext = fmt.lower().lstrip(".")
+    if fmt_ext == "jpg":
+        fmt_ext = "jpeg"
 
     ok_count, fail_count = 0, 0
 
@@ -458,7 +458,7 @@ def img_cmd(
             task = progress.add_task("Converting images...", total=len(img_files))
             for img_path in img_files:
                 progress.update(task, description=img_path.name)
-                out_name = f"{img_path.stem}.{fmt}"
+                out_name = f"{img_path.stem}.{fmt_ext}"
                 out_path = out_dir / out_name
                 if _convert_image(
                     img_path,
@@ -475,7 +475,7 @@ def img_cmd(
                 progress.advance(task)
     else:
         for img_path in img_files:
-            out_name = f"{img_path.stem}.{fmt}"
+            out_name = f"{img_path.stem}.{fmt_ext}"
             out_path = out_dir / out_name
             if _convert_image(
                 img_path,
