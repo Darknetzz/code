@@ -215,6 +215,18 @@ def wayback_download_url(original_url: str, timestamp: str) -> str:
     return f"{WAYBACK_BASE}/{timestamp}id_/{original_url}"
 
 
+def _set_file_mtime_from_wayback_timestamp(path: Path, timestamp: str) -> None:
+    """Set file modification (and access) time from Wayback timestamp (YYYYMMDDhhmmss)."""
+    if len(timestamp) < 14:
+        return
+    try:
+        dt = datetime.strptime(timestamp[:14], "%Y%m%d%H%M%S")
+        mtime = dt.timestamp()
+        os.utime(path, (mtime, mtime))
+    except (ValueError, OSError):
+        pass
+
+
 def _normalize_subdir(subdir: str) -> str:
     return subdir.strip("/").replace("/", os.sep)
 
@@ -389,6 +401,7 @@ def crawl_and_download_wayback(
             session, wayback_url, dest, overwrite=overwrite, expected_extension=ext
         ):
             downloaded.append(asset_url)
+            _set_file_mtime_from_wayback_timestamp(dest, timestamp)
         else:
             failed.append(asset_url)
         time.sleep(delay_sec)
