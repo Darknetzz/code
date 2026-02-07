@@ -326,7 +326,7 @@ def run(
             console=console,
         )
         with progress:
-            task_id = progress.add_task("Crawling and downloading…", total=None)
+            task_id = progress.add_task("Crawling and downloading...", total=None)
 
             def on_progress(asset_url: str, cur: int, tot: int) -> None:
                 progress.update(
