@@ -6,6 +6,7 @@ Uses Typer + Rich for a highly customizable experience.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -316,6 +317,7 @@ def pdf_cmd(
 
     out_dir = out.resolve()
     total_ok, total_fail = 0, 0
+    time_started = datetime.now()
 
     progress = _make_progress()
     if progress and verbose:
@@ -353,12 +355,19 @@ def pdf_cmd(
             total_ok += ok
             total_fail += fail
 
+    time_completed = datetime.now()
+    elapsed = time_completed - time_started
+    elapsed_str = str(elapsed).split(".")[0] if elapsed.total_seconds() >= 1 else f"{elapsed.total_seconds():.2f}s"
+
     table = Table(title="PDF conversion")
     table.add_column("Metric", style="cyan")
     table.add_column("Count", justify="right", style="green")
     table.add_row("PDFs processed", str(len(pdf_files)))
     table.add_row("Pages converted", str(total_ok))
     table.add_row("Failed", str(total_fail))
+    table.add_row("Time started", time_started.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Time completed", time_completed.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Time elapsed", elapsed_str)
     console.print(Panel(table, title="Done", border_style="green"))
 
 
@@ -451,6 +460,7 @@ def img_cmd(
         fmt_ext = "jpeg"
 
     ok_count, fail_count = 0, 0
+    time_started = datetime.now()
 
     progress = _make_progress()
     if progress and verbose:
@@ -490,12 +500,19 @@ def img_cmd(
             else:
                 fail_count += 1
 
+    time_completed = datetime.now()
+    elapsed = time_completed - time_started
+    elapsed_str = str(elapsed).split(".")[0] if elapsed.total_seconds() >= 1 else f"{elapsed.total_seconds():.2f}s"
+
     table = Table(title="Image conversion")
     table.add_column("Metric", style="cyan")
     table.add_column("Count", justify="right", style="green")
     table.add_row("Images processed", str(len(img_files)))
     table.add_row("Converted", str(ok_count))
     table.add_row("Failed", str(fail_count))
+    table.add_row("Time started", time_started.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Time completed", time_completed.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Time elapsed", elapsed_str)
     console.print(Panel(table, title="Done", border_style="green"))
 
 

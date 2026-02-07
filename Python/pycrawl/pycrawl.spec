@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['pycrawl.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pycrawl\\pycrawl.py'],
     pathex=[],
     binaries=[],
     datas=[],

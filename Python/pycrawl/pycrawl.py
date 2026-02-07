@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urljoin, urlparse
@@ -345,6 +346,8 @@ def run(
     if cookie:
         session.headers["Cookie"] = cookie.strip()
 
+    time_started = datetime.now()
+
     # Rich can fail in PyInstaller/frozen builds (missing rich._unicode_data.unicode17-0-0)
     use_rich = True
     try:
@@ -410,6 +413,10 @@ def run(
             on_progress=on_progress,
         )
 
+    time_completed = datetime.now()
+    elapsed = time_completed - time_started
+    elapsed_str = str(elapsed).split(".")[0] if elapsed.total_seconds() >= 1 else f"{elapsed.total_seconds():.2f}s"
+
     # Summary
     if use_rich:
         try:
@@ -419,6 +426,9 @@ def run(
             table.add_row("Pages crawled", str(len(followed_pages)))
             table.add_row("Files downloaded", str(len(downloaded_list)))
             table.add_row("Failed", str(len(failed_list)))
+            table.add_row("Time started", time_started.strftime("%Y-%m-%d %H:%M:%S"))
+            table.add_row("Time completed", time_completed.strftime("%Y-%m-%d %H:%M:%S"))
+            table.add_row("Time elapsed", elapsed_str)
             console.print(Panel(table, title="Crawl complete", border_style="green"))
             if failed_list:
                 console.print("[red]Failed URLs (first 10):[/]")
@@ -432,6 +442,9 @@ def run(
         print(f"Pages crawled: {len(followed_pages)}")
         print(f"Files downloaded: {len(downloaded_list)}")
         print(f"Failed: {len(failed_list)}")
+        print(f"Time started: {time_started.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Time completed: {time_completed.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Time elapsed: {elapsed_str}")
         if failed_list:
             print("Failed URLs (first 10):")
             for u in failed_list[:10]:

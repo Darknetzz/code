@@ -1,9 +1,32 @@
+import sys
 import typer
 import subprocess
 import shutil
 from pathlib import Path
-from rich.console import Console
 from datetime import datetime
+
+# Use UTF-8 for stdout/stderr so emojis work on Windows (e.g. when cp1252 is default)
+def _ensure_utf8():
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel32.SetConsoleOutputCP(65001)  # UTF-8
+            kernel32.SetConsoleCP(65001)
+        except Exception:
+            pass
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and getattr(stream, "encoding", "").lower() != "utf-8":
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
+
+_ensure_utf8()
+
+from rich.console import Console
+
 app = typer.Typer()
 console = Console()
 

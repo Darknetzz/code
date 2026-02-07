@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pyconvert\\pyconvert.py'],
+    ['pycrawl.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='pyconvert',
+    name='pycrawl',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
