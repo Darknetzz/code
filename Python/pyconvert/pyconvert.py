@@ -259,7 +259,7 @@ def pdf_cmd(
         Path,
         typer.Option(".", "--out", "-o", path_type=Path, help="Output directory."),
     ] = Path("."),
-    fmt: Annotated[
+    pdf_format: Annotated[
         str,
         typer.Option("png", "--format", "-f", help="Output format: png, jpg, jpeg, webp, bmp, tiff."),
     ] = "png",
@@ -326,7 +326,7 @@ def pdf_cmd(
                 ok, fail = _convert_pdf_to_images(
                     pdf_path,
                     out_dir,
-                    fmt,
+                    pdf_format,
                     dpi=dpi,
                     jpeg_quality=quality,
                     first_page=first,
@@ -343,7 +343,7 @@ def pdf_cmd(
             ok, fail = _convert_pdf_to_images(
                 pdf_path,
                 out_dir,
-                fmt,
+                pdf_format,
                 dpi=dpi,
                 jpeg_quality=quality,
                 first_page=first,
@@ -377,7 +377,7 @@ def img_cmd(
         Path,
         typer.Option(".", "--out", "-o", path_type=Path, help="Output directory."),
     ] = Path("."),
-    fmt: Annotated[
+    img_format: Annotated[
         str,
         typer.Option("png", "--format", "-f", help="Output format: png, jpg, webp, bmp, tiff."),
     ] = "png",
@@ -446,7 +446,7 @@ def img_cmd(
         raise typer.Exit(0)
 
     out_dir = out.resolve()
-    fmt_ext = fmt.lower().lstrip(".")
+    fmt_ext = img_format.lower().lstrip(".")
     if fmt_ext == "jpg":
         fmt_ext = "jpeg"
 
