@@ -92,7 +92,10 @@ func main() {
 		speedFactor = 1.0
 	}
 
-	rand.Seed(time.Now().UnixNano())
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		fmt.Fprintln(os.Stderr, "gomatrix: stdout is not a terminal")
+		os.Exit(1)
+	}
 
 	fmt.Print(hideCursor)
 	defer fmt.Print(showCursor)
@@ -114,14 +117,10 @@ func main() {
 	baseMin, baseMax := 28, 75
 	columns := make([]column, w)
 	for i := range columns {
-		d := time.Duration(float64(baseMin+rand.Intn(baseMax)) * speedFactor) * time.Millisecond
-		if d < 8*time.Millisecond {
-			d = 8 * time.Millisecond
-		}
 		columns[i] = column{
 			y:      rand.Intn(h),
-			length: 5 + rand.Intn(h/2),
-			delay:  d,
+			length: min(5+rand.Intn(max(1, h/2)), h),
+			delay:  columnDelay(baseMin, baseMax, speedFactor),
 			last:   time.Now(),
 		}
 	}
@@ -144,12 +143,8 @@ func main() {
 			col.y++
 			if col.y-col.length > h {
 				col.y = 0
-				col.length = 5 + rand.Intn(h/2)
-				d := time.Duration(float64(baseMin+rand.Intn(baseMax)) * speedFactor) * time.Millisecond
-				if d < 8*time.Millisecond {
-					d = 8 * time.Millisecond
-				}
-				col.delay = d
+				col.length = min(5+rand.Intn(max(1, h/2)), h)
+				col.delay = columnDelay(baseMin, baseMax, speedFactor)
 			}
 		}
 
@@ -174,17 +169,17 @@ func main() {
 		sb.WriteString(cursorHome)
 		for row := 0; row < h; row++ {
 			for c := 0; c < w; c++ {
-				cell := grid[row][c]
-				if cell.char == 0 {
+				ce := grid[row][c]
+				if ce.char == 0 {
 					sb.WriteByte(' ')
 					continue
 				}
-				if cell.head {
+				if ce.head {
 					sb.WriteString(brightSeq)
 				} else {
 					sb.WriteString(dimSeq)
 				}
-				sb.WriteString(string(cell.char))
+				sb.WriteString(string(ce.char))
 				if brightSeq != "" || dimSeq != "" {
 					sb.WriteString(reset)
 				}
@@ -207,6 +202,14 @@ type column struct {
 type cell struct {
 	char rune
 	head bool
+}
+
+func columnDelay(baseMin, baseMax int, speedFactor float64) time.Duration {
+	d := time.Duration(float64(baseMin+rand.Intn(baseMax))*speedFactor) * time.Millisecond
+	if d < 8*time.Millisecond {
+		d = 8 * time.Millisecond
+	}
+	return d
 }
 
 func randMatrixChar() rune {
