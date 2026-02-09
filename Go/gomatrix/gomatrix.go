@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -52,9 +53,9 @@ func main() {
 	columns := make([]column, w)
 	for i := range columns {
 		columns[i] = column{
-			y:     rand.Intn(h),
+			y:      rand.Intn(h),
 			length: 5 + rand.Intn(h/2),
-			delay:  time.Duration(30+rand.Intn(120)) * time.Millisecond,
+			delay:  time.Duration(15+rand.Intn(50)) * time.Millisecond, // faster step = smoother motion
 			last:   time.Now(),
 		}
 	}
@@ -62,9 +63,13 @@ func main() {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		fmt.Print(cursorHome)
+	// Reuse grid to avoid allocations every frame
+	grid := make([][]cell, h)
+	for i := range grid {
+		grid[i] = make([]cell, w)
+	}
 
+	for range ticker.C {
 		for x := 0; x < w; x++ {
 			col := &columns[x]
 			if time.Since(col.last) < col.delay {
@@ -75,16 +80,16 @@ func main() {
 			if col.y-col.length > h {
 				col.y = 0
 				col.length = 5 + rand.Intn(h/2)
-				col.delay = time.Duration(30+rand.Intn(120)) * time.Millisecond
+				col.delay = time.Duration(15+rand.Intn(50)) * time.Millisecond
 			}
 		}
 
-		// Build and print by row to avoid flicker
-		grid := make([][]cell, h)
-		for i := range grid {
-			grid[i] = make([]cell, w)
+		// Clear and fill grid (reuse)
+		for row := 0; row < h; row++ {
+			for c := 0; c < w; c++ {
+				grid[row][c] = cell{}
+			}
 		}
-
 		for x := 0; x < w; x++ {
 			col := &columns[x]
 			for i := 0; i < col.length; i++ {
@@ -96,23 +101,30 @@ func main() {
 			}
 		}
 
+		// Build entire frame in one buffer, then single write (smoother)
+		var sb strings.Builder
+		sb.Grow(w*h*20 + h + 8) // rough: ~20 bytes per cell, newlines, cursor
+		sb.WriteString(cursorHome)
 		for row := 0; row < h; row++ {
-			for col := 0; col < w; col++ {
-				c := grid[row][col]
-				if c.char == 0 {
-					fmt.Print(" ")
+			for c := 0; c < w; c++ {
+				cell := grid[row][c]
+				if cell.char == 0 {
+					sb.WriteByte(' ')
 					continue
 				}
-				if c.head {
-					fmt.Printf("%s%c%s", greenBright, c.char, reset)
+				if cell.head {
+					sb.WriteString(greenBright)
 				} else {
-					fmt.Printf("%s%c%s", greenDim, c.char, reset)
+					sb.WriteString(greenDim)
 				}
+				sb.WriteString(string(cell.char))
+				sb.WriteString(reset)
 			}
 			if row < h-1 {
-				fmt.Print("\n")
+				sb.WriteByte('\n')
 			}
 		}
+		os.Stdout.WriteString(sb.String())
 	}
 }
 
