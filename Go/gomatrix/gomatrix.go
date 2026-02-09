@@ -25,7 +25,7 @@ const (
 	reset       = "\033[0m"
 	hideCursor  = "\033[?25l"
 	showCursor  = "\033[?25h"
-	clearScreen = "\033[2J\033[H"
+	cursorHome = "\033[H" // move to (1,1); overwrite instead of clear to avoid flicker
 )
 
 func main() {
@@ -63,7 +63,7 @@ func main() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		fmt.Print(clearScreen)
+		fmt.Print(cursorHome)
 
 		for x := 0; x < w; x++ {
 			col := &columns[x]
