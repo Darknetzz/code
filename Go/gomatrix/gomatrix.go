@@ -47,8 +47,8 @@ func main() {
 	speedUsage := "rain speed (e.g. 0.5 = half speed, 2 = twice as fast)"
 	colorUsage := "color: green, cyan, yellow, red, blue, white, off"
 	charsUsage := "chars: katakana (default), full (katakana+digits+latin), ascii (digits+latin only)"
-	flag.Float64Var(&speed, "speed", 2.5, speedUsage)
-	flag.Float64Var(&speed, "s", 2.5, speedUsage)
+	flag.Float64Var(&speed, "speed", 1, speedUsage)
+	flag.Float64Var(&speed, "s", 1, speedUsage)
 	flag.StringVar(&colorName, "color", "green", colorUsage)
 	flag.StringVar(&colorName, "c", "green", colorUsage)
 	flag.StringVar(&charsSet, "chars", "katakana", charsUsage)
@@ -71,7 +71,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  --scale int")
 		fmt.Fprintf(os.Stderr, "    \t%s (default 1)\n", "character size: 1 = normal, 2 = double (each cell drawn 2x2)")
 		fmt.Fprintln(os.Stderr, "  -s, --speed float")
-		fmt.Fprintf(os.Stderr, "    \t%s (default 2.5)\n", speedUsage)
+		fmt.Fprintf(os.Stderr, "    \t%s (default 1)\n", speedUsage)
 		fmt.Fprintln(os.Stderr, "  --width int")
 		fmt.Fprintf(os.Stderr, "    \t%s (default 0)\n", "grid width in columns (0 = terminal width)")
 	}
@@ -103,8 +103,10 @@ func main() {
 	}
 	brightSeq, dimSeq := codes[0], codes[1]
 
-	// Speed factor: delay is multiplied by 1/speed so speed=0.5 => slower
-	speedFactor := 1.0 / speed
+	// Speed 1 = default "fast"; scale so delay = 1/(speed * defaultScale)
+	const defaultSpeedScale = 2.5
+	effectiveSpeed := speed * defaultSpeedScale
+	speedFactor := 1.0 / effectiveSpeed
 	if speedFactor <= 0 || speedFactor > 100 {
 		speedFactor = 1.0
 	}
