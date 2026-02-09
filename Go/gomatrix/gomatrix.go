@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -162,14 +163,17 @@ func main() {
 		}
 	}
 
-	// 30fps — many terminals feel smoother with less redraw load than 60fps
-	ticker := time.NewTicker(33 * time.Millisecond)
+	// 20fps — fewer redraws often feels smoother when the terminal can't keep up
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
 	grid := make([][]cell, logH)
 	for i := range grid {
 		grid[i] = make([]cell, logW)
 	}
+
+	var buf bytes.Buffer
+	buf.Grow(termW*h*24 + h*2 + 32)
 
 	for range ticker.C {
 		for x := 0; x < logW; x++ {
@@ -214,44 +218,42 @@ func main() {
 			}
 		}
 
-		var sb strings.Builder
-		sb.Grow(termW*h*20 + h + 8)
-		sb.WriteString(cursorHome)
+		// Reuse buffer to avoid allocating a large string every frame
+		buf.Reset()
+		buf.WriteString(cursorHome)
 		for row := 0; row < h; row++ {
 			logR := row / scale
 			for c := 0; c < w; c++ {
 				logC := c / scale
 				ce := grid[logR][logC]
 				if ce.char == 0 {
-					sb.WriteByte(' ')
+					buf.WriteByte(' ')
 					continue
 				}
 				if ce.head {
-					sb.WriteString(brightSeq)
+					buf.WriteString(brightSeq)
 				} else {
-					sb.WriteString(dimSeq)
+					buf.WriteString(dimSeq)
 				}
-				sb.WriteString(string(ce.char))
+				buf.WriteRune(ce.char)
 				if brightSeq != "" || dimSeq != "" {
-					sb.WriteString(reset)
+					buf.WriteString(reset)
 				}
 			}
-			// Pad to terminal width so the rest of the line is cleared
 			for c := w; c < termW; c++ {
-				sb.WriteByte(' ')
+				buf.WriteByte(' ')
 			}
-			sb.WriteByte('\n')
+			buf.WriteByte('\n')
 		}
-		// Clear any rows below the grid when h < termH
 		for row := h; row < termH; row++ {
 			for c := 0; c < termW; c++ {
-				sb.WriteByte(' ')
+				buf.WriteByte(' ')
 			}
 			if row < termH-1 {
-				sb.WriteByte('\n')
+				buf.WriteByte('\n')
 			}
 		}
-		os.Stdout.WriteString(sb.String())
+		buf.WriteTo(os.Stdout)
 	}
 }
 
