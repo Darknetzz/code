@@ -714,6 +714,12 @@ def list_urls(
         "-e",
         help="Comma-separated extensions to list.",
     ),
+    cookie: str | None = typer.Option(
+        None,
+        "--cookie",
+        "-c",
+        help="Cookie header (e.g. for age-gated pages).",
+    ),
 ):
     """
     List all file URLs that would be downloaded (dry run).
@@ -727,6 +733,8 @@ def list_urls(
     ext_tuple = tuple("." + x.strip().lstrip(".") for x in extensions.split(",") if x.strip()) or DEFAULT_EXTENSIONS
     follow_pattern = follow or None
     session = _make_session()
+    if cookie:
+        session.headers["Cookie"] = cookie.strip()
     pages = [url]
     if follow_pattern:
         html = fetch_html(session, url)
