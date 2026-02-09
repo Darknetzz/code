@@ -29,14 +29,14 @@ const (
 	cursorHome = "\033[H" // move to (1,1); overwrite instead of clear to avoid flicker
 )
 
-// ANSI bright and dim codes by color name (31=red, 32=green, 33=yellow, 34=blue, 35=magenta, 36=cyan, 37=white).
+// ANSI bright and dim codes. Dim uses darker shades so only the true head looks bright.
 var colorCodes = map[string][2]string{
-	"green":  {"\033[1;32m", "\033[2;32m"},
-	"cyan":   {"\033[1;36m", "\033[2;36m"},
-	"yellow": {"\033[1;33m", "\033[2;33m"},
-	"red":    {"\033[1;31m", "\033[2;31m"},
-	"blue":   {"\033[1;34m", "\033[2;34m"},
-	"white":  {"\033[1;37m", "\033[2;37m"},
+	"green":  {"\033[1;32m", "\033[38;5;22m"},   // bright green, dark green trail
+	"cyan":   {"\033[1;36m", "\033[38;5;23m"},
+	"yellow": {"\033[1;33m", "\033[38;5;58m"},
+	"red":    {"\033[1;31m", "\033[38;5;52m"},
+	"blue":   {"\033[1;34m", "\033[38;5;17m"},
+	"white":  {"\033[1;37m", "\033[38;5;245m"},
 	"off":    {"", ""},
 }
 
@@ -224,7 +224,9 @@ func main() {
 				row := col.y - i
 				if row >= 0 && row < logH {
 					idx := (col.headIdx + i) % col.length
-					grid[row][x] = cell{char: col.trail[idx], head: i == 0}
+					// Only the leading character (at col.y) is the head; others must be dim
+					isHead := i == 0 && row == col.y
+					grid[row][x] = cell{char: col.trail[idx], head: isHead}
 				}
 			}
 		}
