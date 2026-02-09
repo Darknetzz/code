@@ -225,8 +225,14 @@ func main() {
 		buf.WriteString(cursorHome)
 		for row := 0; row < h; row++ {
 			logR := row / scale
+			if logR >= logH {
+				logR = logH - 1
+			}
 			for c := 0; c < w; c++ {
 				logC := c / scale
+				if logC >= logW {
+					logC = logW - 1
+				}
 				ce := grid[logR][logC]
 				if ce.char == 0 {
 					buf.WriteByte(' ')
