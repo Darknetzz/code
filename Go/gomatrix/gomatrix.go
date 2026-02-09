@@ -13,12 +13,11 @@ import (
 	"golang.org/x/term"
 )
 
-// Matrix-style character set: katakana (half-width), digits, and Latin — like the movie.
-var matrixChars = []rune(
-	// Half-width katakana (movie-style)
-	"ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ" +
-		// Digits and Latin
-		"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+// Character sets: default is katakana only; optional digits and Latin.
+var (
+	charsKatakana = []rune("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ")
+	charsDigitsLatin = []rune("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	activeChars []rune // set in main from -chars flag
 )
 
 const (
@@ -41,13 +40,16 @@ var colorCodes = map[string][2]string{
 
 func main() {
 	var speed float64
-	var colorName string
+	var colorName, charsSet string
 	speedUsage := "rain speed (e.g. 0.5 = half speed, 2 = twice as fast)"
 	colorUsage := "color: green, cyan, yellow, red, blue, white, off"
-	flag.Float64Var(&speed, "speed", 1.0, speedUsage)
-	flag.Float64Var(&speed, "s", 1.0, speedUsage)
+	charsUsage := "chars: katakana (default), full (katakana+digits+latin), ascii (digits+latin only)"
+	flag.Float64Var(&speed, "speed", 0.7, speedUsage)
+	flag.Float64Var(&speed, "s", 0.7, speedUsage)
 	flag.StringVar(&colorName, "color", "green", colorUsage)
 	flag.StringVar(&colorName, "c", "green", colorUsage)
+	flag.StringVar(&charsSet, "chars", "katakana", charsUsage)
+	flag.StringVar(&charsSet, "charset", "katakana", charsUsage)
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintln(os.Stderr, "Matrix digital rain in the terminal (movie-style characters).")
@@ -56,10 +58,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Options:")
 		fmt.Fprintln(os.Stderr, "  -c, --color string")
 		fmt.Fprintf(os.Stderr, "    \t%s (default %q)\n", colorUsage, "green")
+		fmt.Fprintln(os.Stderr, "  --chars, --charset string")
+		fmt.Fprintf(os.Stderr, "    \t%s (default %q)\n", charsUsage, "katakana")
 		fmt.Fprintln(os.Stderr, "  -s, --speed float")
-		fmt.Fprintf(os.Stderr, "    \t%s (default 1)\n", speedUsage)
+		fmt.Fprintf(os.Stderr, "    \t%s (default 0.7)\n", speedUsage)
 	}
 	flag.Parse()
+
+	switch strings.ToLower(charsSet) {
+	case "katakana":
+		activeChars = charsKatakana
+	case "full":
+		activeChars = make([]rune, 0, len(charsKatakana)+len(charsDigitsLatin))
+		activeChars = append(activeChars, charsKatakana...)
+		activeChars = append(activeChars, charsDigitsLatin...)
+	case "ascii":
+		activeChars = charsDigitsLatin
+	default:
+		fmt.Fprintf(os.Stderr, "unknown -chars %q; use one of: katakana, full, ascii\n", charsSet)
+		os.Exit(1)
+	}
 
 	codes, ok := colorCodes[strings.ToLower(colorName)]
 	if !ok {
@@ -92,12 +110,13 @@ func main() {
 		w, h = 80, 24
 	}
 
-	baseMin, baseMax := 15, 50
+	// Slower base delays = more relaxed rain; 60fps tick for smoother redraws
+	baseMin, baseMax := 28, 75
 	columns := make([]column, w)
 	for i := range columns {
 		d := time.Duration(float64(baseMin+rand.Intn(baseMax)) * speedFactor) * time.Millisecond
-		if d < 5*time.Millisecond {
-			d = 5 * time.Millisecond
+		if d < 8*time.Millisecond {
+			d = 8 * time.Millisecond
 		}
 		columns[i] = column{
 			y:      rand.Intn(h),
@@ -107,7 +126,7 @@ func main() {
 		}
 	}
 
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(16 * time.Millisecond) // ~60fps for smoother animation
 	defer ticker.Stop()
 
 	grid := make([][]cell, h)
@@ -127,8 +146,8 @@ func main() {
 				col.y = 0
 				col.length = 5 + rand.Intn(h/2)
 				d := time.Duration(float64(baseMin+rand.Intn(baseMax)) * speedFactor) * time.Millisecond
-				if d < 5*time.Millisecond {
-					d = 5 * time.Millisecond
+				if d < 8*time.Millisecond {
+					d = 8 * time.Millisecond
 				}
 				col.delay = d
 			}
@@ -191,10 +210,10 @@ type cell struct {
 }
 
 func randMatrixChar() rune {
-	if len(matrixChars) == 0 {
+	if len(activeChars) == 0 {
 		return ' '
 	}
-	return matrixChars[rand.Intn(len(matrixChars))]
+	return activeChars[rand.Intn(len(activeChars))]
 }
 
 func terminalSize() (width, height int) {
