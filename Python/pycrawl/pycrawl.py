@@ -555,6 +555,18 @@ def run(
         wayback_out_dir = (wayback_out or (out.parent / (out.name + "_wayback"))).resolve()
         wayback_out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Pre-check start URL so we can show why it fails when no pages are crawled
+    try:
+        r = session.get(url, allow_redirects=True)
+        if r.status_code != 200:
+            console.print(
+                f"[yellow]Start URL returned HTTP {r.status_code} {r.reason}[/yellow]"
+            )
+            if r.url != url:
+                console.print(f"[dim]Final URL after redirects: {r.url}[/dim]")
+    except requests.RequestException as e:
+        console.print(f"[yellow]Start URL request failed: {e}[/yellow]")
+
     time_started = datetime.now()
 
     # Rich can fail in PyInstaller/frozen builds (missing rich._unicode_data.unicode17-0-0)
