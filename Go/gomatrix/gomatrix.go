@@ -42,6 +42,7 @@ var colorCodes = map[string][2]string{
 func main() {
 	var speed float64
 	var colorName, charsSet string
+	var width, height, scale int
 	speedUsage := "rain speed (e.g. 0.5 = half speed, 2 = twice as fast)"
 	colorUsage := "color: green, cyan, yellow, red, blue, white, off"
 	charsUsage := "chars: katakana (default), full (katakana+digits+latin), ascii (digits+latin only)"
@@ -51,6 +52,9 @@ func main() {
 	flag.StringVar(&colorName, "c", "green", colorUsage)
 	flag.StringVar(&charsSet, "chars", "katakana", charsUsage)
 	flag.StringVar(&charsSet, "charset", "katakana", charsUsage)
+	flag.IntVar(&width, "width", 0, "grid width in columns (0 = terminal width)")
+	flag.IntVar(&height, "height", 0, "grid height in rows (0 = terminal height)")
+	flag.IntVar(&scale, "scale", 1, "character size: 1 = normal, 2 = double (each cell drawn 2x2)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Matrix digital rain in the terminal (movie-style characters). Version %s\n", version)
@@ -61,10 +65,21 @@ func main() {
 		fmt.Fprintf(os.Stderr, "    \t%s (default %q)\n", colorUsage, "green")
 		fmt.Fprintln(os.Stderr, "  --chars, --charset string")
 		fmt.Fprintf(os.Stderr, "    \t%s (default %q)\n", charsUsage, "katakana")
+		fmt.Fprintln(os.Stderr, "  --height int")
+		fmt.Fprintf(os.Stderr, "    \t%s (default 0)\n", "grid height in rows (0 = terminal height)")
+		fmt.Fprintln(os.Stderr, "  --scale int")
+		fmt.Fprintf(os.Stderr, "    \t%s (default 1)\n", "character size: 1 = normal, 2 = double (each cell drawn 2x2)")
 		fmt.Fprintln(os.Stderr, "  -s, --speed float")
 		fmt.Fprintf(os.Stderr, "    \t%s (default 0.7)\n", speedUsage)
+		fmt.Fprintln(os.Stderr, "  --width int")
+		fmt.Fprintf(os.Stderr, "    \t%s (default 0)\n", "grid width in columns (0 = terminal width)")
 	}
 	flag.Parse()
+
+	if scale != 1 && scale != 2 {
+		fmt.Fprintln(os.Stderr, "gomatrix: --scale must be 1 or 2")
+		os.Exit(1)
+	}
 
 	switch strings.ToLower(charsSet) {
 	case "katakana":
@@ -109,68 +124,99 @@ func main() {
 		os.Exit(0)
 	}()
 
-	w, h := terminalSize()
-	if w <= 0 || h <= 0 {
-		w, h = 80, 24
+	termW, termH := terminalSize()
+	if termW <= 0 || termH <= 0 {
+		termW, termH = 80, 24
+	}
+	w, h := termW, termH
+	if width > 0 {
+		w = min(width, termW)
+	}
+	if height > 0 {
+		h = min(height, termH)
+	}
+
+	// With scale=2, simulate on half-size logical grid and draw each cell 2x2
+	logW, logH := w, h
+	if scale == 2 {
+		logW = max(1, w/2)
+		logH = max(1, h/2)
 	}
 
 	// Slower base delays = more relaxed rain; 60fps tick for smoother redraws
 	baseMin, baseMax := 28, 75
-	columns := make([]column, w)
+	columns := make([]column, logW)
 	for i := range columns {
+		length := min(5+rand.Intn(max(1, logH/2)), logH)
+		trail := make([]rune, length)
+		for j := range trail {
+			trail[j] = randMatrixChar()
+		}
 		columns[i] = column{
-			y:      rand.Intn(h),
-			length: min(5+rand.Intn(max(1, h/2)), h),
+			y:      rand.Intn(logH),
+			length: length,
 			delay:  columnDelay(baseMin, baseMax, speedFactor),
 			last:   time.Now(),
+			trail:  trail,
 		}
 	}
 
 	ticker := time.NewTicker(16 * time.Millisecond) // ~60fps for smoother animation
 	defer ticker.Stop()
 
-	grid := make([][]cell, h)
+	grid := make([][]cell, logH)
 	for i := range grid {
-		grid[i] = make([]cell, w)
+		grid[i] = make([]cell, logW)
 	}
 
 	for range ticker.C {
-		for x := 0; x < w; x++ {
+		for x := 0; x < logW; x++ {
 			col := &columns[x]
 			if time.Since(col.last) < col.delay {
 				continue
 			}
 			col.last = time.Now()
 			col.y++
-			if col.y-col.length > h {
+			// New character only when column advances; prepend to trail
+			col.trail = append([]rune{randMatrixChar()}, col.trail...)
+			if len(col.trail) > col.length {
+				col.trail = col.trail[:col.length]
+			}
+			if col.y-col.length > logH {
 				col.y = 0
-				col.length = min(5+rand.Intn(max(1, h/2)), h)
+				col.length = min(5+rand.Intn(max(1, logH/2)), logH)
 				col.delay = columnDelay(baseMin, baseMax, speedFactor)
+				// Refill trail for new drop
+				col.trail = col.trail[:0]
+				for i := 0; i < col.length; i++ {
+					col.trail = append(col.trail, randMatrixChar())
+				}
 			}
 		}
 
-		for row := 0; row < h; row++ {
-			for c := 0; c < w; c++ {
+		for row := 0; row < logH; row++ {
+			for c := 0; c < logW; c++ {
 				grid[row][c] = cell{}
 			}
 		}
-		for x := 0; x < w; x++ {
+		for x := 0; x < logW; x++ {
 			col := &columns[x]
-			for i := 0; i < col.length; i++ {
+			for i := 0; i < col.length && i < len(col.trail); i++ {
 				row := col.y - i
-				if row >= 0 && row < h {
-					head := i == 0
-					grid[row][x] = cell{char: randMatrixChar(), head: head}
+				if row >= 0 && row < logH {
+					grid[row][x] = cell{char: col.trail[i], head: i == 0}
 				}
 			}
 		}
 
 		var sb strings.Builder
-		sb.Grow(w*h*20 + h + 8)
+		sb.Grow(termW*h*20 + h + 8)
 		sb.WriteString(cursorHome)
 		for row := 0; row < h; row++ {
+			logR := row / scale
 			for c := 0; c < w; c++ {
-				ce := grid[row][c]
+				logC := c / scale
+				ce := grid[logR][logC]
 				if ce.char == 0 {
 					sb.WriteByte(' ')
 					continue
@@ -185,7 +231,18 @@ func main() {
 					sb.WriteString(reset)
 				}
 			}
-			if row < h-1 {
+			// Pad to terminal width so the rest of the line is cleared
+			for c := w; c < termW; c++ {
+				sb.WriteByte(' ')
+			}
+			sb.WriteByte('\n')
+		}
+		// Clear any rows below the grid when h < termH
+		for row := h; row < termH; row++ {
+			for c := 0; c < termW; c++ {
+				sb.WriteByte(' ')
+			}
+			if row < termH-1 {
 				sb.WriteByte('\n')
 			}
 		}
@@ -198,6 +255,7 @@ type column struct {
 	length int
 	delay  time.Duration
 	last   time.Time
+	trail  []rune // persistent chars so trail doesn't flicker every frame
 }
 
 type cell struct {
