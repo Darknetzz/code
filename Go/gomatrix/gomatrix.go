@@ -143,7 +143,7 @@ func main() {
 		logH = max(1, h/2)
 	}
 
-	// Slower base delays = more relaxed rain; 60fps tick for smoother redraws
+	// Slower base delays = more relaxed rain
 	baseMin, baseMax := 28, 75
 	columns := make([]column, logW)
 	for i := range columns {
@@ -153,15 +153,17 @@ func main() {
 			trail[j] = randMatrixChar()
 		}
 		columns[i] = column{
-			y:      rand.Intn(logH),
-			length: length,
-			delay:  columnDelay(baseMin, baseMax, speedFactor),
-			last:   time.Now(),
-			trail:  trail,
+			y:       rand.Intn(logH),
+			length:  length,
+			delay:   columnDelay(baseMin, baseMax, speedFactor),
+			last:    time.Now(),
+			trail:   trail,
+			headIdx: 0,
 		}
 	}
 
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60fps for smoother animation
+	// 30fps — many terminals feel smoother with less redraw load than 60fps
+	ticker := time.NewTicker(33 * time.Millisecond)
 	defer ticker.Stop()
 
 	grid := make([][]cell, logH)
@@ -177,20 +179,22 @@ func main() {
 			}
 			col.last = time.Now()
 			col.y++
-			// New character only when column advances; prepend to trail
-			col.trail = append([]rune{randMatrixChar()}, col.trail...)
-			if len(col.trail) > col.length {
-				col.trail = col.trail[:col.length]
-			}
+			// Circular buffer: no allocations on advance
+			col.headIdx = (col.headIdx + col.length - 1) % col.length
+			col.trail[col.headIdx] = randMatrixChar()
 			if col.y-col.length > logH {
 				col.y = 0
 				col.length = min(5+rand.Intn(max(1, logH/2)), logH)
 				col.delay = columnDelay(baseMin, baseMax, speedFactor)
-				// Refill trail for new drop
-				col.trail = col.trail[:0]
-				for i := 0; i < col.length; i++ {
-					col.trail = append(col.trail, randMatrixChar())
+				if len(col.trail) < col.length {
+					col.trail = make([]rune, col.length)
+				} else {
+					col.trail = col.trail[:col.length]
 				}
+				for i := range col.trail {
+					col.trail[i] = randMatrixChar()
+				}
+				col.headIdx = 0
 			}
 		}
 
@@ -201,10 +205,11 @@ func main() {
 		}
 		for x := 0; x < logW; x++ {
 			col := &columns[x]
-			for i := 0; i < col.length && i < len(col.trail); i++ {
+			for i := 0; i < col.length; i++ {
 				row := col.y - i
 				if row >= 0 && row < logH {
-					grid[row][x] = cell{char: col.trail[i], head: i == 0}
+					idx := (col.headIdx + i) % col.length
+					grid[row][x] = cell{char: col.trail[idx], head: i == 0}
 				}
 			}
 		}
@@ -251,11 +256,12 @@ func main() {
 }
 
 type column struct {
-	y      int
-	length int
-	delay  time.Duration
-	last   time.Time
-	trail  []rune // persistent chars so trail doesn't flicker every frame
+	y       int
+	length  int
+	delay   time.Duration
+	last    time.Time
+	trail   []rune // pre-allocated, length = column length
+	headIdx int    // circular buffer: head is at trail[headIdx]
 }
 
 type cell struct {
