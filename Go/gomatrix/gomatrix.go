@@ -54,7 +54,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to exit.")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
-		flag.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "  -c, --color string")
+		fmt.Fprintf(os.Stderr, "    \t%s (default %q)\n", colorUsage, "green")
+		fmt.Fprintln(os.Stderr, "  -s, --speed float")
+		fmt.Fprintf(os.Stderr, "    \t%s (default 1)\n", speedUsage)
 	}
 	flag.Parse()
 
