@@ -542,6 +542,13 @@ def run(
     session = _make_session()
     if cookie:
         session.headers["Cookie"] = cookie.strip()
+    # Many gated sites require Referer from their own domain
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme and parsed.netloc:
+            session.headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
+    except Exception:
+        pass
 
     use_wayback = wayback_from is not None
     if use_wayback:
@@ -677,6 +684,12 @@ def run(
                     console.print(f"  {u}")
                 if len(failed_list) > 10:
                     console.print(f"  ... and {len(failed_list) - 10} more.")
+            if len(followed_pages) == 0:
+                console.print(
+                    "[yellow]No pages were crawled. The start URL may have failed to load "
+                    "(e.g. 403, redirect, or site requires browser). Check the URL in a browser, "
+                    "refresh the cookie if needed, and ensure --cookie is set.[/yellow]"
+                )
         except Exception:
             use_rich = False
     if not use_rich:
@@ -694,6 +707,11 @@ def run(
                 print(f"  {u}")
             if len(failed_list) > 10:
                 print(f"  ... and {len(failed_list) - 10} more.")
+        if len(followed_pages) == 0:
+            print(
+                "No pages were crawled. The start URL may have failed to load "
+                "(check URL, cookie, or try in browser)."
+            )
 
 
 @app.command("list-urls")
@@ -735,6 +753,12 @@ def list_urls(
     session = _make_session()
     if cookie:
         session.headers["Cookie"] = cookie.strip()
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme and parsed.netloc:
+            session.headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
+    except Exception:
+        pass
     pages = [url]
     if follow_pattern:
         html = fetch_html(session, url)
