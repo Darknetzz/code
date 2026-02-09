@@ -177,23 +177,27 @@ func main() {
 	var buf bytes.Buffer
 	buf.Grow(termW*h*24 + h*2 + 32)
 
-	type pendingAdvance struct{ x int; newChar rune }
-	reusePending := make([]pendingAdvance, 0, logW)
-
 	for range ticker.C {
-		// Collect advances but don't apply yet — draw current state first to avoid
-		// new head character appearing one frame early (ghost spawn).
-		reusePending = reusePending[:0]
 		for x := 0; x < logW; x++ {
 			col := &columns[x]
 			if time.Since(col.last) < col.delay {
 				continue
 			}
 			col.last = time.Now()
-			nextY := col.y + 1
-			newChar := randMatrixChar()
-			if nextY-col.length > logH {
-				// Will reset; apply reset now so draw sees consistent state
+			col.y++
+			col.headIdx = (col.headIdx + col.length - 1) % col.length
+			// Pick new head char different from next 2 trail positions so the same
+			// symbol doesn't appear in multiple rows (looks like ghost spawn).
+			avoid := col.trail[col.headIdx] // will overwrite
+			if col.length > 1 {
+				avoid = col.trail[(col.headIdx+1)%col.length]
+			}
+			avoid2 := rune(0)
+			if col.length > 2 {
+				avoid2 = col.trail[(col.headIdx+2)%col.length]
+			}
+			col.trail[col.headIdx] = randMatrixCharDifferentFrom(avoid, avoid2)
+			if col.y-col.length > logH {
 				col.y = 0
 				col.length = min(5+rand.Intn(max(1, logH/2)), logH)
 				col.delay = columnDelay(baseMin, baseMax, speedFactor)
@@ -206,9 +210,7 @@ func main() {
 					col.trail[i] = randMatrixChar()
 				}
 				col.headIdx = 0
-				continue
 			}
-			reusePending = append(reusePending, pendingAdvance{x, newChar})
 		}
 
 		for row := 0; row < logH; row++ {
@@ -225,14 +227,6 @@ func main() {
 					grid[row][x] = cell{char: col.trail[idx], head: i == 0}
 				}
 			}
-		}
-
-		// Apply advances after drawing so new head appears next frame
-		for _, p := range reusePending {
-			col := &columns[p.x]
-			col.y++
-			col.headIdx = (col.headIdx + col.length - 1) % col.length
-			col.trail[col.headIdx] = p.newChar
 		}
 
 		// Reuse buffer to avoid allocating a large string every frame
@@ -305,6 +299,20 @@ func columnDelay(baseMin, baseMax int, speedFactor float64) time.Duration {
 func randMatrixChar() rune {
 	if len(activeChars) == 0 {
 		return ' '
+	}
+	return activeChars[rand.Intn(len(activeChars))]
+}
+
+// randMatrixCharDifferentFrom returns a random character not equal to avoid or avoid2 (avoid2 can be 0 to skip).
+func randMatrixCharDifferentFrom(avoid, avoid2 rune) rune {
+	if len(activeChars) == 0 {
+		return ' '
+	}
+	for n := 0; n < 20; n++ {
+		r := activeChars[rand.Intn(len(activeChars))]
+		if r != avoid && (avoid2 == 0 || r != avoid2) {
+			return r
+		}
 	}
 	return activeChars[rand.Intn(len(activeChars))]
 }
