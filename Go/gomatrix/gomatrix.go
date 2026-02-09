@@ -21,6 +21,7 @@ var (
 )
 
 const (
+	version    = "1.0.0"
 	reset      = "\033[0m"
 	hideCursor = "\033[?25l"
 	showCursor = "\033[?25h"
@@ -52,7 +53,7 @@ func main() {
 	flag.StringVar(&charsSet, "charset", "katakana", charsUsage)
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
-		fmt.Fprintln(os.Stderr, "Matrix digital rain in the terminal (movie-style characters).")
+		fmt.Fprintf(os.Stderr, "Matrix digital rain in the terminal (movie-style characters). Version %s\n", version)
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to exit.")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
