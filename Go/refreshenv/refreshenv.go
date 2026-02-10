@@ -23,10 +23,12 @@ const (
 func main() {
 	spawnShell := flag.Bool("shell", true, "spawn a new shell with refreshed env (default true)")
 	usePowerShell := flag.Bool("pwsh", false, "spawn PowerShell instead of cmd (default: auto when run from PowerShell)")
+	emit := flag.Bool("emit", false, "print shell commands to stdout for current shell to eval (e.g. refreshenv -emit | iex)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintln(os.Stderr, "Refreshes process environment from User and Machine registry,")
 		fmt.Fprintln(os.Stderr, "then spawns a new shell (PowerShell or cmd) that has the updated env.")
+		fmt.Fprintln(os.Stderr, "Use -emit to output commands for the current shell instead (e.g. refreshenv -emit | iex).")
 		fmt.Fprintln(os.Stderr, "Options:")
 		flag.PrintDefaults()
 	}
@@ -85,6 +87,24 @@ func main() {
 	pathCombined := strings.Trim(strings.TrimSuffix(pathMachine, ";")+";"+strings.TrimSuffix(pathUser, ";"), ";")
 	if pathCombined != "" {
 		vars["Path"] = pathCombined
+	}
+
+	// -emit: output commands for current shell to eval (so parent gets refreshed env)
+	if *emit {
+		usePS := *usePowerShell || os.Getenv("PSModulePath") != ""
+		for name, val := range vars {
+			if usePS {
+				escaped := strings.ReplaceAll(val, "'", "''")
+				fmt.Printf("$env:%s = '%s'; ", name, escaped)
+			} else {
+				escaped := strings.ReplaceAll(val, `"`, `""`)
+				fmt.Printf("set \"%s=%s\"\n", name, escaped)
+			}
+		}
+		if usePS {
+			fmt.Println()
+		}
+		return
 	}
 
 	// Apply to current process
