@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
@@ -28,6 +29,13 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	// Resolve cmd.exe path before we overwrite Path (refreshed Path may not include System32)
+	systemRoot := os.Getenv("SystemRoot")
+	if systemRoot == "" {
+		systemRoot = "C:\\Windows"
+	}
+	cmdExe := filepath.Join(systemRoot, "System32", "cmd.exe")
 
 	vars := make(map[string]string)
 
@@ -86,7 +94,7 @@ func main() {
 		return
 	}
 
-	cmd := exec.Command("cmd.exe", "/K")
+	cmd := exec.Command(cmdExe, "/K")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
