@@ -9,5 +9,6 @@ Small CLI utilities and network tools, each in its own module.
 | [gonet](gonet/) | Network CLI tools — DNS, whois, port check, ping, HTTP headers/download, stat... See [gonet/README.md](gonet/README.md) for details. |
 | [gotools](gotools/) | General-purpose CLI combining base64, checksums, and UUID generation. Run wit... See [gotools/README.md](gotools/README.md) for details. |
 | [hashsum](hashsum/) | File checksum (hash) utility — compute or verify MD5, SHA1, SHA256, or SHA512... See [hashsum/README.md](hashsum/README.md) for details. |
+| [refreshenv](refreshenv/) | Reload User/Machine env from the Windows registry; spawn a new shell or emit commands for the current session. See [refreshenv/README.md](refreshenv/README.md) for details. |
 
 Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.

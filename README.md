@@ -1,6 +1,6 @@
 # code
 
-Different scripts in different languages for different purposes.
+Scripts and CLI tools in various languages (Go, Lua, PHP, PowerShell, Python, Rust, Shell).
 
 ## Index
 
