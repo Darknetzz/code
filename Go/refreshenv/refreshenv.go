@@ -96,6 +96,7 @@ func main() {
 		return
 	}
 
+	fmt.Println("Environment refreshed from registry. Spawning new shell...")
 	// Use PowerShell when -pwsh or when we're likely in PowerShell (e.g. PSModulePath set)
 	usePS := *usePowerShell || os.Getenv("PSModulePath") != ""
 	shellPath := cmdExe
