@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -96,7 +97,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("Environment refreshed from registry. Spawning new shell...")
+	fmt.Println("Environment refreshed from registry. Spawning new shell in a new window...")
 	// Use PowerShell when -pwsh or when we're likely in PowerShell (e.g. PSModulePath set)
 	usePS := *usePowerShell || os.Getenv("PSModulePath") != ""
 	shellPath := cmdExe
@@ -116,12 +117,11 @@ func main() {
 	}
 
 	cmd := exec.Command(shellPath, shellArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
-	if err := cmd.Run(); err != nil {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x10} // CREATE_NEW_CONSOLE: new window, no nesting
+	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "refreshenv: %v\n", err)
 		os.Exit(1)
 	}
+	// Exit so the current shell gets its prompt back; new shell runs in its own window
 }
