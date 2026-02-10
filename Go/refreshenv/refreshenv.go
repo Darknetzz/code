@@ -21,21 +21,23 @@ const (
 
 func main() {
 	spawnShell := flag.Bool("shell", true, "spawn a new shell with refreshed env (default true)")
+	usePowerShell := flag.Bool("pwsh", false, "spawn PowerShell instead of cmd (default: auto when run from PowerShell)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintln(os.Stderr, "Refreshes process environment from User and Machine registry,")
-		fmt.Fprintln(os.Stderr, "then spawns a new cmd.exe so that shell has the updated env.")
+		fmt.Fprintln(os.Stderr, "then spawns a new shell (PowerShell or cmd) that has the updated env.")
 		fmt.Fprintln(os.Stderr, "Options:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	// Resolve cmd.exe path before we overwrite Path (refreshed Path may not include System32)
+	// Resolve shell paths before we overwrite Path (refreshed Path may not include System32)
 	systemRoot := os.Getenv("SystemRoot")
 	if systemRoot == "" {
 		systemRoot = "C:\\Windows"
 	}
 	cmdExe := filepath.Join(systemRoot, "System32", "cmd.exe")
+	psExe := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 
 	vars := make(map[string]string)
 
@@ -94,7 +96,25 @@ func main() {
 		return
 	}
 
-	cmd := exec.Command(cmdExe, "/K")
+	// Use PowerShell when -pwsh or when we're likely in PowerShell (e.g. PSModulePath set)
+	usePS := *usePowerShell || os.Getenv("PSModulePath") != ""
+	shellPath := cmdExe
+	shellArgs := []string{"/K"}
+	if usePS {
+		// Prefer pwsh (PowerShell 7) if in refreshed PATH, else Windows PowerShell 5.1
+		if path, err := exec.LookPath("pwsh"); err == nil {
+			shellPath = path
+			shellArgs = []string{"-NoExit"}
+		} else if _, err := os.Stat(psExe); err == nil {
+			shellPath = psExe
+			shellArgs = []string{"-NoExit"}
+		} else {
+			shellPath = cmdExe
+			shellArgs = []string{"/K"}
+		}
+	}
+
+	cmd := exec.Command(shellPath, shellArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
