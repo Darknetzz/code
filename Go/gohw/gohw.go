@@ -245,17 +245,20 @@ func render(info *sysInfo) {
 		Foreground(accent).
 		MarginBottom(1)
 
+	const labelWidth = 14
 	section := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
 		Padding(0, 1).
+		Width(78).
 		MarginBottom(1)
 
-	label := lipgloss.NewStyle().Foreground(muted).Width(14)
+	label := lipgloss.NewStyle().Foreground(muted)
 	value := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
 
 	row := func(k, v string) string {
-		return label.Render(k+":") + " " + value.Render(v)
+		padded := fmt.Sprintf("%-*s", labelWidth, k+":")
+		return label.Render(padded) + value.Render(v)
 	}
 
 	var out strings.Builder
