@@ -250,7 +250,6 @@ func render(info *sysInfo) {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
 		Padding(0, 1).
-		Width(78).
 		MarginBottom(1)
 
 	label := lipgloss.NewStyle().Foreground(muted)
