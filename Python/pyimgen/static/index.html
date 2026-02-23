@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Imagegen — Space generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0e14;
+      --surface: #13161f;
+      --border: #1e2330;
+      --text: #e6e9ef;
+      --muted: #8b91a0;
+      --accent: #7eb8da;
+      --accent-dim: #5a8fb0;
+      --success: #9fca56;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Outfit", system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    h1 {
+      font-weight: 600;
+      font-size: 1.5rem;
+      margin: 0 0 0.25rem 0;
+      letter-spacing: -0.02em;
+    }
+    .tagline { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .layout {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: 280px 1fr;
+    }
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+    .panel h2 {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 1rem 0;
+    }
+    .field { margin-bottom: 1rem; }
+    .field:last-child { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.9rem;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    input[type="number"] { width: 100%; }
+    .row { display: flex; gap: 0.75rem; }
+    .row .field { flex: 1; }
+    button {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.7rem 1rem;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      font-family: "Outfit", sans-serif;
+      font-weight: 500;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-dim); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .preview {
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .preview img {
+      max-width: 100%;
+      max-height: 75vh;
+      display: block;
+    }
+    .preview .placeholder {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .preview-actions {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .preview-actions a, .preview-actions button {
+      padding: 0.5rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      text-decoration: none;
+      width: auto;
+      margin: 0;
+    }
+    .preview-actions a {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    .preview-actions a:hover { border-color: var(--accent); }
+    .error {
+      color: #e74c3c;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .loading { opacity: 0.7; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Imagegen</h1>
+    <p class="tagline">Procedural space images — nebula, stars, galaxy</p>
+    <div class="layout">
+      <aside class="panel">
+        <h2>Settings</h2>
+        <form id="form">
+          <div class="field">
+            <label for="prompt">Preset</label>
+            <select id="prompt" name="prompt">
+              <option value="deep_space">Deep space</option>
+              <option value="nebula">Nebula</option>
+              <option value="stars">Stars</option>
+              <option value="galaxy">Galaxy</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="size_preset">Size preset</label>
+            <select id="size_preset" name="size_preset">
+              <option value="custom">Custom</option>
+              <option value="1024" selected>Square 1024</option>
+              <option value="full_hd">Full HD (1920×1080)</option>
+              <option value="4k">4K UHD (3840×2160)</option>
+              <option value="8k">8K UHD (7680×4320)</option>
+              <option value="square_2048">Square 2048</option>
+              <option value="square_4k">Square 4K (4096×4096)</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="width">Width</label>
+              <input type="number" id="width" name="width" min="64" max="8192" value="1024" step="1">
+            </div>
+            <div class="field">
+              <label for="height">Height</label>
+              <input type="number" id="height" name="height" min="64" max="8192" value="1024" step="1">
+            </div>
+          </div>
+          <div class="field">
+            <label for="seed">Seed (optional)</label>
+            <input type="number" id="seed" name="seed" min="0" placeholder="random">
+          </div>
+          <h2 style="margin-top: 1.25rem;">Star / nebula</h2>
+          <div class="field">
+            <label for="star_density">Star density</label>
+            <input type="number" id="star_density" name="star_density" min="0.1" max="5" step="0.1" value="1">
+          </div>
+          <div class="field">
+            <label for="star_brightness_min">Star min brightness (0–1)</label>
+            <input type="number" id="star_brightness_min" name="star_brightness_min" min="0" max="1" step="0.1" value="0.5">
+          </div>
+          <div class="field">
+            <label for="nebula_strength">Nebula strength</label>
+            <input type="number" id="nebula_strength" name="nebula_strength" min="0" max="2" step="0.1" value="1">
+          </div>
+          <div class="field">
+            <label for="nebula_smooth">Nebula smooth (blur)</label>
+            <input type="number" id="nebula_smooth" name="nebula_smooth" min="0" max="5" step="1" value="1">
+          </div>
+          <h2 style="margin-top: 1.25rem;">Colors</h2>
+          <div class="field">
+            <label for="color_style">Color palette</label>
+            <select id="color_style" name="color_style">
+              <option value="cosmic">Cosmic (all colors)</option>
+              <option value="cool">Cool (blues, purples, cyans)</option>
+              <option value="warm">Warm (oranges, reds, golds)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="color_jitter">Color jitter (0 = none)</label>
+            <input type="number" id="color_jitter" name="color_jitter" min="0" max="0.4" step="0.05" value="0.1">
+          </div>
+          <button type="submit" id="submit">Generate</button>
+        </form>
+      </aside>
+      <main class="panel" style="display: flex; flex-direction: column;">
+        <h2>Preview</h2>
+        <div class="preview" id="preview">
+          <span class="placeholder">Generate an image to see it here.</span>
+        </div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div class="preview-actions" id="actions" style="display: none;">
+          <a href="#" id="download" download="imagegen.png">Download PNG</a>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script>
+    const form = document.getElementById("form");
+    const preview = document.getElementById("preview");
+    const errorEl = document.getElementById("error");
+    const actions = document.getElementById("actions");
+    const downloadLink = document.getElementById("download");
+    const submitBtn = document.getElementById("submit");
+
+    const SIZE_PRESETS = {
+      custom: null,
+      1024: { width: 1024, height: 1024 },
+      full_hd: { width: 1920, height: 1080 },
+      "4k": { width: 3840, height: 2160 },
+      "8k": { width: 7680, height: 4320 },
+      square_2048: { width: 2048, height: 2048 },
+      square_4k: { width: 4096, height: 4096 },
+    };
+
+    form.size_preset.addEventListener("change", () => {
+      const p = SIZE_PRESETS[form.size_preset.value];
+      if (p) {
+        form.width.value = p.width;
+        form.height.value = p.height;
+      }
+    });
+    form.width.addEventListener("input", () => { form.size_preset.value = "custom"; });
+    form.height.addEventListener("input", () => { form.size_preset.value = "custom"; });
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = "block";
+    }
+    function clearError() {
+      errorEl.textContent = "";
+      errorEl.style.display = "none";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearError();
+      submitBtn.disabled = true;
+      form.classList.add("loading");
+      preview.innerHTML = "<span class=\"placeholder\">Generating…</span>";
+      actions.style.display = "none";
+
+      const seedRaw = form.seed.value.trim();
+      const body = {
+        prompt: form.prompt.value,
+        width: Math.max(1, parseInt(form.width.value, 10) || 1024),
+        height: Math.max(1, parseInt(form.height.value, 10) || 1024),
+        star_density: parseFloat(form.star_density.value) || 1,
+        star_brightness_min: parseFloat(form.star_brightness_min.value) ?? 0.5,
+        nebula_strength: parseFloat(form.nebula_strength.value) ?? 1,
+        nebula_smooth: Math.max(0, parseInt(form.nebula_smooth.value, 10) ?? 1),
+        color_style: form.color_style.value || "cosmic",
+        color_jitter: Math.max(0, Math.min(0.4, parseFloat(form.color_jitter.value) ?? 0.1)),
+      };
+      if (seedRaw !== "") body.seed = parseInt(seedRaw, 10);
+
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        const img = document.createElement("img");
+        img.src = "data:" + (data.content_type || "image/png") + ";base64," + data.image;
+        img.alt = "Generated space image";
+        preview.innerHTML = "";
+        preview.appendChild(img);
+        downloadLink.href = img.src;
+        downloadLink.download = "imagegen-" + (body.prompt || "deep_space") + ".png";
+        actions.style.display = "flex";
+      } catch (err) {
+        showError(err.message || "Generation failed.");
+        preview.innerHTML = "<span class=\"placeholder\">Generate an image to see it here.</span>";
+      } finally {
+        submitBtn.disabled = false;
+        form.classList.remove("loading");
+      }
+    });
+  </script>
+</body>
+</html>

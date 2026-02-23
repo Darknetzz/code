@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Generated images (keep samples in repo if desired; uncomment to ignore)
+# output.png
+# test_*.png
