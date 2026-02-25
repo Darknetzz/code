@@ -48,7 +48,35 @@ python .\Python\pyspotify\pyspotify.py --formats txt json csv --output-dir expor
 ```
 
 - `--formats`: one or more of `txt`, `json`, `csv`
-- `--output-dir`: output folder (default: `exports`)
+- `--output-dir`: subfolder inside `Python/pyspotify/exports` (default: exports root)
+- `--auth-timeout`: seconds to wait for callback URL input (default: `180`, use `0` for no timeout)
+- `--playlist`: filter playlist(s) by ID, exact name, or name substring (repeatable)
+- `--interactive-playlist`: pick playlist(s) from a numbered list at runtime
+
+Examples:
+
+```powershell
+# Export one playlist by name
+python .\Python\pyspotify\pyspotify.py --playlist "Road Trip"
+
+# Export by ID
+python .\Python\pyspotify\pyspotify.py --playlist 37i9dQZF1DXcBWIGoYBM5M
+
+# Export selected playlists interactively
+python .\Python\pyspotify\pyspotify.py --interactive-playlist
+```
+
+### OAuth Login Flow
+
+On first auth (or when token cache is missing/expired), the script:
+
+1. Opens Spotify authorization in your browser
+2. Asks you to paste the full redirected callback URL into the terminal
+3. Exchanges the code and continues export
+
+If it appears stuck, check the terminal prompt for:
+
+- `Paste redirected URL here:`
 
 ## Credentials
 
@@ -78,11 +106,15 @@ SPOTIPY_REDIRECT_URI=http://127.0.0.1:8888/callback
 
 ## Output Files
 
-By default, files are written to `exports/`:
+By default, files are written to `Python/pyspotify/exports/`:
 
 - `spotify_playlists.txt`: human-readable playlist + track list
 - `spotify_playlists.json`: nested structured export
 - `spotify_playlists.csv`: one row per track with playlist metadata
+
+If you pass `--output-dir myrun`, files are written to:
+
+- `Python/pyspotify/exports/myrun/`
 
 ## Troubleshooting
 

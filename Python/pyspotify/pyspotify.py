@@ -18,6 +18,9 @@ import csv
 import getpass
 import json
 import os
+import queue
+import threading
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -46,8 +49,31 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="exports",
-        help="Directory where exported files are written (default: exports).",
+        default=".",
+        help=(
+            "Subdirectory inside the script's exports folder "
+            "(default: current exports root)."
+        ),
+    )
+    parser.add_argument(
+        "--auth-timeout",
+        type=int,
+        default=180,
+        help="Seconds to wait for pasted Spotify callback URL (default: 180). Use 0 to disable timeout.",
+    )
+    parser.add_argument(
+        "--playlist",
+        action="append",
+        default=[],
+        help=(
+            "Playlist selector (can be repeated). Matches by playlist ID, exact name, "
+            "or case-insensitive name substring."
+        ),
+    )
+    parser.add_argument(
+        "--interactive-playlist",
+        action="store_true",
+        help="Choose playlist(s) interactively from a numbered list.",
     )
     return parser.parse_args()
 
@@ -115,9 +141,59 @@ def ensure_spotify_credentials() -> None:
             print(f"Saved credentials to {env_path}")
 
 
-def get_spotify_client() -> spotipy.Spotify:
+def read_input_with_timeout(prompt: str, timeout_seconds: int) -> str:
+    if timeout_seconds <= 0:
+        return input(prompt).strip()
+
+    result_queue: queue.Queue[str] = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            result_queue.put(input(prompt))
+        except EOFError:
+            result_queue.put("")
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+
+    if thread.is_alive():
+        raise TimeoutError(
+            f"Timed out waiting for input after {timeout_seconds} seconds."
+        )
+    return result_queue.get().strip()
+
+
+def authenticate_spotify(auth_manager: SpotifyOAuth, timeout_seconds: int) -> None:
+    # Fast path: skip auth prompt when a cached token already exists.
+    token_info = auth_manager.validate_token(auth_manager.cache_handler.get_cached_token())
+    if token_info:
+        return
+
+    auth_url = auth_manager.get_authorize_url()
+    print("Opening Spotify login in your browser...")
+    print("After approval, copy the FULL redirected URL and paste it here.")
+    print(f"If no response is received in {timeout_seconds}s, auth will time out.")
+    print(f"\nAuth URL (fallback):\n{auth_url}\n")
+    webbrowser.open(auth_url)
+
+    redirected_url = read_input_with_timeout(
+        "Paste redirected URL here: ",
+        timeout_seconds=timeout_seconds,
+    )
+    code = auth_manager.parse_response_code(redirected_url)
+    if not code:
+        raise RuntimeError(
+            "Could not parse auth code from redirected URL. "
+            "Make sure you paste the full callback URL from the browser."
+        )
+    auth_manager.get_access_token(code=code, as_dict=False, check_cache=False)
+
+
+def get_spotify_client(auth_timeout: int) -> spotipy.Spotify:
     ensure_spotify_credentials()
-    auth_manager = SpotifyOAuth(scope=SCOPE, open_browser=True)
+    auth_manager = SpotifyOAuth(scope=SCOPE, open_browser=False)
+    authenticate_spotify(auth_manager=auth_manager, timeout_seconds=auth_timeout)
     return spotipy.Spotify(auth_manager=auth_manager)
 
 
@@ -153,13 +229,125 @@ def fetch_all_playlist_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dic
     )
 
 
+def flatten_terms(values: list[str]) -> list[str]:
+    terms: list[str] = []
+    for value in values:
+        terms.extend(part.strip() for part in value.split(",") if part.strip())
+    return terms
+
+
+def filter_playlists_by_terms(
+    playlists: list[dict[str, Any]], raw_terms: list[str]
+) -> list[dict[str, Any]]:
+    terms = flatten_terms(raw_terms)
+    if not terms:
+        return playlists
+
+    by_id = {playlist.get("id"): playlist for playlist in playlists if playlist.get("id")}
+    selected: list[dict[str, Any]] = []
+    selected_ids: set[str] = set()
+
+    for term in terms:
+        term_lower = term.lower()
+        matches: list[dict[str, Any]] = []
+
+        # First, try direct ID match for precise selection.
+        if term in by_id:
+            matches = [by_id[term]]
+        else:
+            exact_name_matches = [
+                playlist
+                for playlist in playlists
+                if (playlist.get("name") or "").strip().lower() == term_lower
+            ]
+            if exact_name_matches:
+                matches = exact_name_matches
+            else:
+                matches = [
+                    playlist
+                    for playlist in playlists
+                    if term_lower in (playlist.get("name") or "").lower()
+                ]
+
+        if not matches:
+            print(f"Warning: no playlists matched selector '{term}'.")
+            continue
+
+        for playlist in matches:
+            playlist_id = playlist.get("id")
+            if playlist_id and playlist_id not in selected_ids:
+                selected.append(playlist)
+                selected_ids.add(playlist_id)
+
+    return selected
+
+
+def parse_index_selection(selection: str, max_index: int) -> list[int]:
+    if not selection or selection.lower() == "all":
+        return list(range(1, max_index + 1))
+
+    indexes: set[int] = set()
+    tokens = [token.strip() for token in selection.split(",") if token.strip()]
+    for token in tokens:
+        if "-" in token:
+            start_text, end_text = token.split("-", 1)
+            start = int(start_text)
+            end = int(end_text)
+            if start > end:
+                start, end = end, start
+            indexes.update(range(start, end + 1))
+        else:
+            indexes.add(int(token))
+
+    invalid = [idx for idx in indexes if idx < 1 or idx > max_index]
+    if invalid:
+        raise ValueError(f"Selection out of range: {invalid}")
+    return sorted(indexes)
+
+
+def choose_playlists_interactively(playlists: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not playlists:
+        return []
+
+    print("\nAvailable playlists:")
+    for idx, playlist in enumerate(playlists, start=1):
+        name = playlist.get("name", "Untitled playlist")
+        owner = (playlist.get("owner") or {}).get("display_name", "Unknown owner")
+        total = (playlist.get("tracks") or {}).get("total")
+        print(f"  {idx:>3}. {name} ({owner}) - {total} tracks")
+
+    while True:
+        raw = input("\nChoose playlist numbers (e.g. 1,3-5) or 'all': ").strip()
+        try:
+            chosen_indexes = parse_index_selection(raw, len(playlists))
+            return [playlists[idx - 1] for idx in chosen_indexes]
+        except ValueError as err:
+            print(f"Invalid selection: {err}")
+
+
+def select_playlists(
+    playlists: list[dict[str, Any]],
+    selectors: list[str],
+    interactive: bool,
+) -> list[dict[str, Any]]:
+    selected = filter_playlists_by_terms(playlists, selectors)
+    if interactive:
+        selected = choose_playlists_interactively(selected)
+    return selected
+
+
 def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
     # Skip entries where Spotify returns a removed/unavailable track.
     track = item.get("track")
     if not track:
         return None
 
-    artists = [artist.get("name", "") for artist in track.get("artists", []) if artist]
+    # Spotify can occasionally return null artist names; keep only non-empty strings.
+    artists = [
+        str(name).strip()
+        for artist in track.get("artists", [])
+        if artist and (name := artist.get("name")) is not None and str(name).strip()
+    ]
     album = track.get("album", {}).get("name", "") if track.get("album") else ""
     return {
         "id": track.get("id"),
@@ -178,10 +366,9 @@ def normalize_track(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def build_export_payload(sp: spotipy.Spotify) -> list[dict[str, Any]]:
+def build_export_payload(sp: spotipy.Spotify, playlists: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Build one normalized structure that all exporters can reuse.
     payload: list[dict[str, Any]] = []
-    playlists = fetch_all_playlists(sp)
 
     for playlist in playlists:
         playlist_id = playlist.get("id")
@@ -255,7 +442,7 @@ def write_csv(output_dir: Path, playlists: list[dict[str, Any]]) -> Path:
                         "playlist_external_url": playlist["external_url"],
                         "track_id": track["id"],
                         "track_name": track["name"],
-                        "track_artists": ", ".join(track["artists"]),
+                        "track_artists": ", ".join(track["artists"]) if track["artists"] else "Unknown artist",
                         "track_album": track["album"],
                         "duration_ms": track["duration_ms"],
                         "explicit": track["explicit"],
@@ -297,24 +484,48 @@ def write_txt(output_dir: Path, playlists: list[dict[str, Any]]) -> Path:
     return out_file
 
 
+def resolve_output_dir(output_subdir: str) -> Path:
+    script_dir = Path(__file__).resolve().parent
+    exports_root = script_dir / "exports"
+
+    # Always keep exports under the script directory.
+    subdir = Path(output_subdir)
+    if output_subdir in {"", "."}:
+        return exports_root
+
+    # Use only path parts so absolute paths cannot escape exports_root.
+    safe_parts = [part for part in subdir.parts if part not in {"", ".", ".."}]
+    return exports_root.joinpath(*safe_parts)
+
+
 def main() -> None:
     args = parse_args()
-    output_dir = Path(args.output_dir)
+    output_dir = resolve_output_dir(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    sp = get_spotify_client()
-    playlists = build_export_payload(sp)
+    sp = get_spotify_client(auth_timeout=args.auth_timeout)
+    playlists = fetch_all_playlists(sp)
+    selected_playlists = select_playlists(
+        playlists=playlists,
+        selectors=args.playlist,
+        interactive=args.interactive_playlist,
+    )
+    if not selected_playlists:
+        print("No playlists selected. Nothing to export.")
+        return
+
+    playlists_payload = build_export_payload(sp, selected_playlists)
 
     written_files: list[Path] = []
     requested = set(args.formats)
     if "json" in requested:
-        written_files.append(write_json(output_dir, playlists))
+        written_files.append(write_json(output_dir, playlists_payload))
     if "csv" in requested:
-        written_files.append(write_csv(output_dir, playlists))
+        written_files.append(write_csv(output_dir, playlists_payload))
     if "txt" in requested:
-        written_files.append(write_txt(output_dir, playlists))
+        written_files.append(write_txt(output_dir, playlists_payload))
 
-    print(f"Exported {len(playlists)} playlists.")
+    print(f"Exported {len(playlists_payload)} playlists.")
     for file in written_files:
         print(f"- {file}")
 
