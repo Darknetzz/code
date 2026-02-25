@@ -14,3 +14,4 @@ hackcon2026/
 *.log
 PowerShell/OptimizePerformance_Changes.json
 downloads/
+.env
