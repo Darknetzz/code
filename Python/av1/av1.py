@@ -909,7 +909,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     - bitrate_decision: Short human-readable bitrate strategy used for this file
-    - media_info: Short media metadata string (length + fps)
+    - media_info: Short media metadata string (resolution, length, fps)
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
@@ -917,11 +917,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Validate file
     if not validate_video_file(input_path):
-        return delete_original, 0, "skip-invalid", "length unknown | fps unknown"
+        return delete_original, 0, "skip-invalid", "unknown | length unknown | fps unknown"
 
     if not needs_transcoding(input_path):
         cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
-        return delete_original, 0, "skip-codec", "length unknown | fps unknown"
+        return delete_original, 0, "skip-codec", "unknown | length unknown | fps unknown"
 
     # Get file size (used for display and progress)
     try:
@@ -951,21 +951,25 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     # Check disk space before proceeding (skip in dry run)
     if not dry_run:
         if not check_disk_space(input_path, output_dir):
-            return delete_original, 0, "skip-disk", "length unknown | fps unknown"
+            return delete_original, 0, "skip-disk", "unknown | length unknown | fps unknown"
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
             if safe_input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
-                return delete_original, 0, "skip-overwrite", "length unknown | fps unknown"
+                return delete_original, 0, "skip-overwrite", "unknown | length unknown | fps unknown"
 
     # Probe once and reuse metadata for bitrate decisions + user-facing output.
     stream_info = get_video_stream_info(input_path)
+    width = stream_info.get("width")
+    height = stream_info.get("height")
     fps = stream_info.get("fps")
     duration = stream_info.get("duration")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        res_str = f"{width}x{height}"
+    else:
+        res_str = "unknown"
     fps_str = f"{float(fps):.2f}" if isinstance(fps, (int, float)) and float(fps) > 0 else "unknown"
-    media_info = f"length {_format_duration(duration)} | fps {fps_str}"
-    if not _SUPPRESS_OUTPUT:
-        cprint(f"🕒 Media: {media_info}", "info")
+    media_info = f"{res_str} | length {_format_duration(duration)} | fps {fps_str}"
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
@@ -985,8 +989,6 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     
     if not bitrate:
         input_bitrate = stream_info.get("bitrate")
-        width = stream_info.get("width")
-        height = stream_info.get("height")
 
         if isinstance(input_bitrate, int) and input_bitrate > 0:
             recommended_bitrate = None
@@ -1000,33 +1002,17 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     f"kept {input_bitrate/1_000_000:.2f}M "
                     f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {width}x{height} {float(fps):.2f}fps)"
                 )
-                if not _SUPPRESS_OUTPUT:
-                    cprint(
-                        f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M kept "
-                        f"(<= recommended {recommended_bitrate/1_000_000:.2f}M @ {width}x{height} {float(fps):.2f}fps)",
-                        "info"
-                    )
             else:
                 target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
                 bitrate_decision = f"reduced {input_bitrate/1_000_000:.2f}M→{target_bitrate_int/1_000_000:.2f}M"
-                if not _SUPPRESS_OUTPUT:
-                    if recommended_bitrate:
-                        cprint(
-                            f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M "
-                            f"({int(BITRATE_REDUCTION_FACTOR*100)}% reduction; rec≈{recommended_bitrate/1_000_000:.2f}M)",
-                            "info"
-                        )
-                    else:
-                        cprint(
-                            f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M "
-                            f"({int(BITRATE_REDUCTION_FACTOR*100)}% reduction)",
-                            "info"
-                        )
         else:
             if not _SUPPRESS_OUTPUT:
                 cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
             target_bitrate_int = BITRATE_FALLBACK
             bitrate_decision = f"fallback {BITRATE_FALLBACK/1_000_000:.1f}M"
+
+    if not _SUPPRESS_OUTPUT:
+        cprint(f"🎯 {filename} → {bitrate_decision} | {media_info}", "info")
 
     # --- BUILD COMMAND ---
     # Pixel format selection: CPU uses yuv420p, GPU encoders typically use nv12, VAAPI uses same
