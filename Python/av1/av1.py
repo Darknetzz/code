@@ -62,6 +62,10 @@ DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 AUDIO_BITRATE = "64k"  # Opus audio bitrate per stream
 MAX_VIDEO_WIDTH = 1920  # Maximum video width (maintains aspect ratio)
 VIDEO_BITRATE_ESTIMATE_FACTOR = 0.9  # Factor to estimate video-only bitrate from total
+RECOMMENDED_BITRATE_BPP = 0.06  # Bits-per-pixel-per-frame heuristic for "already efficient"
+RECOMMENDED_BITRATE_MARGIN = 1.05  # Consider within +5% of recommended as "at target"
+RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
+RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 
@@ -221,6 +225,92 @@ def _format_size(bytes_amount: float) -> str:
     if bytes_amount >= 1024:
         return f"{bytes_amount / 1024:.1f} KB"
     return f"{bytes_amount} B"
+
+
+def _parse_ffprobe_fraction(value: str) -> Optional[float]:
+    """Parses FFprobe fraction values like '30000/1001' into float FPS."""
+    try:
+        if not value or value == "0/0":
+            return None
+        if "/" in value:
+            num, den = value.split("/", 1)
+            n = float(num)
+            d = float(den)
+            if d == 0:
+                return None
+            return n / d
+        return float(value)
+    except Exception:
+        return None
+
+
+def get_video_stream_info(file_path: str) -> dict:
+    """
+    Returns video stream metadata:
+      bitrate (bits/s), width, height, fps
+    Bitrate falls back to file_size/duration estimate when stream bitrate is unavailable.
+    """
+    info = {"bitrate": None, "width": None, "height": None, "fps": None}
+    try:
+        cmd = [
+            FFPROBE_CMD, "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=bit_rate,width,height,avg_frame_rate,r_frame_rate:format=duration",
+            "-of", "json",
+            file_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
+        if result.returncode != 0 or not result.stdout.strip():
+            return info
+
+        data = json.loads(result.stdout)
+        streams = data.get("streams", [])
+        stream = streams[0] if streams else {}
+        fmt = data.get("format", {})
+
+        # Resolution
+        width = stream.get("width")
+        height = stream.get("height")
+        if isinstance(width, int) and width > 0:
+            info["width"] = width
+        if isinstance(height, int) and height > 0:
+            info["height"] = height
+
+        # FPS (prefer avg_frame_rate, fallback to r_frame_rate)
+        fps = _parse_ffprobe_fraction(str(stream.get("avg_frame_rate", "")))
+        if not fps:
+            fps = _parse_ffprobe_fraction(str(stream.get("r_frame_rate", "")))
+        if fps and fps > 0:
+            info["fps"] = fps
+
+        # Bitrate from stream if available
+        bit_rate = stream.get("bit_rate")
+        if isinstance(bit_rate, str) and bit_rate.isdigit():
+            info["bitrate"] = int(bit_rate)
+        elif isinstance(bit_rate, int) and bit_rate > 0:
+            info["bitrate"] = bit_rate
+
+        # Fallback bitrate: derive from file size/duration
+        if info["bitrate"] is None:
+            duration_str = str(fmt.get("duration", "")).strip()
+            if duration_str and duration_str.replace(".", "", 1).isdigit():
+                duration = float(duration_str)
+                if duration > 0:
+                    size = os.path.getsize(file_path)
+                    info["bitrate"] = int((size * 8 / duration) * VIDEO_BITRATE_ESTIMATE_FACTOR)
+
+    except subprocess.TimeoutExpired:
+        cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
+    except Exception as e:
+        cprint(f"Could not probe stream info: {e}", "warning")
+
+    return info
+
+
+def get_recommended_bitrate(width: int, height: int, fps: float) -> int:
+    """Estimate an efficient bitrate for given resolution/FPS using a simple BPP heuristic."""
+    estimated = int(width * height * fps * RECOMMENDED_BITRATE_BPP)
+    return max(RECOMMENDED_BITRATE_MIN, min(RECOMMENDED_BITRATE_MAX, estimated))
 
 def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
@@ -432,43 +522,9 @@ def get_input_bitrate(file_path: str) -> Optional[int]:
     Returns the bitrate of the video stream in bits/s.
     Falls back to calculating from file size and duration if not available.
     """
-    try:
-        cmd = [
-            FFPROBE_CMD, "-v", "error", 
-            "-select_streams", "v:0",
-            "-show_entries", "stream=bit_rate",
-            "-of", "default=noprint_wrappers=1:nokey=1", 
-            file_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
-        val = result.stdout.strip()
-        if val.isdigit():
-            return int(val)
-        
-        # Fallback: Calculate from duration/size
-        cmd_dur = [
-            FFPROBE_CMD, "-v", "error", 
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", 
-            file_path
-        ]
-        result_dur = subprocess.run(cmd_dur, capture_output=True, text=True, timeout=10)
-        duration_str = result_dur.stdout.strip()
-        
-        if duration_str and duration_str.replace('.', '', 1).isdigit():
-            duration = float(duration_str)
-            size = os.path.getsize(file_path)
-            
-            if duration > 0:
-                # Calculate total bitrate, apply factor to estimate video-only bitrate
-                return int((size * 8 / duration) * VIDEO_BITRATE_ESTIMATE_FACTOR)
-            
-    except subprocess.TimeoutExpired:
-        cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
-    except Exception as e:
-        cprint(f"Could not calculate input bitrate: {e}", "warning")
-    
-    return None
+    info = get_video_stream_info(file_path)
+    bitrate = info.get("bitrate")
+    return int(bitrate) if isinstance(bitrate, int) and bitrate > 0 else None
 
 
 def get_audio_channels(file_path: str) -> Optional[int]:
@@ -886,11 +942,41 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             bitrate = None
     
     if not bitrate:
-        input_bitrate = get_input_bitrate(input_path)
-        if input_bitrate:
-            target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
-            if not _SUPPRESS_OUTPUT:
-                cprint(f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M ({int(BITRATE_REDUCTION_FACTOR*100)}% reduction)", "info")
+        stream_info = get_video_stream_info(input_path)
+        input_bitrate = stream_info.get("bitrate")
+        width = stream_info.get("width")
+        height = stream_info.get("height")
+        fps = stream_info.get("fps")
+
+        if isinstance(input_bitrate, int) and input_bitrate > 0:
+            recommended_bitrate = None
+            if isinstance(width, int) and isinstance(height, int) and isinstance(fps, (int, float)) and fps > 0:
+                recommended_bitrate = get_recommended_bitrate(width, height, float(fps))
+
+            if recommended_bitrate and input_bitrate <= int(recommended_bitrate * RECOMMENDED_BITRATE_MARGIN):
+                # Already efficient for this resolution/FPS: keep source bitrate.
+                target_bitrate_int = input_bitrate
+                if not _SUPPRESS_OUTPUT:
+                    cprint(
+                        f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M kept "
+                        f"(<= recommended {recommended_bitrate/1_000_000:.2f}M @ {width}x{height} {float(fps):.2f}fps)",
+                        "info"
+                    )
+            else:
+                target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
+                if not _SUPPRESS_OUTPUT:
+                    if recommended_bitrate:
+                        cprint(
+                            f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M "
+                            f"({int(BITRATE_REDUCTION_FACTOR*100)}% reduction; rec≈{recommended_bitrate/1_000_000:.2f}M)",
+                            "info"
+                        )
+                    else:
+                        cprint(
+                            f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M → {target_bitrate_int/1_000_000:.2f}M "
+                            f"({int(BITRATE_REDUCTION_FACTOR*100)}% reduction)",
+                            "info"
+                        )
         else:
             if not _SUPPRESS_OUTPUT:
                 cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
