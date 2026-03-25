@@ -226,6 +226,17 @@ def _format_size(bytes_amount: float) -> str:
     return f"{bytes_amount} B"
 
 
+def _format_duration(seconds: Optional[float]) -> str:
+    """Pretty-print seconds as HH:MM:SS."""
+    if not isinstance(seconds, (int, float)) or seconds <= 0:
+        return "unknown"
+    total = int(seconds)
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
 def _parse_ffprobe_fraction(value: str) -> Optional[float]:
     """Parses FFprobe fraction values like '30000/1001' into float FPS."""
     try:
@@ -246,10 +257,10 @@ def _parse_ffprobe_fraction(value: str) -> Optional[float]:
 def get_video_stream_info(file_path: str) -> dict:
     """
     Returns video stream metadata:
-      bitrate (bits/s), width, height, fps
+      bitrate (bits/s), width, height, fps, duration
     Bitrate falls back to file_size/duration estimate when stream bitrate is unavailable.
     """
-    info = {"bitrate": None, "width": None, "height": None, "fps": None}
+    info = {"bitrate": None, "width": None, "height": None, "fps": None, "duration": None}
     try:
         cmd = [
             FFPROBE_CMD, "-v", "error",
@@ -266,6 +277,11 @@ def get_video_stream_info(file_path: str) -> dict:
         streams = data.get("streams", [])
         stream = streams[0] if streams else {}
         fmt = data.get("format", {})
+        duration_str = str(fmt.get("duration", "")).strip()
+        if duration_str and duration_str.replace(".", "", 1).isdigit():
+            duration = float(duration_str)
+            if duration > 0:
+                info["duration"] = duration
 
         # Resolution
         width = stream.get("width")
@@ -291,12 +307,9 @@ def get_video_stream_info(file_path: str) -> dict:
 
         # Fallback bitrate: derive from file size/duration
         if info["bitrate"] is None:
-            duration_str = str(fmt.get("duration", "")).strip()
-            if duration_str and duration_str.replace(".", "", 1).isdigit():
-                duration = float(duration_str)
-                if duration > 0:
-                    size = os.path.getsize(file_path)
-                    info["bitrate"] = int((size * 8 / duration) * VIDEO_BITRATE_ESTIMATE_FACTOR)
+            if isinstance(info["duration"], (int, float)) and info["duration"] > 0:
+                size = os.path.getsize(file_path)
+                info["bitrate"] = int((size * 8 / float(info["duration"])) * VIDEO_BITRATE_ESTIMATE_FACTOR)
 
     except subprocess.TimeoutExpired:
         cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
@@ -889,13 +902,14 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int, str]:
+                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int, str, str]:
     """
     Converts a single video file to the target codec.
-    Returns a tuple: (auto_delete_flag, size_saved_bytes, bitrate_decision)
+    Returns a tuple: (auto_delete_flag, size_saved_bytes, bitrate_decision, media_info)
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
     - bitrate_decision: Short human-readable bitrate strategy used for this file
+    - media_info: Short media metadata string (length + fps)
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
@@ -903,11 +917,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Validate file
     if not validate_video_file(input_path):
-        return delete_original, 0, "skip-invalid"
+        return delete_original, 0, "skip-invalid", "length unknown | fps unknown"
 
     if not needs_transcoding(input_path):
         cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
-        return delete_original, 0, "skip-codec"
+        return delete_original, 0, "skip-codec", "length unknown | fps unknown"
 
     # Get file size (used for display and progress)
     try:
@@ -937,12 +951,21 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     # Check disk space before proceeding (skip in dry run)
     if not dry_run:
         if not check_disk_space(input_path, output_dir):
-            return delete_original, 0, "skip-disk"
+            return delete_original, 0, "skip-disk", "length unknown | fps unknown"
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
             if safe_input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
-                return delete_original, 0, "skip-overwrite"
+                return delete_original, 0, "skip-overwrite", "length unknown | fps unknown"
+
+    # Probe once and reuse metadata for bitrate decisions + user-facing output.
+    stream_info = get_video_stream_info(input_path)
+    fps = stream_info.get("fps")
+    duration = stream_info.get("duration")
+    fps_str = f"{float(fps):.2f}" if isinstance(fps, (int, float)) and float(fps) > 0 else "unknown"
+    media_info = f"length {_format_duration(duration)} | fps {fps_str}"
+    if not _SUPPRESS_OUTPUT:
+        cprint(f"🕒 Media: {media_info}", "info")
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
@@ -961,11 +984,9 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             bitrate = None
     
     if not bitrate:
-        stream_info = get_video_stream_info(input_path)
         input_bitrate = stream_info.get("bitrate")
         width = stream_info.get("width")
         height = stream_info.get("height")
-        fps = stream_info.get("fps")
 
         if isinstance(input_bitrate, int) and input_bitrate > 0:
             recommended_bitrate = None
@@ -1135,18 +1156,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             })
         except Exception:
             pass
-        return delete_original, 0, f"dry-run {bitrate_decision}"
+        return delete_original, 0, f"dry-run {bitrate_decision}", media_info
     
-    # Get video duration for progress calculation
-    try:
-        duration_cmd = [FFPROBE_CMD, "-v", "error", "-show_entries", "format=duration", 
-                       "-of", "default=noprint_wrappers=1:nokey=1", input_path]
-        duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
-        duration_str = duration_result.stdout.strip()
-        total_duration = float(duration_str) if duration_str and duration_str.replace('.', '', 1).isdigit() else None
-    except (subprocess.TimeoutExpired, ValueError, subprocess.SubprocessError) as e:
-        cprint(f"Could not determine video duration: {e}", "warning")
-        total_duration = None
+    # Get video duration for progress calculation (prefer already-probed metadata)
+    total_duration = float(duration) if isinstance(duration, (int, float)) and duration > 0 else None
     
     # Collect output for error reporting
     error_lines = []
@@ -1255,7 +1268,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 os.remove(temp_output)
             except OSError:
                 pass
-        return delete_original, 0, bitrate_decision
+        return delete_original, 0, bitrate_decision, media_info
 
     if result.returncode == 0:
         try:
@@ -1322,7 +1335,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                             except OSError as e:
                                 cprint(f"Could not rename to original name: {e}", "warning")
                 
-                return delete_original, size_saved, bitrate_decision
+                return delete_original, size_saved, bitrate_decision, media_info
             else:
                 cprint("❌ Error: Temp file missing or invalid!", "error")
         except OSError as e:
@@ -1449,7 +1462,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             except Exception as e:
                 cprint(f"Could not remove temp file: {e}", "warning")
 
-    return delete_original, 0, bitrate_decision
+    return delete_original, 0, bitrate_decision, media_info
 
 # ============================================================================ #
 #                      FUNCTION: process_batch_files                           #
@@ -1554,11 +1567,11 @@ def process_batch_files(
             # Suppress output during conversion
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
-            auto_delete_result, size_saved, bitrate_decision = convert_single_file(
+            auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
                 file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=True
             )
             _SUPPRESS_OUTPUT = False
-            cprint(f"🎯 {display_path} → {bitrate_decision}", "info")
+            cprint(f"🎯 {display_path} → {bitrate_decision} | {media_info}", "info")
             
             # Track statistics if conversion happened
             if size_saved != 0:
