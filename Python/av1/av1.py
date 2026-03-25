@@ -448,9 +448,9 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
     if not _SUPPRESS_OUTPUT:
         if _NO_COLOR:
-            console.print(message, **kwargs)
+            console.print(message, markup=False, **kwargs)
         else:
-            console.print(message, style=style, **kwargs)
+            console.print(message, style=style, markup=False, **kwargs)
     
     # Log the message (with prefix for file logging) and structured event
     _LOG_MESSAGES.append(message)
@@ -1103,7 +1103,6 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
 
     if not _SUPPRESS_OUTPUT:
-        cprint(f"🎬 Converting: {filename}", "info")
         cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
         # Show ffmpeg path for debugging
         if os.getenv("AV1_DEBUG"):
