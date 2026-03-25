@@ -873,12 +873,13 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
                        bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int]:
+                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int, str]:
     """
     Converts a single video file to the target codec.
-    Returns a tuple: (auto_delete_flag, size_saved_bytes)
+    Returns a tuple: (auto_delete_flag, size_saved_bytes, bitrate_decision)
     - auto_delete_flag: True if user selected 'all' for auto-delete
     - size_saved_bytes: Bytes saved (positive) or added (negative), 0 if skipped/failed
+    - bitrate_decision: Short human-readable bitrate strategy used for this file
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
@@ -886,11 +887,11 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
 
     # Validate file
     if not validate_video_file(input_path):
-        return delete_original, 0
+        return delete_original, 0, "skip-invalid"
 
     if not needs_transcoding(input_path):
         cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
-        return delete_original, 0
+        return delete_original, 0, "skip-codec"
 
     # Get file size (used for display and progress)
     try:
@@ -920,15 +921,16 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
     # Check disk space before proceeding (skip in dry run)
     if not dry_run:
         if not check_disk_space(input_path, output_dir):
-            return delete_original, 0
+            return delete_original, 0, "skip-disk"
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
             if safe_input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
-                return delete_original, 0
+                return delete_original, 0, "skip-overwrite"
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
+    bitrate_decision = "auto"
     if bitrate:
         try:
             if isinstance(bitrate, str) and bitrate.lower().endswith('m'):
@@ -937,6 +939,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 target_bitrate_int = int(float(bitrate[:-1]) * 1_000)
             else:
                 target_bitrate_int = int(bitrate)
+            bitrate_decision = f"manual {target_bitrate_int/1_000_000:.2f}M"
         except ValueError:
             cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
             bitrate = None
@@ -956,6 +959,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             if recommended_bitrate and input_bitrate <= int(recommended_bitrate * RECOMMENDED_BITRATE_MARGIN):
                 # Already efficient for this resolution/FPS: keep source bitrate.
                 target_bitrate_int = input_bitrate
+                bitrate_decision = (
+                    f"kept {input_bitrate/1_000_000:.2f}M "
+                    f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {width}x{height} {float(fps):.2f}fps)"
+                )
                 if not _SUPPRESS_OUTPUT:
                     cprint(
                         f"🎯 Bitrate: {input_bitrate/1_000_000:.2f}M kept "
@@ -964,6 +971,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                     )
             else:
                 target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
+                bitrate_decision = f"reduced {input_bitrate/1_000_000:.2f}M→{target_bitrate_int/1_000_000:.2f}M"
                 if not _SUPPRESS_OUTPUT:
                     if recommended_bitrate:
                         cprint(
@@ -981,6 +989,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             if not _SUPPRESS_OUTPUT:
                 cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
             target_bitrate_int = BITRATE_FALLBACK
+            bitrate_decision = f"fallback {BITRATE_FALLBACK/1_000_000:.1f}M"
 
     # --- BUILD COMMAND ---
     # Pixel format selection: CPU uses yuv420p, GPU encoders typically use nv12, VAAPI uses same
@@ -1110,7 +1119,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             })
         except Exception:
             pass
-        return delete_original, 0
+        return delete_original, 0, f"dry-run {bitrate_decision}"
     
     # Get video duration for progress calculation
     try:
@@ -1230,7 +1239,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                 os.remove(temp_output)
             except OSError:
                 pass
-        return delete_original, 0
+        return delete_original, 0, bitrate_decision
 
     if result.returncode == 0:
         try:
@@ -1297,7 +1306,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                             except OSError as e:
                                 cprint(f"Could not rename to original name: {e}", "warning")
                 
-                return delete_original, size_saved
+                return delete_original, size_saved, bitrate_decision
             else:
                 cprint("❌ Error: Temp file missing or invalid!", "error")
         except OSError as e:
@@ -1424,7 +1433,7 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             except Exception as e:
                 cprint(f"Could not remove temp file: {e}", "warning")
 
-    return delete_original, 0
+    return delete_original, 0, bitrate_decision
 
 # ============================================================================ #
 #                      FUNCTION: process_batch_files                           #
@@ -1529,10 +1538,11 @@ def process_batch_files(
             # Suppress output during conversion
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
-            auto_delete_result, size_saved = convert_single_file(
+            auto_delete_result, size_saved, bitrate_decision = convert_single_file(
                 file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=True
             )
             _SUPPRESS_OUTPUT = False
+            cprint(f"🎯 {display_path} → {bitrate_decision}", "info")
             
             # Track statistics if conversion happened
             if size_saved != 0:
