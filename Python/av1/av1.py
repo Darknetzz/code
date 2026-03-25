@@ -62,8 +62,7 @@ DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 AUDIO_BITRATE = "64k"  # Opus audio bitrate per stream
 MAX_VIDEO_WIDTH = 1920  # Maximum video width (maintains aspect ratio)
 VIDEO_BITRATE_ESTIMATE_FACTOR = 0.9  # Factor to estimate video-only bitrate from total
-RECOMMENDED_BITRATE_BPP = 0.06  # Bits-per-pixel-per-frame heuristic for "already efficient"
-RECOMMENDED_BITRATE_MARGIN = 1.05  # Consider within +5% of recommended as "at target"
+RECOMMENDED_BITRATE_MARGIN = 1.15  # Consider within +15% of recommended as "at target"
 RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
 RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
@@ -308,8 +307,25 @@ def get_video_stream_info(file_path: str) -> dict:
 
 
 def get_recommended_bitrate(width: int, height: int, fps: float) -> int:
-    """Estimate an efficient bitrate for given resolution/FPS using a simple BPP heuristic."""
-    estimated = int(width * height * fps * RECOMMENDED_BITRATE_BPP)
+    """
+    Estimate an efficient bitrate for given resolution/FPS.
+    Uses resolution tiers with FPS scaling to avoid overly aggressive cuts on near-FHD content.
+    """
+    pixels = width * height
+    if pixels <= 854 * 480:
+        base_30fps = 1_200_000
+    elif pixels <= 1280 * 720:
+        base_30fps = 3_000_000
+    elif pixels <= 1920 * 1080:
+        base_30fps = 8_000_000
+    elif pixels <= 2560 * 1440:
+        base_30fps = 14_000_000
+    else:
+        base_30fps = 22_000_000
+
+    # Scale linearly from a 30fps baseline, with sane bounds for edge FPS values.
+    fps_scale = max(0.75, min(2.0, fps / 30.0))
+    estimated = int(base_30fps * fps_scale)
     return max(RECOMMENDED_BITRATE_MIN, min(RECOMMENDED_BITRATE_MAX, estimated))
 
 def _signal_handler(sig: int, frame) -> None:
