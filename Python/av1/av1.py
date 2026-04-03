@@ -27,6 +27,7 @@ if platform.system() == 'Windows':
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.table import Column
 import typer
 
 # ============================================================================ #
@@ -235,6 +236,72 @@ def _format_duration(seconds: Optional[float]) -> str:
     minutes = (total % 3600) // 60
     secs = total % 60
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _truncate_middle(text: str, max_length: int = 60) -> str:
+    """Shorten long paths so progress rows stay on one terminal line."""
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    keep = (max_length - 3) // 2
+    return f"{text[:keep]}...{text[-(max_length - 3 - keep):]}"
+
+
+def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
+    """Create a progress layout that avoids wrapping in narrow terminals."""
+    columns = [
+        SpinnerColumn(),
+        TextColumn(
+            "[progress.description]{task.description}",
+            table_column=Column(ratio=1, no_wrap=True, overflow="ellipsis"),
+        ),
+        BarColumn(bar_width=None),
+        TaskProgressColumn(),
+    ]
+
+    if batch_mode:
+        columns.extend(
+            [
+                TextColumn(
+                    "[green]Saved: {task.fields[saved]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[yellow]{task.fields[eta]}",
+                    table_column=Column(no_wrap=True),
+                ),
+            ]
+        )
+    else:
+        columns.extend(
+            [
+                TextColumn(
+                    "[cyan]{task.fields[fps]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[yellow]{task.fields[eta]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[blue]Size: {task.fields[size]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[green]Saved: {task.fields[saved]}",
+                    table_column=Column(no_wrap=True),
+                ),
+            ]
+        )
+
+    return Progress(*columns, transient=transient, expand=True)
+
+
+def _format_batch_progress_description(current: int, total: int, elapsed_seconds: int, current_item: str) -> str:
+    """Build a compact batch progress description for the terminal."""
+    short_item = _truncate_middle(current_item, 48)
+    return f"Converting {current}/{total} ({elapsed_seconds}s) {short_item}"
 
 
 def _parse_ffprobe_fraction(value: str) -> Optional[float]:
@@ -1497,22 +1564,12 @@ def process_batch_files(
     signal.signal(signal.SIGINT, _signal_handler)
     
     # Process files with progress tracking
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TextColumn("[cyan]{task.fields[fps]}"),
-        TextColumn("[yellow]{task.fields[eta]}"),
-        TextColumn("[blue]Size: {task.fields[size]}"),
-        TextColumn("[green]Saved: {task.fields[saved]}"),
-        transient=transient_progress,
-    ) as progress:
+    with _build_progress(transient=transient_progress, batch_mode=True) as progress:
         global _PROGRESS_CONTEXT
         _PROGRESS_CONTEXT = progress
         
         overall_task = progress.add_task(
-            f"[cyan]Converting 0/{len(video_files)} files...",
+            _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
             total=len(video_files),
             saved=_format_saved(0),
             fps="",
@@ -1532,7 +1589,10 @@ def process_batch_files(
             display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
             file_start = time.time()
             elapsed = int(time.time() - batch_start_time)
-            progress.update(overall_task, description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s) → {display_path}")
+            progress.update(
+                overall_task,
+                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
+            )
             
             # Capture original size before conversion
             try:
@@ -1553,7 +1613,7 @@ def process_batch_files(
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
             auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
-                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=True
+                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False
             )
             _SUPPRESS_OUTPUT = False
             cprint(f"🎯 {display_path} → {bitrate_decision} | {media_info}", "info")
@@ -1590,7 +1650,7 @@ def process_batch_files(
             
             progress.update(
                 overall_task,
-                description=f"[cyan]Converting {idx}/{len(video_files)} files... ({elapsed}s{eta_str}) → {display_path}",
+                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
                 fields={"saved": _format_saved(cumulative_saved), "fps": "", "eta": "", "size": ""},
             )
         
@@ -1684,17 +1744,7 @@ def convert_videos(
     if os.path.isfile(input_path):
         # Single file - set up progress context for progress bar
         global _PROGRESS_CONTEXT
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("[cyan]{task.fields[fps]}"),
-            TextColumn("[yellow]{task.fields[eta]}"),
-            TextColumn("[blue]Size: {task.fields[size]}"),
-            TextColumn("[green]Saved: {task.fields[saved]}"),
-            transient=False,
-        ) as progress:
+        with _build_progress(transient=False, batch_mode=False) as progress:
             _PROGRESS_CONTEXT = progress
             try:
                 convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv, show_progress=True)
