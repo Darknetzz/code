@@ -304,6 +304,31 @@ def _format_batch_progress_description(current: int, total: int, elapsed_seconds
     return f"Converting {current}/{total} ({elapsed_seconds}s) {short_item}"
 
 
+_INLINE_STATUS_WIDTH = 0
+
+
+def _write_inline_status(message: str) -> None:
+    """Render a single status line in place without Rich progress."""
+    global _INLINE_STATUS_WIDTH
+    safe_message = message.replace("\n", " ").replace("\r", " ")
+    padded = safe_message
+    if len(padded) < _INLINE_STATUS_WIDTH:
+        padded += " " * (_INLINE_STATUS_WIDTH - len(padded))
+    sys.stdout.write("\r" + padded)
+    sys.stdout.flush()
+    _INLINE_STATUS_WIDTH = len(safe_message)
+
+
+def _clear_inline_status() -> None:
+    """Clear the current inline status line."""
+    global _INLINE_STATUS_WIDTH
+    if _INLINE_STATUS_WIDTH <= 0:
+        return
+    sys.stdout.write("\r" + (" " * _INLINE_STATUS_WIDTH) + "\r")
+    sys.stdout.flush()
+    _INLINE_STATUS_WIDTH = 0
+
+
 def _parse_ffprobe_fraction(value: str) -> Optional[float]:
     """Parses FFprobe fraction values like '30000/1001' into float FPS."""
     try:
@@ -1563,25 +1588,15 @@ def process_batch_files(
     _USER_CANCELLED = False
     signal.signal(signal.SIGINT, _signal_handler)
     
-    # Process files with progress tracking
-    with _build_progress(transient=transient_progress, batch_mode=True) as progress:
-        global _PROGRESS_CONTEXT
-        _PROGRESS_CONTEXT = progress
-        
-        overall_task = progress.add_task(
-            _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
-            total=len(video_files),
-            saved=_format_saved(0),
-            fps="",
-            eta="",
-            size="",
-        )
-        
-        auto_delete = delete_original
-        
+    global _PROGRESS_CONTEXT
+    _PROGRESS_CONTEXT = None
+    auto_delete = delete_original
+    
+    try:
         for idx, file_path in enumerate(video_files, 1):
             # Check if user cancelled
             if _USER_CANCELLED:
+                _clear_inline_status()
                 cprint("\n⏸️  Batch conversion interrupted. Finishing current file...", "warning")
                 break
             
@@ -1589,10 +1604,23 @@ def process_batch_files(
             display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
             file_start = time.time()
             elapsed = int(time.time() - batch_start_time)
-            progress.update(
-                overall_task,
-                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
+            
+            # Calculate ETA if we have timing data
+            eta_text = ""
+            if file_times:
+                avg_time_per_file = sum(file_times) / len(file_times)
+                remaining_files = len(video_files) - idx + 1
+                eta_seconds = int(avg_time_per_file * remaining_files)
+                if eta_seconds > 0:
+                    eta_text = f" | ETA {eta_seconds}s"
+            
+            status_line = (
+                f"Converting {idx}/{len(video_files)} "
+                f"| Saved {_format_saved(cumulative_saved)} "
+                f"| {elapsed}s{eta_text} "
+                f"| {_truncate_middle(display_path, 70)}"
             )
+            _write_inline_status(status_line)
             
             # Capture original size before conversion
             try:
@@ -1616,6 +1644,7 @@ def process_batch_files(
                 file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False
             )
             _SUPPRESS_OUTPUT = False
+            _clear_inline_status()
             cprint(f"🎯 {display_path} → {bitrate_decision} | {media_info}", "info")
             
             # Track statistics if conversion happened
@@ -1634,26 +1663,8 @@ def process_batch_files(
             # Update auto-delete flag based on user's "all" choice
             if auto_delete_result:
                 auto_delete = True
-            
-            # Update progress and show running total saved
-            progress.advance(overall_task)
-            elapsed = int(time.time() - batch_start_time)
-            
-            # Calculate ETA if we have timing data
-            eta_str = ""
-            if file_times:
-                avg_time_per_file = sum(file_times) / len(file_times)
-                remaining_files = len(video_files) - idx
-                eta_seconds = int(avg_time_per_file * remaining_files)
-                if eta_seconds > 0:
-                    eta_str = f" | ETA: {eta_seconds}s"
-            
-            progress.update(
-                overall_task,
-                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
-                fields={"saved": _format_saved(cumulative_saved), "fps": "", "eta": "", "size": ""},
-            )
-        
+    finally:
+        _clear_inline_status()
         _PROGRESS_CONTEXT = None
     
     # Display batch summary
