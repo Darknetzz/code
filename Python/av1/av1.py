@@ -34,7 +34,7 @@ import typer
 #                           APP & CLI CONFIGURATION                            #
 # ============================================================================ #
 __app_name__ = "av1"
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 console = Console()  # Will be reinitialized in main() if --no-color is set
 app = typer.Typer(
@@ -74,7 +74,8 @@ ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 # ============================================================================ #
 # Environment variables to tweak behavior without changing CLI:
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
-#   AV1_BITRATE_FALLBACK, AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
+#   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK,
+#   AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
 #   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
 
 def _env_bool(val: str) -> bool:
@@ -236,6 +237,125 @@ def _format_duration(seconds: Optional[float]) -> str:
     minutes = (total % 3600) // 60
     secs = total % 60
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _parse_byte_size(spec: str) -> Optional[int]:
+    """
+    Parse a human-readable size to bytes: '10M', '10MB', '500k', '1G', or plain integer bytes.
+    """
+    if not spec or not str(spec).strip():
+        return None
+    s = str(spec).strip().lower().replace(" ", "")
+    suffix_map = (
+        ("tb", 1024 ** 4),
+        ("gb", 1024 ** 3),
+        ("mb", 1024 ** 2),
+        ("kb", 1024),
+        ("t", 1024 ** 4),
+        ("g", 1024 ** 3),
+        ("m", 1024 ** 2),
+        ("k", 1024),
+    )
+    for suffix, mult in suffix_map:
+        if s.endswith(suffix):
+            num = s[: -len(suffix)]
+            try:
+                return int(float(num) * mult)
+            except ValueError:
+                return None
+    try:
+        return int(float(s))
+    except ValueError:
+        return None
+
+
+def _audio_bitrate_bps() -> int:
+    """Opus/audio bitrate from AUDIO_BITRATE (e.g. '64k') as bits per second."""
+    ab = str(AUDIO_BITRATE).strip().lower()
+    try:
+        if ab.endswith("m"):
+            return int(float(ab[:-1]) * 1_000_000)
+        if ab.endswith("k"):
+            return int(float(ab[:-1]) * 1_000)
+        return int(float(ab))
+    except ValueError:
+        return 64_000
+
+
+def _video_bps_cap_for_max_file_bytes(
+    max_file_bytes: int,
+    duration_sec: float,
+    audio_bps: int,
+) -> Optional[int]:
+    """
+    Approximate upper bound on video bitrate so total muxed size stays under max_file_bytes.
+    Uses duration and audio bitrate; leaves a small headroom for container overhead.
+    """
+    if max_file_bytes <= 0 or duration_sec <= 0:
+        return None
+    safe_bytes = max(1, int(max_file_bytes * 0.97))
+    total_bps = (safe_bytes * 8) / duration_sec
+    video_bps = int(total_bps) - audio_bps
+    return max(1, video_bps)
+
+
+def apply_output_size_bitrate_caps(
+    target_bitrate_int: int,
+    *,
+    input_file_bytes: int,
+    duration_sec: Optional[float],
+    input_stream_bps: Optional[int],
+    max_output_bytes: Optional[int],
+    min_shrink_percent: Optional[float],
+) -> Tuple[int, list[str]]:
+    """
+    Lower target video bitrate to satisfy --max-output-size and/or --min-shrink when possible.
+    Returns (adjusted_bps, list of short reasons for logging).
+    """
+    notes: list[str] = []
+    caps: list[int] = []
+    d = float(duration_sec) if isinstance(duration_sec, (int, float)) and duration_sec > 0 else 0.0
+    audio_bps = _audio_bitrate_bps()
+
+    if max_output_bytes is not None and max_output_bytes > 0:
+        if d > 0:
+            c = _video_bps_cap_for_max_file_bytes(max_output_bytes, d, audio_bps)
+            if c is not None:
+                caps.append(c)
+                notes.append(f"max output {_format_size(float(max_output_bytes))}")
+        else:
+            if not _SUPPRESS_OUTPUT:
+                cprint(
+                    "--max-output-size ignored (duration unknown); use a file with readable length metadata.",
+                    "warning",
+                )
+
+    if min_shrink_percent is not None and 0 < min_shrink_percent < 100:
+        max_bytes = int(input_file_bytes * (1.0 - min_shrink_percent / 100.0))
+        if d > 0 and max_bytes > 0:
+            c = _video_bps_cap_for_max_file_bytes(max_bytes, d, audio_bps)
+            if c is not None:
+                caps.append(c)
+                notes.append(f"≥{min_shrink_percent:.0f}% shrink (≤{_format_size(float(max_bytes))})")
+        elif isinstance(input_stream_bps, int) and input_stream_bps > 0:
+            # No duration: approximate from probed video bitrate only
+            factor = 1.0 - min_shrink_percent / 100.0
+            caps.append(max(1, int(input_stream_bps * factor)))
+            notes.append(f"≥{min_shrink_percent:.0f}% shrink (bitrate heuristic, duration unknown)")
+        else:
+            if not _SUPPRESS_OUTPUT:
+                cprint(
+                    "--min-shrink ignored (need duration or video bitrate from probe).",
+                    "warning",
+                )
+
+    if not caps:
+        return target_bitrate_int, []
+
+    effective = min(caps)
+    if effective < target_bitrate_int:
+        return effective, notes
+    return target_bitrate_int, []
 
 
 def _truncate_middle(text: str, max_length: int = 60) -> str:
@@ -967,9 +1087,19 @@ def validate_video_file(file_path: str) -> bool:
 # ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
-def convert_single_file(input_path: str, output_dir: Optional[str] = None, 
-                       bitrate: Optional[str] = None, delete_original: bool = False, 
-                       overwrite: bool = False, dry_run: bool = False, keep_mkv: bool = False, show_progress: bool = True) -> Tuple[bool, int, str, str]:
+def convert_single_file(
+    input_path: str,
+    output_dir: Optional[str] = None,
+    bitrate: Optional[str] = None,
+    delete_original: bool = False,
+    overwrite: bool = False,
+    dry_run: bool = False,
+    keep_mkv: bool = False,
+    show_progress: bool = True,
+    *,
+    max_output_bytes: Optional[int] = None,
+    min_shrink_percent: Optional[float] = None,
+) -> Tuple[bool, int, str, str]:
     """
     Converts a single video file to the target codec.
     Returns a tuple: (auto_delete_flag, size_saved_bytes, bitrate_decision, media_info)
@@ -1078,6 +1208,22 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             target_bitrate_int = BITRATE_FALLBACK
             bitrate_decision = f"fallback {BITRATE_FALLBACK/1_000_000:.1f}M"
 
+    _pre_cap_bps = target_bitrate_int
+    try:
+        _in_sz = os.path.getsize(input_path)
+    except OSError:
+        _in_sz = 0
+    target_bitrate_int, _cap_notes = apply_output_size_bitrate_caps(
+        target_bitrate_int,
+        input_file_bytes=_in_sz,
+        duration_sec=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+        input_stream_bps=stream_info.get("bitrate") if isinstance(stream_info.get("bitrate"), int) else None,
+        max_output_bytes=max_output_bytes,
+        min_shrink_percent=min_shrink_percent,
+    )
+    if _cap_notes and target_bitrate_int < _pre_cap_bps:
+        bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
+
     if not _SUPPRESS_OUTPUT:
         cprint(f"🎯 {filename} → {bitrate_decision} | {media_info}", "info")
 
@@ -1183,6 +1329,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
         "codec": codec,
         "target_bps": target_bitrate_int,
     }
+    if max_output_bytes is not None:
+        file_event["max_output_bytes"] = max_output_bytes
+    if min_shrink_percent is not None:
+        file_event["min_shrink_percent"] = min_shrink_percent
 
     # Dry run: Show planned command and summary, then return without executing
     if dry_run:
@@ -1194,6 +1344,10 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
             "pix_fmt": pix_fmt,
             "bitrate": target_bitrate_int,
         }
+        if max_output_bytes is not None:
+            summary["max_output_bytes"] = max_output_bytes
+        if min_shrink_percent is not None:
+            summary["min_shrink_percent"] = min_shrink_percent
         if not _SUPPRESS_OUTPUT:
             cprint("🔍 Dry run: Planned conversion", "info")
             # Format summary dict for display
@@ -1444,8 +1598,16 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                         # Retry with system ffmpeg
                         try:
                             result = convert_single_file(
-                                input_path, output_dir, bitrate, delete_original, 
-                                overwrite, dry_run, keep_mkv, show_progress
+                                input_path,
+                                output_dir,
+                                bitrate,
+                                delete_original,
+                                overwrite,
+                                dry_run,
+                                keep_mkv,
+                                show_progress,
+                                max_output_bytes=max_output_bytes,
+                                min_shrink_percent=min_shrink_percent,
                             )
                             # Keep system ffmpeg for this session (hardware encoding works)
                             return result
@@ -1482,8 +1644,16 @@ def convert_single_file(input_path: str, output_dir: Optional[str] = None,
                         # Retry conversion with CPU encoder
                         try:
                             result = convert_single_file(
-                                input_path, output_dir, bitrate, delete_original, 
-                                overwrite, dry_run, keep_mkv, show_progress
+                                input_path,
+                                output_dir,
+                                bitrate,
+                                delete_original,
+                                overwrite,
+                                dry_run,
+                                keep_mkv,
+                                show_progress,
+                                max_output_bytes=max_output_bytes,
+                                min_shrink_percent=min_shrink_percent,
                             )
                             # Restore original encoder after retry
                             ACTIVE_ENCODER = original_encoder
@@ -1529,7 +1699,10 @@ def process_batch_files(
     dry_run: bool,
     keep_mkv: bool,
     recursive: bool = False,
-    transient_progress: bool = True
+    transient_progress: bool = True,
+    *,
+    max_output_bytes: Optional[int] = None,
+    min_shrink_percent: Optional[float] = None,
 ) -> None:
     """
     Process a batch of video files with progress tracking and statistics.
@@ -1619,7 +1792,16 @@ def process_batch_files(
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
             auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
-                file_path, current_output_dir, bitrate, auto_delete, overwrite, dry_run, keep_mkv, show_progress=False
+                file_path,
+                current_output_dir,
+                bitrate,
+                auto_delete,
+                overwrite,
+                dry_run,
+                keep_mkv,
+                show_progress=False,
+                max_output_bytes=max_output_bytes,
+                min_shrink_percent=min_shrink_percent,
             )
             _SUPPRESS_OUTPUT = False
             
@@ -1730,14 +1912,17 @@ def process_batch_files(
 #                           FUNCTION: convert_videos                           #
 # ============================================================================ #
 def convert_videos(
-    input_path: str, 
-    output_dir: Optional[str] = None, 
-    bitrate: Optional[str] = None, 
-    delete_original: bool = False, 
-    overwrite: bool = False, 
-    dry_run: bool = False, 
-    recursive: bool = False, 
-    keep_mkv: bool = False
+    input_path: str,
+    output_dir: Optional[str] = None,
+    bitrate: Optional[str] = None,
+    delete_original: bool = False,
+    overwrite: bool = False,
+    dry_run: bool = False,
+    recursive: bool = False,
+    keep_mkv: bool = False,
+    *,
+    max_output_bytes: Optional[int] = None,
+    min_shrink_percent: Optional[float] = None,
 ) -> None:
     """
     Main entry point for converting videos.
@@ -1750,7 +1935,18 @@ def convert_videos(
         with _build_progress(transient=False, batch_mode=False) as progress:
             _PROGRESS_CONTEXT = progress
             try:
-                convert_single_file(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, keep_mkv, show_progress=True)
+                convert_single_file(
+                    input_path,
+                    output_dir,
+                    bitrate,
+                    delete_original,
+                    overwrite,
+                    dry_run,
+                    keep_mkv,
+                    show_progress=True,
+                    max_output_bytes=max_output_bytes,
+                    min_shrink_percent=min_shrink_percent,
+                )
             finally:
                 _PROGRESS_CONTEXT = None
     elif os.path.isdir(input_path):
@@ -1789,8 +1985,18 @@ def convert_videos(
         
         # Process batch using shared helper function
         process_batch_files(
-            video_files, output_dir, input_path, bitrate, delete_original,
-            overwrite, dry_run, keep_mkv, recursive, transient_progress=True
+            video_files,
+            output_dir,
+            input_path,
+            bitrate,
+            delete_original,
+            overwrite,
+            dry_run,
+            keep_mkv,
+            recursive,
+            transient_progress=True,
+            max_output_bytes=max_output_bytes,
+            min_shrink_percent=min_shrink_percent,
         )
     else:
         cprint("❌ Invalid path: File or directory does not exist.", "error")
@@ -1800,6 +2006,19 @@ def main(
     input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4') - see README.md for examples"),
     output_dir: Optional[str] = typer.Option(None, help="Output dir", rich_help_panel="Input/Output"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)", rich_help_panel="Input/Output"),
+    max_output_size: Optional[str] = typer.Option(
+        None,
+        "--max-output-size",
+        "-S",
+        help="Aim for output under this size (e.g. 10M, 500MB). Uses duration; encoders may overshoot slightly.",
+        rich_help_panel="Input/Output",
+    ),
+    min_shrink: Optional[float] = typer.Option(
+        None,
+        "--min-shrink",
+        help="Aim for output at most (100 minus this) percent of input size; e.g. 70 => ≤30%% of original bytes.",
+        rich_help_panel="Input/Output",
+    ),
     delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion", rich_help_panel="File Handling"),
     overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Overwrite existing output files", rich_help_panel="File Handling"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show planned actions without converting", rich_help_panel="File Handling"),
@@ -1822,7 +2041,7 @@ def main(
         is_flag=True,
     ),
 ):
-    """Universal Video Compressor (AMD/NVIDIA/CPU) - Force 50% size reduction.
+    """Universal Video Compressor (AMD/NVIDIA/CPU). Default bitrate logic reduces size when the source is high-bitrate.
 
         \b
         [bold cyan]EXAMPLES[/]:
@@ -1843,6 +2062,12 @@ def main(
     
             [yellow]Preview what would be converted[/]:
                 $ av1 "C:\\Videos" --recursive --dry-run
+
+            [yellow]Cap output around 10 MB[/]:
+                $ av1 "C:\\Videos\\clip.mp4" --max-output-size 10M
+
+            [yellow]Aim for at least 70%% smaller file than the source[/]:
+                $ av1 "C:\\Videos\\big.mkv" --min-shrink 70
     """
     # If version flag triggered, callback already exited.
     
@@ -1861,6 +2086,30 @@ def main(
     env_log_dir = os.getenv("AV1_LOG_DIR")
     if env_log_dir and log_dir is None:
         log_dir = env_log_dir
+
+    max_output_bytes: Optional[int] = None
+    if max_output_size:
+        max_output_bytes = _parse_byte_size(max_output_size)
+        if not max_output_bytes or max_output_bytes <= 0:
+            cprint(f"Invalid --max-output-size: {max_output_size!r} (examples: 10M, 500MB)", "error")
+            raise typer.Exit(code=1)
+    elif os.getenv("AV1_MAX_OUTPUT_SIZE"):
+        env_spec = os.getenv("AV1_MAX_OUTPUT_SIZE", "").strip()
+        max_output_bytes = _parse_byte_size(env_spec)
+        if not max_output_bytes or max_output_bytes <= 0:
+            cprint(f"Invalid AV1_MAX_OUTPUT_SIZE: {env_spec!r}", "error")
+            raise typer.Exit(code=1)
+
+    min_shrink_percent: Optional[float] = min_shrink
+    if min_shrink_percent is None and os.getenv("AV1_MIN_SHRINK"):
+        try:
+            min_shrink_percent = float(os.getenv("AV1_MIN_SHRINK", "").strip())
+        except ValueError:
+            cprint(f"Invalid AV1_MIN_SHRINK: {os.getenv('AV1_MIN_SHRINK')!r}", "error")
+            raise typer.Exit(code=1)
+    if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
+        cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
+        raise typer.Exit(code=1)
 
     # Override ffmpeg/ffprobe paths from CLI if provided
     global FFMPEG_CMD, FFPROBE_CMD
@@ -1917,8 +2166,18 @@ def main(
         
         # Process batch using shared helper function
         process_batch_files(
-            matched_files, output_dir, base_path, bitrate, delete_original,
-            overwrite, dry_run, keep_mkv, recursive=False, transient_progress=False
+            matched_files,
+            output_dir,
+            base_path,
+            bitrate,
+            delete_original,
+            overwrite,
+            dry_run,
+            keep_mkv,
+            recursive=False,
+            transient_progress=False,
+            max_output_bytes=max_output_bytes,
+            min_shrink_percent=min_shrink_percent,
         )
     else:
         # Single path - could be file, directory, or wildcard pattern
@@ -1931,10 +2190,40 @@ def main(
                 matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
                 if matched_files and len(matched_files) > 1:
                     # Recursively call main with expanded list
-                    return main(matched_files, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv, log_type, log_dir, version=None)
+                    return main(
+                        matched_files,
+                        output_dir,
+                        bitrate,
+                        max_output_size,
+                        min_shrink,
+                        delete_original,
+                        overwrite,
+                        dry_run,
+                        recursive,
+                        keep_mkv,
+                        log_type,
+                        log_dir,
+                        ffmpeg,
+                        ffprobe,
+                        no_color,
+                        no_prompt,
+                        parallel,
+                        version=None,
+                    )
         
         # No wildcards or only 1 match - use existing logic
-        convert_videos(input_path, output_dir, bitrate, delete_original, overwrite, dry_run, recursive, keep_mkv)
+        convert_videos(
+            input_path,
+            output_dir,
+            bitrate,
+            delete_original,
+            overwrite,
+            dry_run,
+            recursive,
+            keep_mkv,
+            max_output_bytes=max_output_bytes,
+            min_shrink_percent=min_shrink_percent,
+        )
     
     # Save logs only if files were actually converted
     global _LOG_MESSAGES
