@@ -250,6 +250,16 @@ def _format_elapsed(seconds: int) -> str:
     return f"{hours}h {minutes:02d}m"
 
 
+def _format_progress_clock(current_seconds: Optional[float], total_seconds: Optional[float]) -> str:
+    """Render current and total media time as HH:MM:SS / HH:MM:SS."""
+    if not isinstance(total_seconds, (int, float)) or total_seconds <= 0:
+        return "Time unknown"
+    current_value = 0.0
+    if isinstance(current_seconds, (int, float)) and current_seconds > 0:
+        current_value = min(float(current_seconds), float(total_seconds))
+    return f"{_format_duration(current_value)} / {_format_duration(total_seconds)}"
+
+
 def _parse_byte_size(spec: str) -> Optional[int]:
     """
     Parse a human-readable size to bytes: '10M', '10MB', '500k', '1G', or plain integer bytes.
@@ -394,6 +404,10 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
     if batch_mode:
         columns.extend(
             [
+                TextColumn(
+                    "[cyan]{task.fields[progress_text]}",
+                    table_column=Column(no_wrap=True),
+                ),
                 TextColumn(
                     "[green]Saved: {task.fields[saved]}",
                     table_column=Column(no_wrap=True),
@@ -1412,6 +1426,7 @@ def convert_single_file(
                 eta="",
                 size=file_size_str,
                 saved="",
+                progress_text=_format_progress_clock(0, total_duration),
             )
             
             try:
@@ -1448,12 +1463,19 @@ def convert_single_file(
                             completed=progress_percent,
                             fps=fps_str,
                             eta=f"ETA: {eta_str}",
-                            size=file_size_str
+                            size=file_size_str,
+                            progress_text=_format_progress_clock(current_time, total_duration),
                         )
                 
                 process.wait()
                 file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                _PROGRESS_CONTEXT.update(file_task, completed=100, eta="Done", size=file_size_str)
+                _PROGRESS_CONTEXT.update(
+                    file_task,
+                    completed=100,
+                    eta="Done",
+                    size=file_size_str,
+                    progress_text=_format_progress_clock(total_duration, total_duration),
+                )
             finally:
                 if file_task is not None:
                     _PROGRESS_CONTEXT.remove_task(file_task)
@@ -1468,6 +1490,7 @@ def convert_single_file(
                 eta="",
                 size=file_size_str,
                 saved="",
+                progress_text="Time unknown",
             )
             try:
                 for line in process.stdout:
@@ -1765,6 +1788,7 @@ def process_batch_files(
         overall_task = progress.add_task(
             _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
             total=len(video_files),
+            progress_text="",
             saved=_format_saved(0),
             eta="",
         )
