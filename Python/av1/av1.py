@@ -17,7 +17,7 @@ import glob
 import time
 import signal
 from datetime import datetime, UTC
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 # Force UTF-8 encoding on Windows
 if platform.system() == 'Windows':
@@ -251,14 +251,66 @@ def _format_elapsed(seconds: int) -> str:
     return f"{hours}h {minutes:02d}m"
 
 
+def _format_eta_seconds(seconds: Optional[float]) -> str:
+    """Pretty-print ETA values compactly for progress displays."""
+    if not isinstance(seconds, (int, float)) or seconds < 0:
+        return "calculating..."
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    minutes, secs = divmod(int(seconds), 60)
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
 def _format_progress_clock(current_seconds: Optional[float], total_seconds: Optional[float]) -> str:
     """Render current and total media time as HH:MM:SS / HH:MM:SS."""
-    if not isinstance(total_seconds, (int, float)) or total_seconds <= 0:
-        return "Time unknown"
     current_value = 0.0
     if isinstance(current_seconds, (int, float)) and current_seconds > 0:
-        current_value = min(float(current_seconds), float(total_seconds))
+        current_value = float(current_seconds)
+    if not isinstance(total_seconds, (int, float)) or total_seconds <= 0:
+        if current_value <= 0:
+            return "Encoding..."
+        return f"Encoded {_format_duration(current_value)}"
+    current_value = min(current_value, float(total_seconds))
     return f"{_format_duration(current_value)} / {_format_duration(total_seconds)}"
+
+
+def _parse_ffmpeg_out_time(value: str) -> Optional[float]:
+    """Parse ffmpeg progress timestamps like HH:MM:SS.microseconds."""
+    try:
+        hours, minutes, seconds = value.strip().split(":", 2)
+        return (int(hours) * 3600) + (int(minutes) * 60) + float(seconds)
+    except Exception:
+        return None
+
+
+def _parse_ffmpeg_speed(value: str) -> Optional[float]:
+    """Parse ffmpeg speed strings like '2.35x'."""
+    try:
+        cleaned = value.strip().lower()
+        if cleaned.endswith("x"):
+            cleaned = cleaned[:-1]
+        speed = float(cleaned)
+        return speed if speed > 0 else None
+    except Exception:
+        return None
+
+
+def _format_rate_display(fps_value: str, speed_value: str) -> str:
+    """Combine fps and encoder speed into a compact status field."""
+    parts = []
+    try:
+        fps_number = float(fps_value)
+        if fps_number > 0:
+            parts.append(f"{int(fps_number)} fps")
+    except Exception:
+        pass
+    speed_number = _parse_ffmpeg_speed(speed_value)
+    if speed_number:
+        parts.append(f"{speed_number:.2f}x")
+    return " | ".join(parts)
 
 
 def _display_path(
@@ -1163,6 +1215,7 @@ def convert_single_file(
     batch_index: Optional[int] = None,
     batch_total: Optional[int] = None,
     progress_label: Optional[str] = None,
+    progress_callback: Optional[Callable[[Optional[float], str, str], None]] = None,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -1306,7 +1359,7 @@ def convert_single_file(
     else:
         pix_fmt = "nv12"  # NVIDIA/AMD default
     
-    command = [FFMPEG_CMD, "-y"]
+    command = [FFMPEG_CMD, "-y", "-hide_banner", "-progress", "pipe:1", "-nostats"]
     
     # VAAPI requires device specification before input
     if ACTIVE_ENCODER["hw_type"] == "vaapi":
@@ -1448,110 +1501,97 @@ def convert_single_file(
     error_lines = []
     
     try:
-        # Run ffmpeg with progress tracking
-        import re
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                   universal_newlines=True, bufsize=1)
-        
-        # If we have a progress context, add a sub-task for this file
-        # Only show encoding progress for single-file conversions (show_progress=True)
+        # Run ffmpeg with machine-readable progress updates.
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1,
+        )
+
         file_task = None
-        if _PROGRESS_CONTEXT and show_progress and total_duration and process.stdout:
-            encoding_start = time.time()
+        if _PROGRESS_CONTEXT and show_progress:
             file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
             file_task = _PROGRESS_CONTEXT.add_task(
                 _format_file_progress_description(progress_name, batch_index, batch_total),
-                total=100,
+                total=100 if total_duration else None,
                 fps="",
                 eta="",
                 size=file_size_str,
                 saved="",
                 progress_text=_format_progress_clock(0, total_duration),
             )
-            
-            try:
-                for line in process.stdout:
-                    # Collect error lines (typically contain "error", "Error", "failed", etc.)
-                    line_lower = line.lower()
-                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
-                        error_lines.append(line.strip())
-                    
-                    # Parse ffmpeg progress output
-                    time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
-                    fps_match = re.search(r'fps=\s*(\d+\.?\d*)', line)
-                    
-                    if time_match and total_duration:
-                        hours, minutes, seconds = map(float, time_match.groups())
-                        current_time = hours * 3600 + minutes * 60 + seconds
-                        progress_percent = min((current_time / total_duration) * 100, 100)
-                        
-                        # Calculate ETA
-                        elapsed = time.time() - encoding_start
-                        if progress_percent > 0 and elapsed > 0:
-                            total_estimated = (elapsed / progress_percent) * 100
-                            eta_seconds = int(total_estimated - elapsed)
-                            eta_str = f"{eta_seconds // 60}m {eta_seconds % 60}s" if eta_seconds > 60 else f"{eta_seconds}s"
-                        else:
-                            eta_str = "calculating..."
-                        
-                        # Get FPS info
-                        fps_str = f"{int(float(fps_match.group(1)))} fps" if fps_match else ""
-                        
-                        file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                        _PROGRESS_CONTEXT.update(
-                            file_task, 
-                            completed=progress_percent,
-                            fps=fps_str,
-                            eta=f"ETA: {eta_str}",
-                            size=file_size_str,
-                            progress_text=_format_progress_clock(current_time, total_duration),
-                        )
-                
-                process.wait()
-                file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                _PROGRESS_CONTEXT.update(
-                    file_task,
-                    completed=100,
-                    eta="Done",
-                    size=file_size_str,
-                    progress_text=_format_progress_clock(total_duration, total_duration),
-                )
-            finally:
-                if file_task is not None:
-                    _PROGRESS_CONTEXT.remove_task(file_task)
-                    
-        elif _PROGRESS_CONTEXT and show_progress and process.stdout:
-            # No duration available; show a spinner-like indeterminate bar
-            file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-            file_task = _PROGRESS_CONTEXT.add_task(
-                _format_file_progress_description(progress_name, batch_index, batch_total),
-                total=None,
-                fps="",
-                eta="",
-                size=file_size_str,
-                saved="",
-                progress_text="Time unknown",
-            )
-            try:
-                for line in process.stdout:
-                    # Collect error lines
-                    line_lower = line.lower()
-                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
-                        error_lines.append(line.strip())
-                process.wait()
-            finally:
-                if file_task is not None:
-                    _PROGRESS_CONTEXT.remove_task(file_task)
-        else:
-            # No progress context, just consume output
+
+        progress_state: dict[str, str] = {}
+        try:
             if process.stdout:
-                for line in process.stdout:
-                    # Collect error lines
+                for raw_line in process.stdout:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        progress_state[key.strip()] = value.strip()
+
+                        if key.strip() == "progress":
+                            current_time = _parse_ffmpeg_out_time(progress_state.get("out_time", ""))
+                            progress_fraction = None
+                            if total_duration and isinstance(current_time, (int, float)):
+                                progress_fraction = min(max(float(current_time) / float(total_duration), 0.0), 1.0)
+
+                            speed_value = progress_state.get("speed", "")
+                            speed_number = _parse_ffmpeg_speed(speed_value)
+                            eta_seconds = None
+                            if total_duration and isinstance(current_time, (int, float)) and speed_number:
+                                remaining = max(float(total_duration) - float(current_time), 0.0)
+                                eta_seconds = remaining / speed_number if speed_number > 0 else None
+                            elif total_duration and progress_fraction and progress_fraction > 0:
+                                elapsed_media = max(float(current_time or 0), 0.0)
+                                eta_seconds = max(float(total_duration) - elapsed_media, 0.0)
+
+                            eta_field = "Done" if progress_state.get("progress") == "end" else f"ETA: {_format_eta_seconds(eta_seconds)}"
+                            progress_text = _format_progress_clock(current_time, total_duration)
+                            rate_text = _format_rate_display(progress_state.get("fps", ""), speed_value)
+
+                            if file_task is not None and _PROGRESS_CONTEXT:
+                                file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
+                                update_kwargs = {
+                                    "fps": rate_text,
+                                    "eta": eta_field,
+                                    "size": file_size_str,
+                                    "progress_text": progress_text,
+                                }
+                                if progress_fraction is not None:
+                                    update_kwargs["completed"] = progress_fraction * 100
+                                _PROGRESS_CONTEXT.update(file_task, **update_kwargs)
+
+                            if progress_callback:
+                                progress_callback(progress_fraction, progress_text, eta_field)
+
+                            progress_state.clear()
+                        continue
+
                     line_lower = line.lower()
                     if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
-                        error_lines.append(line.strip())
+                        error_lines.append(line)
+
             process.wait()
-        
+            if file_task is not None and _PROGRESS_CONTEXT:
+                file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
+                final_update = {
+                    "eta": "Done",
+                    "size": file_size_str,
+                    "progress_text": _format_progress_clock(total_duration, total_duration),
+                }
+                if total_duration:
+                    final_update["completed"] = 100
+                _PROGRESS_CONTEXT.update(file_task, **final_update)
+        finally:
+            if file_task is not None and _PROGRESS_CONTEXT:
+                _PROGRESS_CONTEXT.remove_task(file_task)
+
         result = process
     except Exception as e:
         cprint(f"FFmpeg execution error: {e}", "error")
@@ -1692,6 +1732,10 @@ def convert_single_file(
                                 dry_run,
                                 keep_mkv,
                                 show_progress,
+                                batch_index=batch_index,
+                                batch_total=batch_total,
+                                progress_label=progress_label,
+                                progress_callback=progress_callback,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1738,6 +1782,10 @@ def convert_single_file(
                                 dry_run,
                                 keep_mkv,
                                 show_progress,
+                                batch_index=batch_index,
+                                batch_total=batch_total,
+                                progress_label=progress_label,
+                                progress_callback=progress_callback,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1850,12 +1898,13 @@ def process_batch_files(
                 remaining_files = len(video_files) - idx + 1
                 eta_seconds = int(avg_time_per_file * remaining_files)
                 if eta_seconds > 0:
-                    eta_text = f"ETA {eta_seconds}s"
+                    eta_text = f"ETA: {_format_eta_seconds(eta_seconds)}"
 
             progress.update(
                 overall_task,
                 description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
                 completed=idx - 1,
+                progress_text="",
                 saved=_format_saved(cumulative_saved),
                 eta=eta_text,
             )
@@ -1878,6 +1927,21 @@ def process_batch_files(
             # Suppress output during conversion
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
+
+            def _update_batch_progress(current_fraction: Optional[float], current_progress_text: str, current_eta: str) -> None:
+                elapsed_now = int(time.time() - batch_start_time)
+                completed_value = idx - 1
+                if isinstance(current_fraction, (int, float)):
+                    completed_value += min(max(float(current_fraction), 0.0), 1.0)
+                progress.update(
+                    overall_task,
+                    description=_format_batch_progress_description(idx, len(video_files), elapsed_now, display_path),
+                    completed=completed_value,
+                    progress_text=current_progress_text,
+                    saved=_format_saved(cumulative_saved),
+                    eta="" if current_eta == "Done" else current_eta,
+                )
+
             auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
                 file_path,
                 current_output_dir,
@@ -1890,6 +1954,7 @@ def process_batch_files(
                 batch_index=idx,
                 batch_total=len(video_files),
                 progress_label=display_path,
+                progress_callback=_update_batch_progress,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
             )
@@ -1919,12 +1984,13 @@ def process_batch_files(
                 remaining_files = len(video_files) - idx
                 eta_seconds = int(avg_time_per_file * remaining_files)
                 if eta_seconds > 0:
-                    eta_text = f"ETA {eta_seconds}s"
+                    eta_text = f"ETA: {_format_eta_seconds(eta_seconds)}"
 
             progress.update(
                 overall_task,
                 description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
                 completed=idx,
+                progress_text="",
                 saved=_format_saved(cumulative_saved),
                 eta=eta_text,
             )
