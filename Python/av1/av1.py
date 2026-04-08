@@ -239,6 +239,17 @@ def _format_duration(seconds: Optional[float]) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _format_elapsed(seconds: int) -> str:
+    """Pretty-print elapsed seconds compactly for batch status lines."""
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
 def _parse_byte_size(spec: str) -> Optional[int]:
     """
     Parse a human-readable size to bytes: '10M', '10MB', '500k', '1G', or plain integer bytes.
@@ -421,7 +432,15 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
 def _format_batch_progress_description(current: int, total: int, elapsed_seconds: int, current_item: str) -> str:
     """Build a compact batch progress description for the terminal."""
     short_item = _truncate_middle(current_item, 48)
-    return f"Converting {current}/{total} ({elapsed_seconds}s) {short_item}"
+    return f"File {current}/{total} | Elapsed {_format_elapsed(elapsed_seconds)} | {short_item}"
+
+
+def _format_file_progress_description(file_label: str, current: Optional[int] = None, total: Optional[int] = None) -> str:
+    """Build a per-file progress label, optionally including batch position."""
+    short_label = _truncate_middle(file_label, 48)
+    if current is not None and total is not None and total > 0:
+        return f"[yellow]  └─ File {current}/{total}: {short_label}"
+    return f"[yellow]  └─ Encoding: {short_label}"
 
 
 def _parse_ffprobe_fraction(value: str) -> Optional[float]:
@@ -1096,6 +1115,9 @@ def convert_single_file(
     dry_run: bool = False,
     keep_mkv: bool = False,
     show_progress: bool = True,
+    batch_index: Optional[int] = None,
+    batch_total: Optional[int] = None,
+    progress_label: Optional[str] = None,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -1110,6 +1132,7 @@ def convert_single_file(
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
+    progress_name = progress_label or filename
     
 
     # Validate file
@@ -1383,7 +1406,7 @@ def convert_single_file(
             encoding_start = time.time()
             file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
             file_task = _PROGRESS_CONTEXT.add_task(
-                f"[yellow]  └─ Encoding: {filename}", 
+                _format_file_progress_description(progress_name, batch_index, batch_total),
                 total=100,
                 fps="",
                 eta="",
@@ -1439,7 +1462,7 @@ def convert_single_file(
             # No duration available; show a spinner-like indeterminate bar
             file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
             file_task = _PROGRESS_CONTEXT.add_task(
-                f"[yellow]  └─ Encoding: {filename}", 
+                _format_file_progress_description(progress_name, batch_index, batch_total),
                 total=None,
                 fps="",
                 eta="",
@@ -1799,7 +1822,10 @@ def process_batch_files(
                 overwrite,
                 dry_run,
                 keep_mkv,
-                show_progress=False,
+                show_progress=True,
+                batch_index=idx,
+                batch_total=len(video_files),
+                progress_label=display_path,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
             )
