@@ -75,7 +75,7 @@ ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 # Environment variables to tweak behavior without changing CLI:
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
 #   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK,
-#   AV1_NO_COLOR, AV1_LOG_TYPE, AV1_LOG_DIR,
+#   AV1_NO_COLOR, AV1_NO_PROMPT, AV1_HIDE_FILENAMES, AV1_LOG_TYPE, AV1_LOG_DIR,
 #   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
 
 def _env_bool(val: str) -> bool:
@@ -122,6 +122,7 @@ _LOGGER = None  # Logger instance (unused, kept for compatibility)
 _LOG_EVENTS: list[dict] = []  # Structured events for JSON logging
 _NO_COLOR = False  # Disable colors when True
 _NO_PROMPT = False  # Suppress interactive prompts
+_HIDE_FILENAMES = False  # Redact media filenames from console output when True
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -258,6 +259,35 @@ def _format_progress_clock(current_seconds: Optional[float], total_seconds: Opti
     if isinstance(current_seconds, (int, float)) and current_seconds > 0:
         current_value = min(float(current_seconds), float(total_seconds))
     return f"{_format_duration(current_value)} / {_format_duration(total_seconds)}"
+
+
+def _display_path(
+    path: str,
+    *,
+    base_path: Optional[str] = None,
+    full_path: bool = False,
+    fallback_label: str = "filename hidden",
+) -> str:
+    """Format user-facing paths while honoring filename redaction."""
+    if _HIDE_FILENAMES:
+        return fallback_label
+    if base_path:
+        try:
+            return os.path.relpath(path, base_path)
+        except Exception:
+            pass
+    if full_path:
+        return path
+    return os.path.basename(path)
+
+
+def _display_batch_item(file_path: str, input_path: str, recursive: bool, current: int, total: int) -> str:
+    """Format the current batch item label for progress and summaries."""
+    if _HIDE_FILENAMES:
+        return f"file {current}/{total} (hidden)"
+    if recursive:
+        return _display_path(file_path, base_path=input_path, fallback_label="file")
+    return _display_path(file_path, fallback_label="file")
 
 
 def _parse_byte_size(spec: str) -> Optional[int]:
@@ -532,7 +562,7 @@ def get_video_stream_info(file_path: str) -> dict:
                 info["bitrate"] = int((size * 8 / float(info["duration"])) * VIDEO_BITRATE_ESTIMATE_FACTOR)
 
     except subprocess.TimeoutExpired:
-        cprint(f"Timeout while probing file: {os.path.basename(file_path)}", "warning")
+        cprint(f"Timeout while probing file: {_display_path(file_path)}", "warning")
     except Exception as e:
         cprint(f"Could not probe stream info: {e}", "warning")
 
@@ -986,12 +1016,12 @@ def needs_transcoding(file_path: str) -> bool:
             is_corrupt = any(keyword in stderr_lower for keyword in corruption_keywords)
             
             if is_corrupt:
-                cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)}", "error")
+                cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
                 if result.stderr:
                     error_msg = result.stderr.strip()[:200]  # Limit length
                     cprint(f"   Error: {error_msg}", "error")
             else:
-                cprint(f"⚠️  Could not probe {os.path.basename(file_path)} - may be invalid or unsupported", "warning")
+                cprint(f"⚠️  Could not probe {_display_path(file_path)} - may be invalid or unsupported", "warning")
             return False
             
         data = json.loads(result.stdout)
@@ -1000,7 +1030,7 @@ def needs_transcoding(file_path: str) -> bool:
         # Check if file has any video streams
         video_streams = [s for s in data.get('streams', []) if s.get('codec_type') == 'video']
         if not video_streams:
-            cprint(f"❌ Corrupt or invalid file: {os.path.basename(file_path)} (no video stream found)", "error")
+            cprint(f"❌ Corrupt or invalid file: {_display_path(file_path)} (no video stream found)", "error")
             return False
 
         for stream in video_streams:
@@ -1018,20 +1048,20 @@ def needs_transcoding(file_path: str) -> bool:
         # Should not reach here, but if we do, assume it needs transcoding
         return True
     except subprocess.TimeoutExpired:
-        cprint(f"⏱️  Timeout while probing {os.path.basename(file_path)} - file may be very large or corrupt", "warning")
+        cprint(f"⏱️  Timeout while probing {_display_path(file_path)} - file may be very large or corrupt", "warning")
         return False
     except json.JSONDecodeError:
         # If ffprobe returns invalid JSON, the file is likely corrupt
-        cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)} (invalid metadata)", "error")
+        cprint(f"❌ Corrupt file detected: {_display_path(file_path)} (invalid metadata)", "error")
         return False
     except Exception as e:
         # Check if the error message suggests corruption
         error_str = str(e).lower()
         if any(keyword in error_str for keyword in ["corrupt", "invalid", "truncated", "error reading"]):
-            cprint(f"❌ Corrupt file detected: {os.path.basename(file_path)}", "error")
+            cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
             cprint(f"   Error: {str(e)[:200]}", "error")
         else:
-            cprint(f"⚠️  Error checking file {os.path.basename(file_path)}: {e}", "warning")
+            cprint(f"⚠️  Error checking file {_display_path(file_path)}: {e}", "warning")
         return False
 
 # ============================================================================ #
@@ -1045,14 +1075,15 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
     try:
         if auto_delete:
             os.remove(original_path)
-            cprint(f"Deleted original: {os.path.basename(original_path)}")
+            cprint(f"Deleted original: {_display_path(original_path, fallback_label='original file')}")
             return True
         # Suppress interactive prompt when _NO_PROMPT is enabled
         if _NO_PROMPT:
             return False
         # Print question and path explicitly so [y/N/a] is always visible (Rich may not
         # display multi-line prompts correctly on all terminals)
-        console.print(f"Delete original file?\n{original_path}")
+        prompt_target = _display_path(original_path, full_path=True, fallback_label="original file")
+        console.print(f"Delete original file?\n{prompt_target}")
         resp = safe_input("[y/N/a]: ").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
@@ -1063,9 +1094,9 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
             cprint("Original deleted.", "success")
             return True
     except PermissionError:
-        cprint(f"Permission denied: Cannot delete {original_path}", "error")
+        cprint(f"Permission denied: Cannot delete {_display_path(original_path, full_path=True, fallback_label='original file')}", "error")
     except Exception as e:
-        cprint(f"Could not delete {original_path}: {e}", "warning")
+        cprint(f"Could not delete {_display_path(original_path, full_path=True, fallback_label='original file')}: {e}", "warning")
     return False
 
 # ============================================================================ #
@@ -1110,7 +1141,7 @@ def validate_video_file(file_path: str) -> bool:
     # Check minimum file size
     try:
         if os.path.getsize(file_path) < MIN_FILE_SIZE_BYTES:
-            cprint(f"File too small: {os.path.basename(file_path)}", "warning")
+            cprint(f"File too small: {_display_path(file_path)}", "warning")
             return False
     except OSError:
         return False
@@ -1146,7 +1177,8 @@ def convert_single_file(
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     filename = os.path.basename(input_path)
-    progress_name = progress_label or filename
+    display_name = _display_path(input_path)
+    progress_name = progress_label or display_name
     
 
     # Validate file
@@ -1154,7 +1186,7 @@ def convert_single_file(
         return delete_original, 0, "skip-invalid", "unknown | length unknown | fps unknown"
 
     if not needs_transcoding(input_path):
-        cprint(f"⏭️  Skipping: {filename} (already using target codec)", "info")
+        cprint(f"⏭️  Skipping: {display_name} (already using target codec)", "info")
         return delete_original, 0, "skip-codec", "unknown | length unknown | fps unknown"
 
     # Get file size (used for display and progress)
@@ -1189,7 +1221,8 @@ def convert_single_file(
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         if not overwrite:
-            if safe_input(f"File exists: {output_path}. Delete? [y/N]: ").lower() not in ("y", "yes"):
+            existing_output = _display_path(output_path, full_path=True, fallback_label="output file")
+            if safe_input(f"File exists: {existing_output}. Delete? [y/N]: ").lower() not in ("y", "yes"):
                 return delete_original, 0, "skip-overwrite", "unknown | length unknown | fps unknown"
 
     # Probe once and reuse metadata for bitrate decisions + user-facing output.
@@ -1262,7 +1295,7 @@ def convert_single_file(
         bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
 
     if not _SUPPRESS_OUTPUT:
-        cprint(f"🎯 {filename} → {bitrate_decision} | {media_info}", "info")
+        cprint(f"🎯 {display_name} → {bitrate_decision} | {media_info}", "info")
 
     # --- BUILD COMMAND ---
     # Pixel format selection: CPU uses yuv420p, GPU encoders typically use nv12, VAAPI uses same
@@ -1357,7 +1390,10 @@ def convert_single_file(
         # Show ffmpeg path for debugging
         if os.getenv("AV1_DEBUG"):
             cprint(f"   FFmpeg: {FFMPEG_CMD}", "info")
-            cprint(f"   Command: {' '.join(command)}", "info")
+            if _HIDE_FILENAMES:
+                cprint("   Command: hidden due to --hide-filenames", "info")
+            else:
+                cprint(f"   Command: {' '.join(command)}", "info")
     # Initialize per-file event context
     file_event = {
         "file": input_path,
@@ -1388,7 +1424,11 @@ def convert_single_file(
         if not _SUPPRESS_OUTPUT:
             cprint("🔍 Dry run: Planned conversion", "info")
             # Format summary dict for display
-            summary_str = "\n".join(f"  {k}: {v}" for k, v in summary.items())
+            display_summary = summary.copy()
+            if _HIDE_FILENAMES:
+                display_summary["input"] = _display_path(input_path)
+                display_summary["output"] = _display_path(output_path, fallback_label="output file")
+            summary_str = "\n".join(f"  {k}: {v}" for k, v in display_summary.items())
             cprint(f"Summary:\n{summary_str}", "info")
         try:
             _LOG_EVENTS.append({
@@ -1566,7 +1606,7 @@ def convert_single_file(
                         if output_path != original_name_path:
                             try:
                                 os.rename(output_path, original_name_path)
-                                cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
+                                cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
                             except OSError as e:
                                 cprint(f"Could not rename to original name: {e}", "warning")
                 else:
@@ -1583,7 +1623,7 @@ def convert_single_file(
                         if output_path != original_name_path:
                             try:
                                 os.rename(output_path, original_name_path)
-                                cprint(f"Renamed to: {os.path.basename(original_name_path)}", "success")
+                                cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
                             except OSError as e:
                                 cprint(f"Could not rename to original name: {e}", "warning")
                 
@@ -1801,7 +1841,7 @@ def process_batch_files(
                 break
             
             # Show relative path for recursive mode
-            display_path = os.path.relpath(file_path, input_path) if recursive else os.path.basename(file_path)
+            display_path = _display_batch_item(file_path, input_path, recursive, idx, len(video_files))
             file_start = time.time()
             elapsed = int(time.time() - batch_start_time)
             eta_text = ""
@@ -2080,6 +2120,7 @@ def main(
     ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)", rich_help_panel="FFmpeg"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)", rich_help_panel="Display"),
+    hide_filenames: bool = typer.Option(False, "--hide-filenames", help="Redact media filenames in progress output, prompts, and status messages", rich_help_panel="Display"),
     parallel: int = typer.Option(1, "--parallel", "-j", help="Number of files to process simultaneously (GPU: 2-4 recommended, CPU: 1)", rich_help_panel="Performance"),
     version: Optional[bool] = typer.Option(
         None,
@@ -2128,6 +2169,9 @@ def main(
     env_no_prompt = os.getenv("AV1_NO_PROMPT")
     if env_no_prompt and _env_bool(env_no_prompt):
         no_prompt = True
+    env_hide_filenames = os.getenv("AV1_HIDE_FILENAMES")
+    if env_hide_filenames and _env_bool(env_hide_filenames):
+        hide_filenames = True
 
     env_log_type = os.getenv("AV1_LOG_TYPE")
     if env_log_type and (log_type == "txt"):
@@ -2178,9 +2222,10 @@ def main(
         parallel = 1  # Force sequential for now
 
     # Set global no-color flag and reinitialize console
-    global _NO_COLOR, _NO_PROMPT, console
+    global _NO_COLOR, _NO_PROMPT, _HIDE_FILENAMES, console
     _NO_COLOR = no_color
     _NO_PROMPT = no_prompt
+    _HIDE_FILENAMES = hide_filenames
     if no_color:
         console = Console(no_color=True, force_terminal=True)
     
