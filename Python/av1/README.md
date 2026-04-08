@@ -113,6 +113,8 @@ Options:
   --log-dir TEXT              Directory for logs (default: %TEMP%/av1-logs)
   --ffmpeg TEXT               Path to ffmpeg executable (overrides AV1_FFMPEG_PATH)
   --ffprobe TEXT              Path to ffprobe executable (overrides AV1_FFPROBE_PATH)
+  --cpu-threads, --cpu-cores INT
+                              Logical CPU threads for CPU AV1 encoding [default: 75% of logical CPUs]
   --no-prompt                 Suppress interactive confirmations
   --no-color                  Disable colored output
   --parallel, -j INT          Files to process simultaneously [default: 1]
@@ -134,6 +136,7 @@ Options:
    <tr><td>--log-dir &lt;TEXT&gt;</td><td>Directory for logs (default: %TEMP%/av1-logs).</td></tr>
    <tr><td>--ffmpeg &lt;TEXT&gt;</td><td>Path to ffmpeg executable (overrides env or PATH).</td></tr>
    <tr><td>--ffprobe &lt;TEXT&gt;</td><td>Path to ffprobe executable (overrides env or PATH).</td></tr>
+   <tr><td>--cpu-threads, --cpu-cores &lt;INT&gt;</td><td>Logical CPU threads dedicated to CPU AV1 encoding. Defaults to 75% of available logical CPUs.</td></tr>
    <tr><td>--no-prompt</td><td>Suppress interactive prompts (useful for automation).</td></tr>
    <tr><td>--no-color</td><td>Disable colored output (useful for logging/piping).</td></tr>
    <tr><td>--parallel, -j &lt;INT&gt;</td><td>Concurrent files to process [experimental, default: 1].</td></tr>
@@ -286,7 +289,7 @@ Example JSON log structure:
 ## Performance Notes
 
 - **GPU encoding**: Hardware encoders (NVIDIA/AMD) are very fast—typically 2-5× realtime encoding speed. 
-- **CPU encoding**: CPU AV1 (`libsvtav1`) is slower (~0.5x realtime) but produces smaller files. Useful for archival when time permits.
+- **CPU encoding**: CPU AV1 (`libsvtav1`) is slower (~0.5x realtime) but produces smaller files. By default, it uses 75% of available logical CPUs; override with `--cpu-threads` or `--cpu-cores` when you want stricter limits or full usage.
 - **Large batches**: For 500+ files, consider using `--no-prompt`, `--no-color`, and `--log-type json` for minimal overhead.
 - **Disk I/O**: Ensure output drive can sustain write speeds; slow I/O will bottleneck encoding speed.
 

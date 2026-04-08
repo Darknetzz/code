@@ -49,6 +49,7 @@ BITRATE_REDUCTION_FACTOR = 0.5
 BITRATE_FALLBACK = 2_000_000
 BITRATE_MAXRATE_MULTIPLIER = 1.2
 BITRATE_BUFSIZE_MULTIPLIER = 2.0
+DEFAULT_CPU_USAGE_PERCENT = 75
 
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
@@ -74,7 +75,7 @@ ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 # ============================================================================ #
 # Environment variables to tweak behavior without changing CLI:
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
-#   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK,
+#   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK, AV1_CPU_THREADS,
 #   AV1_NO_COLOR, AV1_NO_PROMPT, AV1_HIDE_FILENAMES, AV1_LOG_TYPE, AV1_LOG_DIR,
 #   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
 
@@ -343,6 +344,19 @@ def _display_batch_item(file_path: str, input_path: str, recursive: bool, curren
     return _display_path(file_path, fallback_label="file")
 
 
+def _default_cpu_threads() -> int:
+    """Use 75% of available logical CPUs for CPU encoding by default."""
+    logical_cpus = max(1, os.cpu_count() or 1)
+    return max(1, (logical_cpus * DEFAULT_CPU_USAGE_PERCENT + 99) // 100)
+
+
+def _resolve_cpu_threads(requested_threads: Optional[int]) -> int:
+    """Validate and resolve the effective CPU thread count."""
+    if requested_threads is None:
+        return _default_cpu_threads()
+    return max(1, int(requested_threads))
+
+
 def _print_startup_summary(
     input_paths: list[str],
     *,
@@ -362,6 +376,8 @@ def _print_startup_summary(
     no_color: bool,
     no_prompt: bool,
     hide_filenames: bool,
+    cpu_threads_requested: Optional[int],
+    effective_cpu_threads: int,
     requested_parallel: int,
     effective_parallel: int,
 ) -> None:
@@ -410,6 +426,10 @@ def _print_startup_summary(
         options.append("no-prompt")
     if hide_filenames:
         options.append("hide-filenames")
+    if cpu_threads_requested is None:
+        options.append(f"cpu-threads={effective_cpu_threads} (default {DEFAULT_CPU_USAGE_PERCENT}% logical CPUs)")
+    else:
+        options.append(f"cpu-threads={effective_cpu_threads}")
     if requested_parallel != 1:
         if effective_parallel != requested_parallel:
             options.append(f"parallel={effective_parallel} (requested {requested_parallel})")
@@ -1299,6 +1319,7 @@ def convert_single_file(
     batch_total: Optional[int] = None,
     progress_label: Optional[str] = None,
     progress_callback: Optional[Callable[[Optional[float], str, str], None]] = None,
+    cpu_threads: Optional[int] = None,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -1315,6 +1336,7 @@ def convert_single_file(
     filename = os.path.basename(input_path)
     display_name = _display_path(input_path)
     progress_name = progress_label or display_name
+    effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
     
 
     # Validate file
@@ -1509,7 +1531,7 @@ def convert_single_file(
     else:
         # CPU (SVT-AV1)
         # SVT-AV1 uses different bitrate control - use only -b:v, not -maxrate/-bufsize
-        command.extend(["-preset", "8", "-g", "240"])
+        command.extend(["-preset", "8", "-g", "240", "-svtav1-params", f"lp={effective_cpu_threads}"])
         # Use only target bitrate for CPU encoder (SVT-AV1 handles rate control internally)
         command.extend(["-b:v", str(target_bitrate_int)])
 
@@ -1523,6 +1545,8 @@ def convert_single_file(
 
     if not _SUPPRESS_OUTPUT:
         cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
+        if hw_type == "cpu":
+            cprint(f"   CPU threads: {effective_cpu_threads}", "info")
         # Show ffmpeg path for debugging
         if os.getenv("AV1_DEBUG"):
             cprint(f"   FFmpeg: {FFMPEG_CMD}", "info")
@@ -1819,6 +1843,7 @@ def convert_single_file(
                                 batch_total=batch_total,
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
+                                cpu_threads=cpu_threads,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1869,6 +1894,7 @@ def convert_single_file(
                                 batch_total=batch_total,
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
+                                cpu_threads=cpu_threads,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1917,6 +1943,7 @@ def process_batch_files(
     keep_mkv: bool,
     recursive: bool = False,
     transient_progress: bool = True,
+    cpu_threads: Optional[int] = None,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -2038,6 +2065,7 @@ def process_batch_files(
                 batch_total=len(video_files),
                 progress_label=display_path,
                 progress_callback=_update_batch_progress,
+                cpu_threads=cpu_threads,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
             )
@@ -2159,6 +2187,7 @@ def convert_videos(
     dry_run: bool = False,
     recursive: bool = False,
     keep_mkv: bool = False,
+    cpu_threads: Optional[int] = None,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -2183,6 +2212,7 @@ def convert_videos(
                     dry_run,
                     keep_mkv,
                     show_progress=True,
+                    cpu_threads=cpu_threads,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
                 )
@@ -2234,6 +2264,7 @@ def convert_videos(
             keep_mkv,
             recursive,
             transient_progress=True,
+            cpu_threads=cpu_threads,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )
@@ -2267,6 +2298,13 @@ def main(
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory to save logs (default: %TEMP%/av1-logs)", rich_help_panel="Logging"),
     ffmpeg: Optional[str] = typer.Option(None, "--ffmpeg", help="Path to ffmpeg executable (overrides env)", rich_help_panel="FFmpeg"),
     ffprobe: Optional[str] = typer.Option(None, "--ffprobe", help="Path to ffprobe executable (overrides env)", rich_help_panel="FFmpeg"),
+    cpu_threads: Optional[int] = typer.Option(
+        None,
+        "--cpu-threads",
+        "--cpu-cores",
+        help=f"Logical CPU threads dedicated to CPU AV1 encoding. Defaults to {DEFAULT_CPU_USAGE_PERCENT}% of available logical CPUs.",
+        rich_help_panel="Performance",
+    ),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)", rich_help_panel="Display"),
     hide_filenames: bool = typer.Option(False, "--hide-filenames", help="Redact media filenames in progress output, prompts, and status messages", rich_help_panel="Display"),
@@ -2321,6 +2359,13 @@ def main(
     env_hide_filenames = os.getenv("AV1_HIDE_FILENAMES")
     if env_hide_filenames and _env_bool(env_hide_filenames):
         hide_filenames = True
+    env_cpu_threads = os.getenv("AV1_CPU_THREADS")
+    if cpu_threads is None and env_cpu_threads:
+        try:
+            cpu_threads = int(env_cpu_threads.strip())
+        except ValueError:
+            cprint(f"Invalid AV1_CPU_THREADS: {env_cpu_threads!r}", "error")
+            raise typer.Exit(code=1)
 
     env_log_type = os.getenv("AV1_LOG_TYPE")
     if env_log_type and (log_type == "txt"):
@@ -2353,6 +2398,11 @@ def main(
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)
+    if cpu_threads is not None and cpu_threads < 1:
+        cprint("--cpu-threads / --cpu-cores / AV1_CPU_THREADS must be at least 1.", "error")
+        raise typer.Exit(code=1)
+
+    effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
 
     # Override ffmpeg/ffprobe paths from CLI if provided
     global FFMPEG_CMD, FFPROBE_CMD
@@ -2402,6 +2452,8 @@ def main(
         no_color=no_color,
         no_prompt=no_prompt,
         hide_filenames=hide_filenames,
+        cpu_threads_requested=cpu_threads,
+        effective_cpu_threads=effective_cpu_threads,
         requested_parallel=requested_parallel,
         effective_parallel=parallel,
     )
@@ -2443,6 +2495,7 @@ def main(
             keep_mkv,
             recursive=False,
             transient_progress=False,
+            cpu_threads=effective_cpu_threads,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )
@@ -2472,8 +2525,10 @@ def main(
                         log_dir,
                         ffmpeg,
                         ffprobe,
+                        cpu_threads,
                         no_color,
                         no_prompt,
+                        hide_filenames,
                         parallel,
                         version=None,
                     )
@@ -2488,6 +2543,7 @@ def main(
             dry_run,
             recursive,
             keep_mkv,
+            cpu_threads=effective_cpu_threads,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )
