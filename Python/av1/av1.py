@@ -346,8 +346,13 @@ def _display_batch_item(file_path: str, input_path: str, recursive: bool, curren
 
 def _default_cpu_threads() -> int:
     """Use 75% of available logical CPUs for CPU encoding by default."""
-    logical_cpus = max(1, os.cpu_count() or 1)
+    logical_cpus = _logical_cpu_count()
     return max(1, (logical_cpus * DEFAULT_CPU_USAGE_PERCENT + 99) // 100)
+
+
+def _logical_cpu_count() -> int:
+    """Return the available logical CPU count with a safe minimum."""
+    return max(1, os.cpu_count() or 1)
 
 
 def _resolve_cpu_threads(requested_threads: Optional[int]) -> int:
@@ -2400,6 +2405,14 @@ def main(
         raise typer.Exit(code=1)
     if cpu_threads is not None and cpu_threads < 1:
         cprint("--cpu-threads / --cpu-cores / AV1_CPU_THREADS must be at least 1.", "error")
+        raise typer.Exit(code=1)
+    available_cpu_threads = _logical_cpu_count()
+    if cpu_threads is not None and cpu_threads > available_cpu_threads:
+        cprint(
+            f"--cpu-threads / --cpu-cores / AV1_CPU_THREADS cannot exceed available logical CPUs "
+            f"({available_cpu_threads}).",
+            "error",
+        )
         raise typer.Exit(code=1)
 
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)

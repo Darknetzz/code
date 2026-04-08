@@ -114,7 +114,7 @@ Options:
   --ffmpeg TEXT               Path to ffmpeg executable (overrides AV1_FFMPEG_PATH)
   --ffprobe TEXT              Path to ffprobe executable (overrides AV1_FFPROBE_PATH)
   --cpu-threads, --cpu-cores INT
-                              Logical CPU threads for CPU AV1 encoding [default: 75% of logical CPUs]
+                              Logical CPU threads for CPU AV1 encoding [default: 75% of logical CPUs, max: available logical CPUs]
   --no-prompt                 Suppress interactive confirmations
   --no-color                  Disable colored output
   --parallel, -j INT          Files to process simultaneously [default: 1]
@@ -136,7 +136,7 @@ Options:
    <tr><td>--log-dir &lt;TEXT&gt;</td><td>Directory for logs (default: %TEMP%/av1-logs).</td></tr>
    <tr><td>--ffmpeg &lt;TEXT&gt;</td><td>Path to ffmpeg executable (overrides env or PATH).</td></tr>
    <tr><td>--ffprobe &lt;TEXT&gt;</td><td>Path to ffprobe executable (overrides env or PATH).</td></tr>
-   <tr><td>--cpu-threads, --cpu-cores &lt;INT&gt;</td><td>Logical CPU threads dedicated to CPU AV1 encoding. Defaults to 75% of available logical CPUs.</td></tr>
+   <tr><td>--cpu-threads, --cpu-cores &lt;INT&gt;</td><td>Logical CPU threads dedicated to CPU AV1 encoding. Defaults to 75% of available logical CPUs and rejects values above the available logical CPU count.</td></tr>
    <tr><td>--no-prompt</td><td>Suppress interactive prompts (useful for automation).</td></tr>
    <tr><td>--no-color</td><td>Disable colored output (useful for logging/piping).</td></tr>
    <tr><td>--parallel, -j &lt;INT&gt;</td><td>Concurrent files to process [experimental, default: 1].</td></tr>
