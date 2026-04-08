@@ -123,6 +123,7 @@ _LOG_EVENTS: list[dict] = []  # Structured events for JSON logging
 _NO_COLOR = False  # Disable colors when True
 _NO_PROMPT = False  # Suppress interactive prompts
 _HIDE_FILENAMES = False  # Redact media filenames from console output when True
+_STARTUP_SUMMARY_EMITTED = False  # Avoid duplicate startup summaries on internal re-entry
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -340,6 +341,88 @@ def _display_batch_item(file_path: str, input_path: str, recursive: bool, curren
     if recursive:
         return _display_path(file_path, base_path=input_path, fallback_label="file")
     return _display_path(file_path, fallback_label="file")
+
+
+def _print_startup_summary(
+    input_paths: list[str],
+    *,
+    output_dir: Optional[str],
+    bitrate: Optional[str],
+    max_output_size: Optional[str],
+    min_shrink_percent: Optional[float],
+    delete_original: bool,
+    overwrite: bool,
+    dry_run: bool,
+    recursive: bool,
+    keep_mkv: bool,
+    log_type: str,
+    log_dir: Optional[str],
+    ffmpeg: Optional[str],
+    ffprobe: Optional[str],
+    no_color: bool,
+    no_prompt: bool,
+    hide_filenames: bool,
+    requested_parallel: int,
+    effective_parallel: int,
+) -> None:
+    """Print a concise startup confirmation of active inputs and options."""
+    global _STARTUP_SUMMARY_EMITTED
+    if _STARTUP_SUMMARY_EMITTED:
+        return
+    if not input_paths:
+        return
+
+    if len(input_paths) == 1:
+        input_summary = _display_path(input_paths[0], full_path=True, fallback_label="1 input path hidden")
+    else:
+        input_summary = f"{len(input_paths)} input paths"
+
+    options: list[str] = []
+    if output_dir:
+        options.append(f"output-dir={_display_path(output_dir, full_path=True, fallback_label='hidden')}")
+    if bitrate:
+        options.append(f"bitrate={bitrate}")
+    if max_output_size:
+        options.append(f"max-output-size={max_output_size}")
+    if min_shrink_percent is not None:
+        options.append(f"min-shrink={min_shrink_percent:g}")
+    if delete_original:
+        options.append("delete-original")
+    if overwrite:
+        options.append("overwrite")
+    if dry_run:
+        options.append("dry-run")
+    if recursive:
+        options.append("recursive")
+    if keep_mkv:
+        options.append("keep-mkv")
+    if log_type and log_type.lower() != "txt":
+        options.append(f"log-type={log_type}")
+    if log_dir:
+        options.append(f"log-dir={_display_path(log_dir, full_path=True, fallback_label='hidden')}")
+    if ffmpeg:
+        options.append(f"ffmpeg={_display_path(ffmpeg, full_path=True, fallback_label='hidden')}")
+    if ffprobe:
+        options.append(f"ffprobe={_display_path(ffprobe, full_path=True, fallback_label='hidden')}")
+    if no_color:
+        options.append("no-color")
+    if no_prompt:
+        options.append("no-prompt")
+    if hide_filenames:
+        options.append("hide-filenames")
+    if requested_parallel != 1:
+        if effective_parallel != requested_parallel:
+            options.append(f"parallel={effective_parallel} (requested {requested_parallel})")
+        else:
+            options.append(f"parallel={effective_parallel}")
+
+    cprint("Startup configuration:", "info")
+    cprint(f"   Input:  {input_summary}", "info")
+    if options:
+        cprint(f"   Flags:  {', '.join(options)}", "info")
+    else:
+        cprint("   Flags:  defaults", "info")
+    _STARTUP_SUMMARY_EMITTED = True
 
 
 def _parse_byte_size(spec: str) -> Optional[int]:
@@ -2279,6 +2362,7 @@ def main(
         FFPROBE_CMD = ffprobe
     
     # Validate parallel value
+    requested_parallel = parallel
     if parallel < 1:
         cprint("⚠️  --parallel must be at least 1, setting to 1", "warning")
         parallel = 1
@@ -2295,12 +2379,34 @@ def main(
     if no_color:
         console = Console(no_color=True, force_terminal=True)
     
-    check_ffmpeg()
-    
     if not input_paths:
         # Show help when no input paths provided
         app(["--help"])
         raise typer.Exit(code=0)
+
+    _print_startup_summary(
+        input_paths,
+        output_dir=output_dir,
+        bitrate=bitrate,
+        max_output_size=max_output_size,
+        min_shrink_percent=min_shrink_percent,
+        delete_original=delete_original,
+        overwrite=overwrite,
+        dry_run=dry_run,
+        recursive=recursive,
+        keep_mkv=keep_mkv,
+        log_type=log_type,
+        log_dir=log_dir,
+        ffmpeg=ffmpeg,
+        ffprobe=ffprobe,
+        no_color=no_color,
+        no_prompt=no_prompt,
+        hide_filenames=hide_filenames,
+        requested_parallel=requested_parallel,
+        effective_parallel=parallel,
+    )
+
+    check_ffmpeg()
     
     # If multiple paths passed (from wildcard expansion), process them all
     if len(input_paths) > 1:
