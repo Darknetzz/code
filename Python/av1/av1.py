@@ -382,6 +382,7 @@ def _print_startup_summary(
     no_color: bool,
     no_prompt: bool,
     hide_filenames: bool,
+    prompt_av1: bool,
     reencode_av1: bool,
     cpu_threads_requested: Optional[int],
     effective_cpu_threads: int,
@@ -433,6 +434,8 @@ def _print_startup_summary(
         options.append("no-prompt")
     if hide_filenames:
         options.append("hide-filenames")
+    if prompt_av1:
+        options.append("prompt-av1")
     if reencode_av1:
         options.append("reencode-av1")
     if cpu_threads_requested is None:
@@ -1364,6 +1367,7 @@ def convert_single_file(
     progress_label: Optional[str] = None,
     progress_callback: Optional[Callable[[Optional[float], str, str], None]] = None,
     cpu_threads: Optional[int] = None,
+    prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
@@ -1392,7 +1396,16 @@ def convert_single_file(
     if transcode_state == "invalid":
         return delete_original, 0, "skip-invalid", "unknown | length unknown | fps unknown"
     if transcode_state == "already-av1":
-        if not maybe_reencode_existing_av1(input_path, auto_reencode=reencode_av1):
+        if reencode_av1:
+            pass
+        elif prompt_av1:
+            if not maybe_reencode_existing_av1(input_path, auto_reencode=False):
+                return delete_original, 0, "skip-av1", "unknown | length unknown | fps unknown"
+        else:
+            cprint(
+                f"⏭️  Skipping: {display_name} (already AV1; use --prompt-av1 or --reencode-av1)",
+                "info",
+            )
             return delete_original, 0, "skip-av1", "unknown | length unknown | fps unknown"
     elif transcode_state != "needs":
         cprint(f"⏭️  Skipping: {display_name} (already using target codec)", "info")
@@ -1895,6 +1908,7 @@ def convert_single_file(
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
                                 cpu_threads=cpu_threads,
+                                prompt_av1=prompt_av1,
                                 reencode_av1=reencode_av1,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
@@ -1947,6 +1961,7 @@ def convert_single_file(
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
                                 cpu_threads=cpu_threads,
+                                prompt_av1=prompt_av1,
                                 reencode_av1=reencode_av1,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
@@ -1997,6 +2012,7 @@ def process_batch_files(
     recursive: bool = False,
     transient_progress: bool = True,
     cpu_threads: Optional[int] = None,
+    prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
@@ -2120,6 +2136,7 @@ def process_batch_files(
                 progress_label=display_path,
                 progress_callback=_update_batch_progress,
                 cpu_threads=cpu_threads,
+                prompt_av1=prompt_av1,
                 reencode_av1=reencode_av1,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
@@ -2243,6 +2260,7 @@ def convert_videos(
     recursive: bool = False,
     keep_mkv: bool = False,
     cpu_threads: Optional[int] = None,
+    prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
@@ -2269,6 +2287,7 @@ def convert_videos(
                     keep_mkv,
                     show_progress=True,
                     cpu_threads=cpu_threads,
+                    prompt_av1=prompt_av1,
                     reencode_av1=reencode_av1,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
@@ -2322,6 +2341,7 @@ def convert_videos(
             recursive,
             transient_progress=True,
             cpu_threads=cpu_threads,
+            prompt_av1=prompt_av1,
             reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
@@ -2362,6 +2382,12 @@ def main(
         "--cpu-cores",
         help=f"Logical CPU threads dedicated to CPU AV1 encoding. Defaults to {DEFAULT_CPU_USAGE_PERCENT}% of available logical CPUs.",
         rich_help_panel="Performance",
+    ),
+    prompt_av1: bool = typer.Option(
+        False,
+        "--prompt-av1",
+        help="Prompt before re-encoding files that are already AV1",
+        rich_help_panel="File Handling",
     ),
     reencode_av1: bool = typer.Option(
         False,
@@ -2462,6 +2488,9 @@ def main(
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)
+    if prompt_av1 and reencode_av1:
+        cprint("--prompt-av1 and --reencode-av1 are mutually exclusive.", "error")
+        raise typer.Exit(code=1)
     if cpu_threads is not None and cpu_threads < 1:
         cprint("--cpu-threads / --cpu-cores / AV1_CPU_THREADS must be at least 1.", "error")
         raise typer.Exit(code=1)
@@ -2524,6 +2553,7 @@ def main(
         no_color=no_color,
         no_prompt=no_prompt,
         hide_filenames=hide_filenames,
+        prompt_av1=prompt_av1,
         reencode_av1=reencode_av1,
         cpu_threads_requested=cpu_threads,
         effective_cpu_threads=effective_cpu_threads,
@@ -2569,6 +2599,7 @@ def main(
             recursive=False,
             transient_progress=False,
             cpu_threads=effective_cpu_threads,
+            prompt_av1=prompt_av1,
             reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
@@ -2600,6 +2631,7 @@ def main(
                         ffmpeg,
                         ffprobe,
                         cpu_threads,
+                        prompt_av1,
                         reencode_av1,
                         no_color,
                         no_prompt,
@@ -2619,6 +2651,7 @@ def main(
             recursive,
             keep_mkv,
             cpu_threads=effective_cpu_threads,
+            prompt_av1=prompt_av1,
             reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
