@@ -880,9 +880,10 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
 # ============================================================================ #
 #                            FUNCTION: safe_input                              #
 # ============================================================================ #
-def safe_input(prompt: str) -> str:
+def safe_input(prompt: str, message: Optional[str] = None) -> str:
     """
     Input function that pauses progress bar if active and ensures terminal is ready for input.
+    Optionally prints a message after the progress display is stopped.
     """
     global _PROGRESS_CONTEXT, _SUPPRESS_OUTPUT, console
     
@@ -934,6 +935,8 @@ def safe_input(prompt: str) -> str:
         pass
     
     try:
+        if message:
+            console.print(message)
         # Use Rich console.input() which handles terminal state better
         # But fallback to standard input() if that fails
         try:
@@ -1248,8 +1251,14 @@ def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> 
         )
         return False
 
-    console.print(f"File is already AV1.\nRe-encode anyway?\n{_display_path(file_path, full_path=True, fallback_label='input file')}")
-    resp = safe_input("[y/N/a]: ").strip().lower()
+    resp = safe_input(
+        "[y/N/a]: ",
+        message=(
+            "File is already AV1.\n"
+            "Re-encode anyway?\n"
+            f"{_display_path(file_path, full_path=True, fallback_label='input file')}"
+        ),
+    ).strip().lower()
     if resp in ("a", "all"):
         _AUTO_REENCODE_AV1 = True
         return True
@@ -1274,8 +1283,7 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
         # Print question and path explicitly so [y/N/a] is always visible (Rich may not
         # display multi-line prompts correctly on all terminals)
         prompt_target = _display_path(original_path, full_path=True, fallback_label="original file")
-        console.print(f"Delete original file?\n{prompt_target}")
-        resp = safe_input("[y/N/a]: ").strip().lower()
+        resp = safe_input("[y/N/a]: ", message=f"Delete original file?\n{prompt_target}").strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
