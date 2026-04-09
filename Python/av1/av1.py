@@ -125,6 +125,7 @@ _NO_COLOR = False  # Disable colors when True
 _NO_PROMPT = False  # Suppress interactive prompts
 _HIDE_FILENAMES = False  # Redact media filenames from console output when True
 _STARTUP_SUMMARY_EMITTED = False  # Avoid duplicate startup summaries on internal re-entry
+_AUTO_REENCODE_AV1 = False  # Remember "all" choice when confirming AV1 re-encodes
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -381,6 +382,7 @@ def _print_startup_summary(
     no_color: bool,
     no_prompt: bool,
     hide_filenames: bool,
+    reencode_av1: bool,
     cpu_threads_requested: Optional[int],
     effective_cpu_threads: int,
     requested_parallel: int,
@@ -431,6 +433,8 @@ def _print_startup_summary(
         options.append("no-prompt")
     if hide_filenames:
         options.append("hide-filenames")
+    if reencode_av1:
+        options.append("reencode-av1")
     if cpu_threads_requested is None:
         options.append(f"cpu-threads={effective_cpu_threads} (default {DEFAULT_CPU_USAGE_PERCENT}% logical CPUs)")
     else:
@@ -1160,69 +1164,96 @@ def needs_transcoding(file_path: str) -> bool:
     Returns True if transcoding is needed, False otherwise.
     Also detects corrupt/invalid files and reports them.
     """
+    return inspect_transcoding_need(file_path) == "needs"
+
+# ============================================================================ #
+#                     FUNCTION: inspect_transcoding_need                        #
+# ============================================================================ #
+def inspect_transcoding_need(file_path: str) -> str:
+    """
+    Inspect whether a file should be transcoded.
+    Returns one of: needs, already-av1, already-target, invalid.
+    """
     try:
         cmd = [FFPROBE_CMD, "-v", "error", "-print_format", "json", "-show_streams", file_path]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
-        
+
         if result.returncode != 0:
-            # Check stderr for corruption indicators
             stderr_lower = result.stderr.lower() if result.stderr else ""
             corruption_keywords = [
                 "corrupt", "invalid", "moov atom not found", "could not find codec parameters",
                 "error while decoding", "invalid data found", "bitstream not supported",
                 "error reading header", "end of file", "truncated"
             ]
-            
+
             is_corrupt = any(keyword in stderr_lower for keyword in corruption_keywords)
-            
+
             if is_corrupt:
                 cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
                 if result.stderr:
-                    error_msg = result.stderr.strip()[:200]  # Limit length
+                    error_msg = result.stderr.strip()[:200]
                     cprint(f"   Error: {error_msg}", "error")
             else:
                 cprint(f"⚠️  Could not probe {_display_path(file_path)} - may be invalid or unsupported", "warning")
-            return False
-            
+            return "invalid"
+
         data = json.loads(result.stdout)
         target_codec = ACTIVE_ENCODER["codec"]
-
-        # Check if file has any video streams
         video_streams = [s for s in data.get('streams', []) if s.get('codec_type') == 'video']
         if not video_streams:
             cprint(f"❌ Corrupt or invalid file: {_display_path(file_path)} (no video stream found)", "error")
-            return False
+            return "invalid"
 
         for stream in video_streams:
             current_codec = stream.get('codec_name')
-            
-            # Logic: If we are targeting AV1, skip if already AV1.
-            # If targeting HEVC, skip if already HEVC (or AV1, which is better).
-            if target_codec == "av1" and current_codec == "av1": 
-                return False
-            if target_codec == "hevc" and current_codec in ['hevc', 'h265', 'av1']: 
-                return False
-            
-            return True # Needs update
-        
-        # Should not reach here, but if we do, assume it needs transcoding
-        return True
+            if target_codec == "av1" and current_codec == "av1":
+                return "already-av1"
+            if target_codec == "hevc" and current_codec in ['hevc', 'h265', 'av1']:
+                return "already-target"
+            return "needs"
+
+        return "needs"
     except subprocess.TimeoutExpired:
         cprint(f"⏱️  Timeout while probing {_display_path(file_path)} - file may be very large or corrupt", "warning")
-        return False
+        return "invalid"
     except json.JSONDecodeError:
-        # If ffprobe returns invalid JSON, the file is likely corrupt
         cprint(f"❌ Corrupt file detected: {_display_path(file_path)} (invalid metadata)", "error")
-        return False
+        return "invalid"
     except Exception as e:
-        # Check if the error message suggests corruption
         error_str = str(e).lower()
         if any(keyword in error_str for keyword in ["corrupt", "invalid", "truncated", "error reading"]):
             cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
             cprint(f"   Error: {str(e)[:200]}", "error")
         else:
             cprint(f"⚠️  Error checking file {_display_path(file_path)}: {e}", "warning")
+        return "invalid"
+
+# ============================================================================ #
+#                    FUNCTION: maybe_reencode_existing_av1                      #
+# ============================================================================ #
+def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> bool:
+    """
+    Ask whether an existing AV1 file should be re-encoded.
+    Returns True if conversion should continue.
+    """
+    global _AUTO_REENCODE_AV1
+
+    if auto_reencode or _AUTO_REENCODE_AV1:
+        return True
+
+    if _NO_PROMPT:
+        cprint(
+            f"⏭️  Skipping: {_display_path(file_path)} (already AV1; use --reencode-av1 to bypass the prompt)",
+            "info",
+        )
         return False
+
+    console.print(f"File is already AV1.\nRe-encode anyway?\n{_display_path(file_path, full_path=True, fallback_label='input file')}")
+    resp = safe_input("[y/N/a]: ").strip().lower()
+    if resp in ("a", "all"):
+        _AUTO_REENCODE_AV1 = True
+        return True
+    return resp in ("y", "yes")
 
 # ============================================================================ #
 #                        FUNCTION: maybe_delete_original                       #
@@ -1325,6 +1356,7 @@ def convert_single_file(
     progress_label: Optional[str] = None,
     progress_callback: Optional[Callable[[Optional[float], str, str], None]] = None,
     cpu_threads: Optional[int] = None,
+    reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -1348,7 +1380,13 @@ def convert_single_file(
     if not validate_video_file(input_path):
         return delete_original, 0, "skip-invalid", "unknown | length unknown | fps unknown"
 
-    if not needs_transcoding(input_path):
+    transcode_state = inspect_transcoding_need(input_path)
+    if transcode_state == "invalid":
+        return delete_original, 0, "skip-invalid", "unknown | length unknown | fps unknown"
+    if transcode_state == "already-av1":
+        if not maybe_reencode_existing_av1(input_path, auto_reencode=reencode_av1):
+            return delete_original, 0, "skip-av1", "unknown | length unknown | fps unknown"
+    elif transcode_state != "needs":
         cprint(f"⏭️  Skipping: {display_name} (already using target codec)", "info")
         return delete_original, 0, "skip-codec", "unknown | length unknown | fps unknown"
 
@@ -1849,6 +1887,7 @@ def convert_single_file(
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
                                 cpu_threads=cpu_threads,
+                                reencode_av1=reencode_av1,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1900,6 +1939,7 @@ def convert_single_file(
                                 progress_label=progress_label,
                                 progress_callback=progress_callback,
                                 cpu_threads=cpu_threads,
+                                reencode_av1=reencode_av1,
                                 max_output_bytes=max_output_bytes,
                                 min_shrink_percent=min_shrink_percent,
                             )
@@ -1949,6 +1989,7 @@ def process_batch_files(
     recursive: bool = False,
     transient_progress: bool = True,
     cpu_threads: Optional[int] = None,
+    reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -2071,6 +2112,7 @@ def process_batch_files(
                 progress_label=display_path,
                 progress_callback=_update_batch_progress,
                 cpu_threads=cpu_threads,
+                reencode_av1=reencode_av1,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
             )
@@ -2193,6 +2235,7 @@ def convert_videos(
     recursive: bool = False,
     keep_mkv: bool = False,
     cpu_threads: Optional[int] = None,
+    reencode_av1: bool = False,
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
@@ -2218,6 +2261,7 @@ def convert_videos(
                     keep_mkv,
                     show_progress=True,
                     cpu_threads=cpu_threads,
+                    reencode_av1=reencode_av1,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
                 )
@@ -2270,6 +2314,7 @@ def convert_videos(
             recursive,
             transient_progress=True,
             cpu_threads=cpu_threads,
+            reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )
@@ -2309,6 +2354,12 @@ def main(
         "--cpu-cores",
         help=f"Logical CPU threads dedicated to CPU AV1 encoding. Defaults to {DEFAULT_CPU_USAGE_PERCENT}% of available logical CPUs.",
         rich_help_panel="Performance",
+    ),
+    reencode_av1: bool = typer.Option(
+        False,
+        "--reencode-av1",
+        help="Re-encode files that are already AV1 without asking for confirmation",
+        rich_help_panel="File Handling",
     ),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)", rich_help_panel="Display"),
@@ -2465,6 +2516,7 @@ def main(
         no_color=no_color,
         no_prompt=no_prompt,
         hide_filenames=hide_filenames,
+        reencode_av1=reencode_av1,
         cpu_threads_requested=cpu_threads,
         effective_cpu_threads=effective_cpu_threads,
         requested_parallel=requested_parallel,
@@ -2509,6 +2561,7 @@ def main(
             recursive=False,
             transient_progress=False,
             cpu_threads=effective_cpu_threads,
+            reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )
@@ -2539,6 +2592,7 @@ def main(
                         ffmpeg,
                         ffprobe,
                         cpu_threads,
+                        reencode_av1,
                         no_color,
                         no_prompt,
                         hide_filenames,
@@ -2557,6 +2611,7 @@ def main(
             recursive,
             keep_mkv,
             cpu_threads=effective_cpu_threads,
+            reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
         )

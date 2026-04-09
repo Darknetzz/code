@@ -115,6 +115,7 @@ Options:
   --ffprobe TEXT              Path to ffprobe executable (overrides AV1_FFPROBE_PATH)
   --cpu-threads, --cpu-cores INT
                               Logical CPU threads for CPU AV1 encoding [default: 75% of logical CPUs, max: available logical CPUs]
+  --reencode-av1              Re-encode AV1 files without confirmation
   --no-prompt                 Suppress interactive confirmations
   --no-color                  Disable colored output
   --parallel, -j INT          Files to process simultaneously [default: 1]
@@ -137,6 +138,7 @@ Options:
    <tr><td>--ffmpeg &lt;TEXT&gt;</td><td>Path to ffmpeg executable (overrides env or PATH).</td></tr>
    <tr><td>--ffprobe &lt;TEXT&gt;</td><td>Path to ffprobe executable (overrides env or PATH).</td></tr>
    <tr><td>--cpu-threads, --cpu-cores &lt;INT&gt;</td><td>Logical CPU threads dedicated to CPU AV1 encoding. Defaults to 75% of available logical CPUs and rejects values above the available logical CPU count.</td></tr>
+   <tr><td>--reencode-av1</td><td>Skip the confirmation prompt and re-encode files that are already AV1.</td></tr>
    <tr><td>--no-prompt</td><td>Suppress interactive prompts (useful for automation).</td></tr>
    <tr><td>--no-color</td><td>Disable colored output (useful for logging/piping).</td></tr>
    <tr><td>--parallel, -j &lt;INT&gt;</td><td>Concurrent files to process [experimental, default: 1].</td></tr>
@@ -151,7 +153,8 @@ Options:
    - **Windows**: NVIDIA AV1 (`av1_nvenc`) → AMD AV1 (`av1_amf`) → NVIDIA HEVC (`hevc_nvenc`) → AMD HEVC (`hevc_amf`) → CPU AV1 (`libsvtav1`)
    - **Linux**: VAAPI AV1 → NVIDIA AV1 (`av1_nvenc`) → VAAPI HEVC → NVIDIA HEVC → CPU AV1
 3. **For each video file**:
-   - Skips if already encoded with target codec (optimization).
+   - Prompts before re-encoding files that are already AV1 when AV1 is the active target, unless `--reencode-av1` is passed.
+   - Skips if already encoded with the target codec in other cases (optimization).
    - Probes input bitrate and calculates target (50% reduction by default).
    - Applies safe scaling (max width 1920, maintains aspect ratio).
    - Encodes with VBR using `-b:v` (target), `-maxrate` (peak), `-bufsize` (buffer).
