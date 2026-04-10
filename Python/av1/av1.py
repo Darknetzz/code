@@ -2377,7 +2377,7 @@ def main(
     min_shrink: Optional[float] = typer.Option(
         None,
         "--min-shrink",
-        help="Aim for output at most (100 minus this) percent of input size; e.g. 70 => ≤30%% of original bytes.",
+        help="Minimum percent reduction in file size. Defaults to 50, meaning outputs target at most 50% of the original size.",
         rich_help_panel="Input/Output",
     ),
     delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Auto-delete originals after conversion", rich_help_panel="File Handling"),
@@ -2498,6 +2498,8 @@ def main(
         except ValueError:
             cprint(f"Invalid AV1_MIN_SHRINK: {os.getenv('AV1_MIN_SHRINK')!r}", "error")
             raise typer.Exit(code=1)
+    if min_shrink_percent is None:
+        min_shrink_percent = 50.0
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)
