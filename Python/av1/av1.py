@@ -599,56 +599,72 @@ def _truncate_middle(text: str, max_length: int = 60) -> str:
     return f"{text[:keep]}...{text[-(max_length - 3 - keep):]}"
 
 
-def _format_status_line(*parts: str) -> str:
-    """Join non-empty progress status parts into a single readable line."""
-    return " | ".join(part for part in parts if part)
-
-
 def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
-    """Create a compact progress layout with task details on a second line."""
+    """Create a progress layout that avoids wrapping in narrow terminals."""
     columns = [
         SpinnerColumn(),
         TextColumn(
             "[progress.description]{task.description}",
-            table_column=Column(ratio=1, overflow="fold"),
+            table_column=Column(ratio=1, no_wrap=True, overflow="ellipsis"),
         ),
         BarColumn(bar_width=None),
         TaskProgressColumn(),
     ]
 
+    if batch_mode:
+        columns.extend(
+            [
+                TextColumn(
+                    "[cyan]{task.fields[progress_text]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[green]Saved: {task.fields[saved]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[yellow]{task.fields[eta]}",
+                    table_column=Column(no_wrap=True),
+                ),
+            ]
+        )
+    else:
+        columns.extend(
+            [
+                TextColumn(
+                    "[cyan]{task.fields[fps]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[yellow]{task.fields[eta]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[blue]Size: {task.fields[size]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
+                    "[green]Saved: {task.fields[saved]}",
+                    table_column=Column(no_wrap=True),
+                ),
+            ]
+        )
+
     return Progress(*columns, transient=transient, expand=True)
 
 
-def _format_batch_progress_description(
-    current: int,
-    total: int,
-    elapsed_seconds: int,
-    current_item: str,
-    detail_line: str = "",
-) -> str:
-    """Build a two-line batch progress description for the terminal."""
+def _format_batch_progress_description(current: int, total: int, elapsed_seconds: int, current_item: str) -> str:
+    """Build a compact batch progress description for the terminal."""
     short_item = _truncate_middle(current_item, 52)
-    header = f"File {current}/{total} | Now: {short_item} | Elapsed {_format_elapsed(elapsed_seconds)}"
-    if detail_line:
-        return f"{header}\n  {detail_line}"
-    return header
+    return f"File {current}/{total} | Now: {short_item} | Elapsed {_format_elapsed(elapsed_seconds)}"
 
 
-def _format_file_progress_description(
-    file_label: str,
-    current: Optional[int] = None,
-    total: Optional[int] = None,
-    detail_line: str = "",
-) -> str:
-    """Build a two-line per-file progress label, optionally including batch position."""
+def _format_file_progress_description(file_label: str, current: Optional[int] = None, total: Optional[int] = None) -> str:
+    """Build a per-file progress label, optionally including batch position."""
     short_label = _truncate_middle(file_label, 48)
     if current is not None and total is not None and total > 0:
-        header = f"[yellow]  └─ File {current}/{total}: {short_label}"
-    else:
-        header = f"[yellow]  └─ Encoding: {short_label}"
-    if detail_line:
-        return f"{header}\n     {detail_line}"
-    return header
+        return f"[yellow]  └─ File {current}/{total}: {short_label}"
+    return f"[yellow]  └─ Encoding: {short_label}"
 
 
 def _parse_ffprobe_fraction(value: str) -> Optional[float]:
@@ -1709,13 +1725,14 @@ def convert_single_file(
         file_task = None
         if _PROGRESS_CONTEXT and show_progress:
             file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-            detail_line = _format_status_line(
-                _format_progress_clock(0, total_duration),
-                f"Size: {file_size_str}" if file_size_str else "",
-            )
             file_task = _PROGRESS_CONTEXT.add_task(
-                _format_file_progress_description(progress_name, batch_index, batch_total, detail_line),
+                _format_file_progress_description(progress_name, batch_index, batch_total),
                 total=100 if total_duration else None,
+                fps="",
+                eta="",
+                size=file_size_str,
+                saved="",
+                progress_text=_format_progress_clock(0, total_duration),
             )
 
         progress_state: dict[str, str] = {}
@@ -1752,19 +1769,11 @@ def convert_single_file(
 
                             if file_task is not None and _PROGRESS_CONTEXT:
                                 file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                                detail_line = _format_status_line(
-                                    progress_text,
-                                    rate_text,
-                                    eta_field,
-                                    f"Size: {file_size_str}" if file_size_str else "",
-                                )
                                 update_kwargs = {
-                                    "description": _format_file_progress_description(
-                                        progress_name,
-                                        batch_index,
-                                        batch_total,
-                                        detail_line,
-                                    ),
+                                    "fps": rate_text,
+                                    "eta": eta_field,
+                                    "size": file_size_str,
+                                    "progress_text": progress_text,
                                 }
                                 if progress_fraction is not None:
                                     update_kwargs["completed"] = progress_fraction * 100
@@ -1783,18 +1792,10 @@ def convert_single_file(
             process.wait()
             if file_task is not None and _PROGRESS_CONTEXT:
                 file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                detail_line = _format_status_line(
-                    _format_progress_clock(total_duration, total_duration),
-                    "Done",
-                    f"Size: {file_size_str}" if file_size_str else "",
-                )
                 final_update = {
-                    "description": _format_file_progress_description(
-                        progress_name,
-                        batch_index,
-                        batch_total,
-                        detail_line,
-                    ),
+                    "eta": "Done",
+                    "size": file_size_str,
+                    "progress_text": _format_progress_clock(total_duration, total_duration),
                 }
                 if total_duration:
                     final_update["completed"] = 100
@@ -2092,14 +2093,11 @@ def process_batch_files(
         global _PROGRESS_CONTEXT
         _PROGRESS_CONTEXT = progress
         overall_task = progress.add_task(
-            _format_batch_progress_description(
-                0,
-                len(video_files),
-                0,
-                "waiting...",
-                _format_status_line("Waiting for encoder...", "Saved: 0"),
-            ),
+            _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
             total=len(video_files),
+            progress_text="",
+            saved=_format_saved(0),
+            eta="",
         )
         auto_delete = delete_original
 
@@ -2123,14 +2121,11 @@ def process_batch_files(
 
             progress.update(
                 overall_task,
-                description=_format_batch_progress_description(
-                    idx,
-                    len(video_files),
-                    elapsed,
-                    display_path,
-                    _format_status_line("Starting...", f"Saved: {_format_saved(cumulative_saved)}", eta_text),
-                ),
+                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
                 completed=idx - 1,
+                progress_text="",
+                saved=_format_saved(cumulative_saved),
+                eta=eta_text,
             )
             
             # Capture original size before conversion
@@ -2159,18 +2154,11 @@ def process_batch_files(
                     completed_value += min(max(float(current_fraction), 0.0), 1.0)
                 progress.update(
                     overall_task,
-                    description=_format_batch_progress_description(
-                        idx,
-                        len(video_files),
-                        elapsed_now,
-                        display_path,
-                        _format_status_line(
-                            current_progress_text,
-                            f"Saved: {_format_saved(cumulative_saved)}",
-                            "" if current_eta == "Done" else current_eta,
-                        ),
-                    ),
+                    description=_format_batch_progress_description(idx, len(video_files), elapsed_now, display_path),
                     completed=completed_value,
+                    progress_text=current_progress_text,
+                    saved=_format_saved(cumulative_saved),
+                    eta="" if current_eta == "Done" else current_eta,
                 )
 
             auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
@@ -2222,14 +2210,11 @@ def process_batch_files(
 
             progress.update(
                 overall_task,
-                description=_format_batch_progress_description(
-                    idx,
-                    len(video_files),
-                    elapsed,
-                    display_path,
-                    _format_status_line("Completed", f"Saved: {_format_saved(cumulative_saved)}", eta_text),
-                ),
+                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
                 completed=idx,
+                progress_text="",
+                saved=_format_saved(cumulative_saved),
+                eta=eta_text,
             )
 
         _PROGRESS_CONTEXT = None
