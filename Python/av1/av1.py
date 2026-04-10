@@ -1304,6 +1304,18 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
 # ============================================================================ #
 #                        FUNCTION: check_disk_space                            #
 # ============================================================================ #
+def resolve_output_dir(output_dir: Optional[str], input_path: Optional[str] = None) -> str:
+    """
+    Normalizes the destination directory for outputs and temp files.
+    Empty dirnames can occur when wildcard matches are relative paths.
+    """
+    if output_dir:
+        return output_dir
+    if input_path:
+        return os.path.dirname(input_path) or os.getcwd()
+    return os.getcwd()
+
+
 def check_disk_space(file_path: str, output_dir: str) -> bool:
     """
     Verifies sufficient disk space is available for conversion.
@@ -1313,9 +1325,7 @@ def check_disk_space(file_path: str, output_dir: str) -> bool:
         file_size = os.path.getsize(file_path)
         required_space = int(file_size * DISK_SPACE_SAFETY_MARGIN)
         
-        # Handle empty string or None output_dir
-        if not output_dir:
-            output_dir = os.getcwd()
+        output_dir = resolve_output_dir(output_dir)
         
         stat = shutil.disk_usage(output_dir)
         if stat.free < required_space:
@@ -1423,8 +1433,11 @@ def convert_single_file(
             cprint(f"Could not determine file size: {e}", "warning")
 
     # Naming suffix - keep original name if deleting source, otherwise add codec suffix
-    if output_dir is None:
-        output_dir = os.path.dirname(input_path) or os.getcwd()
+    output_dir = resolve_output_dir(output_dir, input_path)
+    if not output_dir:
+        output_dir = os.getcwd()
+
+    if output_dir == (os.path.dirname(input_path) or os.getcwd()):
         # When staying in same dir, add suffix to avoid collision during encoding
         suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
         output_name = os.path.splitext(filename)[0] + suffix
@@ -2102,7 +2115,7 @@ def process_batch_files(
                 current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
             else:
                 # No explicit output dir or same as input - use file's own directory
-                current_output_dir = os.path.dirname(file_path)
+                current_output_dir = resolve_output_dir(None, file_path)
             
             # Suppress output during conversion
             global _SUPPRESS_OUTPUT
