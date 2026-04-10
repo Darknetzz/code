@@ -1329,6 +1329,18 @@ def resolve_output_dir(output_dir: Optional[str], input_path: Optional[str] = No
     return os.getcwd()
 
 
+def resolve_original_output_path(input_path: str, output_path: str) -> Optional[str]:
+    """Return the final original-name target when it is safe to rename in place."""
+    input_dir = os.path.abspath(os.path.dirname(input_path) or os.getcwd())
+    output_dir = os.path.abspath(os.path.dirname(output_path) or os.getcwd())
+    if input_dir != output_dir:
+        return None
+    original_name_path = os.path.join(output_dir, os.path.basename(input_path))
+    if os.path.abspath(output_path) == os.path.abspath(original_name_path):
+        return None
+    return original_name_path
+
+
 def check_disk_space(file_path: str, output_dir: str) -> bool:
     """
     Verifies sufficient disk space is available for conversion.
@@ -1838,14 +1850,13 @@ def convert_single_file(
                     if auto_delete_flag:
                         delete_original = True
                     # If original was deleted, rename output to original name when same directory
-                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path) and not keep_mkv:
-                        original_name_path = input_path
-                        if output_path != original_name_path:
-                            try:
-                                os.rename(output_path, original_name_path)
-                                cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
-                            except OSError as e:
-                                cprint(f"Could not rename to original name: {e}", "warning")
+                    original_name_path = resolve_original_output_path(input_path, output_path)
+                    if original_deleted and original_name_path and not keep_mkv:
+                        try:
+                            os.replace(output_path, original_name_path)
+                            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
+                        except OSError as e:
+                            cprint(f"Could not rename to original name: {e}", "warning")
                 else:
                     # Delete original and optionally rename to match original name
                     auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
@@ -1855,14 +1866,13 @@ def convert_single_file(
                         delete_original = True
                     
                     # Rename converted file to original name if original was deleted (unless keep_mkv is set)
-                    if original_deleted and os.path.dirname(output_path) == os.path.dirname(input_path) and not keep_mkv:
-                        original_name_path = input_path
-                        if output_path != original_name_path:
-                            try:
-                                os.rename(output_path, original_name_path)
-                                cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
-                            except OSError as e:
-                                cprint(f"Could not rename to original name: {e}", "warning")
+                    original_name_path = resolve_original_output_path(input_path, output_path)
+                    if original_deleted and original_name_path and not keep_mkv:
+                        try:
+                            os.replace(output_path, original_name_path)
+                            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
+                        except OSError as e:
+                            cprint(f"Could not rename to original name: {e}", "warning")
                 
                 return delete_original, size_saved, bitrate_decision, media_info
             else:
