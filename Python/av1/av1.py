@@ -243,6 +243,19 @@ def _format_duration(seconds: Optional[float]) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _format_timecode(seconds: Optional[float]) -> str:
+    """Pretty-print media timestamps compactly as MM:SS or HH:MM:SS."""
+    if not isinstance(seconds, (int, float)) or seconds < 0:
+        return "unknown"
+    total = int(seconds)
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
 def _format_elapsed(seconds: int) -> str:
     """Pretty-print elapsed seconds compactly for batch status lines."""
     if seconds < 60:
@@ -268,16 +281,16 @@ def _format_eta_seconds(seconds: Optional[float]) -> str:
 
 
 def _format_progress_clock(current_seconds: Optional[float], total_seconds: Optional[float]) -> str:
-    """Render current and total media time as HH:MM:SS / HH:MM:SS."""
+    """Render labeled media progress for the current file."""
     current_value = 0.0
     if isinstance(current_seconds, (int, float)) and current_seconds > 0:
         current_value = float(current_seconds)
     if not isinstance(total_seconds, (int, float)) or total_seconds <= 0:
         if current_value <= 0:
             return "Encoding..."
-        return f"Encoded {_format_duration(current_value)}"
+        return f"Video {_format_timecode(current_value)} encoded"
     current_value = min(current_value, float(total_seconds))
-    return f"{_format_duration(current_value)} / {_format_duration(total_seconds)}"
+    return f"Video {_format_timecode(current_value)} of {_format_timecode(total_seconds)}"
 
 
 def _parse_ffmpeg_out_time(value: str) -> Optional[float]:
@@ -642,8 +655,8 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
 
 def _format_batch_progress_description(current: int, total: int, elapsed_seconds: int, current_item: str) -> str:
     """Build a compact batch progress description for the terminal."""
-    short_item = _truncate_middle(current_item, 48)
-    return f"File {current}/{total} | Elapsed {_format_elapsed(elapsed_seconds)} | {short_item}"
+    short_item = _truncate_middle(current_item, 52)
+    return f"File {current}/{total} | Now: {short_item} | Elapsed {_format_elapsed(elapsed_seconds)}"
 
 
 def _format_file_progress_description(file_label: str, current: Optional[int] = None, total: Optional[int] = None) -> str:
