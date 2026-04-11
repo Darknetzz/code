@@ -243,6 +243,42 @@ def _format_duration(seconds: Optional[float]) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _format_fps_display(fps: Optional[float]) -> str:
+    """Pretty-print FPS with a stable precision."""
+    if not isinstance(fps, (int, float)) or float(fps) <= 0:
+        return "unknown"
+    return f"{float(fps):.2f}"
+
+
+def _format_bitrate_display(bitrate: Optional[int]) -> str:
+    """Pretty-print bitrate using Mbps/kbps as appropriate."""
+    if not isinstance(bitrate, (int, float)) or float(bitrate) <= 0:
+        return "unknown"
+    bitrate_value = float(bitrate)
+    if bitrate_value >= 1_000_000:
+        return f"{bitrate_value / 1_000_000:.2f} Mbps"
+    if bitrate_value >= 1_000:
+        return f"{bitrate_value / 1_000:.0f} kbps"
+    return f"{int(bitrate_value)} bps"
+
+
+def _build_media_info(stream_info: dict) -> str:
+    """Build a compact media metadata summary for logs and status output."""
+    width = stream_info.get("width")
+    height = stream_info.get("height")
+    duration = stream_info.get("duration")
+    fps = stream_info.get("fps")
+    bitrate = stream_info.get("bitrate")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        resolution = f"{width}x{height}"
+    else:
+        resolution = "unknown"
+    return (
+        f"{resolution} | length {_format_duration(duration)} | "
+        f"fps {_format_fps_display(fps)} | bitrate {_format_bitrate_display(bitrate)}"
+    )
+
+
 def _format_timecode(seconds: Optional[float]) -> str:
     """Pretty-print media timestamps compactly as MM:SS or HH:MM:SS."""
     if not isinstance(seconds, (int, float)) or seconds < 0:
@@ -376,6 +412,15 @@ def _resolve_cpu_threads(requested_threads: Optional[int]) -> int:
     return max(1, int(requested_threads))
 
 
+def _resolve_executable_path(configured_path: str, fallback_name: str) -> Optional[str]:
+    """Resolve an executable from a configured path or PATH lookup."""
+    if shutil.which(configured_path):
+        return configured_path
+    if os.path.exists(configured_path) and os.path.isfile(configured_path):
+        return configured_path
+    return shutil.which(fallback_name)
+
+
 def _print_startup_summary(
     input_paths: list[str],
     *,
@@ -397,6 +442,7 @@ def _print_startup_summary(
     hide_filenames: bool,
     prompt_av1: bool,
     reencode_av1: bool,
+    probe_only: bool,
     cpu_threads_requested: Optional[int],
     effective_cpu_threads: int,
     requested_parallel: int,
@@ -451,6 +497,8 @@ def _print_startup_summary(
         options.append("prompt-av1")
     if reencode_av1:
         options.append("reencode-av1")
+    if probe_only:
+        options.append("probe-only")
     if cpu_threads_requested is None:
         options.append(f"cpu-threads={effective_cpu_threads} (default {DEFAULT_CPU_USAGE_PERCENT}% logical CPUs)")
     else:
@@ -687,15 +735,15 @@ def _parse_ffprobe_fraction(value: str) -> Optional[float]:
 def get_video_stream_info(file_path: str) -> dict:
     """
     Returns video stream metadata:
-      bitrate (bits/s), width, height, fps, duration
+      codec, bitrate (bits/s), width, height, fps, duration
     Bitrate falls back to file_size/duration estimate when stream bitrate is unavailable.
     """
-    info = {"bitrate": None, "width": None, "height": None, "fps": None, "duration": None}
+    info = {"codec": None, "bitrate": None, "width": None, "height": None, "fps": None, "duration": None}
     try:
         cmd = [
             FFPROBE_CMD, "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=bit_rate,width,height,avg_frame_rate,r_frame_rate:format=duration",
+            "-show_entries", "stream=codec_name,bit_rate,width,height,avg_frame_rate,r_frame_rate:format=duration,bit_rate",
             "-of", "json",
             file_path
         ]
@@ -707,6 +755,9 @@ def get_video_stream_info(file_path: str) -> dict:
         streams = data.get("streams", [])
         stream = streams[0] if streams else {}
         fmt = data.get("format", {})
+        codec_name = str(stream.get("codec_name", "")).strip()
+        if codec_name:
+            info["codec"] = codec_name
         duration_str = str(fmt.get("duration", "")).strip()
         if duration_str and duration_str.replace(".", "", 1).isdigit():
             duration = float(duration_str)
@@ -734,6 +785,13 @@ def get_video_stream_info(file_path: str) -> dict:
             info["bitrate"] = int(bit_rate)
         elif isinstance(bit_rate, int) and bit_rate > 0:
             info["bitrate"] = bit_rate
+
+        format_bit_rate = fmt.get("bit_rate")
+        if info["bitrate"] is None:
+            if isinstance(format_bit_rate, str) and format_bit_rate.isdigit():
+                info["bitrate"] = int(format_bit_rate)
+            elif isinstance(format_bit_rate, int) and format_bit_rate > 0:
+                info["bitrate"] = format_bit_rate
 
         # Fallback bitrate: derive from file size/duration
         if info["bitrate"] is None:
@@ -1100,23 +1158,12 @@ def check_encoder_support(encoder_name: str) -> bool:
 def check_ffmpeg() -> None:
     global ACTIVE_ENCODER, FFMPEG_CMD, FFPROBE_CMD
     # Validate ffmpeg path or fallback to PATH
-    ffmpeg_ok = shutil.which(FFMPEG_CMD) or (os.path.exists(FFMPEG_CMD) and os.path.isfile(FFMPEG_CMD))
-    if not ffmpeg_ok:
-        path_ffmpeg = shutil.which("ffmpeg")
-        if path_ffmpeg:
-            FFMPEG_CMD = path_ffmpeg
-        else:
-            cprint("ffmpeg is not found.", "error")
-            raise typer.Exit(code=1)
-    # Validate ffprobe path or fallback to PATH
-    ffprobe_ok = shutil.which(FFPROBE_CMD) or (os.path.exists(FFPROBE_CMD) and os.path.isfile(FFPROBE_CMD))
-    if not ffprobe_ok:
-        path_ffprobe = shutil.which("ffprobe")
-        if path_ffprobe:
-            FFPROBE_CMD = path_ffprobe
-        else:
-            cprint("ffprobe is not found.", "error")
-            raise typer.Exit(code=1)
+    resolved_ffmpeg = _resolve_executable_path(FFMPEG_CMD, "ffmpeg")
+    if not resolved_ffmpeg:
+        cprint("ffmpeg is not found.", "error")
+        raise typer.Exit(code=1)
+    FFMPEG_CMD = resolved_ffmpeg
+    check_ffprobe()
     
     cprint("Detecting Best Available Encoder...", "info")
     
@@ -1173,6 +1220,16 @@ def check_ffmpeg() -> None:
     # --- PRIORITY 3: CPU FALLBACK (ALL PLATFORMS) ---
     ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
     cprint("No Hardware Encoder detected. Using CPU (`libsvtav1`).", "warning")
+
+
+def check_ffprobe() -> None:
+    """Validate ffprobe path or fallback to PATH."""
+    global FFPROBE_CMD
+    resolved_ffprobe = _resolve_executable_path(FFPROBE_CMD, "ffprobe")
+    if not resolved_ffprobe:
+        cprint("ffprobe is not found.", "error")
+        raise typer.Exit(code=1)
+    FFPROBE_CMD = resolved_ffprobe
 
 # ============================================================================ #
 #                          FUNCTION: needs_transcoding                         #
@@ -1385,6 +1442,85 @@ def validate_video_file(file_path: str) -> bool:
         
     return True
 
+
+def _collect_directory_video_files(input_path: str, recursive: bool) -> list[str]:
+    """Collect supported video files from a directory."""
+    video_files = []
+    if recursive:
+        for root, dirs, files in os.walk(input_path):
+            for filename in files:
+                if filename.lower().endswith(SUPPORTED_EXTENSIONS):
+                    video_files.append(os.path.join(root, filename))
+    else:
+        for filename in os.listdir(input_path):
+            file_path = os.path.join(input_path, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(SUPPORTED_EXTENSIONS):
+                video_files.append(file_path)
+    video_files.sort()
+    return video_files
+
+
+def _expand_cli_input_paths(input_paths: list[str]) -> list[str]:
+    """Expand wildcard CLI inputs while preserving unmatched paths for diagnostics."""
+    expanded_paths = []
+    for input_path in input_paths:
+        if "*" in input_path or "?" in input_path:
+            matches = glob.glob(input_path)
+            if matches:
+                expanded_paths.extend(matches)
+            else:
+                expanded_paths.append(input_path)
+        else:
+            expanded_paths.append(input_path)
+    return expanded_paths
+
+
+def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
+    """Probe input files and print media metadata without converting."""
+    probe_targets = []
+    for input_path in _expand_cli_input_paths(input_paths):
+        if os.path.isfile(input_path):
+            if input_path.lower().endswith(SUPPORTED_EXTENSIONS):
+                probe_targets.append(input_path)
+            else:
+                cprint(f"Skipping unsupported file: {_display_path(input_path)}", "warning")
+        elif os.path.isdir(input_path):
+            probe_targets.extend(_collect_directory_video_files(input_path, recursive))
+        else:
+            cprint(f"Skipping invalid path: {_display_path(input_path)}", "warning")
+
+    probe_targets = sorted(dict.fromkeys(probe_targets))
+    if not probe_targets:
+        cprint("❌ No video files found to probe.", "error")
+        raise typer.Exit(code=1)
+
+    cprint(f"🔎 Probing {len(probe_targets)} file(s)...", "info")
+    for file_path in probe_targets:
+        if not validate_video_file(file_path):
+            cprint(f"Skipping invalid video file: {_display_path(file_path)}", "warning")
+            continue
+        stream_info = get_video_stream_info(file_path)
+        width = stream_info.get("width")
+        height = stream_info.get("height")
+        resolution = (
+            f"{width}x{height}"
+            if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0
+            else "unknown"
+        )
+        file_size = None
+        try:
+            file_size = os.path.getsize(file_path)
+        except OSError:
+            pass
+
+        cprint(f"Probe: {_display_path(file_path)}", "info")
+        cprint(f"   Codec:     {stream_info.get('codec') or 'unknown'}", "info")
+        cprint(f"   Resolution: {resolution}", "info")
+        cprint(f"   FPS:       {_format_fps_display(stream_info.get('fps'))}", "info")
+        cprint(f"   Bitrate:   {_format_bitrate_display(stream_info.get('bitrate'))}", "info")
+        cprint(f"   Duration:  {_format_duration(stream_info.get('duration'))}", "info")
+        cprint(f"   Filesize:  {_format_size(float(file_size)) if file_size else 'unknown'}", "info")
+
 # ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
@@ -1494,8 +1630,9 @@ def convert_single_file(
         res_str = f"{width}x{height}"
     else:
         res_str = "unknown"
-    fps_str = f"{float(fps):.2f}" if isinstance(fps, (int, float)) and float(fps) > 0 else "unknown"
-    media_info = f"{res_str} | length {_format_duration(duration)} | fps {fps_str}"
+    fps_str = _format_fps_display(fps)
+    bitrate_str = _format_bitrate_display(stream_info.get("bitrate"))
+    media_info = _build_media_info(stream_info)
 
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
@@ -1557,6 +1694,7 @@ def convert_single_file(
         cprint(f"🎯 {display_name} → {bitrate_decision}", "info")
         cprint(f"   Resolution: {res_str}", "info")
         cprint(f"   FPS:        {fps_str}", "info")
+        cprint(f"   Bitrate:    {bitrate_str}", "info")
         cprint(f"   Filesize:   {_format_size(float(file_size_bytes)) if file_size_bytes > 0 else 'unknown'}", "info")
         cprint(f"   Duration:   {_format_duration(duration)}", "info")
 
@@ -2340,21 +2478,7 @@ def convert_videos(
             os.makedirs(output_dir, exist_ok=True)
         
         # Collect all video files (recursively or not)
-        video_files = []
-        
-        if recursive:
-            # Recursive: walk all subdirectories
-            for root, dirs, files in os.walk(input_path):
-                for filename in files:
-                    if filename.lower().endswith(SUPPORTED_EXTENSIONS):
-                        file_path = os.path.join(root, filename)
-                        video_files.append(file_path)
-        else:
-            # Non-recursive: only current directory
-            for filename in os.listdir(input_path):
-                file_path = os.path.join(input_path, filename)
-                if os.path.isfile(file_path) and filename.lower().endswith(SUPPORTED_EXTENSIONS):
-                    video_files.append(file_path)
+        video_files = _collect_directory_video_files(input_path, recursive)
         
         if not video_files:
             mode = "directory tree" if recursive else "directory"
@@ -2434,6 +2558,13 @@ def main(
         help="Re-encode files that are already AV1 without asking for confirmation",
         rich_help_panel="File Handling",
     ),
+    probe_only: bool = typer.Option(
+        False,
+        "--probe-only",
+        "--probe",
+        help="Only inspect input files and show codec/resolution/bitrate/fps/duration without converting",
+        rich_help_panel="Input/Output",
+    ),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored output", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Do not ask for interactive confirmations (e.g., delete original)", rich_help_panel="Display"),
     hide_filenames: bool = typer.Option(False, "--hide-filenames", help="Redact media filenames in progress output, prompts, and status messages", rich_help_panel="Display"),
@@ -2469,6 +2600,9 @@ def main(
     
             [yellow]Preview what would be converted[/]:
                 $ av1 "C:\\Videos" --recursive --dry-run
+
+            [yellow]Probe files without converting[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --probe
 
             [yellow]Cap output around 10 MB[/]:
                 $ av1 "C:\\Videos\\clip.mp4" --max-output-size 10M
@@ -2596,111 +2730,117 @@ def main(
         hide_filenames=hide_filenames,
         prompt_av1=prompt_av1,
         reencode_av1=reencode_av1,
+        probe_only=probe_only,
         cpu_threads_requested=cpu_threads,
         effective_cpu_threads=effective_cpu_threads,
         requested_parallel=requested_parallel,
         effective_parallel=parallel,
     )
 
-    check_ffmpeg()
-    
-    # If multiple paths passed (from wildcard expansion), process them all
-    if len(input_paths) > 1:
-        # Multiple files - treat as batch
-        matched_files = [p for p in input_paths if p.lower().endswith(SUPPORTED_EXTENSIONS)]
-        
-        if not matched_files:
-            cprint("❌ No video files found in arguments.", "error")
-            raise typer.Exit(code=1)
-        
-        # Sort files for consistent processing order
-        matched_files.sort()
-        cprint(f"Found {len(matched_files)} file(s) to process.", "info")
-        
-        # Determine base path for relative path display (use common parent directory)
-        try:
-            if len(matched_files) > 1:
-                base_path = os.path.commonpath(matched_files)
-            else:
-                base_path = os.path.dirname(matched_files[0]) or os.getcwd()
-        except ValueError:
-            # Files are on different drives (Windows) or no common path
-            base_path = os.getcwd()
-        
-        # Process batch using shared helper function
-        process_batch_files(
-            matched_files,
-            output_dir,
-            base_path,
-            bitrate,
-            delete_original,
-            overwrite,
-            dry_run,
-            keep_mkv,
-            recursive=False,
-            transient_progress=False,
-            cpu_threads=effective_cpu_threads,
-            prompt_av1=prompt_av1,
-            reencode_av1=reencode_av1,
-            max_output_bytes=max_output_bytes,
-            min_shrink_percent=min_shrink_percent,
-        )
+    if probe_only:
+        check_ffprobe()
+        probe_inputs(input_paths, recursive=recursive)
     else:
-        # Single path - could be file, directory, or wildcard pattern
-        input_path = input_paths[0]
-        
-        # Try to expand wildcards
-        if '*' in input_path or '?' in input_path:
-            matched_files = glob.glob(input_path)
-            if matched_files:
-                matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
-                if matched_files and len(matched_files) > 1:
-                    # Recursively call main with expanded list
-                    return main(
-                        matched_files,
-                        output_dir,
-                        bitrate,
-                        max_output_size,
-                        min_shrink,
-                        delete_original,
-                        overwrite,
-                        dry_run,
-                        recursive,
-                        keep_mkv,
-                        log_type,
-                        log_dir,
-                        ffmpeg,
-                        ffprobe,
-                        cpu_threads,
-                        prompt_av1,
-                        reencode_av1,
-                        no_color,
-                        no_prompt,
-                        hide_filenames,
-                        parallel,
-                        version=None,
-                    )
-        
-        # No wildcards or only 1 match - use existing logic
-        convert_videos(
-            input_path,
-            output_dir,
-            bitrate,
-            delete_original,
-            overwrite,
-            dry_run,
-            recursive,
-            keep_mkv,
-            cpu_threads=effective_cpu_threads,
-            prompt_av1=prompt_av1,
-            reencode_av1=reencode_av1,
-            max_output_bytes=max_output_bytes,
-            min_shrink_percent=min_shrink_percent,
-        )
+        check_ffmpeg()
+    
+        # If multiple paths passed (from wildcard expansion), process them all
+        if len(input_paths) > 1:
+            # Multiple files - treat as batch
+            matched_files = [p for p in input_paths if p.lower().endswith(SUPPORTED_EXTENSIONS)]
+            
+            if not matched_files:
+                cprint("❌ No video files found in arguments.", "error")
+                raise typer.Exit(code=1)
+            
+            # Sort files for consistent processing order
+            matched_files.sort()
+            cprint(f"Found {len(matched_files)} file(s) to process.", "info")
+            
+            # Determine base path for relative path display (use common parent directory)
+            try:
+                if len(matched_files) > 1:
+                    base_path = os.path.commonpath(matched_files)
+                else:
+                    base_path = os.path.dirname(matched_files[0]) or os.getcwd()
+            except ValueError:
+                # Files are on different drives (Windows) or no common path
+                base_path = os.getcwd()
+            
+            # Process batch using shared helper function
+            process_batch_files(
+                matched_files,
+                output_dir,
+                base_path,
+                bitrate,
+                delete_original,
+                overwrite,
+                dry_run,
+                keep_mkv,
+                recursive=False,
+                transient_progress=False,
+                cpu_threads=effective_cpu_threads,
+                prompt_av1=prompt_av1,
+                reencode_av1=reencode_av1,
+                max_output_bytes=max_output_bytes,
+                min_shrink_percent=min_shrink_percent,
+            )
+        else:
+            # Single path - could be file, directory, or wildcard pattern
+            input_path = input_paths[0]
+            
+            # Try to expand wildcards
+            if '*' in input_path or '?' in input_path:
+                matched_files = glob.glob(input_path)
+                if matched_files:
+                    matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
+                    if matched_files and len(matched_files) > 1:
+                        # Recursively call main with expanded list
+                        return main(
+                            matched_files,
+                            output_dir,
+                            bitrate,
+                            max_output_size,
+                            min_shrink,
+                            delete_original,
+                            overwrite,
+                            dry_run,
+                            recursive,
+                            keep_mkv,
+                            log_type,
+                            log_dir,
+                            ffmpeg,
+                            ffprobe,
+                            cpu_threads,
+                            prompt_av1,
+                            reencode_av1,
+                            probe_only,
+                            no_color,
+                            no_prompt,
+                            hide_filenames,
+                            parallel,
+                            version=None,
+                        )
+            
+            # No wildcards or only 1 match - use existing logic
+            convert_videos(
+                input_path,
+                output_dir,
+                bitrate,
+                delete_original,
+                overwrite,
+                dry_run,
+                recursive,
+                keep_mkv,
+                cpu_threads=effective_cpu_threads,
+                prompt_av1=prompt_av1,
+                reencode_av1=reencode_av1,
+                max_output_bytes=max_output_bytes,
+                min_shrink_percent=min_shrink_percent,
+            )
     
     # Save logs only if files were actually converted
     global _LOG_MESSAGES
-    if _LOG_MESSAGES:
+    if _LOG_MESSAGES and not probe_only:
         import tempfile
         resolved_log_dir = log_dir
         if resolved_log_dir is None:
