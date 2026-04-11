@@ -6,6 +6,7 @@
 # av1 "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
 # av1 "video.mp4" --delete-original
 # av1 "/path/to/videos" -r  (recursive)
+# python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe  (script path first, input path second)
 
 import os
 import subprocess
@@ -202,8 +203,12 @@ def _show_examples() -> None:
       av1 "C:\\Input" "C:\\Output" -o            Batch with custom output folder
       av1 "C:\\Videos" -r --log-type html       Recursive with HTML logging
       av1 "C:\\Videos" -r --dry-run              Preview changes without converting
+      av1 "C:\\Videos\\movie.mp4" --probe       Probe a file without converting
+      python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe
+                                                Run directly: script path first, input path second
     
     NOTES:
+      • The positional path after `av1` is the input video/file/folder path
       • Logs saved to ./logs/ by default
       • Press Ctrl+C once to finish current file and exit gracefully
       • Use -h or --help for complete option list
@@ -2514,7 +2519,10 @@ def convert_videos(
 
 @app.command()
 def main(
-    input_paths: list[str] = typer.Argument(None, help="Paths to input (supports wildcards like 'test*.mp4') - see README.md for examples"),
+    input_paths: list[str] = typer.Argument(
+        None,
+        help="Input video file/folder path(s) to process or probe (supports wildcards like 'test*.mp4'). When running via python, the script path comes first and these are the paths after it.",
+    ),
     output_dir: Optional[str] = typer.Option(None, help="Output dir", rich_help_panel="Input/Output"),
     bitrate: Optional[str] = typer.Option(None, help="Override bitrate (e.g., 2500k, 2.5m)", rich_help_panel="Input/Output"),
     max_output_size: Optional[str] = typer.Option(
@@ -2603,6 +2611,9 @@ def main(
 
             [yellow]Probe files without converting[/]:
                 $ av1 "C:\\Videos\\movie.mp4" --probe
+
+            [yellow]Run the script directly and probe one file[/]:
+                $ python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe
 
             [yellow]Cap output around 10 MB[/]:
                 $ av1 "C:\\Videos\\clip.mp4" --max-output-size 10M
