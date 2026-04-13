@@ -700,6 +700,10 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
                     table_column=Column(no_wrap=True),
                 ),
                 TextColumn(
+                    "[blue]Size: {task.fields[size]}",
+                    table_column=Column(no_wrap=True),
+                ),
+                TextColumn(
                     "[yellow]{task.fields[eta]}",
                     table_column=Column(no_wrap=True),
                 ),
@@ -2294,6 +2298,7 @@ def process_batch_files(
             total=len(video_files),
             progress_text=_format_batch_elapsed_text(0),
             saved=_format_saved(0),
+            size="",
             eta="",
         )
         auto_delete = delete_original
@@ -2316,6 +2321,7 @@ def process_batch_files(
                 completed=completed_before_current,
                 progress_text=_format_batch_elapsed_text(elapsed),
                 saved=_format_saved(cumulative_saved),
+                size="",
                 eta=_format_batch_eta_text(completed_before_current, len(video_files), elapsed),
             )
             
@@ -2324,6 +2330,12 @@ def process_batch_files(
                 original_size = os.path.getsize(file_path)
             except OSError:
                 original_size = 0
+            current_size_text = _format_size(float(original_size)) if original_size > 0 else "unknown"
+
+            progress.update(
+                overall_task,
+                size=current_size_text,
+            )
             
             # Determine output directory
             if output_dir and output_dir != input_path:
@@ -2349,6 +2361,7 @@ def process_batch_files(
                     completed=completed_value,
                     progress_text=_format_batch_elapsed_text(elapsed_now),
                     saved=_format_saved(cumulative_saved),
+                    size=current_size_text,
                     eta=_format_batch_eta_text(completed_value, len(video_files), elapsed_now),
                 )
 
@@ -2399,6 +2412,7 @@ def process_batch_files(
                 completed=completed_after_current,
                 progress_text=_format_batch_elapsed_text(elapsed),
                 saved=_format_saved(cumulative_saved),
+                size=current_size_text,
                 eta=_format_batch_eta_text(completed_after_current, len(video_files), elapsed),
             )
 
