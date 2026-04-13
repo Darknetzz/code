@@ -1,34 +1,47 @@
 ####################################################################
 #   Scripted by Kristian Røste 2026-01-06
-#   
 #
-#   Info: 
+#   Info:
 #   this script kills the processes, keeping
 #   license alive. Normal runtime 1-2 hours. This kills
-#   prosesses over 12 hours runtime.
+#   processes over the configured threshold ($hours hours; default 6).
 #
 ####################################################################
 
+param(
+    [switch]$DryRun
+)
+
 ## Checking if processes older than $hours hours
-$application = "APPLICATION_NAME"  # Change to your application name
+# One or more process name prefixes (wildcards: each entry matches "Prefix*")
+$application = @("APPLICATION_NAME")  # string or array, e.g. @('App1', 'App2')
 $hours       = 6
 $now         = Get-Date
-$processes   = Get-Process "$application*"
-$processesc  = $(if ($processes.Count) { $processes.Count } else { "0" })
-$kill        = $processes | Where-Object StartTime -lt ($now).AddHours(-$hours)
-$killc       = $(if ($kill.Count) { $kill.Count } else { "0" })
-$debug       = $False
-$logdir      = (Get-Location).Path # "C:\Script"
-$logfile     = (Get-Item $PSCommandPath).BaseName + ".log"
-$logpath     = Join-Path $logdir $logfile
+
+$appPrefixes = @($application)
+$processes = foreach ($prefix in $appPrefixes) {
+    if ([string]::IsNullOrWhiteSpace($prefix)) { continue }
+    Get-Process -Name "$prefix*" -ErrorAction SilentlyContinue
+}
+$processes = @($processes | Sort-Object -Property Id -Unique)
+
+$processesc = if ($processes.Count) { $processes.Count } else { "0" }
+$kill       = $processes | Where-Object { $_.StartTime -lt $now.AddHours(-$hours) }
+$killList   = @($kill)
+$killc      = if ($killList.Count) { $killList.Count } else { "0" }
+
+$debug  = $False
+$logdir = (Get-Location).Path # "C:\Script"
+$logfile = (Get-Item $PSCommandPath).BaseName + ".log"
+$logpath = Join-Path $logdir $logfile
 
 ## Defines the logfile and creates it if doesn't exist.
-if (!(Test-Path $logpath)) {
-   New-Item -path "$logdir" -name "$logfile" -type "file"
+if (!(Test-Path -LiteralPath $logpath)) {
+    New-Item -Path $logpath -ItemType File | Out-Null
 }
 
 function Write-Log($text) {
-    "[$now] $text" >> $logfile
+    Add-Content -Path $logpath -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $text"
 }
 
 if ($debug -eq $True) {
@@ -36,14 +49,29 @@ if ($debug -eq $True) {
 }
 
 ## Does nothing if no processes found
-if ($null -eq $kill) {
+if ($killList.Count -eq 0) {
     if ($debug -eq $True) {
         Write-Log "No process to kill."
     }
-    Exit 0
+    exit 0
 }
-else {
-    ## Stops the process and writes date to logfile
-    $kill | Stop-Process -Force
-    Write-Log "Hanging process stopped"
+
+$exitCode = 0
+foreach ($p in $killList) {
+    $detail = "$($p.Name) (Id=$($p.Id), StartTime=$($p.StartTime))"
+    try {
+        if ($DryRun) {
+            Write-Log "DryRun: would stop $detail"
+        }
+        else {
+            Stop-Process -InputObject $p -Force -ErrorAction Stop
+            Write-Log "Stopped $detail"
+        }
+    }
+    catch {
+        Write-Log "Failed to stop $detail : $_"
+        $exitCode = 1
+    }
 }
+
+exit $exitCode
