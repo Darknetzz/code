@@ -4,7 +4,7 @@
 #   Info:
 #   this script kills the processes, keeping
 #   license alive. Normal runtime 1-2 hours. This kills
-#   processes over the configured threshold ($hours hours; default 6).
+#   processes over the configured threshold ($thresholdHours hours; default 6).
 #
 #   Optional parameters (-Application, -Hours, -LogDir, -DebugLogging, -DryRun)
 #   override the script defaults below when you pass them.
@@ -28,48 +28,48 @@ param(
 )
 
 ## Defaults (edit here). Parameters above override when supplied on the command line.
-# One or more process name prefixes (wildcards: each entry matches "Prefix*")
-$application = @("APPLICATION_NAME")  # string or array, e.g. @('App1', 'App2')
-$hours       = 6
+# One or more process name prefixes (wildcards: each entry matches "Prefix*").
+# Name must differ from parameter $Application (PowerShell variables are case-insensitive).
+$processNamePrefixes = @("APPLICATION_NAME")  # string or array, e.g. @('App1', 'App2')
+$thresholdHours = 6
 $debug       = $False
-$logdir      = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$resolvedLogDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
 if ($PSBoundParameters.ContainsKey('Application')) {
-    $application = @($Application)
+    $processNamePrefixes = @($Application)
 }
 if ($PSBoundParameters.ContainsKey('Hours')) {
     if ($Hours -lt 1) {
         throw "Parameter 'Hours' must be at least 1. Got: $Hours"
     }
-    $hours = $Hours
+    $thresholdHours = $Hours
 }
 if ($PSBoundParameters.ContainsKey('LogDir')) {
     if ([string]::IsNullOrWhiteSpace($LogDir)) {
         throw "Parameter 'LogDir' cannot be empty."
     }
-    $logdir = $LogDir
+    $resolvedLogDir = $LogDir
 }
 if ($PSBoundParameters.ContainsKey('DebugLogging')) {
     $debug = [bool]$DebugLogging
 }
 
-## Checking if processes older than $hours hours
+## Checking if processes older than $thresholdHours hours
 $now = Get-Date
 
-$appPrefixes = @($application)
-$processes = foreach ($prefix in $appPrefixes) {
+$processes = foreach ($prefix in @($processNamePrefixes)) {
     if ([string]::IsNullOrWhiteSpace($prefix)) { continue }
     Get-Process -Name "$prefix*" -ErrorAction SilentlyContinue
 }
 $processes = @($processes | Sort-Object -Property Id -Unique)
 
 $processesc = if ($processes.Count) { $processes.Count } else { "0" }
-$kill       = $processes | Where-Object { $_.StartTime -lt $now.AddHours(-$hours) }
+$kill       = $processes | Where-Object { $_.StartTime -lt $now.AddHours(-$thresholdHours) }
 $killList   = @($kill)
 $killc      = if ($killList.Count) { $killList.Count } else { "0" }
 
 $logfile = (Get-Item $PSCommandPath).BaseName + ".log"
-$logpath = Join-Path $logdir $logfile
+$logpath = Join-Path $resolvedLogDir $logfile
 
 ## Defines the logfile and creates it if doesn't exist.
 if (!(Test-Path -LiteralPath $logpath)) {
@@ -81,7 +81,7 @@ function Write-Log($text) {
 }
 
 if ($debug -eq $True) {
-    Write-Log "Found $killc processes running more than $hours hours. ($processesc total)"
+    Write-Log "Found $killc processes running more than $thresholdHours hours. ($processesc total)"
 }
 
 ## Does nothing if no processes found
