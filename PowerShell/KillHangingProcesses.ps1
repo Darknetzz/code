@@ -20,7 +20,7 @@ $killc       = $(if ($kill.Count) { $kill.Count } else { "0" })
 $debug       = $False
 $logdir      = (Get-Location).Path # "C:\Script"
 $logfile     = (Get-Item $PSCommandPath).BaseName + ".log"
-$logpath     = "$logdir\$logfile"
+$logpath     = Join-Path $logdir $logfile
 
 ## Defines the logfile and creates it if doesn't exist.
 if (!(Test-Path $logpath)) {
