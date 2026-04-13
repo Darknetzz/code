@@ -706,10 +706,34 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
     return Progress(*columns, transient=transient, expand=True)
 
 
-def _format_batch_progress_description(current: int, total: int, elapsed_seconds: int, current_item: str) -> str:
+def _format_batch_progress_description(current: int, total: int, _elapsed_seconds: int, current_item: str) -> str:
     """Build a compact batch progress description for the terminal."""
     short_item = _truncate_middle(current_item, 52)
-    return f"File {current}/{total} | Now: {short_item} | Elapsed {_format_elapsed(elapsed_seconds)}"
+    return f"File {current}/{total} | Now: {short_item}"
+
+
+def _format_batch_elapsed_text(elapsed_seconds: int) -> str:
+    """Render elapsed batch runtime for the overall progress row."""
+    return f"Elapsed: {_format_elapsed(max(elapsed_seconds, 0))}"
+
+
+def _estimate_batch_eta_seconds(completed_value: float, total_items: int, elapsed_seconds: int) -> Optional[int]:
+    """Estimate remaining batch time from overall completion fraction."""
+    if total_items <= 0 or elapsed_seconds <= 0 or completed_value <= 0:
+        return None
+    progress_fraction = min(max(float(completed_value) / float(total_items), 0.0), 1.0)
+    if progress_fraction >= 1.0:
+        return 0
+    remaining_seconds = elapsed_seconds * (1.0 - progress_fraction) / progress_fraction
+    return max(int(remaining_seconds), 0)
+
+
+def _format_batch_eta_text(completed_value: float, total_items: int, elapsed_seconds: int) -> str:
+    """Render batch ETA text for the overall progress row."""
+    eta_seconds = _estimate_batch_eta_seconds(completed_value, total_items, elapsed_seconds)
+    if eta_seconds is None or eta_seconds <= 0:
+        return ""
+    return f"ETA: {_format_eta_seconds(eta_seconds)}"
 
 
 def _format_file_progress_description(file_label: str, current: Optional[int] = None, total: Optional[int] = None) -> str:
@@ -2238,7 +2262,7 @@ def process_batch_files(
         overall_task = progress.add_task(
             _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
             total=len(video_files),
-            progress_text="",
+            progress_text=_format_batch_elapsed_text(0),
             saved=_format_saved(0),
             eta="",
         )
@@ -2254,21 +2278,15 @@ def process_batch_files(
             display_path = _display_batch_item(file_path, input_path, recursive, idx, len(video_files))
             file_start = time.time()
             elapsed = int(time.time() - batch_start_time)
-            eta_text = ""
-            if file_times:
-                avg_time_per_file = sum(file_times) / len(file_times)
-                remaining_files = len(video_files) - idx + 1
-                eta_seconds = int(avg_time_per_file * remaining_files)
-                if eta_seconds > 0:
-                    eta_text = f"ETA: {_format_eta_seconds(eta_seconds)}"
+            completed_before_current = idx - 1
 
             progress.update(
                 overall_task,
                 description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
-                completed=idx - 1,
-                progress_text="",
+                completed=completed_before_current,
+                progress_text=_format_batch_elapsed_text(elapsed),
                 saved=_format_saved(cumulative_saved),
-                eta=eta_text,
+                eta=_format_batch_eta_text(completed_before_current, len(video_files), elapsed),
             )
             
             # Capture original size before conversion
@@ -2290,7 +2308,7 @@ def process_batch_files(
             global _SUPPRESS_OUTPUT
             _SUPPRESS_OUTPUT = True
 
-            def _update_batch_progress(current_fraction: Optional[float], current_progress_text: str, current_eta: str) -> None:
+            def _update_batch_progress(current_fraction: Optional[float], _current_progress_text: str, _current_eta: str) -> None:
                 elapsed_now = int(time.time() - batch_start_time)
                 completed_value = idx - 1
                 if isinstance(current_fraction, (int, float)):
@@ -2299,9 +2317,9 @@ def process_batch_files(
                     overall_task,
                     description=_format_batch_progress_description(idx, len(video_files), elapsed_now, display_path),
                     completed=completed_value,
-                    progress_text=current_progress_text,
+                    progress_text=_format_batch_elapsed_text(elapsed_now),
                     saved=_format_saved(cumulative_saved),
-                    eta="" if current_eta == "Done" else current_eta,
+                    eta=_format_batch_eta_text(completed_value, len(video_files), elapsed_now),
                 )
 
             auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
@@ -2343,21 +2361,15 @@ def process_batch_files(
                 auto_delete = True
 
             elapsed = int(time.time() - batch_start_time)
-            eta_text = ""
-            if file_times:
-                avg_time_per_file = sum(file_times) / len(file_times)
-                remaining_files = len(video_files) - idx
-                eta_seconds = int(avg_time_per_file * remaining_files)
-                if eta_seconds > 0:
-                    eta_text = f"ETA: {_format_eta_seconds(eta_seconds)}"
+            completed_after_current = idx
 
             progress.update(
                 overall_task,
                 description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
-                completed=idx,
-                progress_text="",
+                completed=completed_after_current,
+                progress_text=_format_batch_elapsed_text(elapsed),
                 saved=_format_saved(cumulative_saved),
-                eta=eta_text,
+                eta=_format_batch_eta_text(completed_after_current, len(video_files), elapsed),
             )
 
         _PROGRESS_CONTEXT = None
