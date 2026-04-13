@@ -37,6 +37,11 @@ import typer
 __app_name__ = "av1"
 __version__ = "0.3.2"
 
+try:
+    from _pybin_build_info import BUILD_TIMESTAMP_UTC as __build_timestamp_utc__
+except ImportError:
+    __build_timestamp_utc__ = None
+
 console = Console()  # Will be reinitialized in main() if --no-color is set
 app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -131,6 +136,16 @@ _AUTO_REENCODE_AV1 = False  # Remember "all" choice when confirming AV1 re-encod
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
 # ============================================================================ #
+def _format_build_timestamp(build_timestamp: Optional[str]) -> Optional[str]:
+    if not build_timestamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(build_timestamp.replace("Z", "+00:00"))
+        return parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except ValueError:
+        return build_timestamp
+
+
 def _version_callback(value: bool) -> None:
     """Display version and exit."""
     if value:
@@ -138,6 +153,9 @@ def _version_callback(value: bool) -> None:
         py_ver = platform.python_version()
         typer.echo(f"{__app_name__} {__version__}")
         typer.echo(f"Python: {py_exec} ({py_ver})")
+        build_timestamp = _format_build_timestamp(__build_timestamp_utc__)
+        if build_timestamp:
+            typer.echo(f"Built: {build_timestamp}")
         
         # Get ffmpeg version
         try:
