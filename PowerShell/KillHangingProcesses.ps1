@@ -6,17 +6,55 @@
 #   license alive. Normal runtime 1-2 hours. This kills
 #   processes over the configured threshold ($hours hours; default 6).
 #
+#   Optional parameters (-Application, -Hours, -LogDir, -DebugLogging, -DryRun)
+#   override the script defaults below when you pass them.
+#
 ####################################################################
 
 param(
-    [switch]$DryRun
+    [Parameter()]
+    [string[]]$Application,
+
+    [Parameter()]
+    [int]$Hours,
+
+    [Parameter()]
+    [string]$LogDir,
+
+    [switch]$DryRun,
+
+    [Parameter()]
+    [switch]$DebugLogging
 )
 
-## Checking if processes older than $hours hours
+## Defaults (edit here). Parameters above override when supplied on the command line.
 # One or more process name prefixes (wildcards: each entry matches "Prefix*")
 $application = @("APPLICATION_NAME")  # string or array, e.g. @('App1', 'App2')
 $hours       = 6
-$now         = Get-Date
+$debug       = $False
+$logdir      = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+
+if ($PSBoundParameters.ContainsKey('Application')) {
+    $application = @($Application)
+}
+if ($PSBoundParameters.ContainsKey('Hours')) {
+    if ($Hours -lt 1) {
+        throw "Parameter 'Hours' must be at least 1. Got: $Hours"
+    }
+    $hours = $Hours
+}
+if ($PSBoundParameters.ContainsKey('LogDir')) {
+    if ([string]::IsNullOrWhiteSpace($LogDir)) {
+        throw "Parameter 'LogDir' cannot be empty."
+    }
+    $logdir = $LogDir
+}
+if ($PSBoundParameters.ContainsKey('DebugLogging')) {
+    $debug = [bool]$DebugLogging
+}
+
+## Checking if processes older than $hours hours
+$now = Get-Date
 
 $appPrefixes = @($application)
 $processes = foreach ($prefix in $appPrefixes) {
@@ -30,8 +68,6 @@ $kill       = $processes | Where-Object { $_.StartTime -lt $now.AddHours(-$hours
 $killList   = @($kill)
 $killc      = if ($killList.Count) { $killList.Count } else { "0" }
 
-$debug  = $False
-$logdir = (Get-Location).Path # "C:\Script"
 $logfile = (Get-Item $PSCommandPath).BaseName + ".log"
 $logpath = Join-Path $logdir $logfile
 

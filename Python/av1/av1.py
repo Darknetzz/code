@@ -255,6 +255,19 @@ def _format_size(bytes_amount: float) -> str:
     return f"{bytes_amount} B"
 
 
+def _sum_existing_file_sizes(paths: list[str]) -> tuple[int, int]:
+    """Sum on-disk sizes for paths that stat successfully. Returns (total_bytes, ok_count)."""
+    total = 0
+    n_ok = 0
+    for p in paths:
+        try:
+            total += os.path.getsize(p)
+            n_ok += 1
+        except OSError:
+            pass
+    return total, n_ok
+
+
 def _format_duration(seconds: Optional[float]) -> str:
     """Pretty-print seconds as HH:MM:SS."""
     if not isinstance(seconds, (int, float)) or seconds <= 0:
@@ -2275,7 +2288,20 @@ def process_batch_files(
     """
     if not video_files:
         return
-    
+
+    batch_input_bytes_total, batch_input_stat_ok = _sum_existing_file_sizes(video_files)
+    n_files = len(video_files)
+    if batch_input_stat_ok == 0:
+        batch_size_label = "unknown"
+    elif batch_input_stat_ok == n_files:
+        batch_size_label = _format_size(float(batch_input_bytes_total))
+    else:
+        batch_size_label = (
+            f"{_format_size(float(batch_input_bytes_total))} "
+            f"({batch_input_stat_ok}/{n_files} readable)"
+        )
+    cprint(f"\n📦 Total input size: {batch_size_label} ({n_files} file(s))\n", "info")
+
     # Track statistics for batch summary
     total_original_size = 0
     total_new_size = 0
