@@ -654,13 +654,19 @@ def _truncate_middle(text: str, max_length: int = 60) -> str:
 
 def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
     """Create a progress layout that avoids wrapping in narrow terminals."""
+    description_column = Column(
+        ratio=2 if batch_mode else 1,
+        min_width=24 if batch_mode else None,
+        no_wrap=True,
+        overflow="ellipsis",
+    )
     columns = [
         SpinnerColumn(),
         TextColumn(
             "[progress.description]{task.description}",
-            table_column=Column(ratio=1, no_wrap=True, overflow="ellipsis"),
+            table_column=description_column,
         ),
-        BarColumn(bar_width=None),
+        BarColumn(bar_width=40 if batch_mode else None),
         TaskProgressColumn(),
     ]
 
