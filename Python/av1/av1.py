@@ -709,7 +709,7 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
 def _format_batch_progress_description(current: int, total: int, _elapsed_seconds: int, current_item: str) -> str:
     """Build a compact batch progress description for the terminal."""
     short_item = _truncate_middle(current_item, 52)
-    return f"File {current}/{total} | Now: {short_item}"
+    return f"{short_item} [{current}/{total}]"
 
 
 def _format_batch_elapsed_text(elapsed_seconds: int) -> str:
@@ -740,7 +740,7 @@ def _format_file_progress_description(file_label: str, current: Optional[int] = 
     """Build a per-file progress label, optionally including batch position."""
     short_label = _truncate_middle(file_label, 48)
     if current is not None and total is not None and total > 0:
-        return f"[yellow]  └─ File {current}/{total}: {short_label}"
+        return f"[yellow]  └─ {short_label} [{current}/{total}]"
     return f"[yellow]  └─ Encoding: {short_label}"
 
 
