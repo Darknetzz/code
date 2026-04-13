@@ -1451,6 +1451,36 @@ def resolve_original_output_path(input_path: str, output_path: str) -> Optional[
     return original_name_path
 
 
+def _build_output_paths(input_path: str, output_dir: Optional[str], codec: str) -> tuple[str, str, str]:
+    """Resolve output directory and the final/temp output paths for a conversion."""
+    filename = os.path.basename(input_path)
+    resolved_output_dir = resolve_output_dir(output_dir, input_path) or os.getcwd()
+    if resolved_output_dir != (os.path.dirname(input_path) or os.getcwd()):
+        os.makedirs(resolved_output_dir, exist_ok=True)
+
+    output_name = os.path.splitext(filename)[0] + f"-{codec.upper()}.mkv"
+    output_path = os.path.join(resolved_output_dir, output_name)
+    temp_output = f"{output_path}.temp.mkv"
+    return resolved_output_dir, output_path, temp_output
+
+
+def _finalize_output_file(input_path: str, output_path: str, keep_mkv: bool, delete_original: bool) -> bool:
+    """Handle original deletion and optional rename back to the original filename."""
+    auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
+    if auto_delete_flag:
+        delete_original = True
+
+    original_deleted = not os.path.exists(input_path)
+    original_name_path = resolve_original_output_path(input_path, output_path)
+    if original_deleted and original_name_path and not keep_mkv:
+        try:
+            os.replace(output_path, original_name_path)
+            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
+        except OSError as e:
+            cprint(f"Could not rename to original name: {e}", "warning")
+    return delete_original
+
+
 def check_disk_space(file_path: str, output_dir: str) -> bool:
     """
     Verifies sufficient disk space is available for conversion.
@@ -1528,21 +1558,36 @@ def _expand_cli_input_paths(input_paths: list[str]) -> list[str]:
     return expanded_paths
 
 
-def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
-    """Probe input files and print media metadata without converting."""
-    probe_targets = []
+def _resolve_video_input_files(input_paths: list[str], recursive: bool = False) -> list[str]:
+    """Resolve files, directories, and wildcard patterns into concrete video files."""
+    resolved_files = []
     for input_path in _expand_cli_input_paths(input_paths):
         if os.path.isfile(input_path):
             if input_path.lower().endswith(SUPPORTED_EXTENSIONS):
-                probe_targets.append(input_path)
+                resolved_files.append(input_path)
             else:
                 cprint(f"Skipping unsupported file: {_display_path(input_path)}", "warning")
         elif os.path.isdir(input_path):
-            probe_targets.extend(_collect_directory_video_files(input_path, recursive))
+            resolved_files.extend(_collect_directory_video_files(input_path, recursive))
         else:
             cprint(f"Skipping invalid path: {_display_path(input_path)}", "warning")
 
-    probe_targets = sorted(dict.fromkeys(probe_targets))
+    return sorted(dict.fromkeys(resolved_files))
+
+
+def _resolve_batch_base_path(video_files: list[str]) -> str:
+    """Choose a stable base path for batch progress display."""
+    try:
+        if len(video_files) > 1:
+            return os.path.commonpath(video_files)
+        return os.path.dirname(video_files[0]) or os.getcwd()
+    except (ValueError, IndexError):
+        return os.getcwd()
+
+
+def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
+    """Probe input files and print media metadata without converting."""
+    probe_targets = _resolve_video_input_files(input_paths, recursive=recursive)
     if not probe_targets:
         cprint("❌ No video files found to probe.", "error")
         raise typer.Exit(code=1)
@@ -1606,7 +1651,6 @@ def convert_single_file(
     - media_info: Short media metadata string (resolution, length, fps)
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
-    filename = os.path.basename(input_path)
     display_name = _display_path(input_path)
     progress_name = progress_label or display_name
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
@@ -1645,22 +1689,11 @@ def convert_single_file(
         if not _SUPPRESS_OUTPUT:
             cprint(f"Could not determine file size: {e}", "warning")
 
-    # Naming suffix - keep original name if deleting source, otherwise add codec suffix
-    output_dir = resolve_output_dir(output_dir, input_path)
-    if not output_dir:
-        output_dir = os.getcwd()
-
-    if output_dir == (os.path.dirname(input_path) or os.getcwd()):
-        # When staying in same dir, add suffix to avoid collision during encoding
-        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
-        output_name = os.path.splitext(filename)[0] + suffix
-    else:
-        os.makedirs(output_dir, exist_ok=True)
-        suffix = f"-{ACTIVE_ENCODER['codec'].upper()}.mkv"
-        output_name = os.path.splitext(filename)[0] + suffix
-    
-    output_path = os.path.join(output_dir, output_name)
-    temp_output = f"{output_path}.temp.mkv"
+    output_dir, output_path, temp_output = _build_output_paths(
+        input_path,
+        output_dir,
+        ACTIVE_ENCODER["codec"],
+    )
     
     # Check disk space before proceeding (skip in dry run)
     if not dry_run:
@@ -2037,36 +2070,9 @@ def convert_single_file(
                 if file_size <= new_file_size:
                     if not _SUPPRESS_OUTPUT:
                         cprint("⚠️  Warning: Output file is larger than input (entropy/quality issue)", "warning")
-                    # Still offer to delete if user wants
-                    auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
-                    # Track if original was deleted in this step
-                    original_deleted = not os.path.exists(input_path)
-                    if auto_delete_flag:
-                        delete_original = True
-                    # If original was deleted, rename output to original name when same directory
-                    original_name_path = resolve_original_output_path(input_path, output_path)
-                    if original_deleted and original_name_path and not keep_mkv:
-                        try:
-                            os.replace(output_path, original_name_path)
-                            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
-                        except OSError as e:
-                            cprint(f"Could not rename to original name: {e}", "warning")
+                    delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
                 else:
-                    # Delete original and optionally rename to match original name
-                    auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
-                    # Track if original was deleted in this step
-                    original_deleted = not os.path.exists(input_path)
-                    if auto_delete_flag:
-                        delete_original = True
-                    
-                    # Rename converted file to original name if original was deleted (unless keep_mkv is set)
-                    original_name_path = resolve_original_output_path(input_path, output_path)
-                    if original_deleted and original_name_path and not keep_mkv:
-                        try:
-                            os.replace(output_path, original_name_path)
-                            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
-                        except OSError as e:
-                            cprint(f"Could not rename to original name: {e}", "warning")
+                    delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
                 
                 return delete_original, size_saved, bitrate_decision, media_info
             else:
@@ -2612,7 +2618,7 @@ def main(
     no_color: bool = typer.Option(False, "--no-color", help="Disable ANSI/Rich colors. Default: colorized terminal output is enabled.", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Disable interactive confirmations. Default: prompts use their safe fallback behavior, which is usually 'No' unless another explicit flag such as --delete-original or --reencode-av1 was provided.", rich_help_panel="Display"),
     hide_filenames: bool = typer.Option(False, "--hide-filenames", help="Redact media filenames in progress output, prompts, and status messages. Default: show real filenames and relative paths.", rich_help_panel="Display"),
-    parallel: int = typer.Option(1, "--parallel", "-j", help="Number of files to process simultaneously. Default: 1. Values above 1 are currently experimental and may still run sequentially.", rich_help_panel="Performance"),
+    parallel: int = typer.Option(1, "--parallel", "-j", help="Requested file concurrency. Default: 1. Values above 1 are accepted for future compatibility but currently run sequentially.", rich_help_panel="Performance"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -2740,9 +2746,9 @@ def main(
         cprint("⚠️  --parallel must be at least 1, setting to 1", "warning")
         parallel = 1
     elif parallel > 1:
-        cprint(f"ℹ️  Note: Parallel processing (--parallel {parallel}) is currently experimental.", "info")
-        cprint("    For now, files will be processed sequentially. Full parallel support coming soon!", "info")
-        parallel = 1  # Force sequential for now
+        cprint(f"⚠️  --parallel {parallel} requested, but this build currently runs sequentially.", "warning")
+        cprint("    Using --parallel 1 for now.", "info")
+        parallel = 1
 
     # Set global no-color flag and reinitialize console
     global _NO_COLOR, _NO_PROMPT, _HIDE_FILENAMES, console
@@ -2789,31 +2795,17 @@ def main(
         probe_inputs(input_paths, recursive=recursive)
     else:
         check_ffmpeg()
-    
-        # If multiple paths passed (from wildcard expansion), process them all
-        if len(input_paths) > 1:
-            # Multiple files - treat as batch
-            matched_files = [p for p in input_paths if p.lower().endswith(SUPPORTED_EXTENSIONS)]
-            
+
+        has_patterns = any("*" in input_path or "?" in input_path for input_path in input_paths)
+        if len(input_paths) > 1 or has_patterns:
+            matched_files = _resolve_video_input_files(input_paths, recursive=recursive)
             if not matched_files:
                 cprint("❌ No video files found in arguments.", "error")
                 raise typer.Exit(code=1)
-            
-            # Sort files for consistent processing order
-            matched_files.sort()
+
             cprint(f"Found {len(matched_files)} file(s) to process.", "info")
-            
-            # Determine base path for relative path display (use common parent directory)
-            try:
-                if len(matched_files) > 1:
-                    base_path = os.path.commonpath(matched_files)
-                else:
-                    base_path = os.path.dirname(matched_files[0]) or os.getcwd()
-            except ValueError:
-                # Files are on different drives (Windows) or no common path
-                base_path = os.getcwd()
-            
-            # Process batch using shared helper function
+            base_path = _resolve_batch_base_path(matched_files)
+
             process_batch_files(
                 matched_files,
                 output_dir,
@@ -2823,7 +2815,7 @@ def main(
                 overwrite,
                 dry_run,
                 keep_mkv,
-                recursive=False,
+                recursive=recursive,
                 transient_progress=False,
                 cpu_threads=effective_cpu_threads,
                 prompt_av1=prompt_av1,
@@ -2832,43 +2824,7 @@ def main(
                 min_shrink_percent=min_shrink_percent,
             )
         else:
-            # Single path - could be file, directory, or wildcard pattern
             input_path = input_paths[0]
-            
-            # Try to expand wildcards
-            if '*' in input_path or '?' in input_path:
-                matched_files = glob.glob(input_path)
-                if matched_files:
-                    matched_files = [f for f in matched_files if f.lower().endswith(SUPPORTED_EXTENSIONS)]
-                    if matched_files and len(matched_files) > 1:
-                        # Recursively call main with expanded list
-                        return main(
-                            matched_files,
-                            output_dir,
-                            bitrate,
-                            max_output_size,
-                            min_shrink,
-                            delete_original,
-                            overwrite,
-                            dry_run,
-                            recursive,
-                            keep_mkv,
-                            log_type,
-                            log_dir,
-                            ffmpeg,
-                            ffprobe,
-                            cpu_threads,
-                            prompt_av1,
-                            reencode_av1,
-                            probe_only,
-                            no_color,
-                            no_prompt,
-                            hide_filenames,
-                            parallel,
-                            version=None,
-                        )
-            
-            # No wildcards or only 1 match - use existing logic
             convert_videos(
                 input_path,
                 output_dir,

@@ -36,7 +36,6 @@ BUILD_INFO_MODULE_NAME = "_pybin_build_info"
 # ============================================================================ #
 def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
     prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
-    style  = ""
     type   = type.lower()
     
     if type == "error":
@@ -53,6 +52,13 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
         prefix = "✅"
     message = f"{prefix}  {message}"
     console.print(message, style=style, **kwargs)
+
+
+def _source_references_build_info(file_path: Path) -> bool:
+    try:
+        return BUILD_INFO_MODULE_NAME in file_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
 
 
 def _render_build_info_module(build_time_utc: datetime) -> str:
@@ -82,6 +88,18 @@ def _restore_build_info_module(build_info_path: Path, original_contents) -> None
         return
 
     build_info_path.write_text(original_contents, encoding="utf-8")
+
+
+def _resolve_built_artifact_path(dist_path: Path, file_path: Path) -> Path:
+    candidates = []
+    if sys.platform == "win32":
+        candidates.append(dist_path / f"{file_path.stem}.exe")
+    candidates.append(dist_path / file_path.stem)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 # ============================================================================ #
@@ -125,11 +143,15 @@ def main(
 
     build_info_path = None
     original_build_info = None
-    try:
-        build_info_path, original_build_info = _prepare_build_info_module(base_dir)
-        console.print(f"[dim]  Embedded build metadata via {build_info_path.name}[/dim]")
-    except Exception as exc:
-        console.print(f"[yellow]⚠ Could not embed build metadata:[/yellow] {exc}")
+    should_embed_build_info = _source_references_build_info(file.resolve())
+    if should_embed_build_info:
+        try:
+            build_info_path, original_build_info = _prepare_build_info_module(base_dir)
+            console.print(f"[dim]  Embedded build metadata via {build_info_path.name}[/dim]")
+        except Exception as exc:
+            console.print(f"[yellow]⚠ Could not embed build metadata:[/yellow] {exc}")
+    else:
+        console.print(f"[dim]  Skipping build metadata: {file.name} does not reference {BUILD_INFO_MODULE_NAME}[/dim]")
 
     try:
         # Run pyinstaller with explicit paths
@@ -209,8 +231,8 @@ def main(
             # Only show message if user explicitly set --keep-spec but no spec was generated
             pass
         
-        ext = file.suffix if file.suffix else ""
-        console.print(f"\n[green]✓ Build complete:[/green] [cyan]{dist_path / file.stem}{ext}[/cyan]", style="bold")
+        built_artifact = _resolve_built_artifact_path(dist_path, file)
+        console.print(f"\n[green]✓ Build complete:[/green] [cyan]{built_artifact}[/cyan]", style="bold")
     finally:
         if build_info_path is not None:
             _restore_build_info_module(build_info_path, original_build_info)
