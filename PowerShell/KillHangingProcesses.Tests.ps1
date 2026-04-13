@@ -4,20 +4,22 @@
     Regression tests for KillHangingProcesses.ps1 (spawn isolated pwsh / Windows PowerShell children).
 #>
 $ErrorActionPreference = 'Stop'
-# Child stderr (e.g. binding errors) is not always a terminating error here; use explicit checks.
 $ScriptUnderTest = Join-Path $PSScriptRoot 'KillHangingProcesses.ps1'
 
 function Invoke-KhpChild {
     param(
         [string]$PwshPath,
-        [string[]]$ScriptArgs
+        [string[]]$ScriptArgs,
+        [switch]$QuietStdErr
     )
-    $argList = @(
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-        '-File', $ScriptUnderTest
-    ) + $ScriptArgs
-    $p = Start-Process -FilePath $PwshPath -ArgumentList $argList -PassThru -Wait -NoNewWindow
-    return $p.ExitCode
+    # Call operator + native exit code is simpler than Start-Process and allows stderr redirect for negative tests.
+    if ($QuietStdErr) {
+        $null = & $PwshPath -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ScriptUnderTest @ScriptArgs 2>$null
+    }
+    else {
+        $null = & $PwshPath -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ScriptUnderTest @ScriptArgs
+    }
+    return $LASTEXITCODE
 }
 
 function Test-KhpParse {
@@ -57,11 +59,11 @@ foreach ($r in $runners) {
     if ($code -ne 0) { $failures.Add("[$tag] Default args: expected exit 0, got $code") }
     else { Write-Host "[$tag] Default args exit 0: OK" }
 
-    $code = Invoke-KhpChild -PwshPath $exe -ScriptArgs @('-Hours', '0')
+    $code = Invoke-KhpChild -PwshPath $exe -ScriptArgs @('-Hours', '0') -QuietStdErr
     if ($code -eq 0) { $failures.Add("[$tag] -Hours 0: expected non-zero exit, got 0") }
     else { Write-Host "[$tag] -Hours 0 rejects (exit $code): OK" }
 
-    $code = Invoke-KhpChild -PwshPath $exe -ScriptArgs @('-LogDir', '')
+    $code = Invoke-KhpChild -PwshPath $exe -ScriptArgs @('-LogDir', '') -QuietStdErr
     if ($code -eq 0) { $failures.Add("[$tag] -LogDir '': expected non-zero exit, got 0") }
     else { Write-Host "[$tag] -LogDir empty rejects (exit $code): OK" }
 
