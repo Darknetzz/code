@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pyconvert\\pyconvert.py'],
+    ['pyconvert.py'],
     pathex=[],
     binaries=[],
     datas=[],
