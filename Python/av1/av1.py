@@ -686,10 +686,14 @@ def _truncate_middle(text: str, max_length: int = 60) -> str:
 
 def _console_for_progress() -> Console:
     """Rich Progress console: same color mode as the app, but no auto number/URL highlighting."""
+    # Rich stores force_terminal on _force_terminal (no public .force_terminal); PyInstaller builds hit that.
+    force_terminal = getattr(console, "force_terminal", None)
+    if force_terminal is None:
+        force_terminal = getattr(console, "_force_terminal", None)
     return Console(
         file=console.file,
         no_color=console.no_color,
-        force_terminal=console.force_terminal,
+        force_terminal=force_terminal,
         highlight=False,
     )
 
