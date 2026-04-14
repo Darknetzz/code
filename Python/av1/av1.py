@@ -76,6 +76,20 @@ RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
 RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
+SIZE_PRESETS: dict[str, dict[str, object]] = {
+    "light": {
+        "min_shrink_percent": 35.0,
+        "max_video_width": 1920,
+    },
+    "balanced": {
+        "min_shrink_percent": 55.0,
+        "max_video_width": 1280,
+    },
+    "aggressive": {
+        "min_shrink_percent": 70.0,
+        "max_video_width": 960,
+    },
+}
 
 # ============================================================================ #
 #                           ENVIRONMENT OVERRIDES                             #
@@ -484,6 +498,8 @@ def _print_startup_summary(
     effective_cpu_threads: int,
     requested_parallel: int,
     effective_parallel: int,
+    size_preset: Optional[str],
+    max_video_width: int,
 ) -> None:
     """Print a concise startup confirmation of active inputs and options."""
     global _STARTUP_SUMMARY_EMITTED
@@ -506,6 +522,10 @@ def _print_startup_summary(
         options.append(f"max-output-size={max_output_size}")
     if min_shrink_percent is not None:
         options.append(f"min-shrink={min_shrink_percent:g}")
+    if size_preset:
+        options.append(f"size-preset={size_preset}")
+    if max_video_width != MAX_VIDEO_WIDTH:
+        options.append(f"max-width={max_video_width}")
     if delete_original:
         options.append("delete-original")
     if overwrite:
@@ -553,6 +573,19 @@ def _print_startup_summary(
     else:
         cprint("   Flags:  defaults", "info")
     _STARTUP_SUMMARY_EMITTED = True
+
+
+def _resolve_size_preset(size_preset: Optional[str]) -> tuple[Optional[str], Optional[dict[str, object]]]:
+    """Resolve and validate a named size preset."""
+    if not size_preset:
+        return None, None
+    normalized = str(size_preset).strip().lower()
+    preset = SIZE_PRESETS.get(normalized)
+    if preset is None:
+        valid = ", ".join(sorted(SIZE_PRESETS.keys()))
+        cprint(f"Unknown --size-preset {size_preset!r}. Choose one of: {valid}.", "error")
+        raise typer.Exit(code=1)
+    return normalized, dict(preset)
 
 
 def _parse_byte_size(spec: str) -> Optional[int]:
@@ -1687,6 +1720,7 @@ def convert_single_file(
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
+    max_video_width: Optional[int] = None,
 ) -> Tuple[bool, int, str, str]:
     """
     Converts a single video file to the target codec.
@@ -1700,6 +1734,7 @@ def convert_single_file(
     display_name = _display_path(input_path)
     progress_name = progress_label or display_name
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
+    effective_max_width = int(max_video_width) if isinstance(max_video_width, int) and max_video_width > 0 else MAX_VIDEO_WIDTH
     
 
     # Validate file
@@ -1851,16 +1886,16 @@ def convert_single_file(
     # Build filter chain - VAAPI needs hwupload after format conversion
     if ACTIVE_ENCODER["hw_type"] == "vaapi":
         # VAAPI: scale -> format -> hwupload (upload to hardware)
-        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+        filter_chain = f"scale='min({effective_max_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
     elif ACTIVE_ENCODER["hw_type"] == "amd":
         # AMF AV1 requires 64x16 resolution alignment; scale to aligned dimensions to avoid -22
         filter_chain = (
-            f"scale='trunc(min({MAX_VIDEO_WIDTH},iw)/64)*64':'trunc(trunc(min({MAX_VIDEO_WIDTH},iw)/64)*64*ih/iw/16)*16',"
+            f"scale='trunc(min({effective_max_width},iw)/64)*64':'trunc(trunc(min({effective_max_width},iw)/64)*64*ih/iw/16)*16',"
             f"format={pix_fmt}"
         )
     else:
         # Other encoders: just scale and format
-        filter_chain = f"scale='min({MAX_VIDEO_WIDTH},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+        filter_chain = f"scale='min({effective_max_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
     
     command.extend(["-vf", filter_chain])
     # movflags +faststart only applies to MP4/MOV; with MKV it causes "Invalid argument" (-22)
@@ -2299,6 +2334,7 @@ def process_batch_files(
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
+    max_video_width: Optional[int] = None,
 ) -> None:
     """
     Process a batch of video files with progress tracking and statistics.
@@ -2438,6 +2474,7 @@ def process_batch_files(
                 reencode_av1=reencode_av1,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
+                max_video_width=max_video_width,
             )
             _SUPPRESS_OUTPUT = False
             
@@ -2558,6 +2595,7 @@ def convert_videos(
     *,
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
+    max_video_width: Optional[int] = None,
 ) -> None:
     """
     Main entry point for converting videos.
@@ -2584,6 +2622,7 @@ def convert_videos(
                     reencode_av1=reencode_av1,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
+                    max_video_width=max_video_width,
                 )
             finally:
                 _PROGRESS_CONTEXT = None
@@ -2624,6 +2663,7 @@ def convert_videos(
             reencode_av1=reencode_av1,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
+            max_video_width=max_video_width,
         )
     else:
         cprint("❌ Invalid path: File or directory does not exist.", "error")
@@ -2647,6 +2687,18 @@ def main(
         None,
         "--min-shrink",
         help="Minimum percent reduction in file size. Default: 50, meaning the output targets at most 50% of the original size unless another constraint overrides it.",
+        rich_help_panel="Input/Output",
+    ),
+    size_preset: Optional[str] = typer.Option(
+        None,
+        "--size-preset",
+        help="Quick filesize/resolution profile. Choices: light, balanced, aggressive. Applies defaults for shrink and max-width, but explicit flags still win.",
+        rich_help_panel="Input/Output",
+    ),
+    max_width: Optional[int] = typer.Option(
+        None,
+        "--max-width",
+        help=f"Override maximum output width used by the scale filter. Default: {MAX_VIDEO_WIDTH} (or preset value when --size-preset is set).",
         rich_help_panel="Input/Output",
     ),
     delete_original: bool = typer.Option(False, "-d", "--delete-original", help="Delete each source file after a successful conversion. Default: keep originals and, if prompts are enabled, ask before deleting.", rich_help_panel="File Handling"),
@@ -2731,6 +2783,12 @@ def main(
 
             [yellow]Aim for at least 70%% smaller file than the source[/]:
                 $ av1 "C:\\Videos\\big.mkv" --min-shrink 70
+
+            [yellow]Use a balanced preset for quick compression[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --size-preset balanced
+
+            [yellow]Preset + explicit width override[/]:
+                $ av1 "C:\\Videos" --size-preset aggressive --max-width 720
     """
     # If version flag triggered, callback already exited.
     
@@ -2761,6 +2819,13 @@ def main(
         log_dir = env_log_dir
 
     max_output_bytes: Optional[int] = None
+    resolved_size_preset, size_preset_values = _resolve_size_preset(size_preset)
+    if size_preset_values:
+        if min_shrink is None and isinstance(size_preset_values.get("min_shrink_percent"), (int, float)):
+            min_shrink = float(size_preset_values["min_shrink_percent"])
+        if max_width is None and isinstance(size_preset_values.get("max_video_width"), int):
+            max_width = int(size_preset_values["max_video_width"])
+
     if max_output_size:
         max_output_bytes = _parse_byte_size(max_output_size)
         if not max_output_bytes or max_output_bytes <= 0:
@@ -2785,6 +2850,12 @@ def main(
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)
+    effective_max_video_width = MAX_VIDEO_WIDTH
+    if max_width is not None:
+        if max_width < 64:
+            cprint("--max-width must be at least 64.", "error")
+            raise typer.Exit(code=1)
+        effective_max_video_width = int(max_width)
     if prompt_av1 and reencode_av1:
         cprint("--prompt-av1 and --reencode-av1 are mutually exclusive.", "error")
         raise typer.Exit(code=1)
@@ -2857,6 +2928,8 @@ def main(
         effective_cpu_threads=effective_cpu_threads,
         requested_parallel=requested_parallel,
         effective_parallel=parallel,
+        size_preset=resolved_size_preset,
+        max_video_width=effective_max_video_width,
     )
 
     if probe_only:
@@ -2891,6 +2964,7 @@ def main(
                 reencode_av1=reencode_av1,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
+                max_video_width=effective_max_video_width,
             )
         else:
             input_path = input_paths[0]
@@ -2908,6 +2982,7 @@ def main(
                 reencode_av1=reencode_av1,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
+                max_video_width=effective_max_video_width,
             )
     
     # Save logs only if files were actually converted
