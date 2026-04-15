@@ -6,6 +6,7 @@
 # av1 "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
 # av1 "video.mp4" --delete-original
 # av1 "/path/to/videos" -r  (recursive)
+# av1 clean "/path/to/videos" -r  (remove stale temp files)
 # python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe  (script path first, input path second)
 
 import os
@@ -62,6 +63,7 @@ DEFAULT_CPU_USAGE_PERCENT = 75
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
 SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
+TEMP_OUTPUT_SUFFIX = ".temp.mkv"
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
 DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
@@ -1654,6 +1656,57 @@ def _resolve_video_input_files(input_paths: list[str], recursive: bool = False) 
     return sorted(dict.fromkeys(resolved_files))
 
 
+def _collect_directory_temp_files(input_path: str, recursive: bool) -> list[str]:
+    """Collect temporary AV1 output artifacts from a directory."""
+    temp_files = []
+    if recursive:
+        for root, dirs, files in os.walk(input_path):
+            for filename in files:
+                if filename.lower().endswith(TEMP_OUTPUT_SUFFIX):
+                    temp_files.append(os.path.join(root, filename))
+    else:
+        for filename in os.listdir(input_path):
+            file_path = os.path.join(input_path, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(TEMP_OUTPUT_SUFFIX):
+                temp_files.append(file_path)
+    temp_files.sort()
+    return temp_files
+
+
+def _resolve_cleanup_targets(input_paths: list[str], recursive: bool = False) -> list[str]:
+    """Resolve cleanup inputs into concrete stale temp-output files."""
+    resolved_files = []
+    for input_path in _expand_cli_input_paths(input_paths):
+        if os.path.isfile(input_path):
+            if input_path.lower().endswith(TEMP_OUTPUT_SUFFIX):
+                resolved_files.append(input_path)
+        elif os.path.isdir(input_path):
+            resolved_files.extend(_collect_directory_temp_files(input_path, recursive))
+        else:
+            cprint(f"Skipping invalid path: {_display_path(input_path)}", "warning")
+
+    return sorted(dict.fromkeys(resolved_files))
+
+
+def _remove_cleanup_targets(temp_files: list[str]) -> tuple[int, int]:
+    """Delete resolved cleanup files. Returns (removed_count, failed_count)."""
+    removed_count = 0
+    failed_count = 0
+
+    for temp_file in temp_files:
+        if not temp_file.lower().endswith(TEMP_OUTPUT_SUFFIX):
+            continue
+        try:
+            os.remove(temp_file)
+            removed_count += 1
+            cprint(f"Removed temp file: {_display_path(temp_file)}", "success")
+        except OSError as e:
+            failed_count += 1
+            cprint(f"Could not remove {_display_path(temp_file)}: {e}", "warning")
+
+    return removed_count, failed_count
+
+
 def _resolve_batch_base_path(video_files: list[str]) -> str:
     """Choose a stable base path for batch progress display."""
     try:
@@ -2667,6 +2720,63 @@ def convert_videos(
         )
     else:
         cprint("❌ Invalid path: File or directory does not exist.", "error")
+
+def _run_cleanup_command(input_paths: Optional[list[str]], recursive: bool) -> None:
+    """Shared implementation for cleanup command aliases."""
+    resolved_input_paths = input_paths or [os.getcwd()]
+    cleanup_targets = _resolve_cleanup_targets(resolved_input_paths, recursive=recursive)
+
+    if not cleanup_targets:
+        mode = "recursively" if recursive else "without recursion"
+        cprint(
+            f"No stale temp files ({TEMP_OUTPUT_SUFFIX}) found {mode} in the provided locations.",
+            "info",
+        )
+        return
+
+    cprint(f"Found {len(cleanup_targets)} temp file(s) to remove.", "info")
+    removed_count, failed_count = _remove_cleanup_targets(cleanup_targets)
+    cprint(
+        f"Cleanup complete: removed={removed_count}, failed={failed_count}",
+        "success" if failed_count == 0 else "warning",
+    )
+
+
+@app.command("clean")
+def clean(
+    input_paths: Optional[list[str]] = typer.Argument(
+        None,
+        help="Optional files, folders, or wildcard patterns to clean. Default: current working directory.",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "-r",
+        "--recursive",
+        help="Scan folders recursively for stale temp files.",
+        rich_help_panel="File Handling",
+    ),
+) -> None:
+    """Remove stale AV1 temp files (`*.temp.mkv`) from previous runs."""
+    _run_cleanup_command(input_paths, recursive=recursive)
+
+
+@app.command("cleanup")
+def cleanup_alias(
+    input_paths: Optional[list[str]] = typer.Argument(
+        None,
+        help="Optional files, folders, or wildcard patterns to clean. Default: current working directory.",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "-r",
+        "--recursive",
+        help="Scan folders recursively for stale temp files.",
+        rich_help_panel="File Handling",
+    ),
+) -> None:
+    """Alias for `clean`."""
+    _run_cleanup_command(input_paths, recursive=recursive)
+
 
 @app.command()
 def main(
