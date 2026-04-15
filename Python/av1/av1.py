@@ -48,10 +48,10 @@ except ImportError:
 console = Console()  # Will be reinitialized in main() if --no-color is set
 
 _CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "main"})
+# Keep Typer group-only options here. Do not list -h/--help: those should show `main` help
+# (compressor flags) since `main` is hidden from the group command list.
 _CLI_GROUP_ONLY_FLAGS = frozenset(
     {
-        "-h",
-        "--help",
         "--install-completion",
         "--show-completion",
     }
@@ -2824,7 +2824,13 @@ def cleanup_alias(
     _run_cleanup_command(input_paths, recursive=recursive)
 
 
-@app.command("main", hidden=True)
+@app.command(
+    "main",
+    hidden=True,
+    epilog=(
+        "Temp-file cleanup only: [bold]av1 clean --help[/] or use [bold]--clean[/] / [bold]--cleanup[/] above."
+    ),
+)
 def main(
     input_paths: list[str] = typer.Argument(
         None,
