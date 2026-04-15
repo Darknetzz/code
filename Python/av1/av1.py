@@ -74,6 +74,10 @@ def _normalize_cli_argv(argv: list[str]) -> list[str]:
 app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
     rich_markup_mode="rich",  # Enable Rich markup in help output
+    epilog=(
+        "Default: run the compressor (paths and options go on the command line; no subcommand). "
+        "Use [bold]clean[/] or [bold]cleanup[/] only to remove stale *.temp.mkv files."
+    ),
 )
 
 # ============================================================================ #
@@ -2802,7 +2806,7 @@ def clean(
     _run_cleanup_command(input_paths, recursive=recursive)
 
 
-@app.command("cleanup")
+@app.command("cleanup", hidden=True)
 def cleanup_alias(
     input_paths: Optional[list[str]] = typer.Argument(
         None,
@@ -2820,7 +2824,7 @@ def cleanup_alias(
     _run_cleanup_command(input_paths, recursive=recursive)
 
 
-@app.command("main")
+@app.command("main", hidden=True)
 def main(
     input_paths: list[str] = typer.Argument(
         None,
