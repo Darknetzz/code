@@ -16,3 +16,4 @@ PowerShell/OptimizePerformance_Changes.json
 downloads/
 .env
 Python/pyspotify/exports
+*.exe
