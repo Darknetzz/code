@@ -738,9 +738,14 @@ def _progress_field(value: str) -> str:
     return escape(value) if value else ""
 
 
+def _styled_filename(label: str) -> str:
+    """Render filenames/paths with a consistent color everywhere."""
+    return f"[bold cyan]{escape(label)}[/]"
+
+
 def _styled_progress_filename(label: str) -> str:
     """Paths/filenames in progress: one color; metadata columns use other colors (never bold cyan)."""
-    return f"[bold cyan]{escape(label)}[/]"
+    return _styled_filename(label)
 
 
 def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
@@ -1051,6 +1056,7 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
     prefix = ""
     style  = ""
     type   = type.lower()
+    markup_enabled = kwargs.pop("markup", False)
 
     if type == "error":
         style = "red"
@@ -1070,9 +1076,9 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
     if not _SUPPRESS_OUTPUT:
         if _NO_COLOR:
-            console.print(message, markup=False, **kwargs)
+            console.print(message, markup=markup_enabled, **kwargs)
         else:
-            console.print(message, style=style, markup=False, **kwargs)
+            console.print(message, style=style, markup=markup_enabled, **kwargs)
     
     # Log the message (with prefix for file logging) and structured event
     _LOG_MESSAGES.append(message)
@@ -2590,12 +2596,22 @@ def process_batch_files(
             cprint("\n📋 Per-File Results:", style="bold cyan")
             for filename, orig_size, saved, percent in per_file_stats:
                 status = "✅" if saved > 0 else "⚠️"
-                cprint(f"   {status} {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+                styled_name = _styled_filename(filename)
+                cprint(
+                    f"   {status} {styled_name}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)",
+                    "info",
+                    markup=True,
+                )
         elif per_file_stats:
             cprint("\n📋 Showing top 10 files by space saved:", style="bold cyan")
             top_files = sorted(per_file_stats, key=lambda x: x[2], reverse=True)[:10]
             for filename, orig_size, saved, percent in top_files:
-                cprint(f"   ✅ {filename}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)", "info")
+                styled_name = _styled_filename(filename)
+                cprint(
+                    f"   ✅ {styled_name}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)",
+                    "info",
+                    markup=True,
+                )
         
         cprint("\n💾 Total Space Savings:", style="bold cyan")
         cprint(f"   Before:  {total_original_size / (1024**3):.2f} GB", "info")
