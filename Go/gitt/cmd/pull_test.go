@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"gitt/internal/report"
@@ -15,79 +15,77 @@ type fakeResponse struct {
 }
 
 type fakeRunner struct {
-	responses map[string]fakeResponse
+	queue []fakeResponse
 }
 
-func (f fakeRunner) Run(repoPath string, args ...string) (string, string, error) {
-	key := repoPath + "|" + strings.Join(args, " ")
-	resp, ok := f.responses[key]
-	if !ok {
-		return "", "missing fake response", errors.New("missing fake response")
+func (f *fakeRunner) Run(ctx context.Context, repoPath string, args ...string) (string, string, error) {
+	_ = ctx
+	_ = repoPath
+	if len(f.queue) == 0 {
+		return "", "no more fake responses", errors.New("no more fake responses")
 	}
-	return resp.stdout, resp.stderr, resp.err
-}
-
-func TestIsUpToDate(t *testing.T) {
-	if !isUpToDate("Already up to date.", "") {
-		t.Fatalf("expected true for up to date stdout")
-	}
-	if !isUpToDate("", "Already up-to-date.") {
-		t.Fatalf("expected true for up-to-date stderr")
-	}
-	if isUpToDate("Fast-forward", "") {
-		t.Fatalf("expected false for update output")
-	}
+	r := f.queue[0]
+	f.queue = f.queue[1:]
+	return r.stdout, r.stderr, r.err
 }
 
 func TestPullOneRepo_DryRun(t *testing.T) {
-	runner := fakeRunner{
-		responses: map[string]fakeResponse{
-			"/tmp/repo|rev-parse --is-inside-work-tree": {stdout: "true"},
-			"/tmp/repo|status --porcelain":              {stdout: ""},
+	runner := &fakeRunner{
+		queue: []fakeResponse{
+			{stdout: "true"},
+			{stdout: ""},
 		},
 	}
-	result := pullOneRepo("/tmp/repo", pullOptions{dryRun: true}, runner)
+	ctx := context.Background()
+	result := pullOneRepo(ctx, "/tmp/repo", pullOptions{dryRun: true, ScanFlags: ScanFlags{}}, runner)
 	if result.Status != report.StatusSkipped {
 		t.Fatalf("expected skipped, got %s", result.Status)
 	}
 }
 
 func TestPullOneRepo_Updated(t *testing.T) {
-	runner := fakeRunner{
-		responses: map[string]fakeResponse{
-			"/tmp/repo|rev-parse --is-inside-work-tree": {stdout: "true"},
-			"/tmp/repo|status --porcelain":              {stdout: ""},
-			"/tmp/repo|pull --ff-only":                  {stdout: "Fast-forward"},
+	runner := &fakeRunner{
+		queue: []fakeResponse{
+			{stdout: "true"},
+			{stdout: ""},
+			{stdout: "aaa"},
+			{stdout: "Fast-forward"},
+			{stdout: "bbb"},
 		},
 	}
-	result := pullOneRepo("/tmp/repo", pullOptions{}, runner)
+	ctx := context.Background()
+	result := pullOneRepo(ctx, "/tmp/repo", pullOptions{ScanFlags: ScanFlags{}}, runner)
 	if result.Status != report.StatusUpdated {
 		t.Fatalf("expected updated, got %s", result.Status)
 	}
 }
 
 func TestPullOneRepo_UpToDate(t *testing.T) {
-	runner := fakeRunner{
-		responses: map[string]fakeResponse{
-			"/tmp/repo|rev-parse --is-inside-work-tree": {stdout: "true"},
-			"/tmp/repo|status --porcelain":              {stdout: ""},
-			"/tmp/repo|pull --ff-only":                  {stderr: "Already up to date."},
+	runner := &fakeRunner{
+		queue: []fakeResponse{
+			{stdout: "true"},
+			{stdout: ""},
+			{stdout: "samehash"},
+			{stderr: "Already up to date."}, // localized message ignored for classification
+			{stdout: "samehash"},
 		},
 	}
-	result := pullOneRepo("/tmp/repo", pullOptions{}, runner)
+	ctx := context.Background()
+	result := pullOneRepo(ctx, "/tmp/repo", pullOptions{ScanFlags: ScanFlags{}}, runner)
 	if result.Status != report.StatusUpToDate {
 		t.Fatalf("expected up-to-date, got %s", result.Status)
 	}
 }
 
 func TestPullOneRepo_DirtySkipped(t *testing.T) {
-	runner := fakeRunner{
-		responses: map[string]fakeResponse{
-			"/tmp/repo|rev-parse --is-inside-work-tree": {stdout: "true"},
-			"/tmp/repo|status --porcelain":              {stdout: " M file.txt"},
+	runner := &fakeRunner{
+		queue: []fakeResponse{
+			{stdout: "true"},
+			{stdout: " M file.txt"},
 		},
 	}
-	result := pullOneRepo("/tmp/repo", pullOptions{}, runner)
+	ctx := context.Background()
+	result := pullOneRepo(ctx, "/tmp/repo", pullOptions{ScanFlags: ScanFlags{}}, runner)
 	if result.Status != report.StatusSkipped {
 		t.Fatalf("expected skipped for dirty repo, got %s", result.Status)
 	}

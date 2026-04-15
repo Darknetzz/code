@@ -28,6 +28,12 @@ func Execute(args []string) error {
 		return nil
 	case "pull":
 		return runPull(args[1:])
+	case "list":
+		return runList(args[1:])
+	case "fetch":
+		return runFetch(args[1:])
+	case "status":
+		return runStatus(args[1:])
 	default:
 		return fmt.Errorf("%s: unknown command %q\n\n%s", appName, first, rootHelpText())
 	}
@@ -49,7 +55,10 @@ Usage:
   %s <command> [options]
 
 Commands:
-  pull        Recursively pull repositories from current directory
+  pull        Recursively pull repositories (git pull --ff-only) for clean work trees
+  list        Discover and print repository paths under a directory
+  fetch       Recursively run git fetch --prune in each repository
+  status      Report clean vs dirty work trees (git status --porcelain)
   help        Show this help
   version     Show version information
 

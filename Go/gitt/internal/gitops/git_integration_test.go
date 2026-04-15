@@ -1,6 +1,7 @@
 package gitops
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +34,7 @@ func TestPullFFOnly_Integration(t *testing.T) {
 	mustRun(t, seed, "git", "push", "origin", "HEAD")
 
 	runner := ExecRunner{}
-	stdout, stderr, err := PullFFOnly(runner, clone)
+	stdout, stderr, err := PullFFOnly(context.Background(), runner, clone)
 	if err != nil {
 		t.Fatalf("pull ff-only failed: %v (stdout=%q stderr=%q)", err, stdout, stderr)
 	}
