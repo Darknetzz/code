@@ -6,7 +6,8 @@
 # av1 "C:\\Videos\\Input" "C:\\Videos\\Output"  (Windows)
 # av1 "video.mp4" --delete-original
 # av1 "/path/to/videos" -r  (recursive)
-# av1 clean "/path/to/videos" -r  (remove stale temp files)
+# av1 clean "/path/to/videos" -r  (remove stale temp files; same as: av1 --clean "/path/to/videos" -r)
+# av1 "/path/to/videos"  (convert: `main` is the default when no subcommand is given)
 # python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe  (script path first, input path second)
 
 import os
@@ -45,6 +46,31 @@ except ImportError:
     __build_timestamp_utc__ = None
 
 console = Console()  # Will be reinitialized in main() if --no-color is set
+
+_CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "main"})
+_CLI_GROUP_ONLY_FLAGS = frozenset(
+    {
+        "-h",
+        "--help",
+        "--install-completion",
+        "--show-completion",
+    }
+)
+
+
+def _normalize_cli_argv(argv: list[str]) -> list[str]:
+    """If the user omits a subcommand, assume `main` (so paths and flags like --clean work without typing `main`)."""
+    if not argv:
+        return argv
+    script, *rest = argv
+    if not rest:
+        return [script, "main"]
+    first = rest[0]
+    if first in _CLI_KNOWN_SUBCOMMANDS or first in _CLI_GROUP_ONLY_FLAGS:
+        return argv
+    return [script, "main", *rest]
+
+
 app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
     rich_markup_mode="rich",  # Enable Rich markup in help output
@@ -2794,7 +2820,7 @@ def cleanup_alias(
     _run_cleanup_command(input_paths, recursive=recursive)
 
 
-@app.command()
+@app.command("main")
 def main(
     input_paths: list[str] = typer.Argument(
         None,
@@ -2831,6 +2857,13 @@ def main(
     overwrite: bool = typer.Option(False, "-o", "--overwrite", help="Replace an existing output file if one already exists. Default: skip files whose destination already exists.", rich_help_panel="File Handling"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview what would be converted and which settings would be used, without writing any output files.", rich_help_panel="File Handling"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Scan folders recursively. Default: only process files in the top-level input directory.", rich_help_panel="File Handling"),
+    clean_stale: bool = typer.Option(
+        False,
+        "--clean",
+        "--cleanup",
+        help="Remove stale AV1 temp files (*.temp.mkv) under the given paths (or the current directory) and exit. Does not convert. Same behavior as the `clean` subcommand.",
+        rich_help_panel="File Handling",
+    ),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep the converted file as .mkv instead of renaming it back to the original extension when possible. Default: restore the original filename/extension in place when safe.", rich_help_panel="File Handling"),
     log_type: str = typer.Option("txt", "--log-type", help="Log output format: 'txt', 'html', 'json', or 'none'. Default: txt.", rich_help_panel="Logging"),
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory for log files. Default: %TEMP%/av1-logs.", rich_help_panel="Logging"),
@@ -2915,9 +2948,61 @@ def main(
 
             [yellow]Preset + explicit width override[/]:
                 $ av1 "C:\\Videos" --size-preset aggressive --max-width 720
+
+            [yellow]Remove stale temp files (same as `av1 clean`)[/]:
+                $ av1 --clean "C:\\Videos" -r
     """
     # If version flag triggered, callback already exited.
-    
+
+    global _NO_COLOR, _NO_PROMPT, _HIDE_FILENAMES, console, FFMPEG_CMD, FFPROBE_CMD
+
+    if clean_stale:
+        incompatible: list[str] = []
+        if probe_only:
+            incompatible.append("--probe / --probe-only")
+        if dry_run:
+            incompatible.append("--dry-run")
+        if output_dir is not None:
+            incompatible.append("--output-dir")
+        if bitrate is not None:
+            incompatible.append("--bitrate")
+        if max_output_size is not None:
+            incompatible.append("--max-output-size / -S")
+        if min_shrink is not None:
+            incompatible.append("--min-shrink")
+        if size_preset is not None:
+            incompatible.append("--size-preset")
+        if max_width is not None:
+            incompatible.append("--max-width")
+        if delete_original:
+            incompatible.append("--delete-original / -d")
+        if overwrite:
+            incompatible.append("--overwrite / -o")
+        if keep_mkv:
+            incompatible.append("--keep-mkv")
+        if log_type != "txt":
+            incompatible.append("--log-type")
+        if log_dir is not None:
+            incompatible.append("--log-dir")
+        if ffmpeg is not None:
+            incompatible.append("--ffmpeg")
+        if ffprobe is not None:
+            incompatible.append("--ffprobe")
+        if prompt_av1:
+            incompatible.append("--prompt-av1")
+        if reencode_av1:
+            incompatible.append("--reencode-av1")
+        if parallel != 1:
+            incompatible.append("--parallel / -j")
+        if cpu_threads is not None:
+            incompatible.append("--cpu-threads / --cpu-cores")
+        if incompatible:
+            cprint(
+                f"--clean/--cleanup cannot be combined with: {', '.join(incompatible)}",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
     # Apply environment overrides for color and logging
     env_no_color = os.getenv("AV1_NO_COLOR")
     if env_no_color and _env_bool(env_no_color):
@@ -2928,6 +3013,16 @@ def main(
     env_hide_filenames = os.getenv("AV1_HIDE_FILENAMES")
     if env_hide_filenames and _env_bool(env_hide_filenames):
         hide_filenames = True
+
+    if clean_stale:
+        _NO_COLOR = no_color
+        _NO_PROMPT = no_prompt
+        _HIDE_FILENAMES = hide_filenames
+        if no_color:
+            console = Console(no_color=True, force_terminal=True)
+        _run_cleanup_command(input_paths, recursive=recursive)
+        raise typer.Exit(code=0)
+
     env_cpu_threads = os.getenv("AV1_CPU_THREADS")
     if cpu_threads is None and env_cpu_threads:
         try:
@@ -3000,7 +3095,6 @@ def main(
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
 
     # Override ffmpeg/ffprobe paths from CLI if provided
-    global FFMPEG_CMD, FFPROBE_CMD
     if ffmpeg:
         FFMPEG_CMD = ffmpeg
     if ffprobe:
@@ -3017,7 +3111,6 @@ def main(
         parallel = 1
 
     # Set global no-color flag and reinitialize console
-    global _NO_COLOR, _NO_PROMPT, _HIDE_FILENAMES, console
     _NO_COLOR = no_color
     _NO_PROMPT = no_prompt
     _HIDE_FILENAMES = hide_filenames
@@ -3025,8 +3118,8 @@ def main(
         console = Console(no_color=True, force_terminal=True)
     
     if not input_paths:
-        # Show help when no input paths provided
-        app(["--help"])
+        # Show main command help (group-level --help lists subcommands only).
+        app(["main", "--help"])
         raise typer.Exit(code=0)
 
     _print_startup_summary(
@@ -3123,6 +3216,7 @@ def main(
 
 if __name__ == "__main__":
     try:
+        sys.argv[:] = _normalize_cli_argv(sys.argv)
         app()
     finally:
         # Best-effort terminal restore: show cursor and reset terminal state.
