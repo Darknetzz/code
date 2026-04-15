@@ -6,6 +6,7 @@ Small CLI utilities and network tools, each in its own module.
 |-------------|-------------|
 | [b64](b64/) | Base64 encode/decode from stdin or files. Supports standard, URL-safe, and ra... See [b64/README.md](b64/README.md) for details. |
 | [gofile](gofile/) | CLI to inspect and manage files — stat, hash, MIME, size, list, cat, head/tail, realpath, symlinks, copy, move, rm, mkdir, touch. See [gofile/README.md](gofile/README.md) for details. |
+| [gitt](gitt/) | Recursive Git helper CLI. Finds nested repositories and runs safe pull workflows with summary output. See [gitt/README.md](gitt/README.md) for details. |
 | [gohw](gohw/) | Hardware info — motherboard, CPU, RAM, GPU. Styled terminal output. See [gohw/README.md](gohw/README.md) for details. |
 | [gonet](gonet/) | Network CLI tools — DNS, whois, port check, ping, HTTP headers/download, stat... See [gonet/README.md](gonet/README.md) for details. |
 | [gotools](gotools/) | General-purpose CLI combining base64, checksums, and UUID generation. Run wit... See [gotools/README.md](gotools/README.md) for details. |
