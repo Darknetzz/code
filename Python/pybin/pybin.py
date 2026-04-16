@@ -128,19 +128,40 @@ def main(
         "--keep-spec/--no-keep-spec",
         help="Keep the .spec file after building (default: keep)",
         show_default=True,
+        rich_help_panel="Build",
     ),
-    keep_build: bool = typer.Option(False, "--keep-build", help="Keep the build directory after building"),
-    output_dir: Path = typer.Option(None, "--output-dir", help="Optional output directory for the built executable (defaults to script's dist/ folder)"),
+    keep_build: bool = typer.Option(
+        False,
+        "--keep-build",
+        help="Keep the build directory after building",
+        rich_help_panel="Build",
+    ),
+    output_dir: Path = typer.Option(
+        None,
+        "--output-dir",
+        help="Directory for the final .exe (default: <script_dir>/dist).",
+        rich_help_panel="Output",
+    ),
     name: Optional[str] = typer.Option(
         None,
         "--name",
         "-n",
-        help="Base name of the built executable (no .exe); default: same as the script name. Output still goes under --output-dir or script's dist/.",
+        help=(
+            "Base name of the output executable without .exe (PyInstaller --name). "
+            "Default: same stem as the .py file. "
+            "Writes <name>.exe into --output-dir or the default dist/ folder."
+        ),
+        rich_help_panel="Output",
     ),
 ):
     """
-    CLI tool that accepts a single Python file as argument.
-    Compiles it with PyInstaller and cleans up build artifacts.
+    Compile one Python script to a single-file executable (PyInstaller), then optionally remove build noise.
+
+    \b
+    Default artifact: <script_dir>/dist/<script_stem>.exe
+    \b
+    Change only the folder:  --output-dir PATH
+    Change only the .exe name:  --name STEM  (or -n STEM); still uses default dist/ unless you also pass --output-dir.
     """
     if not file.exists():
         console.print(f"[red]✗ Error:[/red] File '{file}' does not exist.", style="bold")
