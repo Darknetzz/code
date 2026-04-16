@@ -1,5 +1,6 @@
 import sys
 import typer
+from typing import Optional
 import subprocess
 import shutil
 from pathlib import Path
@@ -90,11 +91,25 @@ def _restore_build_info_module(build_info_path: Path, original_contents) -> None
     build_info_path.write_text(original_contents, encoding="utf-8")
 
 
-def _resolve_built_artifact_path(dist_path: Path, file_path: Path) -> Path:
+def _normalize_exe_basename(name: str) -> str:
+    """Strip .exe for PyInstaller --name (it adds the suffix on Windows)."""
+    n = name.strip()
+    if n.lower().endswith(".exe"):
+        return n[:-4]
+    return n
+
+
+def _resolve_built_artifact_path(
+    dist_path: Path,
+    file_path: Path,
+    *,
+    output_name: Optional[str] = None,
+) -> Path:
+    stem = _normalize_exe_basename(output_name) if output_name else file_path.stem
     candidates = []
     if sys.platform == "win32":
-        candidates.append(dist_path / f"{file_path.stem}.exe")
-    candidates.append(dist_path / file_path.stem)
+        candidates.append(dist_path / f"{stem}.exe")
+    candidates.append(dist_path / stem)
 
     for candidate in candidates:
         if candidate.exists():
@@ -116,6 +131,12 @@ def main(
     ),
     keep_build: bool = typer.Option(False, "--keep-build", help="Keep the build directory after building"),
     output_dir: Path = typer.Option(None, "--output-dir", help="Optional output directory for the built executable (defaults to script's dist/ folder)"),
+    name: Optional[str] = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help="Base name of the built executable (no .exe); default: same as the script name. Output still goes under --output-dir or script's dist/.",
+    ),
 ):
     """
     CLI tool that accepts a single Python file as argument.
@@ -193,8 +214,10 @@ def main(
                 "pyinstaller",
                 f"--distpath={dist_path}",
                 f"--workpath={work_path}",
-                str(spec_file),
             ]
+            if name:
+                cmd.append(f"--name={_normalize_exe_basename(name)}")
+            cmd.append(str(spec_file))
         else:
             console.print("[yellow]⚙ Generating new .spec file[/yellow]")
             cmd = [
@@ -203,8 +226,10 @@ def main(
                 f"--distpath={dist_path}",
                 f"--workpath={work_path}",
                 f"--specpath={spec_path}",
-                str(file.resolve()),  # Use absolute path to avoid cross-drive issues
             ]
+            if name:
+                cmd.append(f"--name={_normalize_exe_basename(name)}")
+            cmd.append(str(file.resolve()))  # Use absolute path to avoid cross-drive issues
         # Run from the file's directory to avoid Windows cross-drive path issues
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(base_dir))
         if result.returncode != 0:
@@ -231,7 +256,7 @@ def main(
             # Only show message if user explicitly set --keep-spec but no spec was generated
             pass
         
-        built_artifact = _resolve_built_artifact_path(dist_path, file)
+        built_artifact = _resolve_built_artifact_path(dist_path, file, output_name=name)
         console.print(f"\n[green]✓ Build complete:[/green] [cyan]{built_artifact}[/cyan]", style="bold")
     finally:
         if build_info_path is not None:

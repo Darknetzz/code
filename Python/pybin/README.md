@@ -14,6 +14,10 @@ pybin my_script.py
 # Build to a custom output directory
 pybin my_script.py --output-dir D:/Apps/dist
 
+# Same default dist/ folder, but a different executable name (e.g. side-by-side with a running build)
+pybin my_script.py --name my_script_next
+# or: pybin my_script.py -n my_script_next
+
 # Remove the .spec file after build
 pybin my_script.py --no-keep-spec
 
@@ -36,6 +40,7 @@ pybin my_script.py --keep-spec --keep-build
    <tr><td>--keep-spec / --no-keep-spec</td><td>Keep or delete the generated .spec file after the build (default: keep).</td></tr>
    <tr><td>--keep-build</td><td>Keep the build directory after the build (default: removed).</td></tr>
    <tr><td>--output-dir &lt;PATH&gt;</td><td>Optional output directory for the final executable (default: &lt;script_dir&gt;/dist).</td></tr>
+   <tr><td>--name / -n &lt;NAME&gt;</td><td>Base name of the built executable (no <code>.exe</code>); default: script stem. Output path is still <code>&lt;dist&gt;/&lt;NAME&gt;.exe</code>. Passed to PyInstaller as <code>--name</code>. If you use a custom <code>.spec</code> with a fixed <code>EXE(name=...)</code>, you may need to match that or rely on PyInstaller overriding it.</td></tr>
 </table>
 
 ## Notes
