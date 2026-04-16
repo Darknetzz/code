@@ -458,14 +458,46 @@ def _display_path(
     """Format user-facing paths while honoring filename redaction."""
     if _HIDE_FILENAMES:
         return fallback_label
+    if full_path:
+        try:
+            return os.path.normpath(os.path.abspath(path))
+        except Exception:
+            return path
     if base_path:
         try:
             return os.path.relpath(path, base_path)
         except Exception:
             pass
-    if full_path:
-        return path
     return os.path.basename(path)
+
+
+def _path_console_log(
+    path: str,
+    *,
+    base_path: Optional[str] = None,
+    fallback_label: str = "filename hidden",
+) -> tuple[str, str]:
+    """Return (console_path, log_path): short display vs canonical absolute for log files."""
+    short = _display_path(path, base_path=base_path, fallback_label=fallback_label)
+    long = _display_path(path, full_path=True, fallback_label=fallback_label)
+    return short, long
+
+
+def _append_log_directory_header(directory: str) -> None:
+    """Append a multi-line folder separator to file logs only (not the console)."""
+    shown = _display_path(directory, full_path=True, fallback_label="folder")
+    sep = "-" * 72
+    block = f"{sep}\nDirectory: {shown}\n{sep}"
+    _LOG_MESSAGES.append(block)
+    try:
+        _LOG_EVENTS.append({
+            "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+            "level": "info",
+            "message": "log_directory",
+            "data": {"directory": shown},
+        })
+    except Exception:
+        pass
 
 
 def _display_batch_item(file_path: str, input_path: str, recursive: bool, current: int, total: int) -> str:
@@ -969,7 +1001,8 @@ def get_video_stream_info(file_path: str) -> dict:
                 info["bitrate"] = int((size * 8 / float(info["duration"])) * VIDEO_BITRATE_ESTIMATE_FACTOR)
 
     except subprocess.TimeoutExpired:
-        cprint(f"Timeout while probing file: {_display_path(file_path)}", "warning")
+        _sp, _lp = _path_console_log(file_path)
+        cprint(f"Timeout while probing file: {_sp}", "warning", log_body=f"Timeout while probing file: {_lp}")
     except Exception as e:
         cprint(f"Could not probe stream info: {e}", "warning")
 
@@ -1081,7 +1114,14 @@ def _save_log(log_type: str, log_path: Optional[str] = None) -> Optional[str]:
 # ============================================================================ #
 #                               FUNCTION: cprint                               #
 # ============================================================================ #
-def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
+def cprint(
+    message: str,
+    type: str = "",
+    style: str = "bold green",
+    *,
+    log_body: Optional[str] = None,
+    **kwargs,
+) -> None:
     timestamp = time.strftime('%H:%M:%S')
     prefix = ""
     style  = ""
@@ -1101,22 +1141,24 @@ def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) ->
         style = "green"
         prefix = "✅"
 
-    message = f"[{timestamp}] {prefix}  {message}"
-    
+    log_line_body = message if log_body is None else log_body
+    console_msg = f"[{timestamp}] {prefix}  {message}"
+    log_msg = f"[{timestamp}] {prefix}  {log_line_body}"
+
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
     if not _SUPPRESS_OUTPUT:
         if _NO_COLOR:
-            console.print(message, markup=markup_enabled, **kwargs)
+            console.print(console_msg, markup=markup_enabled, **kwargs)
         else:
-            console.print(message, style=style, markup=markup_enabled, **kwargs)
-    
+            console.print(console_msg, style=style, markup=markup_enabled, **kwargs)
+
     # Log the message (with prefix for file logging) and structured event
-    _LOG_MESSAGES.append(message)
+    _LOG_MESSAGES.append(log_msg)
     try:
         _LOG_EVENTS.append({
             "ts": datetime.now(UTC).isoformat(timespec="seconds"),
             "level": type or "info",
-            "message": message,
+            "message": log_msg,
         })
     except Exception:
         pass
@@ -1435,19 +1477,30 @@ def inspect_transcoding_need(file_path: str) -> str:
             is_corrupt = any(keyword in stderr_lower for keyword in corruption_keywords)
 
             if is_corrupt:
-                cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
+                _sp, _lp = _path_console_log(file_path)
+                cprint(f"❌ Corrupt file detected: {_sp}", "error", log_body=f"❌ Corrupt file detected: {_lp}")
                 if result.stderr:
                     error_msg = result.stderr.strip()[:200]
                     cprint(f"   Error: {error_msg}", "error")
             else:
-                cprint(f"⚠️  Could not probe {_display_path(file_path)} - may be invalid or unsupported", "warning")
+                _sp, _lp = _path_console_log(file_path)
+                cprint(
+                    f"⚠️  Could not probe {_sp} - may be invalid or unsupported",
+                    "warning",
+                    log_body=f"⚠️  Could not probe {_lp} - may be invalid or unsupported",
+                )
             return "invalid"
 
         data = json.loads(result.stdout)
         target_codec = ACTIVE_ENCODER["codec"]
         video_streams = [s for s in data.get('streams', []) if s.get('codec_type') == 'video']
         if not video_streams:
-            cprint(f"❌ Corrupt or invalid file: {_display_path(file_path)} (no video stream found)", "error")
+            _sp, _lp = _path_console_log(file_path)
+            cprint(
+                f"❌ Corrupt or invalid file: {_sp} (no video stream found)",
+                "error",
+                log_body=f"❌ Corrupt or invalid file: {_lp} (no video stream found)",
+            )
             return "invalid"
 
         for stream in video_streams:
@@ -1460,18 +1513,30 @@ def inspect_transcoding_need(file_path: str) -> str:
 
         return "needs"
     except subprocess.TimeoutExpired:
-        cprint(f"⏱️  Timeout while probing {_display_path(file_path)} - file may be very large or corrupt", "warning")
+        _sp, _lp = _path_console_log(file_path)
+        cprint(
+            f"⏱️  Timeout while probing {_sp} - file may be very large or corrupt",
+            "warning",
+            log_body=f"⏱️  Timeout while probing {_lp} - file may be very large or corrupt",
+        )
         return "invalid"
     except json.JSONDecodeError:
-        cprint(f"❌ Corrupt file detected: {_display_path(file_path)} (invalid metadata)", "error")
+        _sp, _lp = _path_console_log(file_path)
+        cprint(
+            f"❌ Corrupt file detected: {_sp} (invalid metadata)",
+            "error",
+            log_body=f"❌ Corrupt file detected: {_lp} (invalid metadata)",
+        )
         return "invalid"
     except Exception as e:
         error_str = str(e).lower()
         if any(keyword in error_str for keyword in ["corrupt", "invalid", "truncated", "error reading"]):
-            cprint(f"❌ Corrupt file detected: {_display_path(file_path)}", "error")
+            _sp, _lp = _path_console_log(file_path)
+            cprint(f"❌ Corrupt file detected: {_sp}", "error", log_body=f"❌ Corrupt file detected: {_lp}")
             cprint(f"   Error: {str(e)[:200]}", "error")
         else:
-            cprint(f"⚠️  Error checking file {_display_path(file_path)}: {e}", "warning")
+            _sp, _lp = _path_console_log(file_path)
+            cprint(f"⚠️  Error checking file {_sp}: {e}", "warning", log_body=f"⚠️  Error checking file {_lp}: {e}")
         return "invalid"
 
 # ============================================================================ #
@@ -1488,9 +1553,11 @@ def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> 
         return True
 
     if _NO_PROMPT:
+        _sp, _lp = _path_console_log(file_path)
         cprint(
-            f"⏭️  Skipping: {_display_path(file_path)} (already AV1; use --reencode-av1 to bypass the prompt)",
+            f"⏭️  Skipping: {_sp} (already AV1; use --reencode-av1 to bypass the prompt)",
             "info",
+            log_body=f"⏭️  Skipping: {_lp} (already AV1; use --reencode-av1 to bypass the prompt)",
         )
         return False
 
@@ -1518,7 +1585,12 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
     try:
         if auto_delete:
             os.remove(original_path)
-            cprint(f"Deleted original: {_display_path(original_path, fallback_label='original file')}")
+            _sp, _lp = _path_console_log(original_path, fallback_label="original file")
+            cprint(
+                f"Deleted original: {_sp}",
+                "success",
+                log_body=f"Deleted original: {_lp}",
+            )
             return True
         # Suppress interactive prompt when _NO_PROMPT is enabled
         if _NO_PROMPT:
@@ -1592,7 +1664,8 @@ def _finalize_output_file(input_path: str, output_path: str, keep_mkv: bool, del
     if original_deleted and original_name_path and not keep_mkv:
         try:
             os.replace(output_path, original_name_path)
-            cprint(f"Renamed to: {_display_path(original_name_path, fallback_label='original name')}", "success")
+            _sp, _lp = _path_console_log(original_name_path, fallback_label="original name")
+            cprint(f"Renamed to: {_sp}", "success", log_body=f"Renamed to: {_lp}")
         except OSError as e:
             cprint(f"Could not rename to original name: {e}", "warning")
     return delete_original
@@ -1635,7 +1708,8 @@ def validate_video_file(file_path: str) -> bool:
     # Check minimum file size
     try:
         if os.path.getsize(file_path) < MIN_FILE_SIZE_BYTES:
-            cprint(f"File too small: {_display_path(file_path)}", "warning")
+            _sp, _lp = _path_console_log(file_path)
+            cprint(f"File too small: {_sp}", "warning", log_body=f"File too small: {_lp}")
             return False
     except OSError:
         return False
@@ -1683,11 +1757,13 @@ def _resolve_video_input_files(input_paths: list[str], recursive: bool = False) 
             if input_path.lower().endswith(SUPPORTED_EXTENSIONS):
                 resolved_files.append(input_path)
             else:
-                cprint(f"Skipping unsupported file: {_display_path(input_path)}", "warning")
+                _sp, _lp = _path_console_log(input_path)
+                cprint(f"Skipping unsupported file: {_sp}", "warning", log_body=f"Skipping unsupported file: {_lp}")
         elif os.path.isdir(input_path):
             resolved_files.extend(_collect_directory_video_files(input_path, recursive))
         else:
-            cprint(f"Skipping invalid path: {_display_path(input_path)}", "warning")
+            _sp, _lp = _path_console_log(input_path)
+            cprint(f"Skipping invalid path: {_sp}", "warning", log_body=f"Skipping invalid path: {_lp}")
 
     return sorted(dict.fromkeys(resolved_files))
 
@@ -1719,7 +1795,8 @@ def _resolve_cleanup_targets(input_paths: list[str], recursive: bool = False) ->
         elif os.path.isdir(input_path):
             resolved_files.extend(_collect_directory_temp_files(input_path, recursive))
         else:
-            cprint(f"Skipping invalid path: {_display_path(input_path)}", "warning")
+            _sp, _lp = _path_console_log(input_path)
+            cprint(f"Skipping invalid path: {_sp}", "warning", log_body=f"Skipping invalid path: {_lp}")
 
     return sorted(dict.fromkeys(resolved_files))
 
@@ -1735,10 +1812,12 @@ def _remove_cleanup_targets(temp_files: list[str]) -> tuple[int, int]:
         try:
             os.remove(temp_file)
             removed_count += 1
-            cprint(f"Removed temp file: {_display_path(temp_file)}", "success")
+            _sp, _lp = _path_console_log(temp_file)
+            cprint(f"Removed temp file: {_sp}", "success", log_body=f"Removed temp file: {_lp}")
         except OSError as e:
             failed_count += 1
-            cprint(f"Could not remove {_display_path(temp_file)}: {e}", "warning")
+            _sp, _lp = _path_console_log(temp_file)
+            cprint(f"Could not remove {_sp}: {e}", "warning", log_body=f"Could not remove {_lp}: {e}")
 
     return removed_count, failed_count
 
@@ -1763,7 +1842,8 @@ def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
     cprint(f"🔎 Probing {len(probe_targets)} file(s)...", "info")
     for file_path in probe_targets:
         if not validate_video_file(file_path):
-            cprint(f"Skipping invalid video file: {_display_path(file_path)}", "warning")
+            _sp, _lp = _path_console_log(file_path)
+            cprint(f"Skipping invalid video file: {_sp}", "warning", log_body=f"Skipping invalid video file: {_lp}")
             continue
         stream_info = get_video_stream_info(file_path)
         width = stream_info.get("width")
@@ -1779,7 +1859,8 @@ def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
         except OSError:
             pass
 
-        cprint(f"Probe: {_display_path(file_path)}", "info")
+        _sp, _lp = _path_console_log(file_path)
+        cprint(f"Probe: {_sp}", "info", log_body=f"Probe: {_lp}")
         cprint(f"   Codec:     {stream_info.get('codec') or 'unknown'}", "info")
         cprint(f"   Resolution: {resolution}", "info")
         cprint(f"   FPS:       {_format_fps_display(stream_info.get('fps'))}", "info")
@@ -1821,6 +1902,7 @@ def convert_single_file(
     """
     global ACTIVE_ENCODER, FFMPEG_CMD
     display_name = _display_path(input_path)
+    display_name_log = _display_path(input_path, full_path=True, fallback_label="hidden")
     progress_name = progress_label or display_name
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
     effective_max_width = int(max_video_width) if isinstance(max_video_width, int) and max_video_width > 0 else MAX_VIDEO_WIDTH
@@ -1843,10 +1925,15 @@ def convert_single_file(
             cprint(
                 f"⏭️  Skipping: {display_name} (already AV1; use --prompt-av1 or --reencode-av1)",
                 "info",
+                log_body=f"⏭️  Skipping: {display_name_log} (already AV1; use --prompt-av1 or --reencode-av1)",
             )
             return delete_original, 0, "skip-av1", "unknown | length unknown | fps unknown"
     elif transcode_state != "needs":
-        cprint(f"⏭️  Skipping: {display_name} (already using target codec)", "info")
+        cprint(
+            f"⏭️  Skipping: {display_name} (already using target codec)",
+            "info",
+            log_body=f"⏭️  Skipping: {display_name_log} (already using target codec)",
+        )
         return delete_original, 0, "skip-codec", "unknown | length unknown | fps unknown"
 
     # Get file size (used for display and progress)
@@ -1947,7 +2034,11 @@ def convert_single_file(
         bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
 
     if not _SUPPRESS_OUTPUT:
-        cprint(f"🎯 {display_name} → {bitrate_decision}", "info")
+        cprint(
+            f"🎯 {display_name} → {bitrate_decision}",
+            "info",
+            log_body=f"🎯 {display_name_log} → {bitrate_decision}",
+        )
         cprint(f"   Resolution: {res_str}", "info")
         cprint(f"   FPS:        {fps_str}", "info")
         cprint(f"   Bitrate:    {bitrate_str}", "info")
@@ -2055,8 +2146,8 @@ def convert_single_file(
                 cprint(f"   Command: {' '.join(command)}", "info")
     # Initialize per-file event context
     file_event = {
-        "file": input_path,
-        "output": output_path,
+        "file": _display_path(input_path, full_path=True, fallback_label="hidden"),
+        "output": _display_path(output_path, full_path=True, fallback_label="hidden"),
         "encoder": encoder_name,
         "codec": codec,
         "target_bps": target_bitrate_int,
@@ -2084,17 +2175,28 @@ def convert_single_file(
             cprint("🔍 Dry run: Planned conversion", "info")
             # Format summary dict for display
             display_summary = summary.copy()
+            display_summary_log = summary.copy()
             if _HIDE_FILENAMES:
                 display_summary["input"] = _display_path(input_path)
                 display_summary["output"] = _display_path(output_path, fallback_label="output file")
+                display_summary_log = display_summary
+            else:
+                display_summary_log["input"] = _display_path(input_path, full_path=True)
+                display_summary_log["output"] = _display_path(output_path, full_path=True)
             summary_str = "\n".join(f"  {k}: {v}" for k, v in display_summary.items())
-            cprint(f"Summary:\n{summary_str}", "info")
+            summary_str_log = "\n".join(f"  {k}: {v}" for k, v in display_summary_log.items())
+            cprint(f"Summary:\n{summary_str}", "info", log_body=f"Summary:\n{summary_str_log}")
         try:
+            dry_data = {
+                **summary,
+                "input": _display_path(input_path, full_path=True, fallback_label="hidden"),
+                "output": _display_path(output_path, full_path=True, fallback_label="hidden"),
+            }
             _LOG_EVENTS.append({
                 "ts": datetime.now(UTC).isoformat(timespec="seconds"),
                 "level": "info",
                 "message": "dry_run_summary",
-                "data": summary,
+                "data": dry_data,
             })
         except Exception:
             pass
@@ -2460,7 +2562,7 @@ def process_batch_files(
     total_original_size = 0
     total_new_size = 0
     files_converted = 0
-    per_file_stats: list[Tuple[str, int, int, float]] = []
+    per_file_stats: list[Tuple[str, str, int, int, float]] = []
     cumulative_saved = 0
     batch_start_time = time.time()
     file_times: list[float] = []
@@ -2482,13 +2584,22 @@ def process_batch_files(
             eta=_progress_field(""),
         )
         auto_delete = delete_original
+        last_logged_dir: Optional[str] = None
 
         for idx, file_path in enumerate(video_files, 1):
             # Check if user cancelled
             if _USER_CANCELLED:
                 progress.console.print("[yellow]\n⏸️  Batch conversion interrupted. Finishing current file...[/]")
                 break
-            
+
+            try:
+                current_dir = os.path.dirname(os.path.normpath(os.path.abspath(file_path)))
+            except Exception:
+                current_dir = ""
+            if current_dir != last_logged_dir:
+                _append_log_directory_header(current_dir if current_dir else os.getcwd())
+                last_logged_dir = current_dir
+
             # Show relative path for recursive mode
             display_path = _display_batch_item(file_path, input_path, recursive, idx, len(video_files))
             file_start = time.time()
@@ -2574,7 +2685,15 @@ def process_batch_files(
                 total_new_size += (original_size - size_saved)
                 cumulative_saved += size_saved
                 saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
-                per_file_stats.append((display_path, original_size, size_saved, saved_percent))
+                per_file_stats.append(
+                    (
+                        display_path,
+                        _display_path(file_path, full_path=True, fallback_label="hidden"),
+                        original_size,
+                        size_saved,
+                        saved_percent,
+                    )
+                )
                 
                 # Track file encoding time for ETA
                 file_time = time.time() - file_start
@@ -2624,23 +2743,29 @@ def process_batch_files(
         # Show per-file stats if we have them
         if per_file_stats and len(per_file_stats) <= 10:
             cprint("\n📋 Per-File Results:", style="bold cyan")
-            for filename, orig_size, saved, percent in per_file_stats:
+            for filename, filename_log, orig_size, saved, percent in per_file_stats:
                 status = "✅" if saved > 0 else "⚠️"
                 styled_name = _styled_filename(filename)
                 cprint(
                     f"   {status} {styled_name}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)",
                     "info",
                     markup=True,
+                    log_body=(
+                        f"   {status} {filename_log}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)"
+                    ),
                 )
         elif per_file_stats:
             cprint("\n📋 Showing top 10 files by space saved:", style="bold cyan")
-            top_files = sorted(per_file_stats, key=lambda x: x[2], reverse=True)[:10]
-            for filename, orig_size, saved, percent in top_files:
+            top_files = sorted(per_file_stats, key=lambda x: x[3], reverse=True)[:10]
+            for filename, filename_log, orig_size, saved, percent in top_files:
                 styled_name = _styled_filename(filename)
                 cprint(
                     f"   ✅ {styled_name}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)",
                     "info",
                     markup=True,
+                    log_body=(
+                        f"   ✅ {filename_log}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)"
+                    ),
                 )
         
         cprint("\n💾 Total Space Savings:", style="bold cyan")
