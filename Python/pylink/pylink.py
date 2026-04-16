@@ -54,6 +54,7 @@ def create_link(
             raise typer.Exit(code=1)
 
     # 4. Determine the mklink flag
+    # If target exists and is a directory, default to /D unless a flag is explicit.
     flag = ""
     if directory:
         flag = "/D"
@@ -61,21 +62,22 @@ def create_link(
         flag = "/J"
     elif hard:
         flag = "/H"
+    elif target_path.exists() and target_path.is_dir():
+        flag = "/D"
 
-    # 4. Construct the command
-    # Windows requires the command to be run inside a shell for mklink.
-    # Build mklink command first, then pass it as a single cmd /c string
-    # so paths containing spaces are parsed correctly by cmd.exe.
+    # 5. Construct the command
+    # Windows requires mklink to run under cmd. Build a cmd-native command
+    # string with explicit double quotes so spaces are handled correctly.
     mklink_parts = ["mklink"]
     if flag:
         mklink_parts.append(flag)
-    mklink_parts.append(str(link_path))
-    mklink_parts.append(str(target_path))
-    mklink_command = subprocess.list2cmdline(mklink_parts)
+    mklink_parts.append(f"\"{link_path}\"")
+    mklink_parts.append(f"\"{target_path}\"")
+    mklink_command = " ".join(mklink_parts)
     cmd = ["cmd", "/c", mklink_command]
 
-    # 5. Feedback to user
-    typer.secho(f"Executing: {subprocess.list2cmdline(cmd)}", fg=typer.colors.BLUE)
+    # 6. Feedback to user
+    typer.secho(f"Executing: cmd /c {mklink_command}", fg=typer.colors.BLUE)
 
     try:
         # We assume 'target_path' exists, but mklink allows broken links, so we don't force-check it.
@@ -89,7 +91,7 @@ def create_link(
         typer.secho("==============================\n", fg=typer.colors.RED)
         typer.secho(f"Exit Code: {e.returncode}", fg=typer.colors.RED)
         typer.secho("Command:", fg=typer.colors.RED)
-        typer.secho("  " + subprocess.list2cmdline(cmd), fg=typer.colors.RED)
+        typer.secho(f"  cmd /c {mklink_command}", fg=typer.colors.RED)
 
         # Common pitfalls and guidance
         typer.secho("\nPossible causes:", fg=typer.colors.YELLOW, bold=True)
