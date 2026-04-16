@@ -8,7 +8,13 @@ from typing import Optional
 from typing_extensions import Annotated
 
 # Initialize the app
-app = typer.Typer(help="A modern wrapper for Windows mklink.")
+app = typer.Typer(
+    help=(
+        "A modern wrapper for Windows mklink.\n\n"
+        "If TARGET is a directory and no type flag is given, pylink defaults to Junction "
+        "(/J). In interactive mode it prompts you to choose Junction or Directory Symlink."
+    )
+)
 
 
 def path_lexists(path: Path) -> bool:
@@ -41,21 +47,40 @@ def is_drive_root(path: Path) -> bool:
     return path.anchor and str(path).rstrip("\\/").lower() == path.anchor.rstrip("\\/").lower()
 
 
+def resolve_default_directory_flag(yes: bool) -> str:
+    """
+    Pick directory link type when target is a directory and user did not choose
+    an explicit flag. Defaults to junction for better Windows compatibility.
+    """
+    if yes:
+        return "/J"
+
+    choice = typer.prompt(
+        "Directory target detected. Choose link type: [J]unction or [D]irectory symlink",
+        default="J",
+    ).strip().upper()
+    if choice == "D":
+        return "/D"
+    return "/J"
+
+
 @app.command()
 def create_link(
-    target_path: Annotated[Path, typer.Argument(help="TARGET: Existing file/directory the link points to (required)")],
-    link_path: Optional[Path] = typer.Argument(None, help="LINK: Path to create (defaults to CWD/<target basename> if omitted)"),
-    directory: bool = typer.Option(False, "--dir", "-d", help="Create a directory symbolic link (/D)"),
-    junction: bool = typer.Option(False, "--junction", "-j", help="Create a Directory Junction (/J)"),
-    hard: bool = typer.Option(False, "--hard", "-h", help="Create a hard link (/H)"),
+    target_path: Annotated[Path, typer.Argument(help="TARGET: Existing file/directory path to point at (required unless --no-validate-target)")],
+    link_path: Optional[Path] = typer.Argument(None, help="LINK: Path to create (defaults to CWD/<target basename> if omitted; always shown as absolute path)"),
+    directory: bool = typer.Option(False, "--dir", "-d", help="Force a directory symbolic link (/D)"),
+    junction: bool = typer.Option(False, "--junction", "-j", help="Force a directory junction (/J); recommended for Windows directory links"),
+    hard: bool = typer.Option(False, "--hard", "-h", help="Force a hard link (/H, files only, same volume)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     replace: bool = typer.Option(False, "--replace", "-r", help="Replace existing path at LINK path (requires extra confirmation for non-link files/folders)"),
-    no_validate_target: bool = typer.Option(False, "--no-validate-target", help="Allow non-existent target paths (advanced)"),
+    no_validate_target: bool = typer.Option(False, "--no-validate-target", help="Skip target existence/type validation (allows intentionally broken symlinks; advanced)"),
 ):
     """
     Creates a filesystem link using the Windows mklink command.
-    
-    Defaults to a file symbolic link if no flags are provided.
+
+    Default type behavior:
+    - Directory target + no type flag: prompt (interactive) or default to junction (/J) with --yes.
+    - File target + no type flag: file symbolic link.
     """
     
     # 1. Challenge: Validate Mutually Exclusive Options manually
@@ -166,8 +191,9 @@ def create_link(
             typer.secho(f"  Target: {target_path}", fg=typer.colors.RED)
             raise typer.Exit(code=1)
 
-    # 4. Determine the mklink flag
-    # If target exists and is a directory, default to /D unless a flag is explicit.
+    # 4. Determine the mklink flag.
+    # For directory targets with no explicit flag, prompt in interactive mode and
+    # default to junction to avoid common symlink policy issues on Windows.
     flag = ""
     if directory:
         flag = "/D"
@@ -176,7 +202,7 @@ def create_link(
     elif hard:
         flag = "/H"
     elif target_path.exists() and target_path.is_dir():
-        flag = "/D"
+        flag = resolve_default_directory_flag(yes=yes)
 
     # Validate target type for explicit flag choices.
     if not no_validate_target and flag in ("/D", "/J") and not target_path.is_dir():
