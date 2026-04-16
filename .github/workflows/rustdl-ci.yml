@@ -45,7 +45,7 @@ jobs:
         run: cargo test --all-targets --all-features
 
   deny:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,7 +57,7 @@ jobs:
           manifest-path: Rust/rustdl/Cargo.toml
 
   audit:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
