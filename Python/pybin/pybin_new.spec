@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pybin\\pybin.py'],
+    ['d:\\Kriss\\Documents\\Git\\code\\Python\\pybin\\pybin.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='pybin',
+    name='pybin_new',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
