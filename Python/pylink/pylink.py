@@ -1,12 +1,32 @@
 import typer
 import subprocess
 import sys
+import os
+import stat
 from pathlib import Path
 from typing import Optional
 from typing_extensions import Annotated
 
 # Initialize the app
 app = typer.Typer(help="A modern wrapper for Windows mklink.")
+
+
+def path_lexists(path: Path) -> bool:
+    """Return True if path exists, including broken links."""
+    return os.path.lexists(str(path))
+
+
+def is_reparse_point(path: Path) -> bool:
+    """
+    Return True for Windows reparse points (symlinks/junctions/mount points).
+    Uses lstat so broken links can still be identified.
+    """
+    try:
+        st = os.lstat(str(path))
+    except OSError:
+        return False
+    return bool(getattr(st, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
 
 @app.command()
 def create_link(
@@ -15,6 +35,8 @@ def create_link(
     directory: bool = typer.Option(False, "--dir", "-d", help="Create a directory symbolic link (/D)"),
     junction: bool = typer.Option(False, "--junction", "-j", help="Create a Directory Junction (/J)"),
     hard: bool = typer.Option(False, "--hard", "-h", help="Create a hard link (/H)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    replace: bool = typer.Option(False, "--replace", "-r", help="Replace existing link at LINK path if it is a symlink/junction"),
 ):
     """
     Creates a filesystem link using the Windows mklink command.
@@ -33,6 +55,40 @@ def create_link(
     # If link_path is omitted, default to CWD/<target basename>
     if link_path is None:
         link_path = Path.cwd() / target_path.name
+
+    # 3.5 Prevent accidental overwrite of existing paths.
+    # We only allow --replace for reparse-point links, never real files/folders.
+    if path_lexists(link_path):
+        if not replace:
+            typer.secho("Error: Link path already exists.", fg=typer.colors.RED, bold=True)
+            typer.secho(f"  Existing: {link_path}", fg=typer.colors.RED)
+            typer.echo("Use --replace to remove an existing symlink/junction at this path.")
+            raise typer.Exit(code=1)
+
+        if not is_reparse_point(link_path):
+            typer.secho("Error: --replace is only allowed for existing symlinks/junctions.", fg=typer.colors.RED, bold=True)
+            typer.secho(f"  Refusing to remove non-link path: {link_path}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+
+        if not yes:
+            confirmed_replace = typer.confirm(
+                f"'{link_path}' already exists as a link/junction. Remove and recreate it?",
+                default=False,
+            )
+            if not confirmed_replace:
+                typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+                raise typer.Exit(code=0)
+
+        try:
+            if link_path.is_dir():
+                # Junctions and directory symlinks are removed with rmdir.
+                link_path.rmdir()
+            else:
+                link_path.unlink()
+        except OSError as remove_error:
+            typer.secho("Error: Could not remove existing link path.", fg=typer.colors.RED, bold=True)
+            typer.secho(f"  {remove_error}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
 
     # 3. Validate that link_path and target_path are not the same
     try:
@@ -75,6 +131,16 @@ def create_link(
     mklink_parts.append(f"\"{target_path}\"")
     mklink_command = " ".join(mklink_parts)
     cmd = ["cmd", "/c", mklink_command]
+
+    if not yes:
+        typer.echo(f"Link:   {link_path}")
+        typer.echo(f"Target: {target_path}")
+        if flag:
+            typer.echo(f"Type:   {flag}")
+        confirmed = typer.confirm("Proceed?", default=True)
+        if not confirmed:
+            typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+            raise typer.Exit(code=0)
 
     # 6. Feedback to user
     typer.secho(f"Executing: cmd /c {mklink_command}", fg=typer.colors.BLUE)
