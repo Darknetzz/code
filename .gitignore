@@ -17,3 +17,4 @@ downloads/
 .env
 Python/pyspotify/exports
 *.exe
+*.bak
