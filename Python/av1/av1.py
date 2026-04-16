@@ -94,6 +94,7 @@ DEFAULT_CPU_USAGE_PERCENT = 75
 # ============================================================================ #
 SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
 TEMP_OUTPUT_SUFFIX = ".temp.mkv"
+ROOT_PREVIEW_MAX_WALK_STEPS = 750  # Cap os.walk steps for root-confirm preview (keep huge trees responsive)
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
 DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 
@@ -529,10 +530,69 @@ def _is_root_like_directory_path(path: str) -> bool:
     return expanded == "/"
 
 
+def _count_shallow_matches(root: str, *, mode: Literal["video", "temp"]) -> int:
+    """Count matching files in the root directory only (non-recursive)."""
+    n = 0
+    try:
+        for fn in os.listdir(root):
+            fp = os.path.join(root, fn)
+            if not os.path.isfile(fp):
+                continue
+            if mode == "video":
+                if fn.lower().endswith(SUPPORTED_EXTENSIONS):
+                    n += 1
+            elif fn.lower().endswith(TEMP_OUTPUT_SUFFIX):
+                n += 1
+    except OSError:
+        return 0
+    return n
+
+
+def _preview_recursive_work_dirs(
+    root: str,
+    *,
+    mode: Literal["video", "temp"],
+    max_walk_steps: int = ROOT_PREVIEW_MAX_WALK_STEPS,
+) -> tuple[list[str], int, int, bool]:
+    """
+    Walk under root up to max_walk_steps directory visits.
+    Returns (sorted dirs that contain ≥1 match, total matching files, steps used, truncated).
+    """
+    dirs_with_hits: set[str] = set()
+    total_matches = 0
+    steps = 0
+    truncated = False
+
+    def _file_matches(name: str) -> bool:
+        low = name.lower()
+        if mode == "video":
+            return low.endswith(SUPPORTED_EXTENSIONS)
+        return low.endswith(TEMP_OUTPUT_SUFFIX)
+
+    try:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            steps += 1
+            if steps > max_walk_steps:
+                truncated = True
+                break
+            hit_here = False
+            for fn in filenames:
+                if _file_matches(fn):
+                    hit_here = True
+                    total_matches += 1
+            if hit_here:
+                dirs_with_hits.add(os.path.normpath(dirpath))
+    except OSError:
+        return ([], 0, steps, truncated)
+
+    return (sorted(dirs_with_hits), total_matches, steps, truncated)
+
+
 def _confirm_root_like_input_paths(
     input_paths: list[str],
     *,
     intent: Literal["convert", "probe", "clean"],
+    recursive: bool = False,
 ) -> None:
     """If any existing directory argument is a volume/share root, require explicit confirmation."""
     if _NO_PROMPT:
@@ -563,11 +623,53 @@ def _confirm_root_like_input_paths(
         "probe": "probe media under",
         "clean": "delete stale *.temp.mkv under",
     }[intent]
+    mode: Literal["video", "temp"] = "temp" if intent == "clean" else "video"
+    kind = "video" if mode == "video" else f"*{TEMP_OUTPUT_SUFFIX}"
+
     cprint(
         "⚠️  One or more inputs look like a drive or share root (very broad scope).",
         "warning",
     )
     cprint(f"This command would {action}:\n{shown}", "warning")
+
+    if recursive:
+        cprint(
+            f"Quick preview where --recursive may touch {kind} files "
+            f"(first {ROOT_PREVIEW_MAX_WALK_STEPS} folders visited per root; full run can reach farther):",
+            "info",
+        )
+        for r in unique:
+            root_disp = _display_path(r, full_path=True, fallback_label="path")
+            dlist, nfiles, steps, trunc = _preview_recursive_work_dirs(r, mode=mode)
+            cprint(f"  [{root_disp}]", "info")
+            if nfiles == 0 and not trunc:
+                cprint("    No matching files under this path in the preview walk.", "info")
+            elif nfiles == 0 and trunc:
+                cprint(
+                    f"    No matches in the first {steps} folders visited (preview stopped early).",
+                    "info",
+                )
+            else:
+                tail = " (preview partial — more folders exist)" if trunc else ""
+                cprint(
+                    f"    {nfiles} matching file(s) in {len(dlist)} folder(s); "
+                    f"visited {steps} folder(s){tail}.",
+                    "info",
+                )
+                for d in dlist[:30]:
+                    cprint(f"      • {_display_path(d, full_path=True, fallback_label='path')}", "info")
+                if len(dlist) > 30:
+                    cprint(f"      … and {len(dlist) - 30} more folders with matches", "info")
+    else:
+        cprint(
+            "Without --recursive, only files directly inside each root folder are considered (no subfolders).",
+            "info",
+        )
+        for r in unique:
+            root_disp = _display_path(r, full_path=True, fallback_label="path")
+            n = _count_shallow_matches(r, mode=mode)
+            cprint(f"  [{root_disp}] ~{n} matching file(s) in this folder only.", "info")
+
     resp = safe_input(
         "Type YES (all caps) to continue, or anything else to cancel: ",
         message="",
@@ -3038,7 +3140,7 @@ def convert_videos(
 def _run_cleanup_command(input_paths: Optional[list[str]], recursive: bool) -> None:
     """Shared implementation for cleanup command aliases."""
     resolved_input_paths = input_paths or [os.getcwd()]
-    _confirm_root_like_input_paths(resolved_input_paths, intent="clean")
+    _confirm_root_like_input_paths(resolved_input_paths, intent="clean", recursive=recursive)
     cleanup_targets = _resolve_cleanup_targets(resolved_input_paths, recursive=recursive)
 
     if not cleanup_targets:
@@ -3431,11 +3533,11 @@ def main(
     )
 
     if probe_only:
-        _confirm_root_like_input_paths(input_paths, intent="probe")
+        _confirm_root_like_input_paths(input_paths, intent="probe", recursive=recursive)
         check_ffprobe()
         probe_inputs(input_paths, recursive=recursive)
     else:
-        _confirm_root_like_input_paths(input_paths, intent="convert")
+        _confirm_root_like_input_paths(input_paths, intent="convert", recursive=recursive)
         check_ffmpeg()
 
         has_patterns = any("*" in input_path or "?" in input_path for input_path in input_paths)
