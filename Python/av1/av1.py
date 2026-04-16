@@ -1120,6 +1120,7 @@ def cprint(
     style: str = "bold green",
     *,
     log_body: Optional[str] = None,
+    log_only: bool = False,
     **kwargs,
 ) -> None:
     timestamp = time.strftime('%H:%M:%S')
@@ -1146,7 +1147,7 @@ def cprint(
     log_msg = f"[{timestamp}] {prefix}  {log_line_body}"
 
     # Disable styling if _NO_COLOR is set; respect suppression for console output only
-    if not _SUPPRESS_OUTPUT:
+    if not _SUPPRESS_OUTPUT and not log_only:
         if _NO_COLOR:
             console.print(console_msg, markup=markup_enabled, **kwargs)
         else:
@@ -1707,9 +1708,30 @@ def validate_video_file(file_path: str) -> bool:
     
     # Check minimum file size
     try:
-        if os.path.getsize(file_path) < MIN_FILE_SIZE_BYTES:
+        sz = os.path.getsize(file_path)
+        if sz < MIN_FILE_SIZE_BYTES:
             _sp, _lp = _path_console_log(file_path)
-            cprint(f"File too small: {_sp}", "warning", log_body=f"File too small: {_lp}")
+            sz_h = _format_size(float(sz))
+            min_h = _format_size(float(MIN_FILE_SIZE_BYTES))
+            detail = f"{sz_h} ({sz} bytes); minimum {min_h} ({MIN_FILE_SIZE_BYTES} bytes)"
+            cprint(
+                f"File too small: {_sp} ({detail})",
+                "warning",
+                log_body=f"File too small: {_lp} ({detail})",
+            )
+            try:
+                _LOG_EVENTS.append({
+                    "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+                    "level": "warning",
+                    "message": "skip_too_small",
+                    "data": {
+                        "file": _display_path(file_path, full_path=True, fallback_label="hidden"),
+                        "size_bytes": sz,
+                        "min_size_bytes": MIN_FILE_SIZE_BYTES,
+                    },
+                })
+            except Exception:
+                pass
             return False
     except OSError:
         return False
@@ -2318,9 +2340,28 @@ def convert_single_file(
                 new_file_size = os.path.getsize(output_path)
                 size_saved = file_size - new_file_size
                 saved_percent = (size_saved / file_size) * 100 if file_size > 0 else 0
-                if not _SUPPRESS_OUTPUT:
-                    cprint(f"✅ Complete: {file_size / (1024**2):.2f} MB → {new_file_size / (1024**2):.2f} MB", "success")
-                    cprint(f"   💾 Saved: {size_saved / (1024**2):.2f} MB ({saved_percent:.1f}%)", "success")
+                _log_path = _display_path(input_path, full_path=True, fallback_label="hidden")
+                mb_before = file_size / (1024**2)
+                mb_after = new_file_size / (1024**2)
+                mb_saved = size_saved / (1024**2)
+                cprint(
+                    f"Complete: {mb_before:.2f} MB → {mb_after:.2f} MB",
+                    "success",
+                    log_body=(
+                        f"{_log_path} | before: {mb_before:.2f} MB ({file_size} bytes) | "
+                        f"after: {mb_after:.2f} MB ({new_file_size} bytes)"
+                    ),
+                    log_only=_SUPPRESS_OUTPUT,
+                )
+                cprint(
+                    f"   Saved: {mb_saved:.2f} MB ({saved_percent:.1f}%)",
+                    "success",
+                    log_body=(
+                        f"{_log_path} | saved: {mb_saved:.2f} MB ({saved_percent:.1f}% of input) | "
+                        f"{size_saved} bytes"
+                    ),
+                    log_only=_SUPPRESS_OUTPUT,
+                )
                 # Record per-file metrics
                 try:
                     _LOG_EVENTS.append({
@@ -2340,8 +2381,16 @@ def convert_single_file(
                     pass
                 
                 if file_size <= new_file_size:
-                    if not _SUPPRESS_OUTPUT:
-                        cprint("⚠️  Warning: Output file is larger than input (entropy/quality issue)", "warning")
+                    cprint(
+                        "Warning: Output file is larger than input (entropy/quality issue)",
+                        "warning",
+                        log_body=(
+                            f"{_log_path} | output not smaller than input "
+                            f"(before {mb_before:.2f} MB / {file_size} bytes, "
+                            f"after {mb_after:.2f} MB / {new_file_size} bytes)"
+                        ),
+                        log_only=_SUPPRESS_OUTPUT,
+                    )
                     delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
                 else:
                     delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
@@ -2751,7 +2800,8 @@ def process_batch_files(
                     "info",
                     markup=True,
                     log_body=(
-                        f"   {status} {filename_log}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)"
+                        f"   {status} {filename_log}: saved {saved / (1024**2):.2f} MB ({percent:.1f}%) "
+                        f"| {saved} bytes of {orig_size} bytes input"
                     ),
                 )
         elif per_file_stats:
@@ -2764,14 +2814,30 @@ def process_batch_files(
                     "info",
                     markup=True,
                     log_body=(
-                        f"   ✅ {filename_log}: {saved / (1024**2):.2f} MB saved ({percent:.1f}%)"
+                        f"   ✅ {filename_log}: saved {saved / (1024**2):.2f} MB ({percent:.1f}%) "
+                        f"| {saved} bytes of {orig_size} bytes input"
                     ),
                 )
         
         cprint("\n💾 Total Space Savings:", style="bold cyan")
-        cprint(f"   Before:  {total_original_size / (1024**3):.2f} GB", "info")
-        cprint(f"   After:   {total_new_size / (1024**3):.2f} GB", "info")
-        cprint(f"   Saved:   {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)", "success")
+        cprint(
+            f"   Before:  {total_original_size / (1024**3):.2f} GB",
+            "info",
+            log_body=f"   Before:  {total_original_size / (1024**3):.2f} GB ({total_original_size} bytes total)",
+        )
+        cprint(
+            f"   After:   {total_new_size / (1024**3):.2f} GB",
+            "info",
+            log_body=f"   After:   {total_new_size / (1024**3):.2f} GB ({total_new_size} bytes total)",
+        )
+        cprint(
+            f"   Saved:   {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%)",
+            "success",
+            log_body=(
+                f"   Saved:   {total_saved / (1024**3):.2f} GB ({percent_saved:.1f}%) "
+                f"| {total_saved} bytes freed vs input total"
+            ),
+        )
         
         if batch_elapsed > 0:
             avg_time = batch_elapsed / files_converted
