@@ -20,7 +20,7 @@ import glob
 import time
 import signal
 from datetime import datetime, UTC
-from typing import Callable, Optional, Tuple
+from typing import Callable, Literal, Optional, Tuple
 
 # Force UTF-8 encoding on Windows
 if platform.system() == 'Windows':
@@ -498,6 +498,83 @@ def _append_log_directory_header(directory: str) -> None:
         })
     except Exception:
         pass
+
+
+def _is_root_like_directory_path(path: str) -> bool:
+    """
+    True when path points at a filesystem, drive, or UNC share root (very broad scan targets).
+    Used to ask for an extra confirmation before convert/probe/clean.
+    """
+    try:
+        expanded = os.path.normpath(
+            os.path.normcase(os.path.expandvars(os.path.expanduser(path)))
+        )
+    except Exception:
+        return False
+    if platform.system() == "Windows":
+        p = expanded.replace("/", "\\")
+        if p.startswith("\\\\?\\UNC\\"):
+            p = "\\\\" + p[7:]
+        elif p.startswith("\\\\?\\"):
+            inner = p[4:]
+            drive, tail = os.path.splitdrive(inner)
+            return bool(drive) and tail in ("\\", "/", "")
+        drive, tail = os.path.splitdrive(p)
+        if drive and tail in ("\\", "/", ""):
+            return True
+        if p.startswith("\\\\"):
+            parts = [x for x in p[2:].split("\\") if x]
+            return len(parts) == 2
+        return False
+    return expanded == "/"
+
+
+def _confirm_root_like_input_paths(
+    input_paths: list[str],
+    *,
+    intent: Literal["convert", "probe", "clean"],
+) -> None:
+    """If any existing directory argument is a volume/share root, require explicit confirmation."""
+    if _NO_PROMPT:
+        return
+    env_np = os.getenv("AV1_NO_PROMPT")
+    if env_np and _env_bool(env_np):
+        return
+    roots: list[str] = []
+    for raw in input_paths:
+        if not raw.strip():
+            continue
+        if "*" in raw or "?" in raw:
+            continue
+        try:
+            cand = os.path.abspath(os.path.expandvars(os.path.expanduser(raw)))
+        except Exception:
+            continue
+        if not os.path.isdir(cand):
+            continue
+        if _is_root_like_directory_path(cand):
+            roots.append(os.path.normpath(cand))
+    if not roots:
+        return
+    unique = sorted(set(roots))
+    shown = "\n".join(f"  • {_display_path(r, full_path=True, fallback_label='path')}" for r in unique)
+    action = {
+        "convert": "convert, dry-run, or recurse into",
+        "probe": "probe media under",
+        "clean": "delete stale *.temp.mkv under",
+    }[intent]
+    cprint(
+        "⚠️  One or more inputs look like a drive or share root (very broad scope).",
+        "warning",
+    )
+    cprint(f"This command would {action}:\n{shown}", "warning")
+    resp = safe_input(
+        "Type YES (all caps) to continue, or anything else to cancel: ",
+        message="",
+    ).strip()
+    if resp != "YES":
+        cprint("Aborted.", "info")
+        raise typer.Exit(code=1)
 
 
 def _display_batch_item(file_path: str, input_path: str, recursive: bool, current: int, total: int) -> str:
@@ -2961,6 +3038,7 @@ def convert_videos(
 def _run_cleanup_command(input_paths: Optional[list[str]], recursive: bool) -> None:
     """Shared implementation for cleanup command aliases."""
     resolved_input_paths = input_paths or [os.getcwd()]
+    _confirm_root_like_input_paths(resolved_input_paths, intent="clean")
     cleanup_targets = _resolve_cleanup_targets(resolved_input_paths, recursive=recursive)
 
     if not cleanup_targets:
@@ -3353,9 +3431,11 @@ def main(
     )
 
     if probe_only:
+        _confirm_root_like_input_paths(input_paths, intent="probe")
         check_ffprobe()
         probe_inputs(input_paths, recursive=recursive)
     else:
+        _confirm_root_like_input_paths(input_paths, intent="convert")
         check_ffmpeg()
 
         has_patterns = any("*" in input_path or "?" in input_path for input_path in input_paths)
