@@ -63,17 +63,19 @@ def create_link(
         flag = "/H"
 
     # 4. Construct the command
-    # Windows requires the command to be run inside a shell for mklink
-    cmd = ["cmd", "/c", "mklink"]
+    # Windows requires the command to be run inside a shell for mklink.
+    # Build mklink command first, then pass it as a single cmd /c string
+    # so paths containing spaces are parsed correctly by cmd.exe.
+    mklink_parts = ["mklink"]
     if flag:
-        cmd.append(flag)
-    
-    # Convert Paths to strings
-    cmd.append(str(link_path))
-    cmd.append(str(target_path))
+        mklink_parts.append(flag)
+    mklink_parts.append(str(link_path))
+    mklink_parts.append(str(target_path))
+    mklink_command = subprocess.list2cmdline(mklink_parts)
+    cmd = ["cmd", "/c", mklink_command]
 
     # 5. Feedback to user
-    typer.secho(f"Executing: {' '.join(cmd)}", fg=typer.colors.BLUE)
+    typer.secho(f"Executing: {subprocess.list2cmdline(cmd)}", fg=typer.colors.BLUE)
 
     try:
         # We assume 'target_path' exists, but mklink allows broken links, so we don't force-check it.
@@ -87,7 +89,7 @@ def create_link(
         typer.secho("==============================\n", fg=typer.colors.RED)
         typer.secho(f"Exit Code: {e.returncode}", fg=typer.colors.RED)
         typer.secho("Command:", fg=typer.colors.RED)
-        typer.secho("  " + " ".join(cmd), fg=typer.colors.RED)
+        typer.secho("  " + subprocess.list2cmdline(cmd), fg=typer.colors.RED)
 
         # Common pitfalls and guidance
         typer.secho("\nPossible causes:", fg=typer.colors.YELLOW, bold=True)
