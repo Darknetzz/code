@@ -6,11 +6,12 @@ Built with Textual for interactive TUI and CLI support
 
 import html
 import json
+import math
 import os
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -320,6 +321,147 @@ def render_report_markdown(
     return "\n".join(lines)
 
 
+# Colors for donut / bar segments (dark-theme friendly)
+_HTML_CHART_COLORS = (
+    "#58a6ff",
+    "#d2a8ff",
+    "#79c0ff",
+    "#3fb950",
+    "#ffa657",
+    "#f85149",
+    "#a371f7",
+    "#7ee787",
+    "#ff7b72",
+    "#d4a72c",
+    "#79c0ff",
+    "#db61a2",
+)
+
+
+def _svg_donut_slices(
+    segments: List[Tuple[int, str]],
+    total: int,
+    *,
+    cx: float = 100.0,
+    cy: float = 100.0,
+    outer_r: float = 78.0,
+    inner_r: float = 44.0,
+) -> str:
+    """segments: (size_bytes, color_hex). Returns SVG path elements."""
+    if total <= 0 or not segments:
+        return ""
+    start = -math.pi / 2
+    paths: List[str] = []
+    for size, color in segments:
+        if size <= 0:
+            continue
+        sweep = 2 * math.pi * (size / total)
+        a0, a1 = start, start + sweep
+        x0o, y0o = cx + outer_r * math.cos(a0), cy + outer_r * math.sin(a0)
+        x1o, y1o = cx + outer_r * math.cos(a1), cy + outer_r * math.sin(a1)
+        x0i, y0i = cx + inner_r * math.cos(a0), cy + inner_r * math.sin(a0)
+        x1i, y1i = cx + inner_r * math.cos(a1), cy + inner_r * math.sin(a1)
+        large = 1 if sweep > math.pi else 0
+        paths.append(
+            f'<path d="M {x0o:.2f} {y0o:.2f} A {outer_r} {outer_r} 0 {large} 1 {x1o:.2f} {y1o:.2f} '
+            f"L {x1i:.2f} {y1i:.2f} A {inner_r} {inner_r} 0 {large} 0 {x0i:.2f} {y0i:.2f} Z\" "
+            f'fill="{color}" stroke="#0d1117" stroke-width="1"/>'
+        )
+        start = a1
+    return "".join(paths)
+
+
+def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
+    """Donut SVG + stacked bar + legend for direct children."""
+    kids = list(dir_info.children[: max(limit, 24)])
+    total = dir_info.size or 1
+    if not kids:
+        return '<p class="viz-empty">No direct items to chart.</p>'
+
+    chart_items: List[Tuple[str, int, str]] = []
+    for i, ch in enumerate(kids):
+        chart_items.append((ch.name, ch.size, _HTML_CHART_COLORS[i % len(_HTML_CHART_COLORS)]))
+
+    seg_data = [(sz, col) for _nm, sz, col in chart_items]
+    paths = _svg_donut_slices(seg_data, total)
+
+    legend_rows = []
+    for name, size, color in chart_items:
+        pct = 100.0 * size / total
+        legend_rows.append(
+            "<div class=\"legend-row\">"
+            f"<span class=\"swatch\" style=\"background:{color}\"></span>"
+            f"<span class=\"legend-name\">{esc(name)}</span>"
+            f"<span class=\"legend-pct\">{pct:.1f}%</span>"
+            f"<span class=\"legend-sz\">{esc(format_size(size))}</span>"
+            "</div>"
+        )
+
+    stacked_parts = []
+    for name, size, color in chart_items:
+        w = max(0.0, 100.0 * size / total)
+        stacked_parts.append(
+            f"<span style=\"width:{w:.3f}%;background:{color}\" "
+            f"title=\"{esc(name)} — {esc(format_size(size))}\"></span>"
+        )
+
+    donut = (
+        f'<div class="donut-wrap"><svg viewBox="0 0 200 200" class="donut-svg" '
+        'role="img" aria-label="Storage share by item">'
+        f"<defs><filter id=\"glow\"><feGaussianBlur stdDeviation=\"0.5\" result=\"b\"/>"
+        f"<feMerge><feMergeNode in=\"b\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter></defs>"
+        f"{paths}</svg></div>"
+    )
+    legend = '<div class="legend-col">' + "\n".join(legend_rows) + "</div>"
+    stacked = (
+        '<div class="stacked-hbar" role="img" aria-label="Relative size of each item">'
+        + "".join(stacked_parts)
+        + "</div>"
+    )
+    return (
+        '<div class="storage-viz">'
+        f"{donut}"
+        f'<div class="viz-side"><h3 class="viz-title">Share of scanned folder</h3>{stacked}'
+        f"{legend}</div></div>"
+    )
+
+
+def _html_expandable_tree(
+    node: DirInfo,
+    esc,
+    limit: int,
+    max_depth: int,
+    depth: int = 0,
+) -> str:
+    """Nested <details> for directories, div rows for files."""
+    if depth >= max_depth:
+        return '<div class="tree-limit">…</div>'
+
+    parts: List[str] = []
+    for child in node.children[:limit]:
+        if entry_is_directory(child):
+            label = f"{esc(child.name)} <span class=\"tree-meta\">{esc(format_size(child.size))}</span>"
+            open_attr = " open" if depth < 1 else ""
+            if child.children:
+                inner = _html_expandable_tree(child, esc, limit, max_depth, depth + 1)
+                parts.append(
+                    f'<details class="tree-node"{open_attr}><summary>{label}</summary>'
+                    f'<div class="tree-children">{inner}</div></details>'
+                )
+            else:
+                parts.append(
+                    f'<details class="tree-node tree-node-empty"{open_attr}><summary>{label}</summary>'
+                    "<div class=\"tree-children\"><span class=\"tree-empty\">Empty</span></div></details>"
+                )
+        else:
+            parts.append(
+                '<div class="tree-leaf">'
+                f"{esc(child.name)} <span class=\"tree-meta\">{esc(format_size(child.size))}</span>"
+                "</div>"
+            )
+    return "\n".join(parts)
+
+
 def render_report_html(
     dir_info: DirInfo,
     target_path: Path,
@@ -327,50 +469,88 @@ def render_report_html(
     tree_view: bool,
     limit: int,
 ) -> str:
-    """HTML5 report with dark theme (default)."""
+    """HTML5 interactive report: storage chart, sortable table, expandable tree (dark theme)."""
+    _ = tree_view
     esc = html.escape
     path_s = str(target_path)
-    title_plain = f"Disk usage - {path_s}"
-    title_esc = esc(title_plain)
+    title_esc = esc(f"Disk usage - {path_s}")
     gen = esc(datetime.now().isoformat(timespec="seconds"))
     size_h = esc(format_size(dir_info.size))
+    total_sz = max(dir_info.size, 1)
 
-    if tree_view:
-        tree_lines = build_plain_tree_lines(dir_info, limit)
-        pre = esc("\n".join(tree_lines))
-        body = (
-            '<section class="panel">\n'
-            '<h2>Directory tree</h2>\n'
-            f'<pre class="tree" role="region" aria-label="Directory tree">{pre}</pre>\n'
-            "</section>\n"
+    viz_html = _html_storage_viz_block(dir_info, esc, limit)
+
+    rows: List[str] = []
+    for i, child in enumerate(dir_info.children[:limit], 1):
+        item_type = "Dir" if entry_is_directory(child) else "File"
+        kind = "dir" if item_type == "Dir" else "file"
+        pct = 100.0 * child.size / total_sz
+        bar_color = _HTML_CHART_COLORS[(i - 1) % len(_HTML_CHART_COLORS)]
+        rows.append(
+            "<tr"
+            ' data-sort-name="' + esc(child.name) + '"'
+            f' data-size="{child.size}" data-files="{child.file_count}"'
+            f' data-dirs="{child.dir_count}" data-kind="{0 if kind == "dir" else 1}"'
+            f' data-pct="{pct:.6f}"'
+            ">"
+            f'<td class="num col-idx">{i}</td>'
+            f'<td class="name"><span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
+            f"{esc(child.name)}</td>"
+            '<td class="share-cell">'
+            f'<div class="share-bar" title="{pct:.1f}%"><span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
+            f'<span class="share-pct">{pct:.1f}%</span></td>'
+            f'<td class="num size col-size">{esc(format_size(child.size))}</td>'
+            f'<td class="num col-files">{child.file_count:,}</td>'
+            f'<td class="num col-dirs">{child.dir_count:,}</td>'
+            f'<td class="col-type">{esc(item_type)}</td>'
+            "</tr>"
         )
-    else:
-        rows: List[str] = []
-        for i, child in enumerate(dir_info.children[:limit], 1):
-            item_type = "Dir" if entry_is_directory(child) else "File"
-            kind = "dir" if item_type == "Dir" else "file"
-            rows.append(
-                "<tr>"
-                f'<td class="num">{i}</td>'
-                f'<td class="name"><span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
-                f"{esc(child.name)}</td>"
-                f'<td class="num size">{esc(format_size(child.size))}</td>'
-                f'<td class="num">{child.file_count:,}</td>'
-                f'<td class="num">{child.dir_count:,}</td>'
-                "</tr>"
-            )
-        tbody = "\n".join(rows) if rows else '<tr><td colspan="5" class="empty">No items</td></tr>'
-        body = (
-            '<section class="panel">\n'
-            "<h2>Largest items</h2>\n"
-            '<div class="table-wrap">\n'
-            '<table>\n'
-            "<thead><tr>"
-            "<th>#</th><th>Name</th><th>Size</th><th>Files</th><th>Dirs</th>"
-            "</tr></thead>\n"
-            f"<tbody>\n{tbody}\n</tbody>\n"
-            "</table>\n</div>\n</section>\n"
-        )
+    tbody = (
+        "\n".join(rows)
+        if rows
+        else '<tr><td colspan="7" class="empty">No items</td></tr>'
+    )
+
+    tree_inner = _html_expandable_tree(dir_info, esc, limit, 28)
+    root_label = (
+        f'<div class="tree-root-label"><strong>{esc(dir_info.name)}</strong> '
+        f'<span class="tree-meta">{esc(format_size(dir_info.size))}</span></div>'
+    )
+    tree_section = (
+        '<section class="panel panel-tree" id="pytree-tree">'
+        "<h2>Directory structure</h2>"
+        '<p class="tree-hint">Click folder rows to expand or collapse. Use the buttons below for all folders at once.</p>'
+        '<div class="tree-toolbar">'
+        '<button type="button" class="btn" id="tree-expand-all">Expand all</button> '
+        '<button type="button" class="btn" id="tree-collapse-all">Collapse all</button>'
+        "</div>"
+        f'<div class="interactive-tree">{root_label}{tree_inner}</div>'
+        "</section>"
+    )
+
+    table_section = (
+        '<section class="panel">'
+        "<h2>Largest items (this folder)</h2>"
+        '<p class="table-hint">Click a column header to sort. Share is percent of total scanned size.</p>'
+        '<div class="table-wrap">'
+        '<table id="pytree-items">'
+        "<thead><tr>"
+        '<th class="num">#</th>'
+        '<th class="sortable" data-sort-key="name" scope="col">Name</th>'
+        '<th class="sortable" data-sort-key="pct" scope="col">Share</th>'
+        '<th class="sortable sort-desc" data-sort-key="size" scope="col">Size</th>'
+        '<th class="sortable" data-sort-key="files" scope="col">Files</th>'
+        '<th class="sortable" data-sort-key="dirs" scope="col">Dirs</th>'
+        '<th class="sortable" data-sort-key="kind" scope="col">Type</th>'
+        "</tr></thead>"
+        f"<tbody>{tbody}</tbody>"
+        "</table></div></section>"
+    )
+
+    body = (
+        '<section class="panel panel-viz"><h2>Storage overview</h2>'
+        f"{viz_html}</section>\n{table_section}\n{tree_section}"
+    )
 
     css = """\
 :root {
@@ -476,7 +656,141 @@ thead th {
   letter-spacing: 0.04em;
   border-bottom: 1px solid var(--border);
 }
-thead th:nth-child(n+3) { text-align: right; }
+thead th:nth-child(4),
+thead th:nth-child(5),
+thead th:nth-child(6) { text-align: right; }
+thead th:nth-child(7) { text-align: center; }
+tbody td.col-type { text-align: center; font-size: 0.8rem; color: var(--muted); }
+.tree-root-label {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+thead th.sortable:hover { color: var(--accent); background: #1c2128; }
+thead th.sort-asc::after { content: " \\25B2"; font-size: 0.65em; opacity: 0.85; }
+thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85; }
+.panel-viz h2, .panel-tree h2 { margin-top: 0; }
+.table-hint, .tree-hint {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.storage-viz {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 1.25rem 1.5rem;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .storage-viz { grid-template-columns: 1fr; }
+}
+.donut-wrap { justify-self: center; }
+.donut-svg { width: 100%; max-width: 220px; height: auto; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+.viz-side { min-width: 0; }
+.viz-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.stacked-hbar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #21262d;
+  margin-bottom: 1rem;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.35);
+}
+.stacked-hbar > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: opacity 0.15s ease;
+}
+.stacked-hbar > span:hover { opacity: 0.92; }
+.legend-col { display: flex; flex-direction: column; gap: 0.35rem; max-height: 280px; overflow-y: auto; }
+.legend-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  font-size: 0.82rem;
+}
+.legend-row .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,.12);
+}
+.legend-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend-sz { font-variant-numeric: tabular-nums; color: var(--text); }
+.viz-empty { margin: 0; color: var(--muted); }
+td.share-cell { vertical-align: middle; }
+.share-bar {
+  height: 8px;
+  background: #21262d;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+  max-width: 140px;
+}
+.share-bar span { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+.share-pct { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tree-toolbar { margin-bottom: 0.75rem; }
+.btn {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #21262d;
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:hover { background: #30363d; border-color: var(--accent); }
+.interactive-tree {
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem 0.75rem 0.75rem;
+  background: var(--bg);
+  max-height: min(70vh, 900px);
+  overflow: auto;
+}
+.interactive-tree details { margin: 0.15rem 0 0.15rem 0.25rem; }
+.interactive-tree summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+}
+.interactive-tree summary::-webkit-details-marker { display: none; }
+.interactive-tree summary::before {
+  content: "\\25B6";
+  display: inline-block;
+  margin-right: 0.35rem;
+  font-size: 0.65em;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+.interactive-tree details[open] > summary::before { transform: rotate(90deg); }
+.interactive-tree summary:hover { background: #21262d; }
+.tree-children { margin: 0.25rem 0 0.35rem 0.85rem; padding-left: 0.5rem; border-left: 1px solid #30363d; }
+.tree-meta { color: var(--muted); font-weight: normal; }
+.tree-leaf { padding: 0.15rem 0.35rem 0.15rem 1.2rem; color: #8b949e; }
+.tree-limit, .tree-empty { color: var(--muted); font-style: italic; padding: 0.2rem; }
 tbody tr {
   border-bottom: 1px solid #21262d;
   transition: background 0.12s ease;
@@ -538,6 +852,95 @@ footer {
         "</dl>\n</header>\n"
     )
 
+    script = """
+<script>
+(function () {
+  var table = document.getElementById("pytree-items");
+  if (table) {
+    var tbody = table.querySelector("tbody");
+    var headers = table.querySelectorAll("thead th[data-sort-key]");
+    var current = { key: "size", dir: "desc" };
+
+    function clearSortMarks() {
+      headers.forEach(function (th) {
+        th.classList.remove("sort-asc", "sort-desc");
+      });
+    }
+
+    function cmp(a, b, key, dir) {
+      var mul = dir === "asc" ? 1 : -1;
+      if (key === "name") {
+        var ca = a.getAttribute("data-sort-name") || "";
+        var cb = b.getAttribute("data-sort-name") || "";
+        if (ca !== cb) {
+          return mul * ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
+        }
+      } else if (key === "kind") {
+        var ka = parseInt(a.getAttribute("data-kind") || "0", 10);
+        var kb = parseInt(b.getAttribute("data-kind") || "0", 10);
+        if (ka !== kb) return mul * (ka - kb);
+      } else {
+        var ak = key === "pct" ? "data-pct" : "data-" + key;
+        var va = parseFloat(a.getAttribute(ak) || "0");
+        var vb = parseFloat(b.getAttribute(ak) || "0");
+        if (va !== vb) return mul * (va - vb);
+      }
+      var ca = a.getAttribute("data-sort-name") || "";
+      var cb = b.getAttribute("data-sort-name") || "";
+      return ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
+    }
+
+    function applySort(key, toggle) {
+      if (toggle) {
+        if (current.key === key) {
+          current.dir = current.dir === "asc" ? "desc" : "asc";
+        } else {
+          current.key = key;
+          current.dir = key === "name" || key === "kind" ? "asc" : "desc";
+        }
+      }
+      clearSortMarks();
+      var th = table.querySelector('thead th[data-sort-key="' + current.key + '"]');
+      if (th) th.classList.add(current.dir === "asc" ? "sort-asc" : "sort-desc");
+
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr[data-sort-name]"));
+      rows.sort(function (a, b) {
+        return cmp(a, b, current.key, current.dir);
+      });
+      rows.forEach(function (tr, i) {
+        var idx = tr.querySelector(".col-idx");
+        if (idx) idx.textContent = String(i + 1);
+        tbody.appendChild(tr);
+      });
+    }
+
+    headers.forEach(function (th) {
+      th.addEventListener("click", function () {
+        applySort(th.getAttribute("data-sort-key"), true);
+      });
+    });
+    applySort("size", false);
+  }
+
+  var expandBtn = document.getElementById("tree-expand-all");
+  var collapseBtn = document.getElementById("tree-collapse-all");
+  var treeRoot = document.getElementById("pytree-tree");
+  if (treeRoot && expandBtn && collapseBtn) {
+    expandBtn.addEventListener("click", function () {
+      treeRoot.querySelectorAll("details").forEach(function (d) {
+        d.open = true;
+      });
+    });
+    collapseBtn.addEventListener("click", function () {
+      treeRoot.querySelectorAll("details").forEach(function (d) {
+        d.open = false;
+      });
+    });
+  }
+})();
+</script>
+"""
+
     return (
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
         '<meta charset="utf-8">\n'
@@ -548,7 +951,9 @@ footer {
         '<div class="wrap">\n'
         f"{summary}{body}"
         '<footer>SizeTree / pytree disk usage report</footer>\n'
-        "</div>\n</body>\n</html>\n"
+        "</div>\n"
+        f"{script}"
+        "</body>\n</html>\n"
     )
 
 

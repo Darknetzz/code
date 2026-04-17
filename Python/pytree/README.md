@@ -92,7 +92,7 @@ python pytree.py scan . --tree
 | `.txt` or no extension | text | Summary plus table or ASCII tree (same layout as CLI) |
 | `.json` | json | Full tree as JSON (`scanned_path`, `generated_at`, `root` with nested `children`) |
 | `.md`, `.markdown` | markdown | Summary plus a Markdown table or fenced tree |
-| `.html`, `.htm` | html | Self-contained HTML page with table or `<pre>` tree |
+| `.html`, `.htm` | html | Self-contained **dark-themed** page: storage chart (donut + bar), **sortable** table, **expandable** folder tree |
 
 If the filename does not suggest a format (e.g. `report.out`), pass `--format` explicitly.
 
@@ -136,7 +136,7 @@ python pytree.py version
 
 Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. The table and tree list **both files and subfolders** in the scanned folder (sorted by size). JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
 
-HTML reports use a **dark theme** by default.
+HTML reports use a **dark theme** by default and include an interactive **storage overview** (share of total), a **sortable** “largest items” table (click column headers), and a **nested directory tree** with expand/collapse (`<details>` plus Expand all / Collapse all).
 
 ### Table View (CLI)
 ```
