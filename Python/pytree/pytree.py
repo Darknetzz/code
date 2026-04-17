@@ -552,12 +552,13 @@ def _html_merge_groups_for_children(
                 f'<div class="nest-wrap depth-{depth}">{nested_body}</div></td></tr>'
             )
 
+        viz_idx_attr = f' data-viz-idx="{i}"' if show_index else ""
         parts.append(
             '<tbody class="merge-group"'
             ' data-sort-name="' + esc(child.name) + '"'
             f' data-size="{child.size}" data-files="{child.file_count}"'
             f' data-dirs="{child.dir_count}" data-kind="{0 if kind == "dir" else 1}"'
-            f' data-pct="{pct:.6f}"'
+            f' data-pct="{pct:.6f}"{viz_idx_attr}'
             f">{main_row}{nested_row}</tbody>"
         )
 
@@ -610,8 +611,11 @@ def render_report_html(
         "Each folder row can open nested contents; nested <strong>Share</strong> is % of that folder."
         "</p>"
         '<div class="tree-toolbar">'
-        '<button type="button" class="btn" id="tree-expand-all">Expand all folders</button> '
+        '<input type="search" id="tree-filter" class="tree-filter" '
+        'placeholder="Filter top-level by name..." autocomplete="off" spellcheck="false" />'
+        '<button type="button" class="btn" id="tree-expand-all">Expand all folders</button>'
         '<button type="button" class="btn" id="tree-collapse-all">Collapse all folders</button>'
+        '<span class="tree-filter-status" id="tree-filter-status"></span>'
         "</div>"
         '<div class="table-wrap merged-tree-table">'
         f"{root_line}"
@@ -630,8 +634,11 @@ def render_report_html(
     )
 
     body = (
+        '<div class="layout">\n'
         '<section class="panel panel-viz"><h2>Storage overview</h2>'
-        f"{viz_html}</section>\n{table_section}"
+        f"{viz_html}</section>\n"
+        f"{table_section}\n"
+        "</div>\n"
     )
 
     css = """\
@@ -659,9 +666,33 @@ body {
   line-height: 1.5;
 }
 .wrap {
-  max-width: 1040px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 2rem 1.25rem 3rem;
+  padding: 2rem 1.5rem 3rem;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+@media (min-width: 1180px) {
+  .layout {
+    grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
+    gap: 1.75rem 2rem;
+  }
+  .layout .panel-viz {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+  }
+  .layout .panel-viz .storage-viz-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .layout .panel-viz .donut-wrap { max-width: 260px; }
+  .layout .panel-viz .viz-charts-col { max-width: 100%; }
 }
 header.hero {
   margin-bottom: 1.75rem;
@@ -906,7 +937,35 @@ td.share-cell { vertical-align: middle; }
 }
 .share-bar span { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
 .share-pct { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.tree-toolbar { margin-bottom: 0.75rem; }
+.tree-toolbar {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.tree-filter {
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 360px;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.tree-filter::placeholder { color: var(--muted); }
+.tree-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.tree-filter-status { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
+tbody.merge-group.viz-highlight > tr.row-main > td {
+  background: rgba(88, 166, 255, 0.14);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+tbody.merge-group.row-hidden { display: none; }
 .btn {
   font: inherit;
   font-size: 0.85rem;
@@ -1144,6 +1203,40 @@ footer {
       });
     });
   }
+
+  var filterInput = document.getElementById("tree-filter");
+  var filterStatus = document.getElementById("tree-filter-status");
+  var mainTable = document.getElementById("pytree-items");
+  if (filterInput && mainTable) {
+    var topGroups = Array.prototype.slice.call(
+      mainTable.querySelectorAll(":scope > tbody.merge-group")
+    );
+    function applyFilter() {
+      var q = (filterInput.value || "").trim().toLowerCase();
+      var shown = 0;
+      topGroups.forEach(function (g) {
+        var name = (g.getAttribute("data-sort-name") || "").toLowerCase();
+        var match = !q || name.indexOf(q) !== -1;
+        g.classList.toggle("row-hidden", !match);
+        if (match) shown += 1;
+      });
+      if (filterStatus) {
+        if (!q) {
+          filterStatus.textContent = "";
+        } else {
+          filterStatus.textContent =
+            shown + " of " + topGroups.length + " match";
+        }
+      }
+    }
+    filterInput.addEventListener("input", applyFilter);
+    filterInput.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        filterInput.value = "";
+        applyFilter();
+      }
+    });
+  }
 })();
 </script>
 """
@@ -1179,17 +1272,35 @@ footer {
     return t;
   }
 
+  function highlightRow(idx) {
+    clearRowHighlight();
+    if (idx == null || isNaN(idx)) return;
+    var rows = document.querySelectorAll(
+      '#pytree-items > tbody.merge-group[data-viz-idx="' + idx + '"]'
+    );
+    rows.forEach(function (r) { r.classList.add("viz-highlight"); });
+  }
+  function clearRowHighlight() {
+    document
+      .querySelectorAll("#pytree-items > tbody.merge-group.viz-highlight")
+      .forEach(function (r) { r.classList.remove("viz-highlight"); });
+  }
+
   function bindSegEvents(nodes) {
     nodes.forEach(function (node) {
       node.addEventListener("mouseenter", function (e) {
         var idx = parseInt(node.getAttribute("data-viz-idx"), 10);
         showTip(e.clientX, e.clientY, idx);
+        highlightRow(idx);
       });
       node.addEventListener("mousemove", function (e) {
         var idx = parseInt(node.getAttribute("data-viz-idx"), 10);
         showTip(e.clientX, e.clientY, idx);
       });
-      node.addEventListener("mouseleave", hideTip);
+      node.addEventListener("mouseleave", function () {
+        hideTip();
+        clearRowHighlight();
+      });
       node.addEventListener("click", function (e) {
         e.preventDefault();
         toggleIdx(parseInt(node.getAttribute("data-viz-idx"), 10));
@@ -1353,6 +1464,10 @@ footer {
       if (c) c.checked = included[idx];
       refresh();
     });
+    row.addEventListener("mouseenter", function () {
+      highlightRow(parseInt(row.getAttribute("data-viz-idx"), 10));
+    });
+    row.addEventListener("mouseleave", clearRowHighlight);
   });
 
   if (btnAll) {
