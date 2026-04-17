@@ -426,39 +426,103 @@ def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
     )
 
 
-def _html_expandable_tree(
-    node: DirInfo,
+def _html_merge_groups_for_children(
+    parent: DirInfo,
     esc,
     limit: int,
     max_depth: int,
-    depth: int = 0,
+    depth: int,
+    *,
+    share_base: int,
+    color_offset: int,
+    show_index: bool,
 ) -> str:
-    """Nested <details> for directories, div rows for files."""
+    """Recursive: tbody.merge-group blocks (data row + optional nested subtree table)."""
     if depth >= max_depth:
-        return '<div class="tree-limit">…</div>'
+        return ""
 
     parts: List[str] = []
-    for child in node.children[:limit]:
-        if entry_is_directory(child):
-            label = f"{esc(child.name)} <span class=\"tree-meta\">{esc(format_size(child.size))}</span>"
-            open_attr = " open" if depth < 1 else ""
-            if child.children:
-                inner = _html_expandable_tree(child, esc, limit, max_depth, depth + 1)
-                parts.append(
-                    f'<details class="tree-node"{open_attr}><summary>{label}</summary>'
-                    f'<div class="tree-children">{inner}</div></details>'
-                )
-            else:
-                parts.append(
-                    f'<details class="tree-node tree-node-empty"{open_attr}><summary>{label}</summary>'
-                    "<div class=\"tree-children\"><span class=\"tree-empty\">Empty</span></div></details>"
-                )
-        else:
-            parts.append(
-                '<div class="tree-leaf">'
-                f"{esc(child.name)} <span class=\"tree-meta\">{esc(format_size(child.size))}</span>"
-                "</div>"
+    base = max(share_base, 1)
+    kids = parent.children[:limit]
+
+    for i, child in enumerate(kids):
+        item_type = "Dir" if entry_is_directory(child) else "File"
+        kind = "dir" if item_type == "Dir" else "file"
+        pct = 100.0 * child.size / base
+        bar_color = _HTML_CHART_COLORS[(color_offset + i) % len(_HTML_CHART_COLORS)]
+        is_dir = entry_is_directory(child)
+        nested_allowed = is_dir and depth + 1 < max_depth
+        inner_tbodies = ""
+        if nested_allowed:
+            inner_tbodies = _html_merge_groups_for_children(
+                child,
+                esc,
+                limit,
+                max_depth,
+                depth + 1,
+                share_base=max(child.size, 1),
+                color_offset=color_offset + i + 1,
+                show_index=False,
             )
+        has_nested_block = nested_allowed and (
+            inner_tbodies.strip() != "" or (is_dir and not child.children)
+        )
+
+        idx_cell = (
+            f'<td class="num col-idx">{i + 1}</td>'
+            if show_index
+            else '<td class="num idx-muted">—</td>'
+        )
+
+        name_inner = (
+            f'<span class="badge" data-kind="{kind}">{esc(item_type)}</span>{esc(child.name)}'
+        )
+        if is_dir and has_nested_block:
+            open_here = depth < 1
+            aria_exp = "true" if open_here else "false"
+            name_inner = (
+                f'<button type="button" class="row-expand" aria-expanded="{aria_exp}" '
+                'aria-label="Toggle folder contents"></button> ' + name_inner
+            )
+        elif is_dir and not child.children:
+            name_inner = '<span class="dir-leaf"></span> ' + name_inner
+
+        main_row = (
+            "<tr class=\"row-main\">"
+            f"{idx_cell}"
+            f'<td class="name name-depth-{depth}">{name_inner}</td>'
+            '<td class="share-cell">'
+            f'<div class="share-bar" title="{pct:.1f}%"><span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
+            f'<span class="share-pct">{pct:.1f}%</span></td>'
+            f'<td class="num size">{esc(format_size(child.size))}</td>'
+            f'<td class="num">{child.file_count:,}</td>'
+            f'<td class="num">{child.dir_count:,}</td>'
+            f'<td class="col-type">{esc(item_type)}</td>'
+            "</tr>"
+        )
+
+        nested_row = ""
+        if is_dir and has_nested_block:
+            open_here = depth < 1
+            disp = "" if open_here else ' style="display:none"'
+            if inner_tbodies.strip():
+                nested_body = f'<table class="inner-tree">{inner_tbodies}</table>'
+            else:
+                nested_body = '<span class="nest-empty">Empty folder</span>'
+            nested_row = (
+                f'<tr class="row-nested"{disp}><td colspan="7" class="nested-cell">'
+                f'<div class="nest-wrap depth-{depth}">{nested_body}</div></td></tr>'
+            )
+
+        parts.append(
+            '<tbody class="merge-group"'
+            ' data-sort-name="' + esc(child.name) + '"'
+            f' data-size="{child.size}" data-files="{child.file_count}"'
+            f' data-dirs="{child.dir_count}" data-kind="{0 if kind == "dir" else 1}"'
+            f' data-pct="{pct:.6f}"'
+            f">{main_row}{nested_row}</tbody>"
+        )
+
     return "\n".join(parts)
 
 
@@ -480,59 +544,39 @@ def render_report_html(
 
     viz_html = _html_storage_viz_block(dir_info, esc, limit)
 
-    rows: List[str] = []
-    for i, child in enumerate(dir_info.children[:limit], 1):
-        item_type = "Dir" if entry_is_directory(child) else "File"
-        kind = "dir" if item_type == "Dir" else "file"
-        pct = 100.0 * child.size / total_sz
-        bar_color = _HTML_CHART_COLORS[(i - 1) % len(_HTML_CHART_COLORS)]
-        rows.append(
-            "<tr"
-            ' data-sort-name="' + esc(child.name) + '"'
-            f' data-size="{child.size}" data-files="{child.file_count}"'
-            f' data-dirs="{child.dir_count}" data-kind="{0 if kind == "dir" else 1}"'
-            f' data-pct="{pct:.6f}"'
-            ">"
-            f'<td class="num col-idx">{i}</td>'
-            f'<td class="name"><span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
-            f"{esc(child.name)}</td>"
-            '<td class="share-cell">'
-            f'<div class="share-bar" title="{pct:.1f}%"><span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
-            f'<span class="share-pct">{pct:.1f}%</span></td>'
-            f'<td class="num size col-size">{esc(format_size(child.size))}</td>'
-            f'<td class="num col-files">{child.file_count:,}</td>'
-            f'<td class="num col-dirs">{child.dir_count:,}</td>'
-            f'<td class="col-type">{esc(item_type)}</td>'
-            "</tr>"
-        )
-    tbody = (
-        "\n".join(rows)
-        if rows
-        else '<tr><td colspan="7" class="empty">No items</td></tr>'
+    merged_tbodies = _html_merge_groups_for_children(
+        dir_info,
+        esc,
+        limit,
+        28,
+        0,
+        share_base=total_sz,
+        color_offset=0,
+        show_index=True,
+    )
+    table_body = (
+        merged_tbodies
+        if merged_tbodies.strip()
+        else '<tbody><tr><td colspan="7" class="empty">No items</td></tr></tbody>'
     )
 
-    tree_inner = _html_expandable_tree(dir_info, esc, limit, 28)
-    root_label = (
+    root_line = (
         f'<div class="tree-root-label"><strong>{esc(dir_info.name)}</strong> '
         f'<span class="tree-meta">{esc(format_size(dir_info.size))}</span></div>'
     )
-    tree_section = (
-        '<section class="panel panel-tree" id="pytree-tree">'
-        "<h2>Directory structure</h2>"
-        '<p class="tree-hint">Click folder rows to expand or collapse. Use the buttons below for all folders at once.</p>'
-        '<div class="tree-toolbar">'
-        '<button type="button" class="btn" id="tree-expand-all">Expand all</button> '
-        '<button type="button" class="btn" id="tree-collapse-all">Collapse all</button>'
-        "</div>"
-        f'<div class="interactive-tree">{root_label}{tree_inner}</div>'
-        "</section>"
-    )
-
     table_section = (
-        '<section class="panel">'
-        "<h2>Largest items (this folder)</h2>"
-        '<p class="table-hint">Click a column header to sort. Share is percent of total scanned size.</p>'
-        '<div class="table-wrap">'
+        '<section class="panel" id="pytree-table-panel">'
+        "<h2>Contents</h2>"
+        '<p class="table-hint">'
+        "Click column headers to sort <strong>top-level</strong> items (share = % of total scan). "
+        "Each folder row can open nested contents; nested <strong>Share</strong> is % of that folder."
+        "</p>"
+        '<div class="tree-toolbar">'
+        '<button type="button" class="btn" id="tree-expand-all">Expand all folders</button> '
+        '<button type="button" class="btn" id="tree-collapse-all">Collapse all folders</button>'
+        "</div>"
+        '<div class="table-wrap merged-tree-table">'
+        f"{root_line}"
         '<table id="pytree-items">'
         "<thead><tr>"
         '<th class="num">#</th>'
@@ -543,13 +587,13 @@ def render_report_html(
         '<th class="sortable" data-sort-key="dirs" scope="col">Dirs</th>'
         '<th class="sortable" data-sort-key="kind" scope="col">Type</th>'
         "</tr></thead>"
-        f"<tbody>{tbody}</tbody>"
+        f"{table_body}"
         "</table></div></section>"
     )
 
     body = (
         '<section class="panel panel-viz"><h2>Storage overview</h2>'
-        f"{viz_html}</section>\n{table_section}\n{tree_section}"
+        f"{viz_html}</section>\n{table_section}"
     )
 
     css = """\
@@ -758,39 +802,58 @@ td.share-cell { vertical-align: middle; }
   cursor: pointer;
 }
 .btn:hover { background: #30363d; border-color: var(--accent); }
-.interactive-tree {
-  font-family: var(--mono);
-  font-size: 0.84rem;
-  line-height: 1.5;
+.merged-tree-table {
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.75rem 0.5rem 0.75rem 0.75rem;
-  background: var(--bg);
-  max-height: min(70vh, 900px);
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  max-height: min(85vh, 1200px);
   overflow: auto;
 }
-.interactive-tree details { margin: 0.15rem 0 0.15rem 0.25rem; }
-.interactive-tree summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 0.2rem 0.35rem;
-  border-radius: 4px;
+.merged-tree-table table { border-collapse: collapse; }
+.merged-tree-table .inner-tree {
+  width: 100%;
+  font-size: 0.88rem;
+  border-collapse: collapse;
 }
-.interactive-tree summary::-webkit-details-marker { display: none; }
-.interactive-tree summary::before {
+.merged-tree-table .inner-tree tbody.merge-group .row-main { background: rgba(13,17,23,0.5); }
+.nested-cell {
+  padding: 0.35rem 0.5rem 0.85rem 0.75rem !important;
+  vertical-align: top !important;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+}
+.nest-wrap { border-left: 2px solid #30363d; margin: 0.15rem 0 0.35rem 0.35rem; padding: 0.35rem 0 0 0.65rem; }
+.nest-wrap.depth-0 { margin-left: 0.25rem; }
+.row-expand {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-right: 0.25rem;
+  padding: 0;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #21262d;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.55rem;
+  line-height: 1.1;
+}
+.row-expand::before {
   content: "\\25B6";
   display: inline-block;
-  margin-right: 0.35rem;
-  font-size: 0.65em;
-  opacity: 0.7;
   transition: transform 0.15s ease;
 }
-.interactive-tree details[open] > summary::before { transform: rotate(90deg); }
-.interactive-tree summary:hover { background: #21262d; }
-.tree-children { margin: 0.25rem 0 0.35rem 0.85rem; padding-left: 0.5rem; border-left: 1px solid #30363d; }
+.row-expand[aria-expanded="true"]::before { transform: rotate(90deg); }
+.row-expand:hover { background: #30363d; border-color: var(--accent); }
+.dir-leaf { display: inline-block; width: 1.2rem; margin-right: 0.25rem; }
+.idx-muted { color: var(--muted); text-align: center; }
+.nest-empty { color: var(--muted); font-style: italic; font-size: 0.85rem; padding: 0.35rem; }
+td.name.name-depth-1 { padding-left: 1rem; }
+td.name.name-depth-2 { padding-left: 1.5rem; }
+td.name.name-depth-3 { padding-left: 2rem; }
 .tree-meta { color: var(--muted); font-weight: normal; }
-.tree-leaf { padding: 0.15rem 0.35rem 0.15rem 1.2rem; color: #8b949e; }
-.tree-limit, .tree-empty { color: var(--muted); font-style: italic; padding: 0.2rem; }
 tbody tr {
   border-bottom: 1px solid #21262d;
   transition: background 0.12s ease;
@@ -857,9 +920,14 @@ footer {
 (function () {
   var table = document.getElementById("pytree-items");
   if (table) {
-    var tbody = table.querySelector("tbody");
     var headers = table.querySelectorAll("thead th[data-sort-key]");
     var current = { key: "size", dir: "desc" };
+
+    function topLevelGroups() {
+      return Array.prototype.slice.call(table.children).filter(function (el) {
+        return el.tagName === "TBODY" && el.classList.contains("merge-group");
+      });
+    }
 
     function clearSortMarks() {
       headers.forEach(function (th) {
@@ -903,15 +971,20 @@ footer {
       var th = table.querySelector('thead th[data-sort-key="' + current.key + '"]');
       if (th) th.classList.add(current.dir === "asc" ? "sort-asc" : "sort-desc");
 
-      var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr[data-sort-name]"));
-      rows.sort(function (a, b) {
+      var groups = topLevelGroups();
+      groups.sort(function (a, b) {
         return cmp(a, b, current.key, current.dir);
       });
-      rows.forEach(function (tr, i) {
-        var idx = tr.querySelector(".col-idx");
+      var frag = document.createDocumentFragment();
+      groups.forEach(function (tbody, i) {
+        var idx = tbody.querySelector("tr.row-main .col-idx");
         if (idx) idx.textContent = String(i + 1);
-        tbody.appendChild(tr);
+        frag.appendChild(tbody);
       });
+      var thead = table.querySelector("thead");
+      if (thead) {
+        table.insertBefore(frag, thead.nextSibling);
+      }
     }
 
     headers.forEach(function (th) {
@@ -920,20 +993,38 @@ footer {
       });
     });
     applySort("size", false);
+
+    table.addEventListener("click", function (ev) {
+      var btn = ev.target.closest(".row-expand");
+      if (!btn || !table.contains(btn)) return;
+      var tb = btn.closest("tbody.merge-group");
+      if (!tb) return;
+      var nest = tb.querySelector("tr.row-nested");
+      if (!nest) return;
+      var hidden = nest.style.display === "none";
+      nest.style.display = hidden ? "" : "none";
+      btn.setAttribute("aria-expanded", hidden ? "true" : "false");
+    });
   }
 
   var expandBtn = document.getElementById("tree-expand-all");
   var collapseBtn = document.getElementById("tree-collapse-all");
-  var treeRoot = document.getElementById("pytree-tree");
-  if (treeRoot && expandBtn && collapseBtn) {
+  var panel = document.getElementById("pytree-table-panel");
+  if (panel && expandBtn && collapseBtn) {
     expandBtn.addEventListener("click", function () {
-      treeRoot.querySelectorAll("details").forEach(function (d) {
-        d.open = true;
+      panel.querySelectorAll("tr.row-nested").forEach(function (tr) {
+        tr.style.display = "";
+      });
+      panel.querySelectorAll(".row-expand").forEach(function (b) {
+        b.setAttribute("aria-expanded", "true");
       });
     });
     collapseBtn.addEventListener("click", function () {
-      treeRoot.querySelectorAll("details").forEach(function (d) {
-        d.open = false;
+      panel.querySelectorAll("tr.row-nested").forEach(function (tr) {
+        tr.style.display = "none";
+      });
+      panel.querySelectorAll(".row-expand").forEach(function (b) {
+        b.setAttribute("aria-expanded", "false");
       });
     });
   }
