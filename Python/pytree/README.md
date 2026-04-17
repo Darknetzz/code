@@ -19,6 +19,8 @@ A TreeSize-like disk space analyzer built with **Textual** for interactive TUI a
 pip install -r requirements.txt
 ```
 
+`pytree --help` only lists commands (`scan`, `tui`, `version`). Options such as **`-o` / `--output`** live on **`scan`** — use **`pytree scan --help`**.
+
 ## Usage
 
 ### Quick Start

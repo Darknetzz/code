@@ -26,7 +26,14 @@ from textual.widgets import Header, Footer, Tree, Static, Button, Input, Label
 from textual.reactive import reactive
 from textual.binding import Binding
 
-app = typer.Typer(rich_markup_mode="rich")
+app = typer.Typer(
+    rich_markup_mode="rich",
+    help=(
+        "Disk space analyzer (CLI + TUI). "
+        "Most CLI flags, including saving reports (-o / --output, --format), "
+        "are on the scan command. Run: pytree scan --help"
+    ),
+)
 console = Console()
 
 # ─────────────────────────────────────────────────────────────────────── #
@@ -520,7 +527,11 @@ def scan(
         help="Report format: text, json, markdown, html (default: infer from --output)",
     ),
 ):
-    """Scan directory and show size information (CLI mode)."""
+    """Scan a directory and print a size table or tree (CLI).
+
+    Use -o / --output PATH to write a report; --format text|json|markdown|html,
+    or infer format from the extension (.txt, .json, .md, .html).
+    """
     target_path = Path(path).resolve()
     
     if not target_path.exists():
