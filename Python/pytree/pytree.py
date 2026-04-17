@@ -64,6 +64,14 @@ class DirInfo:
         return f"{size:.1f} PB"
 
 
+def entry_is_directory(info: DirInfo) -> bool:
+    """Whether this row is a directory. Uses the path so empty dirs are still dirs."""
+    try:
+        return info.path.is_dir()
+    except OSError:
+        return bool(info.children)
+
+
 # ─────────────────────────────────────────────────────────────────────── #
 #                              SCANNING LOGIC                             #
 # ─────────────────────────────────────────────────────────────────────── #
@@ -82,8 +90,19 @@ def scan_directory(path: Path, max_depth: Optional[int] = None, current_depth: i
         for item in items:
             try:
                 if item.is_file():
-                    total_size += item.stat().st_size
+                    sz = item.stat().st_size
+                    total_size += sz
                     file_count += 1
+                    # List files alongside dirs so table/tree show largest items in flat folders
+                    children.append(
+                        DirInfo(
+                            path=item,
+                            size=sz,
+                            file_count=1,
+                            dir_count=0,
+                            children=[],
+                        )
+                    )
                 elif item.is_dir():
                     dir_count += 1
                     
@@ -230,7 +249,7 @@ def build_plain_table_lines(dir_info: DirInfo, target_path: Path, limit: int) ->
         "-" * 92,
     ]
     for i, child in enumerate(dir_info.children[:limit], 1):
-        item_type = "Dir" if child.dir_count > 0 or child.children else "File"
+        item_type = "Dir" if entry_is_directory(child) else "File"
         name = child.name if len(child.name) <= 42 else child.name[:39] + "..."
         lines.append(
             f"{i:>4}  {name:<42}  {format_size(child.size):>12}  "
@@ -291,7 +310,7 @@ def render_report_markdown(
         lines.append("| # | Name | Size | Files | Dirs | Type |")
         lines.append("|---:|------|------:|------:|-----:|------|")
         for i, child in enumerate(dir_info.children[:limit], 1):
-            item_type = "Dir" if child.dir_count > 0 or child.children else "File"
+            item_type = "Dir" if entry_is_directory(child) else "File"
             safe_name = child.name.replace("|", "\\|")
             lines.append(
                 f"| {i} | {safe_name} | {format_size(child.size)} | "
@@ -308,46 +327,228 @@ def render_report_html(
     tree_view: bool,
     limit: int,
 ) -> str:
-    """Minimal HTML5 document."""
+    """HTML5 report with dark theme (default)."""
     esc = html.escape
-    title = f"Disk usage — {esc(str(target_path))}"
-    summary = (
-        f"<p><strong>Path:</strong> <code>{esc(str(target_path))}</code><br>\n"
-        f"<strong>Generated:</strong> {esc(datetime.now().isoformat(timespec='seconds'))}<br>\n"
-        f"<strong>Total size:</strong> {esc(format_size(dir_info.size))}<br>\n"
-        f"<strong>Files:</strong> {dir_info.file_count:,} · "
-        f"<strong>Directories:</strong> {dir_info.dir_count:,}</p>\n"
-    )
+    path_s = str(target_path)
+    title_plain = f"Disk usage - {path_s}"
+    title_esc = esc(title_plain)
+    gen = esc(datetime.now().isoformat(timespec="seconds"))
+    size_h = esc(format_size(dir_info.size))
 
     if tree_view:
         tree_lines = build_plain_tree_lines(dir_info, limit)
         pre = esc("\n".join(tree_lines))
-        body = f"<h2>Tree</h2>\n<pre>{pre}</pre>\n"
+        body = (
+            '<section class="panel">\n'
+            '<h2>Directory tree</h2>\n'
+            f'<pre class="tree" role="region" aria-label="Directory tree">{pre}</pre>\n'
+            "</section>\n"
+        )
     else:
-        rows = []
+        rows: List[str] = []
         for i, child in enumerate(dir_info.children[:limit], 1):
-            item_type = "Dir" if child.dir_count > 0 or child.children else "File"
+            item_type = "Dir" if entry_is_directory(child) else "File"
+            kind = "dir" if item_type == "Dir" else "file"
             rows.append(
                 "<tr>"
-                f"<td>{i}</td><td>{esc(child.name)}</td><td>{esc(format_size(child.size))}</td>"
-                f"<td>{child.file_count:,}</td><td>{child.dir_count:,}</td><td>{item_type}</td>"
+                f'<td class="num">{i}</td>'
+                f'<td class="name"><span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
+                f"{esc(child.name)}</td>"
+                f'<td class="num size">{esc(format_size(child.size))}</td>'
+                f'<td class="num">{child.file_count:,}</td>'
+                f'<td class="num">{child.dir_count:,}</td>'
                 "</tr>"
             )
+        tbody = "\n".join(rows) if rows else '<tr><td colspan="5" class="empty">No items</td></tr>'
         body = (
-            "<h2>Largest items</h2>\n<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">\n"
-            "<thead><tr><th>#</th><th>Name</th><th>Size</th><th>Files</th><th>Dirs</th><th>Type</th></tr></thead>\n"
-            "<tbody>\n" + "\n".join(rows) + "\n</tbody>\n</table>\n"
+            '<section class="panel">\n'
+            "<h2>Largest items</h2>\n"
+            '<div class="table-wrap">\n'
+            '<table>\n'
+            "<thead><tr>"
+            "<th>#</th><th>Name</th><th>Size</th><th>Files</th><th>Dirs</th>"
+            "</tr></thead>\n"
+            f"<tbody>\n{tbody}\n</tbody>\n"
+            "</table>\n</div>\n</section>\n"
         )
+
+    css = """\
+:root {
+  --bg: #0d1117;
+  --bg-elevated: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-dim: #388bfd66;
+  --dir: #d2a8ff;
+  --file: #79c0ff;
+  --radius: 10px;
+  --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--text);
+  background: radial-gradient(1200px 800px at 10% -10%, #1f2937 0%, var(--bg) 45%);
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+header.hero {
+  margin-bottom: 1.75rem;
+  padding: 1.5rem 1.25rem;
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, #1c2128 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+}
+header.hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.meta {
+  display: grid;
+  gap: 0.35rem 1.5rem;
+  grid-template-columns: auto 1fr;
+  font-size: 0.9rem;
+}
+.meta dt {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+.meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.meta code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 0.15rem 0.4rem;
+  background: var(--bg);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  word-break: break-all;
+}
+.stat-big {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.25rem 1.5rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,.25);
+}
+.panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+thead th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+thead th:nth-child(n+3) { text-align: right; }
+tbody tr {
+  border-bottom: 1px solid #21262d;
+  transition: background 0.12s ease;
+}
+tbody tr:hover { background: #1f242c; }
+tbody td {
+  padding: 0.6rem 0.75rem;
+  vertical-align: middle;
+}
+tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody td.name { word-break: break-word; }
+tbody td.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 1.5rem;
+}
+.badge {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.badge[data-kind="dir"] { color: var(--dir); background: #2d1f3d; border: 1px solid #4c2889; }
+.badge[data-kind="file"] { color: var(--file); background: #102a4c; border: 1px solid #1f6feb; }
+pre.tree {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: auto;
+  color: #c9d1d9;
+}
+footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+"""
+
+    summary = (
+        "<header class=\"hero\">\n"
+        f"<h1>{title_esc}</h1>\n"
+        '<dl class="meta">\n'
+        f"<dt>Path</dt><dd><code>{esc(path_s)}</code></dd>\n"
+        f"<dt>Generated</dt><dd>{gen}</dd>\n"
+        f"<dt>Total size</dt><dd class=\"stat-big\">{size_h}</dd>\n"
+        f"<dt>Contents</dt><dd>{dir_info.file_count:,} files &middot; "
+        f"{dir_info.dir_count:,} directories</dd>\n"
+        "</dl>\n</header>\n"
+    )
 
     return (
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
-        "<meta charset=\"utf-8\">\n"
-        f"<title>{title}</title>\n"
-        "<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:1rem auto;} "
-        "pre{background:#f5f5f5;padding:1rem;overflow:auto;} table{border-collapse:collapse;} "
-        "th,td{text-align:left;} td:nth-child(3),td:nth-child(4),td:nth-child(5){text-align:right;}</style>\n"
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"<title>{title_esc}</title>\n"
+        f"<style>\n{css}</style>\n"
         "</head>\n<body>\n"
-        f"<h1>{title}</h1>\n{summary}{body}</body>\n</html>\n"
+        '<div class="wrap">\n'
+        f"{summary}{body}"
+        '<footer>SizeTree / pytree disk usage report</footer>\n'
+        "</div>\n</body>\n</html>\n"
     )
 
 
@@ -596,7 +797,7 @@ def scan(
             table.add_column("Type")
 
             for i, child in enumerate(dir_info.children[:limit], 1):
-                item_type = "📁 Dir" if child.dir_count > 0 or child.children else "📄 File"
+                item_type = "📁 Dir" if entry_is_directory(child) else "📄 File"
                 table.add_row(
                     str(i),
                     child.name,

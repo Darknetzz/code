@@ -134,7 +134,9 @@ python pytree.py version
 
 ### Saved reports (`scan -o`)
 
-Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
+Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. The table and tree list **both files and subfolders** in the scanned folder (sorted by size). JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
+
+HTML reports use a **dark theme** by default.
 
 ### Table View (CLI)
 ```
