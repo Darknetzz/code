@@ -11,6 +11,7 @@ A TreeSize-like disk space analyzer built with **Textual** for interactive TUI a
 - ⚡ **Depth Control** - Limit scan depth for faster results
 - 🔒 **Permission Handling** - Gracefully handles access denied errors
 - 👁️ **Hidden Files** - Toggle visibility of hidden files (TUI mode)
+- 💾 **File reports** - Save scans as plain text, JSON, Markdown, or HTML (`-o` / `--output`)
 
 ## Installation
 
@@ -26,16 +27,16 @@ The simplest way to use SizeTree - just provide a path:
 
 ```bash
 # Scan current directory
-python sizetree.py
+python pytree.py
 
 # Scan any directory
-python sizetree.py C:\Users
-python sizetree.py /var/log
-python sizetree.py ..
+python pytree.py C:\Users
+python pytree.py /var/log
+python pytree.py ..
 
 # Add options directly
-python sizetree.py . --depth 2 --limit 10
-python sizetree.py ~/Downloads --tree
+python pytree.py . --depth 2 --limit 10
+python pytree.py ~/Downloads --tree
 ```
 
 ### Interactive TUI Mode
@@ -43,9 +44,9 @@ python sizetree.py ~/Downloads --tree
 Launch the interactive Textual UI:
 
 ```bash
-python sizetree.py tui
-python sizetree.py tui /path/to/scan
-python sizetree.py tui . --depth 3
+python pytree.py tui
+python pytree.py tui /path/to/scan
+python pytree.py tui . --depth 3
 ```
 
 **TUI Keybindings:**
@@ -60,16 +61,16 @@ Use the `scan` command explicitly:
 
 ```bash
 # Scan current directory
-python sizetree.py scan
+python pytree.py scan
 
 # Scan specific path
-python sizetree.py scan C:\Users
+python pytree.py scan C:\Users
 
 # Limit depth and number of items
-python sizetree.py scan . --depth 2 --limit 10
+python pytree.py scan . --depth 2 --limit 10
 
 # Show as tree view
-python sizetree.py scan . --tree
+python pytree.py scan . --tree
 ```
 
 ### Options
@@ -79,6 +80,19 @@ python sizetree.py scan . --tree
 - `--depth, -d` - Maximum depth to scan (default: unlimited)
 - `--limit, -l` - Number of items to show (default: 20)
 - `--tree, -t` - Show as tree view instead of table
+- `--output, -o` - Write the report to a file (UTF-8). When set, the table/tree is written to the file only; a short confirmation is still printed in the terminal.
+- `--format` - Report format: `text`, `json`, `markdown`, or `html`. If omitted, the format is inferred from the output filename (see below).
+
+**Output file formats (scan only)**
+
+| Extension | Format | Notes |
+|-----------|--------|--------|
+| `.txt` or no extension | text | Summary plus table or ASCII tree (same layout as CLI) |
+| `.json` | json | Full tree as JSON (`scanned_path`, `generated_at`, `root` with nested `children`) |
+| `.md`, `.markdown` | markdown | Summary plus a Markdown table or fenced tree |
+| `.html`, `.htm` | html | Self-contained HTML page with table or `<pre>` tree |
+
+If the filename does not suggest a format (e.g. `report.out`), pass `--format` explicitly.
 
 **TUI Command:**
 - `path` - Directory to scan (default: current directory)
@@ -88,28 +102,37 @@ python sizetree.py scan . --tree
 
 ```bash
 # Quick scan of current directory
-python sizetree.py
+python pytree.py
 
 # Scan Downloads folder with limit
-python sizetree.py ~/Downloads --limit 10
+python pytree.py ~/Downloads --limit 10
 
 # Scan parent directory, 2 levels deep
-python sizetree.py .. --depth 2
+python pytree.py .. --depth 2
 
 # Deep analysis with TUI
-python sizetree.py tui /var/log
+python pytree.py tui /var/log
 
 # Show tree view in CLI
-python sizetree.py . --tree --depth 2
+python pytree.py . --tree --depth 2
 
 # Scan Windows directory (explicit command)
-python sizetree.py scan C:\Windows --depth 1 --limit 5
+python pytree.py scan C:\Windows --depth 1 --limit 5
+
+# Save report: table as text, tree as Markdown, full data as JSON
+python pytree.py scan ~/Projects -o report.txt
+python pytree.py scan ~/Projects --tree -o tree.md
+python pytree.py scan ~/Projects -o data.json --format json
 
 # Show version
-python sizetree.py version
+python pytree.py version
 ```
 
 ## Output Format
+
+### Saved reports (`scan -o`)
+
+Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
 
 ### Table View (CLI)
 ```

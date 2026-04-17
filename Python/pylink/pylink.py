@@ -1,5 +1,4 @@
 import typer
-import subprocess
 import sys
 import os
 import stat
@@ -64,6 +63,30 @@ def resolve_default_directory_flag(yes: bool) -> str:
     return "/J"
 
 
+def create_windows_link(link_path: Path, target_path: Path, flag: str) -> str:
+    """
+    Create a link using Win32 APIs (same results as mklink, without cmd.exe).
+
+    cmd/mklink can mis-parse paths containing ``!`` or other specials; the C API
+    accepts any valid NT path.
+    """
+    target_s = str(target_path)
+    link_s = str(link_path)
+    if flag == "/H":
+        os.link(target_s, link_s)
+        return f"os.link({target_s!r}, {link_s!r})"
+    if flag == "/J":
+        import _winapi
+
+        _winapi.CreateJunction(target_s, link_s)
+        return f"_winapi.CreateJunction({target_s!r}, {link_s!r})"
+    if flag == "/D":
+        os.symlink(target_s, link_s, target_is_directory=True)
+        return f"os.symlink({target_s!r}, {link_s!r}, target_is_directory=True)"
+    os.symlink(target_s, link_s, target_is_directory=False)
+    return f"os.symlink({target_s!r}, {link_s!r})"
+
+
 @app.command()
 def create_link(
     target_path: Annotated[Path, typer.Argument(help="TARGET: Existing file/directory path to point at (required unless --no-validate-target)")],
@@ -76,13 +99,16 @@ def create_link(
     no_validate_target: bool = typer.Option(False, "--no-validate-target", help="Skip target existence/type validation (allows intentionally broken symlinks; advanced)"),
 ):
     """
-    Creates a filesystem link using the Windows mklink command.
+    Creates a filesystem link using Windows APIs (equivalent to mklink).
 
     Default type behavior:
     - Directory target + no type flag: prompt (interactive) or default to junction (/J) with --yes.
     - File target + no type flag: file symbolic link.
     """
-    
+    if sys.platform != "win32":
+        typer.secho("Error: pylink only supports Windows.", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(code=1)
+
     # 1. Challenge: Validate Mutually Exclusive Options manually
     # Typer doesn't have "mutually_exclusive_group" like argparse yet, so we code it.
     flags_set = sum([directory, junction, hard])
@@ -95,8 +121,8 @@ def create_link(
     if link_path is None:
         link_path = Path.cwd() / target_path.name
 
-    # Normalize to absolute paths so cmd/mklink cannot reinterpret relative
-    # paths against an unexpected working directory.
+    # Normalize to absolute paths so nothing reinterprets relative segments
+    # against an unexpected working directory.
     if not target_path.is_absolute():
         target_path = Path.cwd() / target_path
     if not link_path.is_absolute():
@@ -214,17 +240,6 @@ def create_link(
         show_link_context(link_path, target_path, flag)
         raise typer.Exit(code=1)
 
-    # 5. Construct the command
-    # Windows requires mklink to run under cmd. Build a cmd-native command
-    # string with explicit double quotes so spaces are handled correctly.
-    mklink_parts = ["mklink"]
-    if flag:
-        mklink_parts.append(flag)
-    mklink_parts.append(f"\"{link_path}\"")
-    mklink_parts.append(f"\"{target_path}\"")
-    mklink_command = " ".join(mklink_parts)
-    cmd = ["cmd", "/c", mklink_command]
-
     if not yes:
         show_link_context(link_path, target_path, flag)
         confirmed = typer.confirm("Proceed?", default=True)
@@ -232,48 +247,40 @@ def create_link(
             typer.secho("Cancelled.", fg=typer.colors.YELLOW)
             raise typer.Exit(code=0)
 
-    # 6. Feedback to user
-    typer.secho(f"Executing: cmd /c {mklink_command}", fg=typer.colors.BLUE)
+    # 5–6. Create link via Win32 APIs (not cmd/mklink — avoids path parsing bugs).
+    typer.secho("Executing:", fg=typer.colors.BLUE)
 
     try:
-        # We assume 'target_path' exists, but mklink allows broken links, so we don't force-check it.
-        subprocess.run(cmd, check=True, shell=False)
+        detail = create_windows_link(link_path, target_path, flag)
+        typer.secho(f"  {detail}", fg=typer.colors.BLUE)
         typer.secho("Success!", fg=typer.colors.GREEN, bold=True)
         show_link_context(link_path, target_path, flag)
-        
-    except subprocess.CalledProcessError as e:
-        # Emphasized error output with actionable hints
+
+    except OSError as e:
         typer.secho("\n==============================", fg=typer.colors.RED)
         typer.secho("  FAILED TO CREATE LINK", fg=typer.colors.RED, bold=True)
         typer.secho("==============================\n", fg=typer.colors.RED)
-        typer.secho(f"Exit Code: {e.returncode}", fg=typer.colors.RED)
-        typer.secho("Command:", fg=typer.colors.RED)
-        typer.secho(f"  cmd /c {mklink_command}", fg=typer.colors.RED)
+        typer.secho(f"  {e}", fg=typer.colors.RED)
 
-        # Common pitfalls and guidance
         typer.secho("\nPossible causes:", fg=typer.colors.YELLOW, bold=True)
         typer.echo("  • The link path already exists. Remove it and retry.")
-        typer.echo("  • Arguments swapped. Correct order is: LINK first, TARGET second.")
         typer.echo("  • Insufficient privileges. For symlinks, run as Administrator or enable Developer Mode.")
-        if junction:
-            typer.echo("  • Junctions typically require Administrator.")
+        if junction or (flag == "/J"):
+            typer.echo("  • Junction creation failed (permissions or invalid target directory).")
         if hard:
             typer.echo("  • Hard links only work within the same volume.")
         if directory:
-            typer.echo("  • Use --dir for directory symlinks; for folders consider --junction.")
+            typer.echo("  • Directory symlinks require a directory target and appropriate privileges.")
+        if flag in ("", "/D") and not junction:
+            typer.echo("\nTip: For file/directory symlinks, ensure Developer Mode or Administrator.")
 
-        # Extra tip for non-junction attempts
-        if e.returncode == 1 and not junction:
-            typer.echo("\nTip: If you are not using --junction, ensure you are running as Administrator.")
-        
-        # Show suggested fix if the link path exists
         try:
             if link_path.exists():
                 typer.secho("\nSuggestion:", fg=typer.colors.BLUE, bold=True)
-                typer.echo(f"  Remove existing link/file and retry:\n    del \"{link_path}\"\n    mklink {'/D ' if directory else ('/H ' if hard else '')}\"{link_path}\" \"{target_path}\"")
+                typer.echo(f"  Remove existing link/file and retry:\n    del \"{link_path}\"\n    pylink {target_path} {link_path}")
         except Exception:
             pass
-        raise typer.Exit(code=e.returncode)
+        raise typer.Exit(code=1)
 
 if __name__ == "__main__":
     app()

@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['sizetree.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pytree\\pytree.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='sizetree',
+    name='pytree',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
