@@ -453,11 +453,14 @@ def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
     return (
         '<div class="storage-viz" id="pytree-storage-viz">'
         f'<script type="application/json" id="pytree-viz-data">{json_text}</script>'
-        f"{toolbar}"
+        f'<div class="viz-toolbar-wrap">{toolbar}</div>'
         f"{tooltip}"
+        '<div class="storage-viz-top">'
         f"{donut}"
-        f'<div class="viz-side"><h3 class="viz-title">Share of scanned folder</h3>{stacked}'
-        f"{legend}</div></div>"
+        f'<div class="viz-charts-col"><h3 class="viz-title">Share of scanned folder</h3>{stacked}</div>'
+        "</div>"
+        f'<div class="legend-col legend-col-full">{legend}</div>'
+        "</div>"
     )
 
 
@@ -760,18 +763,32 @@ thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85
   font-size: 0.82rem;
   color: var(--muted);
 }
+#pytree-viz-data { display: none; }
 .storage-viz {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.viz-toolbar-wrap { width: 100%; }
+.storage-viz-top {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) 1fr;
-  gap: 1.25rem 1.5rem;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 1.25rem 1.75rem;
   align-items: start;
 }
-@media (max-width: 720px) {
-  .storage-viz { grid-template-columns: 1fr; }
+@media (max-width: 900px) {
+  .storage-viz-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .viz-charts-col { width: 100%; max-width: 100%; }
 }
-.donut-wrap { justify-self: center; }
-.donut-svg { width: 100%; max-width: 220px; height: auto; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
-.viz-side { min-width: 0; }
+.donut-wrap { justify-self: center; width: 100%; max-width: 280px; }
+.donut-svg { width: 100%; max-width: 280px; height: auto; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+.viz-charts-col {
+  width: 100%;
+  min-width: 0;
+}
 .viz-title {
   margin: 0 0 0.5rem;
   font-size: 0.85rem;
@@ -782,11 +799,11 @@ thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85
 }
 .stacked-hbar {
   display: flex;
-  height: 14px;
-  border-radius: 7px;
+  height: 24px;
+  border-radius: 12px;
   overflow: hidden;
   background: #21262d;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   box-shadow: inset 0 1px 3px rgba(0,0,0,.35);
 }
 .stacked-hbar > span {
@@ -833,13 +850,24 @@ thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85
   color: var(--muted);
   text-align: center;
 }
-.legend-col { display: flex; flex-direction: column; gap: 0.35rem; max-height: 280px; overflow-y: auto; }
+.legend-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.legend-col-full {
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
 .legend-row, .viz-legend-row {
   display: grid;
-  grid-template-columns: auto 12px 1fr auto auto;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  font-size: 0.82rem;
+  grid-template-columns: auto 14px minmax(120px, 1fr) auto auto;
+  gap: 0.5rem 0.85rem;
+  align-items: start;
+  font-size: 0.85rem;
 }
 .viz-legend-row {
   cursor: pointer;
@@ -857,7 +885,13 @@ thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85
   border-radius: 3px;
   border: 1px solid rgba(255,255,255,.12);
 }
-.legend-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-name {
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+  min-width: 0;
+}
 .legend-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
 .legend-sz { font-variant-numeric: tabular-nums; color: var(--text); }
 .viz-empty { margin: 0; color: var(--muted); }
