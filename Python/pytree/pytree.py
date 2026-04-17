@@ -1256,6 +1256,26 @@ footer {
     bindSegEvents(hbar.querySelectorAll(".viz-hbar-seg"));
   }
 
+  function updateLegendPct() {
+    var tot = activeTotal();
+    var allOn = included.filter(Boolean).length === items.length;
+    items.forEach(function (it, idx) {
+      var row = document.querySelector('.viz-legend-row[data-viz-idx="' + idx + '"]');
+      if (!row) return;
+      var pctEl = row.querySelector(".legend-pct");
+      if (!pctEl) return;
+      if (included[idx] && tot > 0) {
+        pctEl.textContent = ((100 * it.size) / tot).toFixed(1) + "%";
+        pctEl.title = allOn
+          ? "Share of scanned folder"
+          : "Share of visible chart (of scan: " + it.pctRoot.toFixed(1) + "%)";
+      } else {
+        pctEl.textContent = it.pctRoot.toFixed(1) + "%";
+        pctEl.title = "Share of scanned folder — hidden from chart";
+      }
+    });
+  }
+
   function updateStatus() {
     var n = included.filter(Boolean).length;
     if (statusEl) {
@@ -1265,6 +1285,7 @@ footer {
           : "Showing " + n + " of " + items.length + " — donut and bar use only visible items.";
     }
     if (donutEmpty) donutEmpty.hidden = activeTotal() > 0;
+    updateLegendPct();
   }
 
   function toggleIdx(idx) {
