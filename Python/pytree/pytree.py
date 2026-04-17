@@ -464,6 +464,25 @@ def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
     )
 
 
+def _heat_bg(value: int, max_value: int) -> str:
+    """Return a heat-map background color (green -> yellow -> red) for a cell.
+
+    Uses a perceptual sqrt curve so mid-range values aren't all pale green.
+    Returns an empty string when there's nothing meaningful to color.
+    """
+    if max_value <= 0 or value <= 0:
+        return ""
+    ratio = value / max_value
+    if ratio < 0:
+        ratio = 0.0
+    elif ratio > 1:
+        ratio = 1.0
+    curved = ratio ** 0.5
+    hue = 120.0 * (1.0 - curved)
+    alpha = 0.12 + 0.38 * curved
+    return f"hsla({hue:.0f}, 72%, 45%, {alpha:.3f})"
+
+
 def _html_merge_groups_for_children(
     parent: DirInfo,
     esc,
@@ -482,6 +501,9 @@ def _html_merge_groups_for_children(
     parts: List[str] = []
     base = max(share_base, 1)
     kids = parent.children[:limit]
+    max_size = max((c.size for c in kids), default=0)
+    max_files = max((c.file_count for c in kids), default=0)
+    max_dirs = max((c.dir_count for c in kids), default=0)
 
     for i, child in enumerate(kids):
         item_type = "Dir" if entry_is_directory(child) else "File"
@@ -512,9 +534,7 @@ def _html_merge_groups_for_children(
             else '<td class="num idx-muted">—</td>'
         )
 
-        name_inner = (
-            f'<span class="badge" data-kind="{kind}">{esc(item_type)}</span>{esc(child.name)}'
-        )
+        name_inner = f'<span class="entry-name">{esc(child.name)}</span>'
         if is_dir and has_nested_block:
             open_here = depth < 1
             aria_exp = "true" if open_here else "false"
@@ -525,6 +545,21 @@ def _html_merge_groups_for_children(
         elif is_dir and not child.children:
             name_inner = '<span class="dir-leaf"></span> ' + name_inner
 
+        def _pill(value_html: str, bg: str) -> str:
+            if not bg:
+                return value_html
+            return f'<span class="heat-pill" style="background:{bg}">{value_html}</span>'
+
+        size_pill = _pill(esc(format_size(child.size)), _heat_bg(child.size, max_size))
+        files_pill = _pill(f"{child.file_count:,}", _heat_bg(child.file_count, max_files))
+        dirs_pill = _pill(f"{child.dir_count:,}", _heat_bg(child.dir_count, max_dirs))
+
+        type_cell = (
+            f'<td class="col-type">'
+            f'<span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
+            "</td>"
+        )
+
         main_row = (
             "<tr class=\"row-main\">"
             f"{idx_cell}"
@@ -532,10 +567,10 @@ def _html_merge_groups_for_children(
             '<td class="share-cell">'
             f'<div class="share-bar" title="{pct:.1f}%"><span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
             f'<span class="share-pct">{pct:.1f}%</span></td>'
-            f'<td class="num size">{esc(format_size(child.size))}</td>'
-            f'<td class="num">{child.file_count:,}</td>'
-            f'<td class="num">{child.dir_count:,}</td>'
-            f'<td class="col-type">{esc(item_type)}</td>'
+            f'<td class="num size">{size_pill}</td>'
+            f'<td class="num">{files_pill}</td>'
+            f'<td class="num">{dirs_pill}</td>'
+            f"{type_cell}"
             "</tr>"
         )
 
@@ -774,6 +809,18 @@ thead th:nth-child(5),
 thead th:nth-child(6) { text-align: right; }
 thead th:nth-child(7) { text-align: center; }
 tbody td.col-type { text-align: center; font-size: 0.8rem; color: var(--muted); }
+.heat-pill {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  min-width: 2.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #f6f8fa;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+td.size .heat-pill { font-family: var(--mono); font-size: 0.82rem; }
 .tree-root-label {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
@@ -1047,9 +1094,8 @@ tbody td.empty {
 }
 .badge {
   display: inline-block;
-  margin-right: 0.5rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 4px;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
