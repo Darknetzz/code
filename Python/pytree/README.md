@@ -136,7 +136,7 @@ python pytree.py version
 
 Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. The table and tree list **both files and subfolders** in the scanned folder (sorted by size). JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
 
-HTML reports use a **dark theme** by default: a **storage overview** (donut + bar), then a **single “Contents” table** that combines **sortable columns** (top-level rows) with **expandable nested rows** for each folder’s children (nested **Share** is relative to that folder). Use **Expand all folders** / **Collapse all** for nested sections.
+HTML reports use a **dark theme** by default: an **interactive storage overview** (donut + stacked bar + legend) with checkboxes to **include or exclude** items (chart redraws to match), **hover tooltips** (name, type, size, bytes, file/dir counts, % of scan and of visible chart), and **click** on a segment or bar slice to toggle it like the checkbox. Below that, a **single “Contents” table** combines **sortable** top-level rows with **expandable** nested folder rows (nested **Share** is relative to that folder). Use **Expand all folders** / **Collapse all** for nested sections.
 
 ### Table View (CLI)
 ```
