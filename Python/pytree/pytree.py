@@ -541,8 +541,10 @@ def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
     )
     toolbar = (
         '<div class="viz-toolbar">'
-        '<button type="button" class="btn viz-tb-btn" id="viz-show-all" title="Include every item in the chart">Show all</button> '
-        '<button type="button" class="btn viz-tb-btn" id="viz-hide-all" title="Hide every segment (chart empty)">Hide all</button> '
+        '<button type="button" class="btn viz-tb-btn" id="viz-show-all" title="Include every item in the chart">'
+        f'<span class="btn-icon">{_icon("eye", size=13, cls="chrome-icon")}</span>Show all</button> '
+        '<button type="button" class="btn viz-tb-btn" id="viz-hide-all" title="Hide every segment (chart empty)">'
+        f'<span class="btn-icon">{_icon("eye_slash", size=13, cls="chrome-icon")}</span>Hide all</button> '
         '<span class="viz-status" id="viz-filter-status"></span>'
         "</div>"
     )
@@ -580,33 +582,134 @@ def _heat_bg(value: int, max_value: int) -> str:
     return f"hsla({hue:.0f}, 72%, 45%, {alpha:.3f})"
 
 
-# Compact inline SVGs (single <path> each). Color comes from
-# ``fill="currentColor"`` + a kind-specific CSS rule, so we keep one source
-# of truth for each icon shape and one for each kind's color.
-_SVG_ICON_DIR = (
-    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" '
-    'class="icon-svg">'
-    '<path fill="currentColor" d="M1.75 1h3.5c.28 0 .54.11.73.28l1.5 1.47h6.77'
-    'c.97 0 1.75.78 1.75 1.75v8.75c0 .97-.78 1.75-1.75 1.75H1.75A1.75 1.75 0'
-    ' 0 1 0 13.25V2.75C0 1.78.78 1 1.75 1Z"/></svg>'
-)
-_SVG_ICON_FILE = (
-    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" '
-    'class="icon-svg">'
-    '<path fill="currentColor" d="M2 1.75C2 .78 2.78 0 3.75 0h6.5a.75.75 0 0'
-    ' 1 .53.22l4.25 4.25c.14.14.22.33.22.53v9.25A1.75 1.75 0 0 1 13.5 16h-9.75'
-    'A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .14.11.25'
-    '.25.25h9.75a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9.25 4.25V1.5Z'
-    'm6.75.56v2.19c0 .14.11.25.25.25h2.19Z"/></svg>'
-)
+# ─────────────────────────────────────────────────────────────────────── #
+#                              ICON LIBRARY                               #
+# ─────────────────────────────────────────────────────────────────────── #
+# Every icon is a single <path> on a 16×16 viewBox and uses
+# ``fill="currentColor"`` so the surrounding CSS decides the color. One
+# source of truth per shape, one helper to stamp them out at any size.
+
+def _svg_icon(path_d: str, *, size: int = 14, cls: str = "icon-svg") -> str:
+    return (
+        f'<svg viewBox="0 0 16 16" width="{size}" height="{size}" '
+        f'aria-hidden="true" class="{cls}">'
+        f'<path fill="currentColor" d="{path_d}"/></svg>'
+    )
+
+
+# Octicons-derived path data (MIT-licensed shapes, trimmed to single paths).
+_ICON_D = {
+    "dir": (
+        "M1.75 1h3.5c.28 0 .54.11.73.28l1.5 1.47h6.77c.97 0 1.75.78 1.75 "
+        "1.75v8.75c0 .97-.78 1.75-1.75 1.75H1.75A1.75 1.75 0 0 1 0 13.25V2.75"
+        "C0 1.78.78 1 1.75 1Z"
+    ),
+    "file": (
+        "M2 1.75C2 .78 2.78 0 3.75 0h6.5a.75.75 0 0 1 .53.22l4.25 4.25c.14."
+        "14.22.33.22.53v9.25A1.75 1.75 0 0 1 13.5 16h-9.75A1.75 1.75 0 0 1 2"
+        " 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .14.11.25.25.25h9.75a."
+        "25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9.25 4.25V1.5Zm6.75.56"
+        "v2.19c0 .14.11.25.25.25h2.19Z"
+    ),
+    "search": (
+        "M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04"
+        "a.749.749 0 0 1-1.06 1.06ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 "
+        "4.499 0 0 0 11.5 7Z"
+    ),
+    "chevron_down": (
+        "M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0"
+        "L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 "
+        "0 1 1.06 0Z"
+    ),
+    "chevron_up": (
+        "M3.22 10.78a.749.749 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.06 0l"
+        "4.25 4.25a.749.749 0 1 1-1.06 1.06L8 7.061l-3.72 3.719a.749.749 0 "
+        "0 1-1.06 0Z"
+    ),
+    "eye": (
+        "M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.36 2.637 "
+        "3.023a1.62 1.62 0 0 1 0 1.798c-.45.663-1.367 1.932-2.637 3.023C11"
+        ".67 13.008 9.98 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10."
+        "83.88 9.56.43 8.898a1.62 1.62 0 0 1 0-1.798c.45-.663 1.367-1.932 "
+        "2.637-3.023C4.33 2.992 6.02 2 8 2Zm0 2.5a3.5 3.5 0 1 0 0 7 3.5 3."
+        "5 0 0 0 0-7ZM8 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"
+    ),
+    "eye_slash": (
+        "m.47 1.53 14 14a.75.75 0 1 0 1.06-1.06l-2.2-2.2c1.18-.9 2-1.94 2."
+        "45-2.59a1.62 1.62 0 0 0 0-1.79c-.45-.66-1.37-1.93-2.64-3.03C11.88"
+        " 3.78 10.06 2.75 8 2.75c-1.36 0-2.58.46-3.63 1.08L1.53.47A.75.75 "
+        "0 0 0 .47 1.53ZM8 11.25a3.25 3.25 0 0 1-3.18-3.94L3.56 6.05a16.3 "
+        "16.3 0 0 0-1.48 1.8 1.62 1.62 0 0 0 0 1.79c.45.66 1.37 1.93 2.64 "
+        "3.03C5.96 13.85 6.94 14 8 14c.85 0 1.66-.17 2.43-.46l-1.25-1.26a3"
+        ".22 3.22 0 0 1-1.18.22ZM8 5.25c.45 0 .88.09 1.26.26L6.52 8.26a3."
+        "25 3.25 0 0 1 1.48-3.01Z"
+    ),
+    "label": (
+        "M2.5 7.775V2.75a.25.25 0 0 1 .25-.25h5.025a.25.25 0 0 1 .177.073l"
+        "6.25 6.25a.25.25 0 0 1 0 .354l-5.025 5.025a.25.25 0 0 1-.354 0l-6"
+        ".25-6.25a.25.25 0 0 1-.073-.177Zm-1.5 0V2.75C1 1.784 1.784 1 2.75"
+        " 1h5.025c.464 0 .91.184 1.238.513l6.25 6.25a1.75 1.75 0 0 1 0 2.4"
+        "74l-5.026 5.026a1.75 1.75 0 0 1-2.474 0l-6.25-6.25A1.748 1.748 0 "
+        "0 1 1 7.775ZM6 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"
+    ),
+    "pie": (
+        "M8 0a8 8 0 1 1-3.2 15.33.75.75 0 1 1 .6-1.37A6.5 6.5 0 1 0 1.53 5"
+        ".6a.75.75 0 1 1-1.36-.63A8 8 0 0 1 8 0Zm1.6 1.65A6.5 6.5 0 0 1 14"
+        ".35 6.4.75.75 0 0 1 13.6 7.3H9.25a.75.75 0 0 1-.75-.75V2.2a.75.75"
+        " 0 0 1 1.1-.55ZM10 3.76v1.74h1.74A5 5 0 0 0 10 3.76Z"
+    ),
+    "disk": (
+        "M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v3.5"
+        "c0 .412-.144.79-.383 1.088.239.297.383.676.383 1.087v3.5A1.75 1."
+        "75 0 0 1 14.25 13.75H1.75A1.75 1.75 0 0 1 0 12v-3.5c0-.411.144-."
+        "79.383-1.087A1.742 1.742 0 0 1 0 6.25v-3.5Zm1.75-.25a.25.25 0 0 "
+        "0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5"
+        "a.25.25 0 0 0-.25-.25H1.75ZM2.5 4.25a.75.75 0 0 1 .75-.75h1.5a."
+        "75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Zm9.25-.75a.75.75 0 "
+        "0 0 0 1.5h.5a.75.75 0 0 0 0-1.5h-.5ZM1.5 12c0 .138.112.25.25.25"
+        "h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75a.25."
+        "25 0 0 0-.25.25V12Zm1.75-1.75a.75.75 0 0 1 .75.75.75.75 0 0 1-"
+        ".75.75.75.75 0 0 1-.75-.75.75.75 0 0 1 .75-.75Zm9 0a.75.75 0 0"
+        " 0 0 1.5h.5a.75.75 0 0 0 0-1.5h-.5Z"
+    ),
+    "folder_up": (
+        "M0 2.75C0 1.784.784 1 1.75 1h3.502c.464 0 .91.184 1.238.513L7.7"
+        "5 2.75h6.5c.966 0 1.75.784 1.75 1.75v8.75A1.75 1.75 0 0 1 14.25 "
+        "15H1.75A1.75 1.75 0 0 1 0 13.25V2.75Zm8.53 6.53L7.25 8v3.75a.75"
+        ".75 0 0 1-1.5 0V8L4.47 9.28a.75.75 0 0 1-1.06-1.06l2.5-2.5a.75."
+        "75 0 0 1 1.06 0l2.5 2.5a.75.75 0 1 1-1.06 1.06Z"
+    ),
+    "expand_all": (
+        "M3.97 4.03a.75.75 0 0 1 1.06 0L8 7l2.97-2.97a.75.75 0 1 1 1.06 "
+        "1.06L8.53 8.53a.75.75 0 0 1-1.06 0L3.97 5.09a.75.75 0 0 1 0-1.0"
+        "6Zm0 4a.75.75 0 0 1 1.06 0L8 11l2.97-2.97a.75.75 0 1 1 1.06 1.0"
+        "6l-3.5 3.5a.75.75 0 0 1-1.06 0L3.97 9.09a.75.75 0 0 1 0-1.06Z"
+    ),
+    "collapse_all": (
+        "M3.97 8.03a.75.75 0 0 0 1.06 0L8 5.06l2.97 2.97a.75.75 0 0 0 1."
+        "06-1.06L8.53 3.47a.75.75 0 0 0-1.06 0L3.97 6.97a.75.75 0 0 0 0 "
+        "1.06Zm0 4a.75.75 0 0 0 1.06 0L8 9.06l2.97 2.97a.75.75 0 0 0 1."
+        "06-1.06l-3.5-3.5a.75.75 0 0 0-1.06 0l-3.5 3.5a.75.75 0 0 0 0 1"
+        ".06Z"
+    ),
+}
+
+
+def _icon(name: str, *, size: int = 14, cls: str = "icon-svg") -> str:
+    return _svg_icon(_ICON_D[name], size=size, cls=cls)
+
+
+# Canonical icons used in tree rows (kept as explicit names for clarity).
+_SVG_ICON_DIR = _icon("dir")
+_SVG_ICON_FILE = _icon("file")
 
 
 def _pill(value_html: str, bg: str) -> str:
-    """Wrap a value in a heat-pill span when we have a heat color, otherwise
-    return the value untouched. Centralised so every table row uses the same
-    shape."""
+    """Wrap a value in a heat-pill span. If ``bg`` is empty (value is zero or
+    the whole column is zero) we still render the pill, using the ``-zero``
+    modifier so every row in a numeric column looks structurally identical."""
     if not bg:
-        return value_html
+        return f'<span class="heat-pill heat-pill-zero">{value_html}</span>'
     return f'<span class="heat-pill" style="background:{bg}">{value_html}</span>'
 
 
@@ -765,6 +868,21 @@ def render_report_html(
         '<col class="col-w-dirs">'
         '</colgroup>'
     )
+    # Icons for toolbar chrome + column headers. Keeping the templating
+    # inline would double the column-header line length; a single helper
+    # keeps it DRY and makes the markup easy to scan.
+    def _th(key: str, label: str, icon: str, *, extra: str = "") -> str:
+        cls = "sortable" + ((" " + extra) if extra else "")
+        return (
+            f'<th class="{cls}" data-sort-key="{key}" scope="col">'
+            f'<span class="th-inner">'
+            f'<span class="th-icon">{_icon(icon, size=12, cls="chrome-icon")}</span>'
+            f'{label}</span></th>'
+        )
+
+    def _btn_label(icon: str, text: str) -> str:
+        return f'<span class="btn-icon">{_icon(icon, size=13, cls="chrome-icon")}</span>{text}'
+
     table_section = (
         '<section class="panel" id="pytree-table-panel">'
         "<h2>Contents</h2>"
@@ -773,13 +891,18 @@ def render_report_html(
         "Click the caret next to a folder to open it; nested <strong>Share</strong> is % of that folder."
         "</p>"
         '<div class="tree-toolbar">'
+        '<div class="tree-filter-wrap">'
+        f'<span class="tree-filter-icon">{_icon("search", size=14, cls="chrome-icon")}</span>'
         '<input type="search" id="tree-filter" class="tree-filter" '
         'placeholder="Filter top-level by name..." autocomplete="off" spellcheck="false" />'
+        '</div>'
         '<label class="toolbar-toggle" title="Always show folders before files when sorting">'
-        '<input type="checkbox" id="folders-first-cb"> Folders first'
+        '<input type="checkbox" id="folders-first-cb">'
+        f'<span class="btn-icon">{_icon("folder_up", size=13, cls="chrome-icon")}</span>'
+        'Folders first'
         '</label>'
-        '<button type="button" class="btn" id="tree-expand-all">Expand all folders</button>'
-        '<button type="button" class="btn" id="tree-collapse-all">Collapse all folders</button>'
+        f'<button type="button" class="btn" id="tree-expand-all">{_btn_label("expand_all", "Expand all")}</button>'
+        f'<button type="button" class="btn" id="tree-collapse-all">{_btn_label("collapse_all", "Collapse all")}</button>'
         '<span class="tree-filter-status" id="tree-filter-status"></span>'
         "</div>"
         '<div class="table-wrap merged-tree-table">'
@@ -788,11 +911,11 @@ def render_report_html(
         f"{colgroup}"
         "<thead><tr>"
         '<th class="num">#</th>'
-        '<th class="sortable" data-sort-key="name" scope="col">Name</th>'
-        '<th class="sortable" data-sort-key="pct" scope="col">Share</th>'
-        '<th class="sortable sort-desc" data-sort-key="size" scope="col">Size</th>'
-        '<th class="sortable" data-sort-key="files" scope="col">Files</th>'
-        '<th class="sortable" data-sort-key="dirs" scope="col">Dirs</th>'
+        f'{_th("name", "Name", "label")}'
+        f'{_th("pct", "Share", "pie")}'
+        f'{_th("size", "Size", "disk", extra="sort-desc")}'
+        f'{_th("files", "Files", "file")}'
+        f'{_th("dirs", "Dirs", "dir")}'
         "</tr></thead>"
         f"{table_body}"
         "</table></div></section>"
@@ -965,6 +1088,14 @@ thead th:nth-child(6) { text-align: right; }
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   white-space: nowrap;
 }
+/* Structural zero: keep the same pill silhouette but mute it so rows align
+   visually and we never leave a bare number in an otherwise pill column. */
+.heat-pill-zero {
+  background: #1b2029;
+  color: var(--muted);
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
 .tree-root-label {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
@@ -979,6 +1110,15 @@ thead th.sortable {
 thead th.sortable:hover { color: var(--accent); background: #1c2128; }
 thead th.sort-asc::after { content: " \\25B2"; font-size: 0.65em; opacity: 0.85; }
 thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85; }
+/* Column header = [icon] label; inline-flex keeps both baselines aligned and
+   lets the sort glyph ("::after") hug the label on the right. */
+thead th .th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+thead th .th-icon { color: var(--muted); display: inline-flex; }
+thead th.sortable:hover .th-icon { color: var(--accent); }
 .panel-viz h2, .panel-tree h2 { margin-top: 0; }
 .table-hint, .tree-hint {
   margin: 0 0 1rem;
@@ -1135,13 +1275,28 @@ td.share-cell { vertical-align: middle; }
   gap: 0.5rem;
   align-items: center;
 }
-.tree-filter {
+/* Search input with a leading magnifier icon. The wrapper owns the flex
+   sizing; the input itself just fills 100% of it. */
+.tree-filter-wrap {
+  position: relative;
   flex: 1 1 220px;
   min-width: 180px;
   max-width: 360px;
+  display: flex;
+  align-items: center;
+}
+.tree-filter-icon {
+  position: absolute;
+  left: 0.6rem;
+  display: inline-flex;
+  color: var(--muted);
+  pointer-events: none;
+}
+.tree-filter {
+  width: 100%;
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.4rem 0.75rem;
+  padding: 0.4rem 0.75rem 0.4rem 2rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -1151,6 +1306,7 @@ td.share-cell { vertical-align: middle; }
 }
 .tree-filter::placeholder { color: var(--muted); }
 .tree-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.tree-filter-wrap:focus-within .tree-filter-icon { color: var(--accent); }
 .tree-filter-status { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
 .toolbar-toggle {
   display: inline-flex;
@@ -1183,8 +1339,19 @@ td.share-cell { vertical-align: middle; }
   background: #21262d;
   color: var(--text);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .btn:hover { background: #30363d; border-color: var(--accent); }
+/* Shared icon conventions for toolbar/button/header chrome. All `.chrome-icon`
+   SVGs inherit color via `fill="currentColor"` so hover/focus states just
+   update the parent's color. */
+.chrome-icon { display: block; flex-shrink: 0; }
+.btn-icon { display: inline-flex; align-items: center; color: var(--muted); }
+.btn:hover .btn-icon,
+.toolbar-toggle:hover .btn-icon,
+.toolbar-toggle:has(input:checked) .btn-icon { color: var(--accent); }
 .merged-tree-table {
   border: 1px solid var(--border);
   border-radius: 8px;
