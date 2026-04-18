@@ -9,10 +9,11 @@ import json
 import math
 import os
 import sys
+import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import typer
@@ -77,23 +78,58 @@ def entry_is_directory(info: DirInfo) -> bool:
 #                              SCANNING LOGIC                             #
 # ─────────────────────────────────────────────────────────────────────── #
 
-def scan_directory(path: Path, max_depth: Optional[int] = None, current_depth: int = 0) -> DirInfo:
-    """Recursively scan directory and calculate sizes."""
+@dataclass
+class ScanStats:
+    """Live counters updated during a scan. Shared across the full recursion."""
+    files: int = 0
+    dirs: int = 0
+    size: int = 0
+    current: str = ""
+
+
+ProgressCb = Callable[[ScanStats], None]
+
+
+def scan_directory(
+    path: Path,
+    max_depth: Optional[int] = None,
+    current_depth: int = 0,
+    *,
+    stats: Optional[ScanStats] = None,
+    progress_cb: Optional[ProgressCb] = None,
+) -> DirInfo:
+    """Recursively scan directory and calculate sizes.
+
+    If ``stats`` + ``progress_cb`` are supplied, ``progress_cb(stats)`` is
+    called after each file/dir is seen so callers (CLI/TUI) can render live
+    progress. Throttling is the caller's responsibility so the scanner stays
+    as fast as possible.
+    """
+    if stats is None:
+        stats = ScanStats()
     total_size = 0
     file_count = 0
     dir_count = 0
     children = []
     error = None
 
+    if progress_cb is not None:
+        stats.current = str(path)
+        progress_cb(stats)
+
     try:
         items = list(path.iterdir())
-        
+
         for item in items:
             try:
                 if item.is_file():
                     sz = item.stat().st_size
                     total_size += sz
                     file_count += 1
+                    stats.files += 1
+                    stats.size += sz
+                    if progress_cb is not None:
+                        progress_cb(stats)
                     # List files alongside dirs so table/tree show largest items in flat folders
                     children.append(
                         DirInfo(
@@ -106,17 +142,24 @@ def scan_directory(path: Path, max_depth: Optional[int] = None, current_depth: i
                     )
                 elif item.is_dir():
                     dir_count += 1
-                    
+                    stats.dirs += 1
+
                     # Recursively scan subdirectories if within depth limit
                     if max_depth is None or current_depth < max_depth:
-                        child_info = scan_directory(item, max_depth, current_depth + 1)
+                        child_info = scan_directory(
+                            item,
+                            max_depth,
+                            current_depth + 1,
+                            stats=stats,
+                            progress_cb=progress_cb,
+                        )
                         children.append(child_info)
                         total_size += child_info.size
                         file_count += child_info.file_count
                         dir_count += child_info.dir_count
                     else:
                         # Just get size without recursing
-                        child_size = get_dir_size(item)
+                        child_size = get_dir_size(item, stats=stats, progress_cb=progress_cb)
                         child_info = DirInfo(
                             path=item,
                             size=child_size,
@@ -126,14 +169,12 @@ def scan_directory(path: Path, max_depth: Optional[int] = None, current_depth: i
                         )
                         children.append(child_info)
                         total_size += child_size
-                        
+
             except PermissionError:
-                # Skip items we can't access
                 continue
-            except Exception as e:
-                # Log other errors but continue
+            except Exception:
                 continue
-                
+
     except PermissionError:
         error = "Permission denied"
     except Exception as e:
@@ -152,19 +193,62 @@ def scan_directory(path: Path, max_depth: Optional[int] = None, current_depth: i
     )
 
 
-def get_dir_size(path: Path) -> int:
+def get_dir_size(
+    path: Path,
+    *,
+    stats: Optional[ScanStats] = None,
+    progress_cb: Optional[ProgressCb] = None,
+) -> int:
     """Get total size of directory without detailed recursion."""
     total = 0
     try:
         for item in path.rglob('*'):
             try:
                 if item.is_file():
-                    total += item.stat().st_size
-            except:
+                    sz = item.stat().st_size
+                    total += sz
+                    if stats is not None:
+                        stats.files += 1
+                        stats.size += sz
+                        if progress_cb is not None:
+                            progress_cb(stats)
+            except Exception:
                 continue
-    except:
+    except Exception:
         pass
     return total
+
+
+def make_throttled_progress_cb(
+    progress: Progress,
+    task_id: int,
+    *,
+    interval: float = 0.1,
+) -> ProgressCb:
+    """Return a progress callback that updates a rich ``Progress`` task at
+    most every ``interval`` seconds, showing files/dirs/size scanned so far."""
+    state = {"last": 0.0}
+
+    def _cb(stats: ScanStats) -> None:
+        now = time.monotonic()
+        if now - state["last"] < interval:
+            return
+        state["last"] = now
+        current = stats.current
+        if len(current) > 60:
+            current = "..." + current[-57:]
+        progress.update(
+            task_id,
+            description=(
+                f"Scanning  "
+                f"[bold]{stats.files:,}[/bold] files  "
+                f"[bold]{stats.dirs:,}[/bold] dirs  "
+                f"[bold]{format_size(stats.size)}[/bold]  "
+                f"[dim]{current}[/dim]"
+            ),
+        )
+
+    return _cb
 
 
 def format_size(size: int) -> str:
@@ -496,22 +580,58 @@ def _heat_bg(value: int, max_value: int) -> str:
     return f"hsla({hue:.0f}, 72%, 45%, {alpha:.3f})"
 
 
-def _html_merge_groups_for_children(
+# Compact inline SVGs (single <path> each). Color comes from
+# ``fill="currentColor"`` + a kind-specific CSS rule, so we keep one source
+# of truth for each icon shape and one for each kind's color.
+_SVG_ICON_DIR = (
+    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" '
+    'class="icon-svg">'
+    '<path fill="currentColor" d="M1.75 1h3.5c.28 0 .54.11.73.28l1.5 1.47h6.77'
+    'c.97 0 1.75.78 1.75 1.75v8.75c0 .97-.78 1.75-1.75 1.75H1.75A1.75 1.75 0'
+    ' 0 1 0 13.25V2.75C0 1.78.78 1 1.75 1Z"/></svg>'
+)
+_SVG_ICON_FILE = (
+    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" '
+    'class="icon-svg">'
+    '<path fill="currentColor" d="M2 1.75C2 .78 2.78 0 3.75 0h6.5a.75.75 0 0'
+    ' 1 .53.22l4.25 4.25c.14.14.22.33.22.53v9.25A1.75 1.75 0 0 1 13.5 16h-9.75'
+    'A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .14.11.25'
+    '.25.25h9.75a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9.25 4.25V1.5Z'
+    'm6.75.56v2.19c0 .14.11.25.25.25h2.19Z"/></svg>'
+)
+
+
+def _pill(value_html: str, bg: str) -> str:
+    """Wrap a value in a heat-pill span when we have a heat color, otherwise
+    return the value untouched. Centralised so every table row uses the same
+    shape."""
+    if not bg:
+        return value_html
+    return f'<span class="heat-pill" style="background:{bg}">{value_html}</span>'
+
+
+def _html_tree_rows(
     parent: DirInfo,
     esc,
     limit: int,
     max_depth: int,
-    depth: int,
     *,
+    path_id: str = "",
+    depth: int = 0,
     share_base: int,
-    color_offset: int,
-    show_index: bool,
-) -> str:
-    """Recursive: tbody.merge-group blocks (data row + optional nested subtree table)."""
-    if depth >= max_depth:
-        return ""
+    color_offset: int = 0,
+) -> List[str]:
+    """Flat list of ``<tr>`` rows for the contents table.
 
-    parts: List[str] = []
+    Every item is a direct child of the outer ``<tbody>`` so columns are
+    guaranteed to align at every depth. Parent-child relationships are
+    encoded via ``data-path`` / ``data-parent`` and expand/collapse is
+    driven by JS on the client side.
+    """
+    if depth >= max_depth:
+        return []
+
+    rows: List[str] = []
     base = max(share_base, 1)
     kids = parent.children[:limit]
     max_size = max((c.size for c in kids), default=0)
@@ -519,98 +639,80 @@ def _html_merge_groups_for_children(
     max_dirs = max((c.dir_count for c in kids), default=0)
 
     for i, child in enumerate(kids):
-        item_type = "Dir" if entry_is_directory(child) else "File"
-        kind = "dir" if item_type == "Dir" else "file"
+        is_dir = entry_is_directory(child)
+        kind = "dir" if is_dir else "file"
         pct = 100.0 * child.size / base
         bar_color = _HTML_CHART_COLORS[(color_offset + i) % len(_HTML_CHART_COLORS)]
-        is_dir = entry_is_directory(child)
-        nested_allowed = is_dir and depth + 1 < max_depth
-        inner_tbodies = ""
-        if nested_allowed:
-            inner_tbodies = _html_merge_groups_for_children(
-                child,
-                esc,
-                limit,
-                max_depth,
-                depth + 1,
-                share_base=max(child.size, 1),
-                color_offset=color_offset + i + 1,
-                show_index=False,
-            )
-        has_nested_block = nested_allowed and (
-            inner_tbodies.strip() != "" or (is_dir and not child.children)
+
+        child_path = f"{path_id}.{i}" if path_id else str(i)
+        has_kids = is_dir and (depth + 1 < max_depth) and bool(child.children)
+
+        is_top = depth == 0
+        idx_html = f"{i + 1}" if is_top else ""
+        idx_cell = f'<td class="num col-idx">{idx_html}</td>'
+
+        expand_html = (
+            '<button type="button" class="row-expand" aria-expanded="false" '
+            'aria-label="Toggle folder contents"></button>'
+            if has_kids
+            else '<span class="row-expand-placeholder"></span>'
         )
-
-        idx_cell = (
-            f'<td class="num col-idx">{i + 1}</td>'
-            if show_index
-            else '<td class="num idx-muted">—</td>'
+        icon_html = (
+            f'<span class="entry-icon" data-kind="{kind}">'
+            f'{_SVG_ICON_DIR if is_dir else _SVG_ICON_FILE}</span>'
         )
-
-        name_inner = f'<span class="entry-name">{esc(child.name)}</span>'
-        if is_dir and has_nested_block:
-            open_here = depth < 1
-            aria_exp = "true" if open_here else "false"
-            name_inner = (
-                f'<button type="button" class="row-expand" aria-expanded="{aria_exp}" '
-                'aria-label="Toggle folder contents"></button> ' + name_inner
-            )
-        elif is_dir and not child.children:
-            name_inner = '<span class="dir-leaf"></span> ' + name_inner
-
-        def _pill(value_html: str, bg: str) -> str:
-            if not bg:
-                return value_html
-            return f'<span class="heat-pill" style="background:{bg}">{value_html}</span>'
+        name_inner = (
+            f'{expand_html}{icon_html}'
+            f'<span class="entry-name">{esc(child.name)}</span>'
+        )
 
         size_pill = _pill(esc(format_size(child.size)), _heat_bg(child.size, max_size))
         files_pill = _pill(format_count(child.file_count), _heat_bg(child.file_count, max_files))
         dirs_pill = _pill(format_count(child.dir_count), _heat_bg(child.dir_count, max_dirs))
 
-        type_cell = (
-            f'<td class="col-type">'
-            f'<span class="badge" data-kind="{kind}">{esc(item_type)}</span>'
-            "</td>"
-        )
+        # Indent the name cell proportionally to depth. The expand
+        # button/placeholder already takes a fixed slot, so we only add
+        # indent per nesting level here.
+        indent_rem = 0.75 + depth * 1.25
+        hidden_attr = "" if is_top else " hidden"
+        viz_idx_attr = f' data-viz-idx="{i}"' if is_top else ""
 
-        main_row = (
-            "<tr class=\"row-main\">"
-            f"{idx_cell}"
-            f'<td class="name name-depth-{depth}">{name_inner}</td>'
-            '<td class="share-cell">'
-            f'<div class="share-bar" title="{pct:.1f}%"><span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
+        rows.append(
+            f'<tr class="item-row depth-{depth}"'
+            f' data-path="{child_path}" data-parent="{path_id}"'
+            f' data-depth="{depth}" data-is-dir="{1 if is_dir else 0}"'
+            f' data-has-kids="{1 if has_kids else 0}"'
+            f' data-sort-name="{esc(child.name)}"'
+            f' data-size="{child.size}" data-files="{child.file_count}"'
+            f' data-dirs="{child.dir_count}" data-kind="{0 if is_dir else 1}"'
+            f' data-pct="{pct:.6f}"{viz_idx_attr}{hidden_attr}>'
+            f'{idx_cell}'
+            f'<td class="name" style="padding-left:{indent_rem:.2f}rem">{name_inner}</td>'
+            f'<td class="share-cell">'
+            f'<div class="share-bar" title="{pct:.1f}%">'
+            f'<span style="width:{min(100.0, pct):.4f}%;background:{bar_color}"></span></div>'
             f'<span class="share-pct">{pct:.1f}%</span></td>'
             f'<td class="num size">{size_pill}</td>'
             f'<td class="num">{files_pill}</td>'
             f'<td class="num">{dirs_pill}</td>'
-            f"{type_cell}"
-            "</tr>"
+            f'</tr>'
         )
 
-        nested_row = ""
-        if is_dir and has_nested_block:
-            open_here = depth < 1
-            disp = "" if open_here else ' style="display:none"'
-            if inner_tbodies.strip():
-                nested_body = f'<table class="inner-tree">{inner_tbodies}</table>'
-            else:
-                nested_body = '<span class="nest-empty">Empty folder</span>'
-            nested_row = (
-                f'<tr class="row-nested"{disp}><td colspan="7" class="nested-cell">'
-                f'<div class="nest-wrap depth-{depth}">{nested_body}</div></td></tr>'
+        if has_kids:
+            rows.extend(
+                _html_tree_rows(
+                    child,
+                    esc,
+                    limit,
+                    max_depth,
+                    path_id=child_path,
+                    depth=depth + 1,
+                    share_base=max(child.size, 1),
+                    color_offset=color_offset + i + 1,
+                )
             )
 
-        viz_idx_attr = f' data-viz-idx="{i}"' if show_index else ""
-        parts.append(
-            '<tbody class="merge-group"'
-            ' data-sort-name="' + esc(child.name) + '"'
-            f' data-size="{child.size}" data-files="{child.file_count}"'
-            f' data-dirs="{child.dir_count}" data-kind="{0 if kind == "dir" else 1}"'
-            f' data-pct="{pct:.6f}"{viz_idx_attr}'
-            f">{main_row}{nested_row}</tbody>"
-        )
-
-    return "\n".join(parts)
+    return rows
 
 
 def render_report_html(
@@ -631,36 +733,51 @@ def render_report_html(
 
     viz_html = _html_storage_viz_block(dir_info, esc, limit)
 
-    merged_tbodies = _html_merge_groups_for_children(
+    rows = _html_tree_rows(
         dir_info,
         esc,
         limit,
         28,
-        0,
+        path_id="",
+        depth=0,
         share_base=total_sz,
         color_offset=0,
-        show_index=True,
     )
     table_body = (
-        merged_tbodies
-        if merged_tbodies.strip()
-        else '<tbody><tr><td colspan="7" class="empty">No items</td></tr></tbody>'
+        "<tbody>" + "".join(rows) + "</tbody>"
+        if rows
+        else '<tbody><tr><td colspan="6" class="empty">No items</td></tr></tbody>'
     )
 
     root_line = (
         f'<div class="tree-root-label"><strong>{esc(dir_info.name)}</strong> '
         f'<span class="tree-meta">{esc(format_size(dir_info.size))}</span></div>'
     )
+    # One flat <table> + <colgroup> gives consistent column widths at every
+    # depth (fixes the "columns misalign in subfolders" problem entirely).
+    colgroup = (
+        '<colgroup>'
+        '<col class="col-w-idx">'
+        '<col class="col-w-name">'
+        '<col class="col-w-share">'
+        '<col class="col-w-size">'
+        '<col class="col-w-files">'
+        '<col class="col-w-dirs">'
+        '</colgroup>'
+    )
     table_section = (
         '<section class="panel" id="pytree-table-panel">'
         "<h2>Contents</h2>"
         '<p class="table-hint">'
         "Click column headers to sort <strong>top-level</strong> items (share = % of total scan). "
-        "Each folder row can open nested contents; nested <strong>Share</strong> is % of that folder."
+        "Click the caret next to a folder to open it; nested <strong>Share</strong> is % of that folder."
         "</p>"
         '<div class="tree-toolbar">'
         '<input type="search" id="tree-filter" class="tree-filter" '
         'placeholder="Filter top-level by name..." autocomplete="off" spellcheck="false" />'
+        '<label class="toolbar-toggle" title="Always show folders before files when sorting">'
+        '<input type="checkbox" id="folders-first-cb"> Folders first'
+        '</label>'
         '<button type="button" class="btn" id="tree-expand-all">Expand all folders</button>'
         '<button type="button" class="btn" id="tree-collapse-all">Collapse all folders</button>'
         '<span class="tree-filter-status" id="tree-filter-status"></span>'
@@ -668,6 +785,7 @@ def render_report_html(
         '<div class="table-wrap merged-tree-table">'
         f"{root_line}"
         '<table id="pytree-items">'
+        f"{colgroup}"
         "<thead><tr>"
         '<th class="num">#</th>'
         '<th class="sortable" data-sort-key="name" scope="col">Name</th>'
@@ -675,7 +793,6 @@ def render_report_html(
         '<th class="sortable sort-desc" data-sort-key="size" scope="col">Size</th>'
         '<th class="sortable" data-sort-key="files" scope="col">Files</th>'
         '<th class="sortable" data-sort-key="dirs" scope="col">Dirs</th>'
-        '<th class="sortable" data-sort-key="kind" scope="col">Type</th>'
         "</tr></thead>"
         f"{table_body}"
         "</table></div></section>"
@@ -714,9 +831,15 @@ body {
   line-height: 1.5;
 }
 .wrap {
-  max-width: 1440px;
+  max-width: 1800px;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
+}
+@media (min-width: 1920px) {
+  .wrap { max-width: 2200px; }
+}
+@media (min-width: 2560px) {
+  .wrap { max-width: 2600px; }
 }
 .layout {
   display: grid;
@@ -820,8 +943,14 @@ thead th {
 thead th:nth-child(4),
 thead th:nth-child(5),
 thead th:nth-child(6) { text-align: right; }
-thead th:nth-child(7) { text-align: center; }
-tbody td.col-type { text-align: center; font-size: 0.8rem; color: var(--muted); }
+/* Fixed layout + <colgroup> widths keep columns aligned at every depth. */
+#pytree-items { table-layout: fixed; width: 100%; }
+#pytree-items .col-w-idx   { width: 3rem; }
+#pytree-items .col-w-share { width: 12rem; }
+#pytree-items .col-w-size  { width: 7rem; }
+#pytree-items .col-w-files { width: 7rem; }
+#pytree-items .col-w-dirs  { width: 6rem; }
+/* col-w-name is intentionally unset so it takes the remaining width. */
 .heat-pill {
   display: inline-block;
   padding: 0.12rem 0.55rem;
@@ -834,6 +963,7 @@ tbody td.col-type { text-align: center; font-size: 0.8rem; color: var(--muted); 
   color: #f6f8fa;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
 }
 .tree-root-label {
   margin-bottom: 0.75rem;
@@ -1022,11 +1152,28 @@ td.share-cell { vertical-align: middle; }
 .tree-filter::placeholder { color: var(--muted); }
 .tree-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 .tree-filter-status { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
-tbody.merge-group.viz-highlight > tr.row-main > td {
+.toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #21262d;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.toolbar-toggle:hover { color: var(--text); border-color: var(--accent); }
+.toolbar-toggle input { accent-color: var(--accent); cursor: pointer; }
+.toolbar-toggle:has(input:checked) { color: var(--text); border-color: var(--accent); }
+.item-row.viz-highlight > td {
   background: rgba(88, 166, 255, 0.14);
   box-shadow: inset 3px 0 0 var(--accent);
 }
-tbody.merge-group.row-hidden { display: none; }
+.item-row.row-hidden { display: none; }
 .btn {
   font: inherit;
   font-size: 0.85rem;
@@ -1047,27 +1194,19 @@ tbody.merge-group.row-hidden { display: none; }
   overflow: auto;
 }
 .merged-tree-table table { border-collapse: collapse; }
-.merged-tree-table .inner-tree {
-  width: 100%;
-  font-size: 0.88rem;
-  border-collapse: collapse;
-}
-.merged-tree-table .inner-tree tbody.merge-group .row-main { background: rgba(13,17,23,0.5); }
-.nested-cell {
-  padding: 0.35rem 0.5rem 0.85rem 0.75rem !important;
-  vertical-align: top !important;
-  background: #0d1117;
-  border-bottom: 1px solid #21262d;
-}
-.nest-wrap { border-left: 2px solid #30363d; margin: 0.15rem 0 0.35rem 0.35rem; padding: 0.35rem 0 0 0.65rem; }
-.nest-wrap.depth-0 { margin-left: 0.25rem; }
-.row-expand {
+/* Expand caret + placeholder share the same box so the icon and name
+   always land at exactly the same x-offset whether or not the row is a
+   folder that can be opened. */
+.row-expand,
+.row-expand-placeholder {
   display: inline-block;
   width: 1.2rem;
   height: 1.2rem;
-  margin-right: 0.25rem;
-  padding: 0;
+  margin-right: 0.35rem;
   vertical-align: middle;
+}
+.row-expand {
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: #21262d;
@@ -1083,41 +1222,40 @@ tbody.merge-group.row-hidden { display: none; }
 }
 .row-expand[aria-expanded="true"]::before { transform: rotate(90deg); }
 .row-expand:hover { background: #30363d; border-color: var(--accent); }
-.dir-leaf { display: inline-block; width: 1.2rem; margin-right: 0.25rem; }
-.idx-muted { color: var(--muted); text-align: center; }
-.nest-empty { color: var(--muted); font-style: italic; font-size: 0.85rem; padding: 0.35rem; }
-td.name.name-depth-1 { padding-left: 1rem; }
-td.name.name-depth-2 { padding-left: 1.5rem; }
-td.name.name-depth-3 { padding-left: 2rem; }
+.entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  line-height: 0;
+}
+.entry-icon[data-kind="dir"]  { color: var(--dir); }
+.entry-icon[data-kind="file"] { color: var(--file); }
+.entry-icon .icon-svg { display: block; }
 .tree-meta { color: var(--muted); font-weight: normal; }
-tbody tr {
+.item-row {
   border-bottom: 1px solid #21262d;
   transition: background 0.12s ease;
 }
-tbody tr:hover { background: #1f242c; }
+.item-row:hover { background: #1f242c; }
 tbody td {
-  padding: 0.6rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   vertical-align: middle;
 }
 tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
-tbody td.name { word-break: break-word; }
+tbody td.name {
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 tbody td.empty {
   text-align: center;
   color: var(--muted);
   padding: 1.5rem;
 }
-.badge {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  vertical-align: middle;
-}
-.badge[data-kind="dir"] { color: var(--dir); background: #2d1f3d; border: 1px solid #4c2889; }
-.badge[data-kind="file"] { color: var(--file); background: #102a4c; border: 1px solid #1f6feb; }
 pre.tree {
   margin: 0;
   padding: 1rem 1.1rem;
@@ -1154,147 +1292,189 @@ footer {
 <script>
 (function () {
   var table = document.getElementById("pytree-items");
-  if (table) {
-    var headers = table.querySelectorAll("thead th[data-sort-key]");
-    var current = { key: "size", dir: "desc" };
+  if (!table) return;
+  var tbody = table.querySelector("tbody");
+  if (!tbody) return;
 
-    function topLevelGroups() {
-      return Array.prototype.slice.call(table.children).filter(function (el) {
-        return el.tagName === "TBODY" && el.classList.contains("merge-group");
-      });
-    }
+  // ---------- Build an index of the flat row list ----------
+  // Every row is a direct child of <tbody>; parent-child relationships live
+  // on data-path / data-parent. We index once and reuse for sort / expand /
+  // filter so we never re-query the DOM.
+  var rows = Array.prototype.slice.call(tbody.querySelectorAll(":scope > tr.item-row"));
+  var byPath = Object.create(null);
+  var childrenOf = Object.create(null);
+  var topRows = [];
+  rows.forEach(function (r) {
+    var p = r.getAttribute("data-path");
+    var par = r.getAttribute("data-parent") || "";
+    byPath[p] = r;
+    (childrenOf[par] = childrenOf[par] || []).push(r);
+    if (!par) topRows.push(r);
+  });
 
-    function clearSortMarks() {
-      headers.forEach(function (th) {
-        th.classList.remove("sort-asc", "sort-desc");
-      });
-    }
-
-    function cmp(a, b, key, dir) {
-      var mul = dir === "asc" ? 1 : -1;
-      if (key === "name") {
-        var ca = a.getAttribute("data-sort-name") || "";
-        var cb = b.getAttribute("data-sort-name") || "";
-        if (ca !== cb) {
-          return mul * ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
-        }
-      } else if (key === "kind") {
-        var ka = parseInt(a.getAttribute("data-kind") || "0", 10);
-        var kb = parseInt(b.getAttribute("data-kind") || "0", 10);
-        if (ka !== kb) return mul * (ka - kb);
-      } else {
-        var ak = key === "pct" ? "data-pct" : "data-" + key;
-        var va = parseFloat(a.getAttribute(ak) || "0");
-        var vb = parseFloat(b.getAttribute(ak) || "0");
-        if (va !== vb) return mul * (va - vb);
-      }
-      var ca = a.getAttribute("data-sort-name") || "";
-      var cb = b.getAttribute("data-sort-name") || "";
-      return ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
-    }
-
-    function applySort(key, toggle) {
-      if (toggle) {
-        if (current.key === key) {
-          current.dir = current.dir === "asc" ? "desc" : "asc";
-        } else {
-          current.key = key;
-          current.dir = key === "name" || key === "kind" ? "asc" : "desc";
-        }
-      }
-      clearSortMarks();
-      var th = table.querySelector('thead th[data-sort-key="' + current.key + '"]');
-      if (th) th.classList.add(current.dir === "asc" ? "sort-asc" : "sort-desc");
-
-      var groups = topLevelGroups();
-      groups.sort(function (a, b) {
-        return cmp(a, b, current.key, current.dir);
-      });
-      var frag = document.createDocumentFragment();
-      groups.forEach(function (tbody, i) {
-        var idx = tbody.querySelector("tr.row-main .col-idx");
-        if (idx) idx.textContent = String(i + 1);
-        frag.appendChild(tbody);
-      });
-      var thead = table.querySelector("thead");
-      if (thead) {
-        table.insertBefore(frag, thead.nextSibling);
+  // ---------- Expand / collapse ----------
+  function directChildren(row) {
+    return childrenOf[row.getAttribute("data-path")] || [];
+  }
+  function setExpanded(row, open) {
+    var btn = row.querySelector(".row-expand");
+    if (!btn) return;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      directChildren(row).forEach(function (ch) { ch.hidden = false; });
+    } else {
+      // Recursively hide and collapse every descendant.
+      var stack = directChildren(row).slice();
+      while (stack.length) {
+        var r = stack.pop();
+        r.hidden = true;
+        var b = r.querySelector(".row-expand");
+        if (b) b.setAttribute("aria-expanded", "false");
+        Array.prototype.push.apply(stack, directChildren(r));
       }
     }
-
-    headers.forEach(function (th) {
-      th.addEventListener("click", function () {
-        applySort(th.getAttribute("data-sort-key"), true);
-      });
-    });
-    applySort("size", false);
-
-    table.addEventListener("click", function (ev) {
-      var btn = ev.target.closest(".row-expand");
-      if (!btn || !table.contains(btn)) return;
-      var tb = btn.closest("tbody.merge-group");
-      if (!tb) return;
-      var nest = tb.querySelector("tr.row-nested");
-      if (!nest) return;
-      var hidden = nest.style.display === "none";
-      nest.style.display = hidden ? "" : "none";
-      btn.setAttribute("aria-expanded", hidden ? "true" : "false");
-    });
   }
 
+  table.addEventListener("click", function (ev) {
+    var btn = ev.target.closest(".row-expand");
+    if (!btn || !table.contains(btn)) return;
+    var row = btn.closest("tr.item-row");
+    if (!row) return;
+    var open = btn.getAttribute("aria-expanded") !== "true";
+    setExpanded(row, open);
+  });
+
+  // ---------- Sorting ----------
+  var headers = table.querySelectorAll("thead th[data-sort-key]");
+  var current = { key: "size", dir: "desc" };
+  var foldersFirstCb = document.getElementById("folders-first-cb");
+
+  function clearSortMarks() {
+    headers.forEach(function (th) { th.classList.remove("sort-asc", "sort-desc"); });
+  }
+
+  function cmp(a, b, key, dir) {
+    if (foldersFirstCb && foldersFirstCb.checked) {
+      var ka = parseInt(a.getAttribute("data-kind") || "0", 10);
+      var kb = parseInt(b.getAttribute("data-kind") || "0", 10);
+      if (ka !== kb) return ka - kb; // 0 = dir, 1 = file → dirs first
+    }
+    var mul = dir === "asc" ? 1 : -1;
+    if (key === "name") {
+      var na = a.getAttribute("data-sort-name") || "";
+      var nb = b.getAttribute("data-sort-name") || "";
+      if (na !== nb) {
+        return mul * na.localeCompare(nb, undefined, { numeric: true, sensitivity: "base" });
+      }
+    } else {
+      var ak = key === "pct" ? "data-pct" : "data-" + key;
+      var va = parseFloat(a.getAttribute(ak) || "0");
+      var vb = parseFloat(b.getAttribute(ak) || "0");
+      if (va !== vb) return mul * (va - vb);
+    }
+    var fa = a.getAttribute("data-sort-name") || "";
+    var fb = b.getAttribute("data-sort-name") || "";
+    return fa.localeCompare(fb, undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  // Return every descendant of `row` in depth-first document order, so that
+  // when we reorder top-level rows their whole subtree moves with them.
+  function subtree(row) {
+    var out = [];
+    var stack = directChildren(row).slice().reverse();
+    while (stack.length) {
+      var r = stack.pop();
+      out.push(r);
+      var kids = directChildren(r);
+      for (var i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    }
+    return out;
+  }
+
+  function applySort(key, toggle) {
+    if (toggle) {
+      if (current.key === key) {
+        current.dir = current.dir === "asc" ? "desc" : "asc";
+      } else {
+        current.key = key;
+        current.dir = key === "name" ? "asc" : "desc";
+      }
+    }
+    clearSortMarks();
+    var th = table.querySelector('thead th[data-sort-key="' + current.key + '"]');
+    if (th) th.classList.add(current.dir === "asc" ? "sort-asc" : "sort-desc");
+
+    var sorted = topRows.slice().sort(function (a, b) {
+      return cmp(a, b, current.key, current.dir);
+    });
+    var frag = document.createDocumentFragment();
+    sorted.forEach(function (row, i) {
+      var idx = row.querySelector(".col-idx");
+      if (idx) idx.textContent = String(i + 1);
+      frag.appendChild(row);
+      subtree(row).forEach(function (r) { frag.appendChild(r); });
+    });
+    tbody.appendChild(frag);
+  }
+
+  headers.forEach(function (th) {
+    th.addEventListener("click", function () {
+      applySort(th.getAttribute("data-sort-key"), true);
+    });
+  });
+  if (foldersFirstCb) {
+    foldersFirstCb.addEventListener("change", function () { applySort(current.key, false); });
+  }
+  applySort("size", false);
+
+  // ---------- Expand-all / Collapse-all ----------
   var expandBtn = document.getElementById("tree-expand-all");
   var collapseBtn = document.getElementById("tree-collapse-all");
-  var panel = document.getElementById("pytree-table-panel");
-  if (panel && expandBtn && collapseBtn) {
+  if (expandBtn) {
     expandBtn.addEventListener("click", function () {
-      panel.querySelectorAll("tr.row-nested").forEach(function (tr) {
-        tr.style.display = "";
-      });
-      panel.querySelectorAll(".row-expand").forEach(function (b) {
-        b.setAttribute("aria-expanded", "true");
+      rows.forEach(function (r) {
+        if (r.getAttribute("data-has-kids") === "1") {
+          var b = r.querySelector(".row-expand");
+          if (b) b.setAttribute("aria-expanded", "true");
+        }
+        if (r.getAttribute("data-depth") !== "0") r.hidden = false;
       });
     });
+  }
+  if (collapseBtn) {
     collapseBtn.addEventListener("click", function () {
-      panel.querySelectorAll("tr.row-nested").forEach(function (tr) {
-        tr.style.display = "none";
-      });
-      panel.querySelectorAll(".row-expand").forEach(function (b) {
-        b.setAttribute("aria-expanded", "false");
+      rows.forEach(function (r) {
+        var b = r.querySelector(".row-expand");
+        if (b) b.setAttribute("aria-expanded", "false");
+        if (r.getAttribute("data-depth") !== "0") r.hidden = true;
       });
     });
   }
 
+  // ---------- Filter (top-level by name) ----------
   var filterInput = document.getElementById("tree-filter");
   var filterStatus = document.getElementById("tree-filter-status");
-  var mainTable = document.getElementById("pytree-items");
-  if (filterInput && mainTable) {
-    var topGroups = Array.prototype.slice.call(
-      mainTable.querySelectorAll(":scope > tbody.merge-group")
-    );
+  if (filterInput) {
     function applyFilter() {
       var q = (filterInput.value || "").trim().toLowerCase();
       var shown = 0;
-      topGroups.forEach(function (g) {
-        var name = (g.getAttribute("data-sort-name") || "").toLowerCase();
+      topRows.forEach(function (row) {
+        var name = (row.getAttribute("data-sort-name") || "").toLowerCase();
         var match = !q || name.indexOf(q) !== -1;
-        g.classList.toggle("row-hidden", !match);
+        row.classList.toggle("row-hidden", !match);
+        // Hide the whole subtree when filtered out; leave expansion state alone.
+        subtree(row).forEach(function (r) { r.classList.toggle("row-hidden", !match); });
         if (match) shown += 1;
       });
       if (filterStatus) {
-        if (!q) {
-          filterStatus.textContent = "";
-        } else {
-          filterStatus.textContent =
-            shown + " of " + topGroups.length + " match";
-        }
+        filterStatus.textContent = q
+          ? shown + " of " + topRows.length + " match"
+          : "";
       }
     }
     filterInput.addEventListener("input", applyFilter);
     filterInput.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        filterInput.value = "";
-        applyFilter();
-      }
+      if (e.key === "Escape") { filterInput.value = ""; applyFilter(); }
     });
   }
 })();
@@ -1336,13 +1516,13 @@ footer {
     clearRowHighlight();
     if (idx == null || isNaN(idx)) return;
     var rows = document.querySelectorAll(
-      '#pytree-items > tbody.merge-group[data-viz-idx="' + idx + '"]'
+      '#pytree-items tr.item-row[data-viz-idx="' + idx + '"]'
     );
     rows.forEach(function (r) { r.classList.add("viz-highlight"); });
   }
   function clearRowHighlight() {
     document
-      .querySelectorAll("#pytree-items > tbody.merge-group.viz-highlight")
+      .querySelectorAll("#pytree-items tr.item-row.viz-highlight")
       .forEach(function (r) { r.classList.remove("viz-highlight"); });
   }
 
@@ -1674,8 +1854,9 @@ class SizeTreeApp(App):
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Scanning directories...", total=None)
-            self.dir_info = scan_directory(self.root_path, self.max_depth)
+            task = progress.add_task("Scanning...", total=None)
+            cb = make_throttled_progress_cb(progress, task)
+            self.dir_info = scan_directory(self.root_path, self.max_depth, progress_cb=cb)
             progress.update(task, completed=True)
         
         # Update info panel
@@ -1767,11 +1948,21 @@ def scan(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
+        transient=False,
     ) as progress:
-        task = progress.add_task("Scanning directories...", total=None)
-        dir_info = scan_directory(target_path, depth)
-        progress.remove_task(task)
-    
+        task = progress.add_task("Scanning...", total=None)
+        cb = make_throttled_progress_cb(progress, task)
+        dir_info = scan_directory(target_path, depth, progress_cb=cb)
+        progress.update(
+            task,
+            description=(
+                f"Scanned  "
+                f"[bold green]{dir_info.file_count:,}[/bold green] files  "
+                f"[bold green]{dir_info.dir_count:,}[/bold green] dirs  "
+                f"[bold green]{format_size(dir_info.size)}[/bold green]"
+            ),
+        )
+
     console.print("\n[bold green]Scan complete[/bold green]")
     console.print(f"Total Size: [bold]{format_size(dir_info.size)}[/bold]")
     console.print(f"Files: {dir_info.file_count:,} | Directories: {dir_info.dir_count:,}\n")
