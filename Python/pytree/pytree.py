@@ -177,6 +177,19 @@ def format_size(size: int) -> str:
     return f"{size_float:.1f} PB"
 
 
+# Narrow no-break space — visually distinct from a decimal point, keeps
+# numbers non-wrapping. Used only for HTML-facing count formatting so there's
+# no chance of confusing integer counts like "73,898" with a float "73.898"
+# in small pill fonts.
+_COUNT_THOUSANDS_SEP = "\u202f"
+
+
+def format_count(n: int) -> str:
+    """Format an integer count with a narrow no-break space as the thousands
+    separator. Integer-only by design: counts are never fractional."""
+    return f"{int(n):,}".replace(",", _COUNT_THOUSANDS_SEP)
+
+
 class ReportFormat(str, Enum):
     """Supported file report formats."""
     text = "text"
@@ -551,8 +564,8 @@ def _html_merge_groups_for_children(
             return f'<span class="heat-pill" style="background:{bg}">{value_html}</span>'
 
         size_pill = _pill(esc(format_size(child.size)), _heat_bg(child.size, max_size))
-        files_pill = _pill(f"{child.file_count:,}", _heat_bg(child.file_count, max_files))
-        dirs_pill = _pill(f"{child.dir_count:,}", _heat_bg(child.dir_count, max_dirs))
+        files_pill = _pill(format_count(child.file_count), _heat_bg(child.file_count, max_files))
+        dirs_pill = _pill(format_count(child.dir_count), _heat_bg(child.dir_count, max_dirs))
 
         type_cell = (
             f'<td class="col-type">'
@@ -815,12 +828,13 @@ tbody td.col-type { text-align: center; font-size: 0.8rem; color: var(--muted); 
   border-radius: 999px;
   min-width: 2.5rem;
   text-align: right;
+  font-family: var(--mono);
+  font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
   color: #f6f8fa;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-td.size .heat-pill { font-family: var(--mono); font-size: 0.82rem; }
 .tree-root-label {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
@@ -1131,8 +1145,8 @@ footer {
         f"<dt>Path</dt><dd><code>{esc(path_s)}</code></dd>\n"
         f"<dt>Generated</dt><dd>{gen}</dd>\n"
         f"<dt>Total size</dt><dd class=\"stat-big\">{size_h}</dd>\n"
-        f"<dt>Contents</dt><dd>{dir_info.file_count:,} files &middot; "
-        f"{dir_info.dir_count:,} directories</dd>\n"
+        f"<dt>Contents</dt><dd>{format_count(dir_info.file_count)} files &middot; "
+        f"{format_count(dir_info.dir_count)} directories</dd>\n"
         "</dl>\n</header>\n"
     )
 
