@@ -222,7 +222,7 @@ def main(
                     "pyi-makespec",
                     "--onefile",
                     f"--specpath={spec_path}",
-                    str(file.resolve()),
+                    file.name,
                 ]
                 mk = subprocess.run(makespec_cmd, capture_output=True, text=True, cwd=str(base_dir))
                 if mk.returncode != 0:
@@ -250,8 +250,8 @@ def main(
             ]
             if name:
                 cmd.append(f"--name={_normalize_exe_basename(name)}")
-            cmd.append(str(file.resolve()))  # Use absolute path to avoid cross-drive issues
-        # Run from the file's directory to avoid Windows cross-drive path issues
+            cmd.append(file.name)
+        # Run from the script directory; basename keeps generated .spec files portable (no machine paths)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(base_dir))
         if result.returncode != 0:
             console.print("[red]✗ PyInstaller failed:[/red]", style="bold")
