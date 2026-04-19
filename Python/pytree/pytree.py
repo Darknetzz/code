@@ -18,6 +18,7 @@ from datetime import datetime
 
 import typer
 from rich.console import Console
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.tree import Tree as RichTree
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -2227,13 +2228,76 @@ def version():
     console.print("A TreeSize-like disk space analyzer built with Textual")
 
 
+_INTERACTIVE_ACTIONS = ("scan", "tui", "version")
+
+
+def _prompt_interactive_args() -> List[str]:
+    """Build a CLI argv list by interactively prompting the user.
+
+    Used when pytree is launched with no arguments so first-time users see
+    a friendly walkthrough instead of a silent default scan. The resulting
+    argv is handed straight to Typer so option parsing stays single-source.
+    """
+    console.print(
+        "[bold cyan]pytree[/bold cyan] — no command given. "
+        "Answer a few prompts (Ctrl+C to cancel).\n"
+    )
+
+    action = Prompt.ask(
+        "What do you want to do?",
+        choices=list(_INTERACTIVE_ACTIONS),
+        default="scan",
+    )
+    if action == "version":
+        return ["version"]
+
+    path = Prompt.ask("Directory to scan", default=".")
+    argv: List[str] = [action, path]
+
+    depth_raw = Prompt.ask(
+        "Maximum depth to scan (blank = unlimited)", default=""
+    ).strip()
+    if depth_raw:
+        argv += ["-d", depth_raw]
+
+    if action == "tui":
+        return argv
+
+    limit_raw = Prompt.ask("Number of items to show", default="20").strip()
+    if limit_raw and limit_raw != "20":
+        argv += ["-l", limit_raw]
+
+    if Confirm.ask("Show as tree view?", default=False):
+        argv.append("-t")
+
+    output_raw = Prompt.ask(
+        "Write report to file? (path, or blank to skip)", default=""
+    ).strip()
+    if output_raw:
+        argv += ["-o", output_raw]
+        if infer_report_format(Path(output_raw)) is None:
+            fmt = Prompt.ask(
+                "Report format",
+                choices=[f.value for f in ReportFormat],
+                default=ReportFormat.text.value,
+            )
+            argv += ["--format", fmt]
+
+    return argv
+
+
 if __name__ == "__main__":
-    # Show help if no arguments provided
     if len(sys.argv) == 1:
-        sys.argv.extend(["scan", "."])
+        try:
+            sys.argv.extend(_prompt_interactive_args())
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Cancelled.[/dim]")
+            sys.exit(130)
     # If first arg is not a command and not an option, treat it as a path for scan
-    elif len(sys.argv) >= 2 and not sys.argv[1].startswith('-') and sys.argv[1] not in ['scan', 'tui', 'version']:
-        path = sys.argv[1]
-        # Insert 'scan' command and keep the rest of the args
-        sys.argv = [sys.argv[0], 'scan', path] + sys.argv[2:]
+    elif (
+        len(sys.argv) >= 2
+        and not sys.argv[1].startswith("-")
+        and sys.argv[1] not in _INTERACTIVE_ACTIONS
+    ):
+        sys.argv = [sys.argv[0], "scan", sys.argv[1]] + sys.argv[2:]
     app()
