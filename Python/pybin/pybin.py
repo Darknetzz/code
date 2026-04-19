@@ -1,3 +1,4 @@
+import re
 import sys
 import typer
 from typing import Optional
@@ -99,6 +100,69 @@ def _normalize_exe_basename(name: str) -> str:
     return n
 
 
+def _script_imports_rich(script_path: Path) -> bool:
+    """True if the script appears to depend on Rich (needs extra PyInstaller hidden imports)."""
+    try:
+        text = script_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("from rich") or stripped.startswith("import rich"):
+            return True
+    return False
+
+
+def _rich_unicode_hidden_import_cli_args() -> list[str]:
+    """Used only when PyInstaller is invoked without a .spec (CLI accepts --hidden-import)."""
+    try:
+        from PyInstaller.utils.hooks import collect_submodules
+
+        return [f"--hidden-import={m}" for m in collect_submodules("rich._unicode_data")]
+    except Exception:
+        return []
+
+
+def _patch_regenerated_spec(
+    spec_path: Path,
+    *,
+    entry_basename: str,
+    ensure_rich: bool,
+) -> None:
+    """After pyi-makespec: portable entry script and Rich unicode tables (spec-only; no CLI hooks)."""
+    text = spec_path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"(a = Analysis\(\s*)\[['\"][^'\"]+['\"]\]",
+        rf"\1['{entry_basename}']",
+        text,
+        count=1,
+    )
+    if ensure_rich:
+        if 'collect_submodules("rich._unicode_data")' not in text:
+            header = (
+                "from PyInstaller.utils.hooks import collect_submodules\n\n"
+                '_RICH_UNICODE_SUBMODULES = collect_submodules("rich._unicode_data")\n\n'
+            )
+            lines = text.splitlines(keepends=True)
+            insert_at = 1
+            if len(lines) > 1 and lines[1].strip() == "":
+                insert_at = 2
+            else:
+                lines.insert(1, "\n")
+                insert_at = 2
+            lines.insert(insert_at, header)
+            text = "".join(lines)
+        text = re.sub(
+            r"\n(\s*)hiddenimports=\[[^\]]*\],",
+            r"\n\1hiddenimports=_RICH_UNICODE_SUBMODULES,",
+            text,
+            count=1,
+        )
+    spec_path.write_text(text, encoding="utf-8")
+
+
 def _resolve_built_artifact_path(
     dist_path: Path,
     file_path: Path,
@@ -173,8 +237,15 @@ def main(
     
     console.print(f"[cyan]📦 Processing:[/cyan] {file}", style="bold")
 
+    script_for_analysis = file.resolve()
+    rich_hi_args = (
+        _rich_unicode_hidden_import_cli_args()
+        if _script_imports_rich(script_for_analysis)
+        else []
+    )
+
     # Determine base paths (use script directory to keep outputs next to the script)
-    base_dir = file.resolve().parent
+    base_dir = script_for_analysis.parent
     dist_path = output_dir.resolve() if output_dir else base_dir / "dist"
     work_path = base_dir / "build"
     spec_path = base_dir
@@ -230,6 +301,14 @@ def main(
                     console.print(mk.stderr, style="red")
                 else:
                     console.print("[green]✓ .spec regenerated[/green]")
+                    try:
+                        _patch_regenerated_spec(
+                            spec_file,
+                            entry_basename=file.name,
+                            ensure_rich=_script_imports_rich(script_for_analysis),
+                        )
+                    except Exception as exc:
+                        console.print(f"[yellow]⚠ Could not patch regenerated .spec:[/yellow] {exc}")
 
             cmd = [
                 "pyinstaller",
@@ -247,6 +326,7 @@ def main(
                 f"--distpath={dist_path}",
                 f"--workpath={work_path}",
                 f"--specpath={spec_path}",
+                *rich_hi_args,
             ]
             if name:
                 cmd.append(f"--name={_normalize_exe_basename(name)}")
