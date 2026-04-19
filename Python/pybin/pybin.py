@@ -27,33 +27,10 @@ def _ensure_utf8():
 
 _ensure_utf8()
 
-from rich.console import Console
-
-app = typer.Typer()
-console = Console()
+# No `import rich` here: PyInstaller would need every lazy unicode submodule, and Typer only
+# pulls Rich in for help/error formatting. Use plain Typer/Click output instead.
+app = typer.Typer(rich_markup_mode=None, add_completion=False)
 BUILD_INFO_MODULE_NAME = "_pybin_build_info"
-
-# ============================================================================ #
-#                               FUNCTION: cprint                               #
-# ============================================================================ #
-def cprint(message: str, type: str = "", style: str = "bold green", **kwargs) -> None:
-    prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
-    type   = type.lower()
-    
-    if type == "error":
-        style = "red"
-        prefix = "❌"
-    elif type == "warning":
-        style = "yellow"
-        prefix = "⚠️"
-    elif type == "info":
-        style = "blue"
-        prefix = "ℹ️"
-    elif type == "success":
-        style = "green"
-        prefix = "✅"
-    message = f"{prefix}  {message}"
-    console.print(message, style=style, **kwargs)
 
 
 def _source_references_build_info(file_path: Path) -> bool:
@@ -192,19 +169,16 @@ def main(
         "--keep-spec/--no-keep-spec",
         help="Keep the .spec file after building (default: keep)",
         show_default=True,
-        rich_help_panel="Build",
     ),
     keep_build: bool = typer.Option(
         False,
         "--keep-build",
         help="Keep the build directory after building",
-        rich_help_panel="Build",
     ),
     output_dir: Path = typer.Option(
         None,
         "--output-dir",
         help="Directory for the final .exe (default: <script_dir>/dist).",
-        rich_help_panel="Output",
     ),
     name: Optional[str] = typer.Option(
         None,
@@ -215,7 +189,6 @@ def main(
             "Default: same stem as the .py file. "
             "Writes <name>.exe into --output-dir or the default dist/ folder."
         ),
-        rich_help_panel="Output",
     ),
 ):
     """
@@ -228,14 +201,14 @@ def main(
     Change only the .exe name:  --name STEM  (or -n STEM); still uses default dist/ unless you also pass --output-dir.
     """
     if not file.exists():
-        console.print(f"[red]✗ Error:[/red] File '{file}' does not exist.", style="bold")
+        typer.secho(f"✗ Error: File '{file}' does not exist.", fg=typer.colors.RED, bold=True, err=True)
         raise typer.Exit(code=1)
-    
+
     if file.suffix != ".py":
-        console.print(f"[red]✗ Error:[/red] '{file}' is not a Python file.", style="bold")
+        typer.secho(f"✗ Error: '{file}' is not a Python file.", fg=typer.colors.RED, bold=True, err=True)
         raise typer.Exit(code=1)
-    
-    console.print(f"[cyan]📦 Processing:[/cyan] {file}", style="bold")
+
+    typer.secho(f"📦 Processing: {file}", fg=typer.colors.CYAN, bold=True)
 
     script_for_analysis = file.resolve()
     rich_hi_args = (
@@ -260,17 +233,20 @@ def main(
     if should_embed_build_info:
         try:
             build_info_path, original_build_info = _prepare_build_info_module(base_dir)
-            console.print(f"[dim]  Embedded build metadata via {build_info_path.name}[/dim]")
+            typer.secho(f"  Embedded build metadata via {build_info_path.name}", dim=True)
         except Exception as exc:
-            console.print(f"[yellow]⚠ Could not embed build metadata:[/yellow] {exc}")
+            typer.secho(f"⚠ Could not embed build metadata: {exc}", fg=typer.colors.YELLOW)
     else:
-        console.print(f"[dim]  Skipping build metadata: {file.name} does not reference {BUILD_INFO_MODULE_NAME}[/dim]")
+        typer.secho(
+            f"  Skipping build metadata: {file.name} does not reference {BUILD_INFO_MODULE_NAME}",
+            dim=True,
+        )
 
     try:
         # Run pyinstaller with explicit paths
         # If a .spec file exists, use it directly to preserve custom settings
         if spec_file.exists():
-            console.print(f"[green]✓ Found existing .spec file:[/green] {spec_file.name}")
+            typer.secho(f"✓ Found existing .spec file: {spec_file.name}", fg=typer.colors.GREEN)
 
             # If the source file is newer than the spec, regenerate the spec
             try:
@@ -281,13 +257,20 @@ def main(
                 spec_mtime = None
 
             if src_mtime is not None and spec_mtime is not None and src_mtime > spec_mtime:
-                console.print("[yellow]⚠ Source is newer than .spec; regenerating .spec (backup saved)[/yellow]")
+                typer.secho(
+                    "⚠ Source is newer than .spec; regenerating .spec (backup saved)",
+                    fg=typer.colors.YELLOW,
+                )
                 # Backup existing spec
                 backup_spec = spec_file.with_suffix(spec_file.suffix + ".bak")
                 try:
                     shutil.copy2(spec_file, backup_spec)
                 except Exception:
-                    console.print("[red]✗ Failed to backup existing .spec; continuing without backup[/red]")
+                    typer.secho(
+                        "✗ Failed to backup existing .spec; continuing without backup",
+                        fg=typer.colors.RED,
+                        err=True,
+                    )
 
                 makespec_cmd = [
                     "pyi-makespec",
@@ -297,10 +280,10 @@ def main(
                 ]
                 mk = subprocess.run(makespec_cmd, capture_output=True, text=True, cwd=str(base_dir))
                 if mk.returncode != 0:
-                    console.print("[red]✗ pyi-makespec failed; using existing .spec[/red]")
-                    console.print(mk.stderr, style="red")
+                    typer.secho("✗ pyi-makespec failed; using existing .spec", fg=typer.colors.RED, err=True)
+                    typer.secho(mk.stderr, fg=typer.colors.RED, err=True)
                 else:
-                    console.print("[green]✓ .spec regenerated[/green]")
+                    typer.secho("✓ .spec regenerated", fg=typer.colors.GREEN)
                     try:
                         _patch_regenerated_spec(
                             spec_file,
@@ -308,7 +291,7 @@ def main(
                             ensure_rich=_script_imports_rich(script_for_analysis),
                         )
                     except Exception as exc:
-                        console.print(f"[yellow]⚠ Could not patch regenerated .spec:[/yellow] {exc}")
+                        typer.secho(f"⚠ Could not patch regenerated .spec: {exc}", fg=typer.colors.YELLOW)
 
             cmd = [
                 "pyinstaller",
@@ -319,7 +302,7 @@ def main(
                 cmd.append(f"--name={_normalize_exe_basename(name)}")
             cmd.append(str(spec_file))
         else:
-            console.print("[yellow]⚙ Generating new .spec file[/yellow]")
+            typer.secho("⚙ Generating new .spec file", fg=typer.colors.YELLOW)
             cmd = [
                 "pyinstaller",
                 "--onefile",
@@ -334,31 +317,33 @@ def main(
         # Run from the script directory; basename keeps generated .spec files portable (no machine paths)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(base_dir))
         if result.returncode != 0:
-            console.print("[red]✗ PyInstaller failed:[/red]", style="bold")
-            console.print(result.stderr, style="red")
+            typer.secho("✗ PyInstaller failed:", fg=typer.colors.RED, bold=True, err=True)
+            typer.secho(result.stderr, fg=typer.colors.RED, err=True)
             raise typer.Exit(code=1)
-        
-        console.print("[green]✓ PyInstaller completed successfully[/green]", style="bold")
+
+        typer.secho("✓ PyInstaller completed successfully", fg=typer.colors.GREEN, bold=True)
         
         # Clean up build directory (cross-platform) if not keeping it
         if not keep_build:
             if work_path.exists():
                 shutil.rmtree(work_path)
-                console.print("[dim]  Cleaned up build directory[/dim]")
+                typer.secho("  Cleaned up build directory", dim=True)
         else:
-            console.print("[yellow]  Keeping build directory (--keep-build)[/yellow]")
+            typer.secho("  Keeping build directory (--keep-build)", fg=typer.colors.YELLOW)
         
         # Clean up spec file if not keeping it
         if not keep_spec:
             if spec_file.exists():
                 spec_file.unlink()
-                console.print("[dim]  Cleaned up .spec file[/dim]")
+                typer.secho("  Cleaned up .spec file", dim=True)
         elif keep_spec and not spec_file.exists():
             # Only show message if user explicitly set --keep-spec but no spec was generated
             pass
         
         built_artifact = _resolve_built_artifact_path(dist_path, file, output_name=name)
-        console.print(f"\n[green]✓ Build complete:[/green] [cyan]{built_artifact}[/cyan]", style="bold")
+        typer.echo("")
+        typer.secho("✓ Build complete: ", fg=typer.colors.GREEN, bold=True, nl=False)
+        typer.secho(str(built_artifact), fg=typer.colors.CYAN, bold=True)
     finally:
         if build_info_path is not None:
             _restore_build_info_module(build_info_path, original_build_info)

@@ -1,16 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_submodules
-
-_RICH_UNICODE_SUBMODULES = collect_submodules("rich._unicode_data")
-
 
 a = Analysis(
     ['pybin.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=_RICH_UNICODE_SUBMODULES,
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

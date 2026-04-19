@@ -2,8 +2,8 @@
 
 from PyInstaller.utils.hooks import collect_submodules
 
-# Rich loads cell-width tables via import_module (unicode17-0-0, etc.); PyInstaller misses those.
 _RICH_UNICODE_SUBMODULES = collect_submodules("rich._unicode_data")
+
 
 a = Analysis(
     ['pybin.py'],
