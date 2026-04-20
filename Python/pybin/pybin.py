@@ -92,14 +92,47 @@ def _script_imports_rich(script_path: Path) -> bool:
     return False
 
 
-def _rich_unicode_hidden_import_cli_args() -> list[str]:
-    """Used only when PyInstaller is invoked without a .spec (CLI accepts --hidden-import)."""
-    try:
-        from PyInstaller.utils.hooks import collect_submodules
+def _extract_spec_entry_script(spec_text: str) -> Optional[str]:
+    match = re.search(
+        r"a = Analysis\(\s*\[(?:\s*)['\"]([^'\"]+)['\"]",
+        spec_text,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return None
+    return match.group(1)
 
-        return [f"--hidden-import={m}" for m in collect_submodules("rich._unicode_data")]
-    except Exception:
-        return []
+
+def _is_windows_abs_path(path_string: str) -> bool:
+    return bool(re.match(r"^[A-Za-z]:[\\/]", path_string))
+
+
+def _spec_looks_compatible(spec_path: Path, script_path: Path) -> tuple[bool, str]:
+    """
+    Check whether the spec's Analysis entry is portable for the current platform.
+    Returns (compatible, reason_if_not).
+    """
+    try:
+        text = spec_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return False, f"could not read spec: {exc}"
+
+    entry = _extract_spec_entry_script(text)
+    if not entry:
+        return False, "could not parse Analysis entry"
+
+    if _is_windows_abs_path(entry) and sys.platform != "win32":
+        return False, "contains Windows absolute path on non-Windows"
+    if entry.startswith("/") and sys.platform == "win32":
+        return False, "contains POSIX absolute path on Windows"
+
+    if _is_windows_abs_path(entry) or Path(entry).is_absolute():
+        return False, "contains machine-specific absolute path"
+
+    if Path(entry).name != script_path.name:
+        return False, f"entry points to '{entry}' instead of '{script_path.name}'"
+
+    return True, ""
 
 
 def _patch_regenerated_spec(
@@ -175,6 +208,15 @@ def main(
         "--keep-build",
         help="Keep the build directory after building",
     ),
+    use_spec: bool = typer.Option(
+        False,
+        "--use-spec/--no-use-spec",
+        help=(
+            "Use .spec workflow when available. Incompatible specs are auto-regenerated. "
+            "Use --no-use-spec to always build directly from .py."
+        ),
+        show_default=True,
+    ),
     output_dir: Path = typer.Option(
         None,
         "--output-dir",
@@ -211,11 +253,7 @@ def main(
     typer.secho(f"📦 Processing: {file}", fg=typer.colors.CYAN, bold=True)
 
     script_for_analysis = file.resolve()
-    rich_hi_args = (
-        _rich_unicode_hidden_import_cli_args()
-        if _script_imports_rich(script_for_analysis)
-        else []
-    )
+    script_imports_rich = _script_imports_rich(script_for_analysis)
 
     # Determine base paths (use script directory to keep outputs next to the script)
     base_dir = script_for_analysis.parent
@@ -243,34 +281,47 @@ def main(
         )
 
     try:
-        # Run pyinstaller with explicit paths
-        # If a .spec file exists, use it directly to preserve custom settings
-        if spec_file.exists():
-            typer.secho(f"✓ Found existing .spec file: {spec_file.name}", fg=typer.colors.GREEN)
+        should_build_with_spec = use_spec
+        should_regenerate_spec = False
 
-            # If the source file is newer than the spec, regenerate the spec
-            try:
-                src_mtime = file.stat().st_mtime
-                spec_mtime = spec_file.stat().st_mtime
-            except Exception:
-                src_mtime = None
-                spec_mtime = None
-
-            if src_mtime is not None and spec_mtime is not None and src_mtime > spec_mtime:
-                typer.secho(
-                    "⚠ Source is newer than .spec; regenerating .spec (backup saved)",
-                    fg=typer.colors.YELLOW,
-                )
-                # Backup existing spec
-                backup_spec = spec_file.with_suffix(spec_file.suffix + ".bak")
-                try:
-                    shutil.copy2(spec_file, backup_spec)
-                except Exception:
+        if use_spec:
+            if spec_file.exists():
+                typer.secho(f"✓ Found existing .spec file: {spec_file.name}", fg=typer.colors.GREEN)
+                compatible, reason = _spec_looks_compatible(spec_file, script_for_analysis)
+                if not compatible:
+                    should_regenerate_spec = True
                     typer.secho(
-                        "✗ Failed to backup existing .spec; continuing without backup",
-                        fg=typer.colors.RED,
-                        err=True,
+                        f"⚠ Existing .spec is incompatible ({reason}); regenerating",
+                        fg=typer.colors.YELLOW,
                     )
+                else:
+                    try:
+                        src_mtime = file.stat().st_mtime
+                        spec_mtime = spec_file.stat().st_mtime
+                    except Exception:
+                        src_mtime = None
+                        spec_mtime = None
+                    if src_mtime is not None and spec_mtime is not None and src_mtime > spec_mtime:
+                        should_regenerate_spec = True
+                        typer.secho(
+                            "⚠ Source is newer than .spec; regenerating .spec (backup saved)",
+                            fg=typer.colors.YELLOW,
+                        )
+            else:
+                should_regenerate_spec = True
+                typer.secho("⚙ No existing .spec; generating one", fg=typer.colors.YELLOW)
+
+            if should_regenerate_spec:
+                if spec_file.exists():
+                    backup_spec = spec_file.with_suffix(spec_file.suffix + ".bak")
+                    try:
+                        shutil.copy2(spec_file, backup_spec)
+                    except Exception:
+                        typer.secho(
+                            "✗ Failed to backup existing .spec; continuing without backup",
+                            fg=typer.colors.RED,
+                            err=True,
+                        )
 
                 makespec_cmd = [
                     "pyi-makespec",
@@ -280,18 +331,19 @@ def main(
                 ]
                 mk = subprocess.run(makespec_cmd, capture_output=True, text=True, cwd=str(base_dir))
                 if mk.returncode != 0:
-                    typer.secho("✗ pyi-makespec failed; using existing .spec", fg=typer.colors.RED, err=True)
+                    typer.secho("✗ pyi-makespec failed", fg=typer.colors.RED, err=True)
                     typer.secho(mk.stderr, fg=typer.colors.RED, err=True)
-                else:
-                    typer.secho("✓ .spec regenerated", fg=typer.colors.GREEN)
-                    try:
-                        _patch_regenerated_spec(
-                            spec_file,
-                            entry_basename=file.name,
-                            ensure_rich=_script_imports_rich(script_for_analysis),
-                        )
-                    except Exception as exc:
-                        typer.secho(f"⚠ Could not patch regenerated .spec: {exc}", fg=typer.colors.YELLOW)
+                    raise typer.Exit(code=1)
+
+                typer.secho("✓ .spec regenerated", fg=typer.colors.GREEN)
+                try:
+                    _patch_regenerated_spec(
+                        spec_file,
+                        entry_basename=file.name,
+                        ensure_rich=script_imports_rich,
+                    )
+                except Exception as exc:
+                    typer.secho(f"⚠ Could not patch regenerated .spec: {exc}", fg=typer.colors.YELLOW)
 
             cmd = [
                 "pyinstaller",
@@ -302,15 +354,16 @@ def main(
                 cmd.append(f"--name={_normalize_exe_basename(name)}")
             cmd.append(str(spec_file))
         else:
-            typer.secho("⚙ Generating new .spec file", fg=typer.colors.YELLOW)
+            typer.secho("⚙ Building directly from script (--no-use-spec)", fg=typer.colors.YELLOW)
             cmd = [
                 "pyinstaller",
                 "--onefile",
                 f"--distpath={dist_path}",
                 f"--workpath={work_path}",
                 f"--specpath={spec_path}",
-                *rich_hi_args,
             ]
+            if script_imports_rich:
+                cmd.append("--collect-submodules=rich._unicode_data")
             if name:
                 cmd.append(f"--name={_normalize_exe_basename(name)}")
             cmd.append(file.name)
