@@ -33,14 +33,26 @@ from textual.binding import Binding
 
 __version__ = "1.0.0"
 
+_CLI_EPILOG = (
+    "[bold]Examples:[/bold]\n\n"
+    "[cyan]pytree .[/cyan] - scan current dir (shortcut for 'pytree scan .').\n\n"
+    "[cyan]pytree scan ~/code -d 2 -l 30 -t[/cyan] - tree view, depth 2, top 30 entries.\n\n"
+    "[cyan]pytree report D:\\ -o sizes.html[/cyan] - write HTML report and open it in a browser.\n\n"
+    "[cyan]pytree report . --format json -o out.json[/cyan] - machine-readable report "
+    "(text / json / markdown / html).\n\n"
+    "[cyan]pytree tui ~/Downloads[/cyan] - interactive explorer (arrow keys, enter to drill in).\n\n"
+    "Run [cyan]pytree <command> --help[/cyan] for all flags of a given command."
+)
+
 app = typer.Typer(
     rich_markup_mode="rich",
     help=(
         "Disk space analyzer (CLI + TUI). "
-        "Commands: 'scan' (terminal view), 'report' (HTML/JSON/Markdown/text "
-        "file, opens HTML in browser by default), 'tui' (interactive explorer). "
-        "Run e.g. 'pytree report --help' for details."
+        "Commands: [cyan]scan[/cyan] (terminal view), [cyan]report[/cyan] "
+        "(HTML / JSON / Markdown / text file, opens HTML in browser by default), "
+        "[cyan]tui[/cyan] (interactive explorer), [cyan]version[/cyan]."
     ),
+    epilog=_CLI_EPILOG,
 )
 console = Console()
 
@@ -2596,7 +2608,9 @@ def _scan_with_progress(target_path: Path, depth: Optional[int]) -> DirInfo:
     return dir_info
 
 
-@app.command()
+@app.command(
+    short_help="Print the largest items to the terminal. Flags: -d DEPTH, -l LIMIT, -t (tree)."
+)
 def scan(
     path: str = typer.Argument(".", help="Directory to scan"),
     depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
@@ -2613,7 +2627,12 @@ def scan(
     _render_console_view(dir_info, target_path, tree=tree, limit=limit)
 
 
-@app.command()
+@app.command(
+    short_help=(
+        "Write an HTML/JSON/Markdown/text report file. "
+        "Flags: -o FILE, --format FMT, --no-open, -d, -l, -t."
+    )
+)
 def report(
     path: str = typer.Argument(".", help="Directory to scan"),
     depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
@@ -2681,7 +2700,9 @@ def build_rich_tree(parent, dir_info: DirInfo, limit: int, current_level: int = 
             parent.add(f"[dim]{label}[/dim]")
 
 
-@app.command()
+@app.command(
+    short_help="Launch the interactive Textual explorer (arrow keys / enter to drill in). Flag: -d DEPTH."
+)
 def tui(
     path: str = typer.Argument(".", help="Directory to scan"),
     depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
@@ -2692,7 +2713,7 @@ def tui(
     app_instance.run()
 
 
-@app.command()
+@app.command(short_help="Print version info (same as --version / -V).")
 def version():
     """Show version information."""
     _print_version()
