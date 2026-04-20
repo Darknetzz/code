@@ -549,15 +549,16 @@ def _html_storage_viz_block(dir_info: DirInfo, esc, limit: int) -> str:
     viz_payload: List[Dict[str, Any]] = []
     for i, ch in enumerate(kids):
         nm, sz, col = chart_items[i]
+        is_dir = entry_is_directory(ch)
         viz_payload.append(
             {
                 "i": i,
                 "name": ch.name,
                 "size": ch.size,
                 "human": ch.format_size(),
-                "files": ch.file_count,
-                "dirs": ch.dir_count,
-                "isDir": entry_is_directory(ch),
+                "files": ch.file_count if is_dir else None,
+                "dirs": ch.dir_count if is_dir else None,
+                "isDir": is_dir,
                 "color": col,
                 "pctRoot": round(100.0 * sz / total, 4),
             }
@@ -833,8 +834,16 @@ def _html_tree_rows(
         )
 
         size_pill = _pill(esc(format_size(child.size)), _heat_bg(child.size, max_size))
-        files_pill = _pill(format_count(child.file_count), _heat_bg(child.file_count, max_files))
-        dirs_pill = _pill(format_count(child.dir_count), _heat_bg(child.dir_count, max_dirs))
+        if is_dir:
+            files_pill = _pill(
+                format_count(child.file_count), _heat_bg(child.file_count, max_files)
+            )
+            dirs_pill = _pill(
+                format_count(child.dir_count), _heat_bg(child.dir_count, max_dirs)
+            )
+        else:
+            files_pill = ""
+            dirs_pill = ""
 
         # Indent the name cell proportionally to depth. The expand
         # button/placeholder already takes a fixed slot, so we only add
@@ -1793,10 +1802,14 @@ footer {
     var lines = [
       "<strong>" + htmlEscape(it.name) + "</strong>",
       "Type: " + type,
-      "Size: " + htmlEscape(it.human) + " (" + it.size.toLocaleString() + " bytes)",
-      "Files: " + it.files + " · Dirs: " + it.dirs,
-      "Of scanned folder: " + (it.pctRoot != null ? it.pctRoot.toFixed(1) : "?") + "%"
+      "Size: " + htmlEscape(it.human) + " (" + it.size.toLocaleString() + " bytes)"
     ];
+    if (it.isDir) {
+      lines.push("Files: " + it.files + " · Dirs: " + it.dirs);
+    }
+    lines.push(
+      "Of scanned folder: " + (it.pctRoot != null ? it.pctRoot.toFixed(1) : "?") + "%"
+    );
     if (included[idx] && tot > 0) {
       lines.push("Of visible chart: " + pctChart.toFixed(1) + "%");
     } else {
@@ -2117,9 +2130,13 @@ def _tui_fixed_name(name: str, width: int) -> str:
 
 
 def _tui_counts_fragment(info: DirInfo) -> Optional[Text]:
-    """Styled ``Nf  Md`` counts fragment, or ``None`` when both are zero.
+    """Styled ``Nf  Md`` counts fragment, or ``None`` when no counts apply.
 
-    Returned as an independent Text so the caller can pad / align it."""
+    File rows always carry ``file_count=1, dir_count=0`` which is noise, so
+    this returns ``None`` for them and for empty dirs. Returned as an
+    independent Text so the caller can pad / align it."""
+    if not entry_is_directory(info):
+        return None
     if not info.file_count and not info.dir_count:
         return None
     t = Text()
