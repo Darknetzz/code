@@ -6,12 +6,13 @@ A TreeSize-like disk space analyzer built with **Textual** for interactive TUI a
 
 - 🌳 **Interactive TUI** - Beautiful terminal UI with expandable tree view
 - 📊 **CLI Mode** - Quick scans with table or tree output
+- 🌐 **HTML Reports** - Interactive, self-contained HTML reports that auto-open in your browser
 - 📈 **Size Analysis** - Recursive directory scanning with human-readable sizes
 - 🎯 **Smart Sorting** - Automatically sorts by size (largest first)
 - ⚡ **Depth Control** - Limit scan depth for faster results
 - 🔒 **Permission Handling** - Gracefully handles access denied errors
 - 👁️ **Hidden Files** - Toggle visibility of hidden files (TUI mode)
-- 💾 **File reports** - Save scans as plain text, JSON, Markdown, or HTML (`-o` / `--output`)
+- 💾 **File reports** - Save reports as HTML, plain text, JSON, or Markdown
 
 ## Installation
 
@@ -19,7 +20,7 @@ A TreeSize-like disk space analyzer built with **Textual** for interactive TUI a
 pip install -r requirements.txt
 ```
 
-`pytree --help` only lists commands (`scan`, `tui`, `version`). Options such as **`-o` / `--output`** live on **`scan`** — use **`pytree scan --help`**.
+`pytree --help` lists the top-level commands: **`scan`** (terminal view), **`report`** (HTML/JSON/Markdown/text file, opens HTML in browser by default), **`tui`** (interactive explorer), and **`version`**. Use e.g. `pytree report --help` to see each command's options.
 
 ## Usage
 
@@ -59,7 +60,7 @@ python pytree.py tui . --depth 3
 
 ### CLI Mode (Explicit)
 
-Use the `scan` command explicitly:
+Use the `scan` command explicitly for a quick terminal view:
 
 ```bash
 # Scan current directory
@@ -75,17 +76,44 @@ python pytree.py scan . --depth 2 --limit 10
 python pytree.py scan . --tree
 ```
 
+### Report Mode
+
+Use the `report` command to generate a report file. By default it writes an interactive HTML report to a temp file and opens it in your default browser:
+
+```bash
+# Default: HTML report of current directory, opens in browser
+python pytree.py report
+
+# Save the report to a specific path
+python pytree.py report ~/Projects -o report.html
+python pytree.py report ~/Projects -o data.json
+python pytree.py report ~/Projects -o tree.md --tree
+
+# Pick a format without choosing a path (temp file is used)
+python pytree.py report . --format markdown
+
+# Generate HTML without opening a browser (good for CI/scripts)
+python pytree.py report . --no-open
+```
+
 ### Options
 
-**Scan Command:**
+**Scan Command (terminal view):**
 - `path` - Directory to scan (default: current directory)
 - `--depth, -d` - Maximum depth to scan (default: unlimited)
 - `--limit, -l` - Number of items to show (default: 20)
 - `--tree, -t` - Show as tree view instead of table
-- `--output, -o` - Write the report to a file (UTF-8). When set, the table/tree is written to the file only; a short confirmation is still printed in the terminal.
-- `--format` - Report format: `text`, `json`, `markdown`, or `html`. If omitted, the format is inferred from the output filename (see below).
 
-**Output file formats (scan only)**
+**Report Command (file output):**
+- `path` - Directory to scan (default: current directory)
+- `--depth, -d` - Maximum depth to scan (default: unlimited)
+- `--limit, -l` - Number of items to show (default: 20)
+- `--tree, -t` - Render the report in tree form
+- `--output, -o` - Write the report to this file (default: a temp file). UTF-8.
+- `--format` - Report format: `text`, `json`, `markdown`, or `html`. Default: `html`. If `-o` is set without `--format`, the format is inferred from the filename extension.
+- `--no-open` - Do not launch the browser for HTML reports
+
+**Report file formats**
 
 | Extension | Format | Notes |
 |-----------|--------|--------|
@@ -103,7 +131,7 @@ If the filename does not suggest a format (e.g. `report.out`), pass `--format` e
 ## Examples
 
 ```bash
-# Quick scan of current directory
+# Quick terminal scan of current directory
 python pytree.py
 
 # Scan Downloads folder with limit
@@ -121,10 +149,13 @@ python pytree.py . --tree --depth 2
 # Scan Windows directory (explicit command)
 python pytree.py scan C:\Windows --depth 1 --limit 5
 
+# Generate and open an interactive HTML report of a project
+python pytree.py report ~/Projects
+
 # Save report: table as text, tree as Markdown, full data as JSON
-python pytree.py scan ~/Projects -o report.txt
-python pytree.py scan ~/Projects --tree -o tree.md
-python pytree.py scan ~/Projects -o data.json --format json
+python pytree.py report ~/Projects -o report.txt
+python pytree.py report ~/Projects --tree -o tree.md
+python pytree.py report ~/Projects -o data.json --format json
 
 # Show version
 python pytree.py version
@@ -132,9 +163,9 @@ python pytree.py version
 
 ## Output Format
 
-### Saved reports (`scan -o`)
+### Saved reports (`report`)
 
-Use `-o` with `--tree` for a tree-shaped report, or without `--tree` for the largest-items table. The table and tree list **both files and subfolders** in the scanned folder (sorted by size). JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
+Use `--tree` for a tree-shaped report, or omit it for the largest-items table. The table and tree list **both files and subfolders** in the scanned folder (sorted by size). JSON always includes the full scanned tree structure regardless of `-t` / `-l`.
 
 HTML reports use a **dark theme** by default: an **interactive storage overview** (donut + stacked bar + legend) with checkboxes to **include or exclude** items (chart redraws to match), **hover tooltips** (name, type, size, bytes, file/dir counts, % of scan and of visible chart), and **click** on a segment or bar slice to toggle it like the checkbox. Below that, a **single “Contents” table** combines **sortable** top-level rows with **expandable** nested folder rows (nested **Share** is relative to that folder). Use **Expand all folders** / **Collapse all** for nested sections.
 

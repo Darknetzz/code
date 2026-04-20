@@ -35,8 +35,9 @@ app = typer.Typer(
     rich_markup_mode="rich",
     help=(
         "Disk space analyzer (CLI + TUI). "
-        "Most CLI flags, including saving reports (-o / --output, --format), "
-        "are on the scan command. Run: pytree scan --help"
+        "Commands: 'scan' (terminal view), 'report' (HTML/JSON/Markdown/text "
+        "file, opens HTML in browser by default), 'tui' (interactive explorer). "
+        "Run e.g. 'pytree report --help' for details."
     ),
 )
 console = Console()
@@ -2522,41 +2523,8 @@ def _render_console_view(dir_info: DirInfo, target_path: Path, *, tree: bool, li
     console.print(table)
 
 
-@app.command()
-def scan(
-    path: str = typer.Argument(".", help="Directory to scan"),
-    depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
-    limit: int = typer.Option(20, "-l", "--limit", help="Number of items to show"),
-    tree: bool = typer.Option(False, "-t", "--tree", help="Show as tree view"),
-    output: Optional[Path] = typer.Option(
-        None,
-        "-o",
-        "--output",
-        help="Write report to this file (format from extension or --format)",
-    ),
-    output_format: Optional[str] = typer.Option(
-        None,
-        "--format",
-        help="Report format: text, json, markdown, html (default: html)",
-    ),
-    console_mode: bool = typer.Option(
-        False,
-        "--console",
-        help="Print results to the terminal instead of opening an HTML report",
-    ),
-    no_open: bool = typer.Option(
-        False,
-        "--no-open",
-        help="Do not launch the browser for HTML reports",
-    ),
-):
-    """Scan a directory and show a size report.
-
-    By default writes an interactive HTML report to a temp file and opens it
-    in your default browser. Use --console for the classic terminal table/tree
-    view, -o PATH to save the report somewhere persistent, or --format to pick
-    a different report format (text, json, markdown, html).
-    """
+def _validate_scan_target(path: str) -> Path:
+    """Resolve ``path`` and ensure it's an existing directory, or exit."""
     target_path = Path(path).resolve()
 
     if not target_path.exists():
@@ -2567,6 +2535,11 @@ def scan(
         console.print(f"[bold red]Error: Not a directory: {target_path}[/bold red]")
         raise typer.Exit(code=1)
 
+    return target_path
+
+
+def _scan_with_progress(target_path: Path, depth: Optional[int]) -> DirInfo:
+    """Shared scan + progress + summary used by every scanning command."""
     console.print(f"[bold blue]Scanning: {target_path}[/bold blue]")
 
     with Progress(
@@ -2591,10 +2564,58 @@ def scan(
     console.print("\n[bold green]Scan complete[/bold green]")
     console.print(f"Total Size: [bold]{format_size(dir_info.size)}[/bold]")
     console.print(f"Files: {dir_info.file_count:,} | Directories: {dir_info.dir_count:,}\n")
+    return dir_info
 
-    if console_mode and output is None:
-        _render_console_view(dir_info, target_path, tree=tree, limit=limit)
-        return
+
+@app.command()
+def scan(
+    path: str = typer.Argument(".", help="Directory to scan"),
+    depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
+    limit: int = typer.Option(20, "-l", "--limit", help="Number of items to show"),
+    tree: bool = typer.Option(False, "-t", "--tree", help="Show as tree view"),
+):
+    """Scan a directory and print the largest items to the terminal.
+
+    Use ``pytree report`` to generate an HTML/JSON/Markdown report file, or
+    ``pytree tui`` for the interactive explorer.
+    """
+    target_path = _validate_scan_target(path)
+    dir_info = _scan_with_progress(target_path, depth)
+    _render_console_view(dir_info, target_path, tree=tree, limit=limit)
+
+
+@app.command()
+def report(
+    path: str = typer.Argument(".", help="Directory to scan"),
+    depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
+    limit: int = typer.Option(20, "-l", "--limit", help="Number of items to show"),
+    tree: bool = typer.Option(False, "-t", "--tree", help="Render the report in tree form"),
+    output: Optional[Path] = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Write report to this file (default: a temp file)",
+    ),
+    output_format: Optional[str] = typer.Option(
+        None,
+        "--format",
+        help="Report format: text, json, markdown, html (default: html)",
+    ),
+    no_open: bool = typer.Option(
+        False,
+        "--no-open",
+        help="Do not launch the browser for HTML reports",
+    ),
+):
+    """Generate a report file from a scan.
+
+    Defaults to an interactive HTML report written to a temp file and opened
+    in your default browser. Pass ``-o PATH`` to save it somewhere persistent,
+    ``--format`` to pick text/json/markdown/html, or ``--no-open`` to skip the
+    browser launch.
+    """
+    target_path = _validate_scan_target(path)
+    dir_info = _scan_with_progress(target_path, depth)
 
     fmt = _resolve_report_format(output, output_format)
     report_path = output if output is not None else make_temp_report_path(target_path, fmt)
@@ -2621,7 +2642,7 @@ def build_rich_tree(parent, dir_info: DirInfo, limit: int, current_level: int = 
     """Build Rich tree recursively."""
     if current_level >= max_level:
         return
-    
+
     for child in dir_info.children[:limit]:
         label = f"{child.name} ({format_size(child.size)})"
         if child.children:
@@ -2637,16 +2658,7 @@ def tui(
     depth: Optional[int] = typer.Option(None, "-d", "--depth", help="Maximum depth to scan"),
 ):
     """Launch interactive TUI mode."""
-    target_path = Path(path).resolve()
-    
-    if not target_path.exists():
-        console.print(f"[bold red]Error: Path does not exist: {target_path}[/bold red]")
-        raise typer.Exit(code=1)
-    
-    if not target_path.is_dir():
-        console.print(f"[bold red]Error: Not a directory: {target_path}[/bold red]")
-        raise typer.Exit(code=1)
-    
+    target_path = _validate_scan_target(path)
     app_instance = SizeTreeApp(target_path, depth)
     app_instance.run()
 
@@ -2658,7 +2670,7 @@ def version():
     console.print("A TreeSize-like disk space analyzer built with Textual")
 
 
-_INTERACTIVE_ACTIONS = ("scan", "tui", "version")
+_INTERACTIVE_ACTIONS = ("scan", "report", "tui", "version")
 
 
 def _prompt_interactive_args() -> List[str]:
@@ -2676,7 +2688,7 @@ def _prompt_interactive_args() -> List[str]:
     action = Prompt.ask(
         "What do you want to do?",
         choices=list(_INTERACTIVE_ACTIONS),
-        default="scan",
+        default="report",
     )
     if action == "version":
         return ["version"]
@@ -2700,12 +2712,7 @@ def _prompt_interactive_args() -> List[str]:
     if Confirm.ask("Show as tree view?", default=False):
         argv.append("-t")
 
-    use_console = Confirm.ask(
-        "Show results in the terminal instead of an HTML report?",
-        default=False,
-    )
-    if use_console:
-        argv.append("--console")
+    if action == "scan":
         return argv
 
     output_raw = Prompt.ask(
