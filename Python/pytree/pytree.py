@@ -1958,8 +1958,19 @@ def write_scan_report(
 
 _TUI_BAR_FILL = "█"
 _TUI_BAR_EMPTY = "░"
+# Column widths used for the tree rows. Padding the name to a fixed width
+# makes the bar / % / size columns line up across siblings — the main
+# payoff of these constants.
 _TUI_TREE_BAR_WIDTH = 12
-_TUI_TOP_BAR_WIDTH = 20
+_TUI_TREE_NAME_W = 26
+_TUI_TREE_SIZE_W = 10
+_TUI_TREE_PCT_W = 5   # "100.0" fits; rendered as " 99.9%" via >5.1f + %
+_TUI_TREE_COUNT_W = 14  # "9,999,999f 999d" range
+
+# Top-items sidebar is narrow (1fr of the split) so columns are tighter.
+_TUI_TOP_BAR_WIDTH = 14
+_TUI_TOP_NAME_W = 18
+_TUI_TOP_SIZE_W = 9
 
 # Colors are kept consistent with the HTML report for a coherent look.
 _TUI_COLOR_DIR = "#d2a8ff"
@@ -1998,6 +2009,34 @@ def _tui_bar(pct: float, width: int) -> str:
     return _TUI_BAR_FILL * filled + _TUI_BAR_EMPTY * (width - filled)
 
 
+def _tui_fixed_name(name: str, width: int) -> str:
+    """Truncate with an ellipsis and right-pad to ``width`` cells.
+
+    Approximates display width by code-point length, which is fine for
+    filesystem paths (~always ASCII/BMP). If a path contains wide chars
+    the row may drift by a cell or two — acceptable vs. bringing in a
+    heavy width-aware library."""
+    if len(name) > width:
+        name = name[: width - 1] + "…"
+    return name.ljust(width)
+
+
+def _tui_counts_fragment(info: DirInfo) -> Optional[Text]:
+    """Styled ``Nf  Md`` counts fragment, or ``None`` when both are zero.
+
+    Returned as an independent Text so the caller can pad / align it."""
+    if not info.file_count and not info.dir_count:
+        return None
+    t = Text()
+    if info.file_count:
+        t.append(f"{info.file_count:,}f", style=_TUI_COLOR_FILE)
+    if info.file_count and info.dir_count:
+        t.append(" ")
+    if info.dir_count:
+        t.append(f"{info.dir_count:,}d", style=_TUI_COLOR_DIR)
+    return t
+
+
 def _tui_name_style(is_dir: bool) -> str:
     return f"bold {_TUI_COLOR_DIR}" if is_dir else _TUI_COLOR_FILE
 
@@ -2009,32 +2048,38 @@ def _tui_entry_icon(is_dir: bool) -> str:
 def _tui_tree_label(info: DirInfo, max_size: int, parent_size: int) -> Text:
     """Rich Text label for an in-tree row.
 
-    Layout: ``ICON NAME  ▰▰▱▱▱  pct%  SIZE  Nf Md [error]``. The bar and
-    size use a heat color based on ``size / max_size`` of the siblings
-    (so the biggest child in a folder is always the reddest).
+    Fixed-width columns so rows line up across siblings:
+
+        ICON  NAME(26)  BAR(12)  PCT(6)  SIZE(10)  COUNTS(14)  [error]
+
+    Heat color for bar + size is based on ``size / max_size`` of the
+    siblings (biggest child in a folder is always the reddest).
     """
     is_dir = entry_is_directory(info)
     ratio = (info.size / max_size) if max_size > 0 else 0.0
     color = _tui_heat_color(ratio)
     pct = (100.0 * info.size / parent_size) if parent_size > 0 else 0.0
 
-    t = Text(overflow="ellipsis", no_wrap=True)
+    t = Text(no_wrap=True, overflow="ellipsis")
     t.append(f"{_tui_entry_icon(is_dir)} ")
-    t.append(info.name, style=_tui_name_style(is_dir))
-    t.append("  ")
+    t.append(_tui_fixed_name(info.name, _TUI_TREE_NAME_W), style=_tui_name_style(is_dir))
+    t.append(" ")
     t.append(_tui_bar(pct, _TUI_TREE_BAR_WIDTH), style=color)
-    t.append(f" {pct:5.1f}%", style=_TUI_COLOR_MUTED)
-    t.append(f"  {format_size(info.size):>10}", style=f"bold {color}")
-    if info.file_count or info.dir_count:
-        t.append("  ")
-        if info.file_count:
-            t.append(f"{info.file_count:,}f", style=_TUI_COLOR_FILE)
-            if info.dir_count:
-                t.append(" ")
-        if info.dir_count:
-            t.append(f"{info.dir_count:,}d", style=_TUI_COLOR_DIR)
+    t.append(f" {pct:>{_TUI_TREE_PCT_W}.1f}%", style=_TUI_COLOR_MUTED)
+    t.append(f"  {format_size(info.size):>{_TUI_TREE_SIZE_W}}", style=f"bold {color}")
+    counts = _tui_counts_fragment(info)
+    t.append("  ")
+    if counts is not None:
+        # Right-pad the counts fragment to a fixed width so the error
+        # marker (when present) always lands in the same column.
+        t.append_text(counts)
+        pad = _TUI_TREE_COUNT_W - counts.cell_len
+        if pad > 0:
+            t.append(" " * pad)
+    else:
+        t.append(" " * _TUI_TREE_COUNT_W)
     if info.error:
-        t.append(f"  ⚠ {info.error}", style=f"bold {_TUI_COLOR_ERR}")
+        t.append(f"⚠ {info.error}", style=f"bold {_TUI_COLOR_ERR}")
     return t
 
 
@@ -2085,11 +2130,14 @@ def _tui_scan_progress_text(files: int, dirs: int, size: int) -> Text:
 def _tui_top_items_text(dir_info: DirInfo, limit: int = 20) -> Text:
     """Rich Text block for the sidebar: top-N children as horizontal bars.
 
-    Each row: ``rank. ICON name                 ▰▰▰▰▱▱  pct%  SIZE``.
+    Fixed-width layout so everything aligns column-to-column:
+
+        NN. ICON NAME(18) BAR(14) PCT(6)  SIZE(9)
+
     Bar width is scaled against the largest sibling so the biggest item
-    always fills the row, while percent is of the parent folder total.
+    always fills the row; percent is of the parent folder total.
     """
-    t = Text()
+    t = Text(no_wrap=True, overflow="ellipsis")
     t.append("Top items by size", style=f"bold {_TUI_COLOR_ACCENT} underline")
     t.append("\n\n")
 
@@ -2100,26 +2148,22 @@ def _tui_top_items_text(dir_info: DirInfo, limit: int = 20) -> Text:
 
     total = dir_info.size or 1
     max_size = max((c.size for c in kids), default=1) or 1
-    rank_w = len(str(len(kids)))
-    name_w = 22
+    rank_w = max(2, len(str(len(kids))))
 
     for i, ch in enumerate(kids, 1):
         is_dir = entry_is_directory(ch)
         ratio = ch.size / max_size
         color = _tui_heat_color(ratio)
         pct = 100.0 * ch.size / total
-        filled = int(round(_TUI_TOP_BAR_WIDTH * ratio))
-        bar = _TUI_BAR_FILL * filled + _TUI_BAR_EMPTY * (_TUI_TOP_BAR_WIDTH - filled)
-
-        name = ch.name if len(ch.name) <= name_w else ch.name[: name_w - 1] + "…"
+        bar = _tui_bar(100.0 * ratio, _TUI_TOP_BAR_WIDTH)
 
         t.append(f"{i:>{rank_w}}. ", style=_TUI_COLOR_DIM)
         t.append(f"{_tui_entry_icon(is_dir)} ")
-        t.append(f"{name:<{name_w}}", style=_tui_name_style(is_dir))
+        t.append(_tui_fixed_name(ch.name, _TUI_TOP_NAME_W), style=_tui_name_style(is_dir))
         t.append(" ")
         t.append(bar, style=color)
-        t.append(f" {pct:5.1f}%", style=_TUI_COLOR_MUTED)
-        t.append(f"  {format_size(ch.size):>10}\n", style=f"bold {color}")
+        t.append(f" {pct:>5.1f}%", style=_TUI_COLOR_MUTED)
+        t.append(f"  {format_size(ch.size):>{_TUI_TOP_SIZE_W}}\n", style=f"bold {color}")
 
     return t
 
@@ -2190,7 +2234,7 @@ class SizeTreeApp(App):
 
     #top-panel {
         width: 1fr;
-        min-width: 55;
+        min-width: 64;
         border: round #30363d;
         background: #0d1117;
         padding: 0 1;
