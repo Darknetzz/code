@@ -9,7 +9,9 @@ import html
 import json
 import math
 import sys
+import tempfile
 import time
+import webbrowser
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -1946,6 +1948,41 @@ def write_scan_report(
     out_path.write_text(text, encoding="utf-8")
 
 
+_REPORT_EXTENSIONS: Dict[ReportFormat, str] = {
+    ReportFormat.text: ".txt",
+    ReportFormat.json: ".json",
+    ReportFormat.markdown: ".md",
+    ReportFormat.html: ".html",
+}
+
+
+def _slugify_for_filename(value: str) -> str:
+    """Turn an arbitrary path segment into a safe temp-file slug."""
+    cleaned = "".join(c if c.isalnum() or c in "-_." else "_" for c in value)
+    cleaned = cleaned.strip("._") or "root"
+    return cleaned[:40]
+
+
+def make_temp_report_path(target_path: Path, fmt: ReportFormat) -> Path:
+    """Build a stable, human-friendly temp path for a one-off report.
+
+    Uses ``<tmp>/pytree-<slug>-<timestamp><ext>`` so repeated scans don't
+    clobber each other and the file is easy to identify on disk.
+    """
+    slug = _slugify_for_filename(target_path.name or target_path.anchor or "root")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    ext = _REPORT_EXTENSIONS.get(fmt, ".txt")
+    return Path(tempfile.gettempdir()) / f"pytree-{slug}-{stamp}{ext}"
+
+
+def open_in_browser(path: Path) -> bool:
+    """Open ``path`` in the user's default browser. Returns success."""
+    try:
+        return webbrowser.open(path.resolve().as_uri())
+    except Exception:
+        return False
+
+
 # ─────────────────────────────────────────────────────────────────────── #
 #                         TUI VISUAL HELPERS                              #
 # ─────────────────────────────────────────────────────────────────────── #
@@ -2430,6 +2467,61 @@ class SizeTreeApp(App):
 #                              CLI COMMANDS                               #
 # ─────────────────────────────────────────────────────────────────────── #
 
+def _resolve_report_format(
+    output: Optional[Path], output_format: Optional[str]
+) -> ReportFormat:
+    """Resolve a ReportFormat from --format and/or --output; exits on error."""
+    if output_format:
+        try:
+            return ReportFormat(output_format.lower())
+        except ValueError:
+            console.print(
+                f"[bold red]Error: Unknown --format {output_format!r}. "
+                f"Use: text, json, markdown, html[/bold red]"
+            )
+            raise typer.Exit(code=1)
+    if output is not None:
+        fmt = infer_report_format(output)
+        if fmt is None:
+            console.print(
+                "[bold red]Error: Could not infer format from --output; "
+                "use .txt, .json, .md, .html or pass --format[/bold red]"
+            )
+            raise typer.Exit(code=1)
+        return fmt
+    return ReportFormat.html
+
+
+def _render_console_view(dir_info: DirInfo, target_path: Path, *, tree: bool, limit: int) -> None:
+    """Render the classic terminal table/tree view for a scan result."""
+    if tree:
+        rich_tree = RichTree(f"[bold]{dir_info.name}[/bold] ({format_size(dir_info.size)})")
+        build_rich_tree(rich_tree, dir_info, limit)
+        console.print(rich_tree)
+        return
+
+    table = Table(title=f"Largest Items in {target_path}")
+    table.add_column("#", style="dim")
+    table.add_column("Name", style="cyan")
+    table.add_column("Size", justify="right", style="green")
+    table.add_column("Files", justify="right")
+    table.add_column("Dirs", justify="right")
+    table.add_column("Type")
+
+    for i, child in enumerate(dir_info.children[:limit], 1):
+        item_type = "📁 Dir" if entry_is_directory(child) else "📄 File"
+        table.add_row(
+            str(i),
+            child.name,
+            format_size(child.size),
+            str(child.file_count),
+            str(child.dir_count),
+            item_type,
+        )
+
+    console.print(table)
+
+
 @app.command()
 def scan(
     path: str = typer.Argument(".", help="Directory to scan"),
@@ -2445,26 +2537,38 @@ def scan(
     output_format: Optional[str] = typer.Option(
         None,
         "--format",
-        help="Report format: text, json, markdown, html (default: infer from --output)",
+        help="Report format: text, json, markdown, html (default: html)",
+    ),
+    console_mode: bool = typer.Option(
+        False,
+        "--console",
+        help="Print results to the terminal instead of opening an HTML report",
+    ),
+    no_open: bool = typer.Option(
+        False,
+        "--no-open",
+        help="Do not launch the browser for HTML reports",
     ),
 ):
-    """Scan a directory and print a size table or tree (CLI).
+    """Scan a directory and show a size report.
 
-    Use -o / --output PATH to write a report; --format text|json|markdown|html,
-    or infer format from the extension (.txt, .json, .md, .html).
+    By default writes an interactive HTML report to a temp file and opens it
+    in your default browser. Use --console for the classic terminal table/tree
+    view, -o PATH to save the report somewhere persistent, or --format to pick
+    a different report format (text, json, markdown, html).
     """
     target_path = Path(path).resolve()
-    
+
     if not target_path.exists():
         console.print(f"[bold red]Error: Path does not exist: {target_path}[/bold red]")
         raise typer.Exit(code=1)
-    
+
     if not target_path.is_dir():
         console.print(f"[bold red]Error: Not a directory: {target_path}[/bold red]")
         raise typer.Exit(code=1)
-    
+
     console.print(f"[bold blue]Scanning: {target_path}[/bold blue]")
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -2488,56 +2592,29 @@ def scan(
     console.print(f"Total Size: [bold]{format_size(dir_info.size)}[/bold]")
     console.print(f"Files: {dir_info.file_count:,} | Directories: {dir_info.dir_count:,}\n")
 
-    fmt: Optional[ReportFormat] = None
-    if output is not None:
-        if output_format:
-            try:
-                fmt = ReportFormat(output_format.lower())
-            except ValueError:
-                console.print(
-                    f"[bold red]Error: Unknown --format {output_format!r}. "
-                    f"Use: text, json, markdown, html[/bold red]"
-                )
-                raise typer.Exit(code=1)
+    if console_mode and output is None:
+        _render_console_view(dir_info, target_path, tree=tree, limit=limit)
+        return
+
+    fmt = _resolve_report_format(output, output_format)
+    report_path = output if output is not None else make_temp_report_path(target_path, fmt)
+    write_scan_report(dir_info, target_path, report_path, fmt, tree_view=tree, limit=limit)
+
+    is_temp = output is None
+    label = "Generated" if is_temp else "Wrote"
+    console.print(
+        f"[bold green]{label} {fmt.value} report:[/bold green] [cyan]{report_path}[/cyan]"
+    )
+
+    should_open = fmt == ReportFormat.html and not no_open
+    if should_open:
+        if open_in_browser(report_path):
+            console.print("[dim]Opened in your default browser.[/dim]")
         else:
-            fmt = infer_report_format(output)
-            if fmt is None:
-                console.print(
-                    "[bold red]Error: Could not infer format from --output; "
-                    "use .txt, .json, .md, .html or pass --format[/bold red]"
-                )
-                raise typer.Exit(code=1)
-        write_scan_report(dir_info, target_path, output, fmt, tree_view=tree, limit=limit)
-        console.print(f"[bold green]Wrote {fmt.value} report to[/bold green] [cyan]{output}[/cyan]")
-
-    if output is None:
-        if tree:
-            # Show as tree view
-            rich_tree = RichTree(f"[bold]{dir_info.name}[/bold] ({format_size(dir_info.size)})")
-            build_rich_tree(rich_tree, dir_info, limit)
-            console.print(rich_tree)
-        else:
-            # Show as table
-            table = Table(title=f"Largest Items in {target_path}")
-            table.add_column("#", style="dim")
-            table.add_column("Name", style="cyan")
-            table.add_column("Size", justify="right", style="green")
-            table.add_column("Files", justify="right")
-            table.add_column("Dirs", justify="right")
-            table.add_column("Type")
-
-            for i, child in enumerate(dir_info.children[:limit], 1):
-                item_type = "📁 Dir" if entry_is_directory(child) else "📄 File"
-                table.add_row(
-                    str(i),
-                    child.name,
-                    format_size(child.size),
-                    str(child.file_count),
-                    str(child.dir_count),
-                    item_type,
-                )
-
-            console.print(table)
+            console.print(
+                "[yellow]Could not launch a browser automatically; "
+                "open the file above manually.[/yellow]"
+            )
 
 
 def build_rich_tree(parent, dir_info: DirInfo, limit: int, current_level: int = 0, max_level: int = 3):
@@ -2623,8 +2700,16 @@ def _prompt_interactive_args() -> List[str]:
     if Confirm.ask("Show as tree view?", default=False):
         argv.append("-t")
 
+    use_console = Confirm.ask(
+        "Show results in the terminal instead of an HTML report?",
+        default=False,
+    )
+    if use_console:
+        argv.append("--console")
+        return argv
+
     output_raw = Prompt.ask(
-        "Write report to file? (path, or blank to skip)", default=""
+        "Save report to file? (path, or blank for a temp HTML file)", default=""
     ).strip()
     if output_raw:
         argv += ["-o", output_raw]
@@ -2632,9 +2717,12 @@ def _prompt_interactive_args() -> List[str]:
             fmt = Prompt.ask(
                 "Report format",
                 choices=[f.value for f in ReportFormat],
-                default=ReportFormat.text.value,
+                default=ReportFormat.html.value,
             )
             argv += ["--format", fmt]
+
+    if not Confirm.ask("Open the HTML report in your browser?", default=True):
+        argv.append("--no-open")
 
     return argv
 
