@@ -2587,12 +2587,13 @@ def _render_console_view(dir_info: DirInfo, target_path: Path, *, tree: bool, li
 
     for i, child in enumerate(dir_info.children[:limit], 1):
         item_type = "📁 Dir" if entry_is_directory(child) else "📄 File"
+        files_s, dirs_s = child_count_cells(child)
         table.add_row(
             str(i),
             child.name,
             format_size(child.size),
-            str(child.file_count),
-            str(child.dir_count),
+            files_s,
+            dirs_s,
             item_type,
         )
 
