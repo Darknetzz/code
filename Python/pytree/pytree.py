@@ -119,6 +119,22 @@ def entry_is_directory(info: DirInfo) -> bool:
         return bool(info.children)
 
 
+def child_count_cells(
+    info: DirInfo, *, empty: str = "", fmt: str = "{:,}"
+) -> Tuple[str, str]:
+    """Display strings ``(files, dirs)`` for a child row.
+
+    Per-file counts (``file_count``/``dir_count``) are always ``1``/``0`` for a
+    file entry and therefore uninformative — every renderer should show empty
+    cells for files and only populate counts for directory rows. Centralizing
+    that rule here keeps the behavior consistent across CLI, TUI, text,
+    Markdown, HTML, and JSON outputs.
+    """
+    if not entry_is_directory(info):
+        return (empty, empty)
+    return (fmt.format(info.file_count), fmt.format(info.dir_count))
+
+
 # ─────────────────────────────────────────────────────────────────────── #
 #                              SCANNING LOGIC                             #
 # ─────────────────────────────────────────────────────────────────────── #
@@ -394,9 +410,10 @@ def build_plain_table_lines(dir_info: DirInfo, target_path: Path, limit: int) ->
     for i, child in enumerate(dir_info.children[:limit], 1):
         item_type = "Dir" if entry_is_directory(child) else "File"
         name = child.name if len(child.name) <= 42 else child.name[:39] + "..."
+        files_s, dirs_s = child_count_cells(child)
         lines.append(
             f"{i:>4}  {name:<42}  {format_size(child.size):>12}  "
-            f"{child.file_count:>8,}  {child.dir_count:>6,}  {item_type}"
+            f"{files_s:>8}  {dirs_s:>6}  {item_type}"
         )
     return lines
 
@@ -455,9 +472,10 @@ def render_report_markdown(
         for i, child in enumerate(dir_info.children[:limit], 1):
             item_type = "Dir" if entry_is_directory(child) else "File"
             safe_name = child.name.replace("|", "\\|")
+            files_s, dirs_s = child_count_cells(child)
             lines.append(
                 f"| {i} | {safe_name} | {format_size(child.size)} | "
-                f"{child.file_count:,} | {child.dir_count:,} | {item_type} |"
+                f"{files_s} | {dirs_s} | {item_type} |"
             )
     lines.append("")
     return "\n".join(lines)
