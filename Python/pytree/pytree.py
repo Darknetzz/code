@@ -4,6 +4,7 @@ SizeTree - A TreeSize-like disk space analyzer
 Built with Textual for interactive TUI and CLI support
 """
 
+import colorsys
 import html
 import json
 import math
@@ -20,11 +21,12 @@ import typer
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.text import Text
 from rich.tree import Tree as RichTree
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.widgets import Header, Footer, Tree, Static, Button, Input, Label
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -1947,130 +1949,439 @@ def write_scan_report(
 
 
 # ─────────────────────────────────────────────────────────────────────── #
+#                         TUI VISUAL HELPERS                              #
+# ─────────────────────────────────────────────────────────────────────── #
+# Shared rendering helpers so the Textual tree, top-items sidebar, and
+# info panel all speak the same visual language (heat colors, bars,
+# icons, counts). Rich ``Text`` objects with inline ``style=`` are used
+# everywhere so the TUI stays a single source of truth for colors.
+
+_TUI_BAR_FILL = "█"
+_TUI_BAR_EMPTY = "░"
+_TUI_TREE_BAR_WIDTH = 12
+_TUI_TOP_BAR_WIDTH = 20
+
+# Colors are kept consistent with the HTML report for a coherent look.
+_TUI_COLOR_DIR = "#d2a8ff"
+_TUI_COLOR_FILE = "#79c0ff"
+_TUI_COLOR_ACCENT = "#58a6ff"
+_TUI_COLOR_GOOD = "#3fb950"
+_TUI_COLOR_WARN = "#d4a72c"
+_TUI_COLOR_ERR = "#f85149"
+_TUI_COLOR_MUTED = "grey66"
+_TUI_COLOR_DIM = "grey50"
+
+_TUI_ICON_DIR = "📁"
+_TUI_ICON_FILE = "📄"
+
+
+def _tui_heat_color(ratio: float) -> str:
+    """Heat-mapped RGB color string (green → yellow → red) for a 0..1 ratio.
+
+    Matches the HTML report's perceptual sqrt curve so the TUI and the
+    generated HTML feel like the same product at a glance."""
+    if ratio <= 0:
+        return _TUI_COLOR_DIM
+    ratio = 1.0 if ratio > 1 else ratio
+    curved = ratio ** 0.5
+    hue = 120.0 * (1.0 - curved)  # 120=green, 60=yellow, 0=red
+    lightness = 0.60
+    saturation = 0.75
+    r, g, b = colorsys.hls_to_rgb(hue / 360.0, lightness, saturation)
+    return f"rgb({int(r * 255)},{int(g * 255)},{int(b * 255)})"
+
+
+def _tui_bar(pct: float, width: int) -> str:
+    """Unicode block-char progress bar."""
+    pct = 0.0 if pct < 0 else (100.0 if pct > 100 else pct)
+    filled = int(round(width * pct / 100.0))
+    return _TUI_BAR_FILL * filled + _TUI_BAR_EMPTY * (width - filled)
+
+
+def _tui_name_style(is_dir: bool) -> str:
+    return f"bold {_TUI_COLOR_DIR}" if is_dir else _TUI_COLOR_FILE
+
+
+def _tui_entry_icon(is_dir: bool) -> str:
+    return _TUI_ICON_DIR if is_dir else _TUI_ICON_FILE
+
+
+def _tui_tree_label(info: DirInfo, max_size: int, parent_size: int) -> Text:
+    """Rich Text label for an in-tree row.
+
+    Layout: ``ICON NAME  ▰▰▱▱▱  pct%  SIZE  Nf Md [error]``. The bar and
+    size use a heat color based on ``size / max_size`` of the siblings
+    (so the biggest child in a folder is always the reddest).
+    """
+    is_dir = entry_is_directory(info)
+    ratio = (info.size / max_size) if max_size > 0 else 0.0
+    color = _tui_heat_color(ratio)
+    pct = (100.0 * info.size / parent_size) if parent_size > 0 else 0.0
+
+    t = Text(overflow="ellipsis", no_wrap=True)
+    t.append(f"{_tui_entry_icon(is_dir)} ")
+    t.append(info.name, style=_tui_name_style(is_dir))
+    t.append("  ")
+    t.append(_tui_bar(pct, _TUI_TREE_BAR_WIDTH), style=color)
+    t.append(f" {pct:5.1f}%", style=_TUI_COLOR_MUTED)
+    t.append(f"  {format_size(info.size):>10}", style=f"bold {color}")
+    if info.file_count or info.dir_count:
+        t.append("  ")
+        if info.file_count:
+            t.append(f"{info.file_count:,}f", style=_TUI_COLOR_FILE)
+            if info.dir_count:
+                t.append(" ")
+        if info.dir_count:
+            t.append(f"{info.dir_count:,}d", style=_TUI_COLOR_DIR)
+    if info.error:
+        t.append(f"  ⚠ {info.error}", style=f"bold {_TUI_COLOR_ERR}")
+    return t
+
+
+def _tui_root_label(info: DirInfo) -> Text:
+    """Distinct label for the tree root — no bar (it's always 100%)."""
+    t = Text(overflow="ellipsis", no_wrap=True)
+    t.append("💾 ")
+    t.append(info.name or str(info.path), style=f"bold {_TUI_COLOR_ACCENT}")
+    t.append(f"  {format_size(info.size)}", style=f"bold {_TUI_COLOR_GOOD}")
+    if info.file_count or info.dir_count:
+        t.append("  ")
+        t.append(f"{info.file_count:,}", style=_TUI_COLOR_FILE)
+        t.append(" files · ", style=_TUI_COLOR_MUTED)
+        t.append(f"{info.dir_count:,}", style=_TUI_COLOR_DIR)
+        t.append(" dirs", style=_TUI_COLOR_MUTED)
+    if info.error:
+        t.append(f"  ⚠ {info.error}", style=f"bold {_TUI_COLOR_ERR}")
+    return t
+
+
+def _tui_summary_text(dir_info: DirInfo) -> Text:
+    """One-line richly styled scan summary for the info panel."""
+    t = Text()
+    t.append("💾 ", style="")
+    t.append("Total ", style=_TUI_COLOR_MUTED)
+    t.append(format_size(dir_info.size), style=f"bold {_TUI_COLOR_GOOD}")
+    t.append("   " + _TUI_ICON_FILE + " ")
+    t.append(f"{dir_info.file_count:,}", style=f"bold {_TUI_COLOR_FILE}")
+    t.append(" files", style=_TUI_COLOR_MUTED)
+    t.append("   " + _TUI_ICON_DIR + " ")
+    t.append(f"{dir_info.dir_count:,}", style=f"bold {_TUI_COLOR_DIR}")
+    t.append(" dirs", style=_TUI_COLOR_MUTED)
+    return t
+
+
+def _tui_scan_progress_text(files: int, dirs: int, size: int) -> Text:
+    """Live in-progress counters shown while scanning."""
+    t = Text()
+    t.append("⟳ Scanning… ", style=f"italic {_TUI_COLOR_WARN}")
+    t.append(f"{files:,}", style=f"bold {_TUI_COLOR_FILE}")
+    t.append(" files · ", style=_TUI_COLOR_MUTED)
+    t.append(f"{dirs:,}", style=f"bold {_TUI_COLOR_DIR}")
+    t.append(" dirs · ", style=_TUI_COLOR_MUTED)
+    t.append(format_size(size), style=f"bold {_TUI_COLOR_GOOD}")
+    return t
+
+
+def _tui_top_items_text(dir_info: DirInfo, limit: int = 20) -> Text:
+    """Rich Text block for the sidebar: top-N children as horizontal bars.
+
+    Each row: ``rank. ICON name                 ▰▰▰▰▱▱  pct%  SIZE``.
+    Bar width is scaled against the largest sibling so the biggest item
+    always fills the row, while percent is of the parent folder total.
+    """
+    t = Text()
+    t.append("Top items by size", style=f"bold {_TUI_COLOR_ACCENT} underline")
+    t.append("\n\n")
+
+    kids = dir_info.children[:limit]
+    if not kids:
+        t.append("(empty)", style=_TUI_COLOR_MUTED)
+        return t
+
+    total = dir_info.size or 1
+    max_size = max((c.size for c in kids), default=1) or 1
+    rank_w = len(str(len(kids)))
+    name_w = 22
+
+    for i, ch in enumerate(kids, 1):
+        is_dir = entry_is_directory(ch)
+        ratio = ch.size / max_size
+        color = _tui_heat_color(ratio)
+        pct = 100.0 * ch.size / total
+        filled = int(round(_TUI_TOP_BAR_WIDTH * ratio))
+        bar = _TUI_BAR_FILL * filled + _TUI_BAR_EMPTY * (_TUI_TOP_BAR_WIDTH - filled)
+
+        name = ch.name if len(ch.name) <= name_w else ch.name[: name_w - 1] + "…"
+
+        t.append(f"{i:>{rank_w}}. ", style=_TUI_COLOR_DIM)
+        t.append(f"{_tui_entry_icon(is_dir)} ")
+        t.append(f"{name:<{name_w}}", style=_tui_name_style(is_dir))
+        t.append(" ")
+        t.append(bar, style=color)
+        t.append(f" {pct:5.1f}%", style=_TUI_COLOR_MUTED)
+        t.append(f"  {format_size(ch.size):>10}\n", style=f"bold {color}")
+
+    return t
+
+
+def _tui_legend_text() -> Text:
+    """Small legend explaining the bar/heat color scheme in the footer area."""
+    t = Text()
+    t.append("  Heat: ", style=_TUI_COLOR_MUTED)
+    for r in (0.05, 0.25, 0.5, 0.75, 1.0):
+        t.append(_TUI_BAR_FILL * 2, style=_tui_heat_color(r))
+    t.append("   " + _TUI_ICON_DIR + " ", style="")
+    t.append("dir", style=f"bold {_TUI_COLOR_DIR}")
+    t.append("   " + _TUI_ICON_FILE + " ", style="")
+    t.append("file", style=_TUI_COLOR_FILE)
+    return t
+
+
+# ─────────────────────────────────────────────────────────────────────── #
 #                              TEXTUAL TUI APP                            #
 # ─────────────────────────────────────────────────────────────────────── #
 
 class SizeTreeApp(App):
-    """Textual TUI for TreeSize-like functionality."""
-    
+    """Textual TUI for TreeSize-like functionality.
+
+    Layout:
+
+    ┌─ Header ───────────────────────────────────────────────────┐
+    │ info-panel: path + live scan summary + status line         │
+    ├─ main-container (horizontal) ──────────────────────────────┤
+    │ tree-container (2fr)      │  top-panel (1fr)               │
+    │  colored, barred tree     │  Top-N horizontal bar chart    │
+    ├─ Footer ───────────────────────────────────────────────────┤
+    """
+
     CSS = """
-    Screen {
-        background: $surface;
-    }
-    
+    Screen { background: #0d1117; }
+
+    Header { background: #161b22; color: #e6edf3; }
+    Footer { background: #161b22; color: #8b949e; }
+
     #info-panel {
         dock: top;
-        height: 5;
-        background: $primary-background;
-        border: solid $primary;
+        height: 7;
+        background: #161b22;
+        border: heavy #58a6ff;
+        padding: 0 1;
     }
-    
-    #tree-container {
+    #info-panel Label {
+        padding: 0;
+        height: 1;
+    }
+    #info-path { color: #58a6ff; text-style: bold; }
+    #info-legend { color: #8b949e; }
+    #info-status { color: #8b949e; }
+
+    #main-container {
         height: 1fr;
-        border: solid $secondary;
+        layout: horizontal;
     }
-    
-    .info-label {
-        padding: 1;
-        color: $text;
+
+    #tree-container {
+        width: 2fr;
+        border: round #30363d;
+        background: #0d1117;
+        padding: 0 1;
     }
-    
+    #tree-container:focus-within { border: round #58a6ff; }
+
+    #top-panel {
+        width: 1fr;
+        min-width: 55;
+        border: round #30363d;
+        background: #0d1117;
+        padding: 0 1;
+    }
+
+    #top-panel-content {
+        width: 1fr;
+        padding: 0;
+    }
+
     Tree {
         scrollbar-gutter: stable;
+        background: #0d1117;
+    }
+
+    Tree > .tree--cursor {
+        background: #1f6feb 35%;
+        color: #e6edf3;
+        text-style: bold;
+    }
+    Tree > .tree--highlight-line {
+        background: #161b22;
+    }
+    Tree > .tree--guides {
+        color: #30363d;
+    }
+    Tree > .tree--guides-hover,
+    Tree > .tree--guides-selected {
+        color: #58a6ff;
     }
     """
-    
+
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "rescan", "Rescan"),
-        Binding("h", "toggle_hidden", "Toggle Hidden"),
+        Binding("h", "toggle_hidden", "Hidden"),
+        Binding("e", "expand_all", "Expand all"),
+        Binding("c", "collapse_all", "Collapse all"),
     ]
-    
+
+    # Max siblings per tree node — high enough to be useful, low enough
+    # not to drown the TUI when a folder has tens of thousands of files.
+    _TUI_MAX_CHILDREN = 25
+
     def __init__(self, root_path: Path, max_depth: Optional[int] = None):
         super().__init__()
         self.root_path = root_path
         self.max_depth = max_depth
         self.dir_info: Optional[DirInfo] = None
         self.show_hidden = False
+        self._last_progress_update = 0.0
+        self.title = "pytree · SizeTree"
+        self.sub_title = str(root_path)
 
     def compose(self) -> ComposeResult:
-        """Create child widgets."""
-        yield Header()
-        
+        yield Header(show_clock=True)
+
         with Vertical(id="info-panel"):
-            yield Label(f"Scanning: {self.root_path}", id="path-label", classes="info-label")
-            yield Label("Total Size: Computing...", id="size-label", classes="info-label")
-            yield Label("Files: 0 | Directories: 0", id="count-label", classes="info-label")
-        
-        with Container(id="tree-container"):
-            yield Tree(str(self.root_path), id="size-tree")
-        
+            path_label = Label("", id="info-path")
+            yield path_label
+            yield Label("Preparing scan…", id="info-summary")
+            yield Label("", id="info-status")
+            yield Label("", id="info-legend")
+
+        with Horizontal(id="main-container"):
+            with Container(id="tree-container"):
+                yield Tree(str(self.root_path), id="size-tree")
+            with VerticalScroll(id="top-panel"):
+                yield Static("", id="top-panel-content")
+
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Scan directory on mount."""
-        self.scan_and_populate()
+        path_text = Text()
+        path_text.append("📂 ", style="")
+        path_text.append(str(self.root_path), style=f"bold {_TUI_COLOR_ACCENT}")
+        self.query_one("#info-path", Label).update(path_text)
+        self.query_one("#info-legend", Label).update(_tui_legend_text())
 
-    def scan_and_populate(self) -> None:
-        """Scan directory and populate tree."""
-        # Show scanning status
-        self.query_one("#size-label", Label).update("Total Size: Scanning...")
-        
-        # Scan directory
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Scanning...", total=None)
-            cb = make_throttled_progress_cb(progress, task)
-            self.dir_info = scan_directory(self.root_path, self.max_depth, progress_cb=cb)
-            progress.update(task, completed=True)
-        
-        # Update info panel
-        self.query_one("#size-label", Label).update(
-            f"Total Size: {format_size(self.dir_info.size)}"
+        tree = self.query_one("#size-tree", Tree)
+        tree.show_root = True
+        tree.guide_depth = 3
+
+        self._start_scan()
+
+    def _start_scan(self) -> None:
+        """Kick off a scan in a worker thread so the UI stays responsive."""
+        self.query_one("#info-summary", Label).update(
+            _tui_scan_progress_text(0, 0, 0)
         )
-        self.query_one("#count-label", Label).update(
-            f"Files: {self.dir_info.file_count:,} | Directories: {self.dir_info.dir_count:,}"
+        self.query_one("#info-status", Label).update(
+            Text("Starting…", style=f"italic {_TUI_COLOR_MUTED}")
         )
-        
-        # Populate tree
+        self.run_worker(self._scan_worker, thread=True, exclusive=True)
+
+    def _scan_worker(self) -> None:
+        """Runs on a worker thread. UI updates go through call_from_thread."""
+        stats = ScanStats()
+        state = {"last": 0.0}
+
+        def cb(s: ScanStats) -> None:
+            now = time.monotonic()
+            if now - state["last"] < 0.12:
+                return
+            state["last"] = now
+            current = s.current
+            if len(current) > 80:
+                current = "…" + current[-79:]
+            self.call_from_thread(
+                self._update_scan_progress, s.files, s.dirs, s.size, current
+            )
+
+        info = scan_directory(
+            self.root_path, self.max_depth, stats=stats, progress_cb=cb
+        )
+        self.dir_info = info
+        self.call_from_thread(self._finalize_scan)
+
+    def _update_scan_progress(
+        self, files: int, dirs: int, size: int, current: str
+    ) -> None:
+        self.query_one("#info-summary", Label).update(
+            _tui_scan_progress_text(files, dirs, size)
+        )
+        self.query_one("#info-status", Label).update(
+            Text(current, style=_TUI_COLOR_DIM)
+        )
+
+    def _finalize_scan(self) -> None:
+        info = self.dir_info
+        if info is None:
+            return
+        self.query_one("#info-summary", Label).update(_tui_summary_text(info))
+        self.query_one("#info-status", Label).update(
+            Text("Ready · [q]uit [r]escan [h]idden [e]xpand [c]ollapse",
+                 style=_TUI_COLOR_MUTED)
+        )
+        self._populate_ui()
+
+    def _visible_children(self, info: DirInfo) -> List[DirInfo]:
+        kids = info.children
+        if not self.show_hidden:
+            kids = [c for c in kids if not c.name.startswith(".")]
+        return kids[: self._TUI_MAX_CHILDREN]
+
+    def _populate_ui(self) -> None:
+        info = self.dir_info
+        if info is None:
+            return
         tree = self.query_one("#size-tree", Tree)
         tree.clear()
-        tree.root.label = f"{self.dir_info.name} ({format_size(self.dir_info.size)})"
-        self.populate_tree_node(tree.root, self.dir_info)
+        tree.root.set_label(_tui_root_label(info))
+        self._populate_tree_node(tree.root, info)
         tree.root.expand()
 
-    def populate_tree_node(self, node, dir_info: DirInfo) -> None:
-        """Recursively populate tree nodes."""
-        for child in dir_info.children[:20]:  # Limit to top 20 to avoid lag
-            # Skip hidden files if needed
-            if not self.show_hidden and child.name.startswith('.'):
-                continue
-            
-            label = f"{child.name} ({format_size(child.size)})"
-            if child.error:
-                label += f" [Error: {child.error}]"
-            
-            child_node = node.add(label, expand=False)
-            
-            if child.children:
-                self.populate_tree_node(child_node, child)
+        top = self.query_one("#top-panel-content", Static)
+        top.update(_tui_top_items_text(info, limit=20))
+
+    def _populate_tree_node(self, node, dir_info: DirInfo) -> None:
+        kids = self._visible_children(dir_info)
+        max_size = max((c.size for c in kids), default=0)
+        parent_size = dir_info.size or 1
+        for child in kids:
+            label = _tui_tree_label(child, max_size, parent_size)
+            has_kids = bool(child.children)
+            child_node = node.add(
+                label, expand=False, allow_expand=has_kids
+            )
+            if has_kids:
+                self._populate_tree_node(child_node, child)
 
     def action_rescan(self) -> None:
-        """Rescan the directory."""
-        self.scan_and_populate()
+        self._start_scan()
 
     def action_toggle_hidden(self) -> None:
-        """Toggle showing hidden files."""
         self.show_hidden = not self.show_hidden
-        if self.dir_info:
-            tree = self.query_one("#size-tree", Tree)
-            tree.clear()
-            tree.root.label = f"{self.dir_info.name} ({format_size(self.dir_info.size)})"
-            self.populate_tree_node(tree.root, self.dir_info)
-            tree.root.expand()
+        state = "shown" if self.show_hidden else "hidden"
+        self.query_one("#info-status", Label).update(
+            Text(f"Hidden entries {state}", style=f"italic {_TUI_COLOR_WARN}")
+        )
+        if self.dir_info is not None:
+            self._populate_ui()
+
+    def action_expand_all(self) -> None:
+        tree = self.query_one("#size-tree", Tree)
+        tree.root.expand_all()
+
+    def action_collapse_all(self) -> None:
+        tree = self.query_one("#size-tree", Tree)
+        tree.root.collapse_all()
+        tree.root.expand()
 
 
 # ─────────────────────────────────────────────────────────────────────── #
