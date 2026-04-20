@@ -8,13 +8,12 @@ import colorsys
 import html
 import json
 import math
-import os
 import sys
 import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 import typer
@@ -27,8 +26,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal, VerticalScroll
-from textual.widgets import Header, Footer, Tree, Static, Button, Input, Label
-from textual.reactive import reactive
+from textual.widgets import Header, Footer, Tree, Static, Label
 from textual.binding import Binding
 
 app = typer.Typer(
