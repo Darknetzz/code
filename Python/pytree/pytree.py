@@ -31,6 +31,8 @@ from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.widgets import Header, Footer, Tree, Static, Label
 from textual.binding import Binding
 
+__version__ = "1.0.0"
+
 app = typer.Typer(
     rich_markup_mode="rich",
     help=(
@@ -41,6 +43,33 @@ app = typer.Typer(
     ),
 )
 console = Console()
+
+
+def _print_version() -> None:
+    """Print the pytree version banner. Single source of truth for version output."""
+    console.print(f"[bold]SizeTree[/bold] v{__version__}")
+    console.print("A TreeSize-like disk space analyzer built with Textual")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        _print_version()
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        is_eager=True,
+        callback=_version_callback,
+    ),
+) -> None:
+    """Root callback so --version works without a subcommand."""
+    return
 
 # ─────────────────────────────────────────────────────────────────────── #
 #                              DATA STRUCTURES                            #
@@ -2666,8 +2695,7 @@ def tui(
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]SizeTree[/bold] v1.0.0")
-    console.print("A TreeSize-like disk space analyzer built with Textual")
+    _print_version()
 
 
 _INTERACTIVE_ACTIONS = ("scan", "report", "tui", "version")
