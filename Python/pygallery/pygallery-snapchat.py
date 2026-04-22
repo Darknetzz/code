@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Generate a static HTML gallery from Snapchat data export folders.
 
-Scans every ``mydata~*/chat_media/`` and ``mydata~*/memories/`` folder next to
-this script, groups related Snapchat files (media + thumbnail + overlay) that
-share a timestamp, and emits a self-contained ``gallery.html`` plus assets in
-``gallery/`` via the shared :mod:`_core` module. Stdlib only.
+Scans every ``mydata~*/chat_media/`` and ``mydata~*/memories/`` folder under
+the chosen root (defaults to the script's own directory), groups related
+Snapchat files (media + thumbnail + overlay) that share a timestamp, and
+emits a self-contained ``gallery.html`` plus assets in ``gallery/`` via the
+shared :mod:`_core` module. Stdlib only.
 
 Usage:
-    python pygallery-snapchat.py            # generate the gallery
-    python pygallery-snapchat.py --enrich   # also join chat_history.json etc.
+    python pygallery-snapchat.py                        # scan script directory
+    python pygallery-snapchat.py D:\\Temp\\Snapchat     # scan given directory
+    python pygallery-snapchat.py --enrich               # join chat_history.json etc.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from _core import (
 )
 
 
-ROOT = Path(__file__).resolve().parent
+DEFAULT_ROOT = Path(__file__).resolve().parent
 TITLE = "Snapchat Gallery"
 
 MEMORY_SUFFIX_RE = re.compile(r"^(.+?)-(main|overlay)$")
@@ -88,7 +90,7 @@ def group_key(f: FileInfo) -> tuple | None:
 # -----------------------------------------------------------------------------
 
 
-def scan_folder(folder: Path, source: str) -> list[FileInfo]:
+def scan_folder(folder: Path, source: str, root: Path) -> list[FileInfo]:
     """Return classified ``FileInfo`` entries from ``folder`` (non-recursive)."""
     folder_name = folder.parent.name
     out: list[FileInfo] = []
@@ -106,7 +108,7 @@ def scan_folder(folder: Path, source: str) -> list[FileInfo]:
             continue
         out.append(FileInfo(
             path=p,
-            rel=rel_url(p, ROOT),
+            rel=rel_url(p, root),
             date=date,
             mtime=mtime,
             size=st.st_size,
@@ -118,13 +120,13 @@ def scan_folder(folder: Path, source: str) -> list[FileInfo]:
     return out
 
 
-def collect_files() -> list[FileInfo]:
+def collect_files(root: Path) -> list[FileInfo]:
     files: list[FileInfo] = []
-    for d in sorted(p for p in ROOT.iterdir() if p.is_dir() and p.name.startswith("mydata~")):
+    for d in sorted(p for p in root.iterdir() if p.is_dir() and p.name.startswith("mydata~")):
         for sub, source in (("chat_media", "chat"), ("memories", "memories")):
             sub_path = d / sub
             if sub_path.is_dir():
-                files.extend(scan_folder(sub_path, source))
+                files.extend(scan_folder(sub_path, source, root))
     return files
 
 
@@ -224,7 +226,7 @@ def _index_entries_for_enrich(entries: list[dict]) -> dict[str, dict]:
     return index
 
 
-def enrich_entries(entries: list[dict]) -> int:
+def enrich_entries(entries: list[dict], root: Path) -> int:
     """Join entries with ``chat_history.json`` and ``memories_history.json``.
 
     Adds ``sender``, ``exact_time``, ``conversation``, and ``location`` fields
@@ -232,7 +234,7 @@ def enrich_entries(entries: list[dict]) -> int:
     """
     index = _index_entries_for_enrich(entries)
     matched = 0
-    for d in ROOT.iterdir():
+    for d in root.iterdir():
         if not (d.is_dir() and d.name.startswith("mydata~")):
             continue
         json_dir = d / "json"
@@ -304,28 +306,38 @@ def _enrich_memories(index: dict[str, dict], data: object) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("root", nargs="?", default=None,
+                        help="Directory containing mydata~* folders "
+                             "(default: this script's directory).")
     parser.add_argument("--enrich", action="store_true",
                         help="Join with chat_history.json / memories_history.json")
     args = parser.parse_args(argv)
 
-    files = collect_files()
+    root = Path(args.root).resolve() if args.root else DEFAULT_ROOT
+    if not root.is_dir():
+        print(f"Not a directory: {root}", file=sys.stderr)
+        return 1
+
+    files = collect_files(root)
     if not files:
-        print("No Snapchat media files found next to this script.", file=sys.stderr)
-        print(f"Expected directories: {ROOT}/mydata~*/chat_media", file=sys.stderr)
+        print(f"No Snapchat media files found in {root}.", file=sys.stderr)
+        print(f"Expected directories: {root}/mydata~*/chat_media", file=sys.stderr)
         return 1
 
     entries, stats = build_entries(files)
 
     extras_summary: dict = {}
     if args.enrich:
-        extras_summary["Enriched from JSON"] = enrich_entries(entries)
+        extras_summary["Enriched from JSON"] = enrich_entries(entries, root)
     if stats.get("skipped_no_media"):
         extras_summary["Groups without media"] = stats["skipped_no_media"]
     if stats.get("other_files"):
         extras_summary["Unclassified files"] = stats["other_files"]
 
-    out_html = write_outputs(entries, stats, root=ROOT, title=TITLE)
+    out_html = write_outputs(entries, stats, root=root, title=TITLE)
     print_summary(entries, stats, title=TITLE, out_html=out_html, extras=extras_summary)
     return 0
 
