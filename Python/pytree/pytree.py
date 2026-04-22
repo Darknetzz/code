@@ -3144,7 +3144,7 @@ def _prompt_interactive_args() -> List[str]:
     """
     console.print(
         "[bold cyan]pytree[/bold cyan] — no command given. "
-        "Answer a few prompts (Ctrl+C to cancel).\n"
+        "Answer a couple of prompts (Ctrl+C to cancel).\n"
     )
 
     action = Prompt.ask(
@@ -3155,14 +3155,7 @@ def _prompt_interactive_args() -> List[str]:
     if action == "version":
         return ["version"]
 
-    path = Prompt.ask("Directory to scan", default=".")
-    argv: List[str] = [action, path]
-
-    depth_raw = Prompt.ask(
-        "Maximum depth to scan (blank = unlimited)", default=""
-    ).strip()
-    if depth_raw:
-        argv += ["-d", depth_raw]
+    argv: List[str] = [action, "."]
 
     if action == "tui":
         return argv
@@ -3174,25 +3167,10 @@ def _prompt_interactive_args() -> List[str]:
     if Confirm.ask("Show as tree view?", default=False):
         argv.append("-t")
 
-    if action == "scan":
-        return argv
-
-    output_raw = Prompt.ask(
-        "Save report to file? (path, or blank for a temp HTML file)", default=""
-    ).strip()
-    if output_raw:
-        argv += ["-o", output_raw]
-        if infer_report_format(Path(output_raw)) is None:
-            fmt = Prompt.ask(
-                "Report format",
-                choices=[f.value for f in ReportFormat],
-                default=ReportFormat.html.value,
-            )
-            argv += ["--format", fmt]
-
-    # HTML reports always open in the user's default browser after
-    # generation. Power users can still pass ``--no-open`` directly on
-    # the CLI, but we no longer prompt for it in the walkthrough.
+    # Path, depth, and output are left at their CLI defaults (`.`,
+    # unlimited, temp HTML auto-opened in the browser). Anyone who wants
+    # to override them can pass the flags directly on the command line,
+    # which skips this interactive walkthrough entirely.
 
     return argv
 
