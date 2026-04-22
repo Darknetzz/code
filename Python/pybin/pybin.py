@@ -1,7 +1,9 @@
+import fnmatch
+import glob as _glob
 import re
 import sys
 import typer
-from typing import Optional
+from typing import List, Optional
 import subprocess
 import shutil
 from pathlib import Path
@@ -191,64 +193,102 @@ def _resolve_built_artifact_path(
     return candidates[0]
 
 
-# ============================================================================ #
-#                                FUNCTION: main                                #
-# ============================================================================ #
-@app.command()
-def main(
-    file: Path = typer.Argument(..., help="Python file to process"),
-    keep_spec: bool = typer.Option(
-        True,
-        "--keep-spec/--no-keep-spec",
-        help="Keep the .spec file after building (default: keep)",
-        show_default=True,
-    ),
-    keep_build: bool = typer.Option(
-        False,
-        "--keep-build",
-        help="Keep the build directory after building",
-    ),
-    use_spec: bool = typer.Option(
-        False,
-        "--use-spec/--no-use-spec",
-        help=(
-            "Use .spec workflow when available. Incompatible specs are auto-regenerated. "
-            "Use --no-use-spec to always build directly from .py."
-        ),
-        show_default=True,
-    ),
-    output_dir: Path = typer.Option(
-        None,
-        "--output-dir",
-        help="Directory for the final .exe (default: <script_dir>/dist).",
-    ),
-    name: Optional[str] = typer.Option(
-        None,
-        "--name",
-        "-n",
-        help=(
-            "Base name of the output executable without .exe (PyInstaller --name). "
-            "Default: same stem as the .py file. "
-            "Writes <name>.exe into --output-dir or the default dist/ folder."
-        ),
-    ),
-):
-    """
-    Compile one Python script to a single-file executable (PyInstaller), then optionally remove build noise.
+_GLOB_CHARS = "*?["
 
-    \b
-    Default artifact: <script_dir>/dist/<script_stem>.exe
-    \b
-    Change only the folder:  --output-dir PATH
-    Change only the .exe name:  --name STEM  (or -n STEM); still uses default dist/ unless you also pass --output-dir.
+
+def _has_glob(path_str: str) -> bool:
+    return any(ch in path_str for ch in _GLOB_CHARS)
+
+
+def _matches_any_pattern(path: Path, patterns: List[str]) -> bool:
+    """True if `path.name` or the raw path string matches any fnmatch pattern."""
+    s = str(path)
+    for pat in patterns:
+        if fnmatch.fnmatch(path.name, pat) or fnmatch.fnmatch(s, pat):
+            return True
+    return False
+
+
+def _expand_inputs(
+    inputs: List[Path],
+    *,
+    excludes: List[str],
+    include_underscore: bool,
+) -> List[Path]:
     """
+    Expand glob patterns, de-duplicate, and filter inputs.
+
+    Rules:
+    - Patterns containing '*', '?' or '[' are expanded via glob (recursive).
+    - Non-matching patterns emit a warning and are skipped.
+    - Non-.py results are skipped with a note.
+    - When more than one file ends up in the build set, underscore-prefixed
+      files (by convention: private/helper modules) are auto-skipped unless
+      --include-underscore is set.
+    - Any file matching an --exclude pattern is skipped.
+    """
+    expanded: List[Path] = []
+    seen: set = set()
+
+    def _add(path: Path) -> None:
+        try:
+            key = path.resolve()
+        except OSError:
+            key = path
+        if key in seen:
+            return
+        seen.add(key)
+        expanded.append(path)
+
+    for raw in inputs:
+        s = str(raw)
+        if _has_glob(s):
+            matches = sorted(_glob.glob(s, recursive=True))
+            if not matches:
+                typer.secho(f"⚠ No matches for pattern: {s}", fg=typer.colors.YELLOW)
+                continue
+            for m in matches:
+                _add(Path(m))
+        else:
+            _add(raw)
+
+    filtered: List[Path] = []
+    multi = len(expanded) > 1
+    for path in expanded:
+        if path.suffix != ".py":
+            typer.secho(f"  Skipping {path} (not a .py file)", dim=True)
+            continue
+        if multi and not include_underscore and path.name.startswith("_"):
+            typer.secho(
+                f"  Skipping {path.name} (underscore-prefixed; use --include-underscore to include)",
+                dim=True,
+            )
+            continue
+        if excludes and _matches_any_pattern(path, excludes):
+            typer.secho(f"  Skipping {path.name} (matches --exclude)", dim=True)
+            continue
+        filtered.append(path)
+
+    return filtered
+
+
+def _compile_one(
+    file: Path,
+    *,
+    keep_spec: bool,
+    keep_build: bool,
+    use_spec: bool,
+    output_dir: Optional[Path],
+    name: Optional[str],
+) -> bool:
+    """Build one script. Returns True on success, False on failure (no exit)."""
     if not file.exists():
         typer.secho(f"✗ Error: File '{file}' does not exist.", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(code=1)
+        return False
 
     if file.suffix != ".py":
         typer.secho(f"✗ Error: '{file}' is not a Python file.", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(code=1)
+        return False
 
     typer.secho(f"📦 Processing: {file}", fg=typer.colors.CYAN, bold=True)
 
@@ -333,7 +373,7 @@ def main(
                 if mk.returncode != 0:
                     typer.secho("✗ pyi-makespec failed", fg=typer.colors.RED, err=True)
                     typer.secho(mk.stderr, fg=typer.colors.RED, err=True)
-                    raise typer.Exit(code=1)
+                    return False
 
                 typer.secho("✓ .spec regenerated", fg=typer.colors.GREEN)
                 try:
@@ -372,7 +412,7 @@ def main(
         if result.returncode != 0:
             typer.secho("✗ PyInstaller failed:", fg=typer.colors.RED, bold=True, err=True)
             typer.secho(result.stderr, fg=typer.colors.RED, err=True)
-            raise typer.Exit(code=1)
+            return False
 
         typer.secho("✓ PyInstaller completed successfully", fg=typer.colors.GREEN, bold=True)
         
@@ -397,10 +437,145 @@ def main(
         typer.echo("")
         typer.secho("✓ Build complete: ", fg=typer.colors.GREEN, bold=True, nl=False)
         typer.secho(str(built_artifact), fg=typer.colors.CYAN, bold=True)
+        return True
     finally:
         if build_info_path is not None:
             _restore_build_info_module(build_info_path, original_build_info)
 
+
+# ============================================================================ #
+#                                FUNCTION: main                                #
+# ============================================================================ #
+@app.command()
+def main(
+    files: List[Path] = typer.Argument(
+        ...,
+        help=(
+            "One or more Python files to build. Glob patterns (e.g. 'src/*.py') are "
+            "expanded automatically. Quote the pattern to prevent the shell from "
+            "expanding it."
+        ),
+    ),
+    exclude: List[str] = typer.Option(
+        [],
+        "--exclude",
+        "-x",
+        help=(
+            "Skip files whose name or path matches this fnmatch pattern (e.g. '_*' or "
+            "'*test*'). Repeat to add more patterns."
+        ),
+    ),
+    include_underscore: bool = typer.Option(
+        False,
+        "--include-underscore",
+        help=(
+            "Include underscore-prefixed files (e.g. '_core.py') when building multiple "
+            "files. By default these are treated as private helpers and skipped."
+        ),
+    ),
+    keep_spec: bool = typer.Option(
+        True,
+        "--keep-spec/--no-keep-spec",
+        help="Keep the .spec file after building (default: keep)",
+        show_default=True,
+    ),
+    keep_build: bool = typer.Option(
+        False,
+        "--keep-build",
+        help="Keep the build directory after building",
+    ),
+    use_spec: bool = typer.Option(
+        False,
+        "--use-spec/--no-use-spec",
+        help=(
+            "Use .spec workflow when available. Incompatible specs are auto-regenerated. "
+            "Use --no-use-spec to always build directly from .py."
+        ),
+        show_default=True,
+    ),
+    output_dir: Path = typer.Option(
+        None,
+        "--output-dir",
+        help="Directory for the final .exe (default: <script_dir>/dist).",
+    ),
+    name: Optional[str] = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help=(
+            "Base name of the output executable without .exe (PyInstaller --name). "
+            "Default: same stem as the .py file. "
+            "Writes <name>.exe into --output-dir or the default dist/ folder. "
+            "Only valid when building a single file."
+        ),
+    ),
+):
+    """
+    Compile one or more Python scripts to single-file executables (PyInstaller).
+
+    \b
+    Default artifact: <script_dir>/dist/<script_stem>.exe
+    \b
+    Multiple files / wildcards:
+      pybin a.py b.py
+      pybin "src/*.py"           # quote to let pybin expand the glob
+      pybin src/*.py -x _*       # exclude underscore-prefixed (also default)
+    \b
+    Change only the folder:  --output-dir PATH
+    Change only the .exe name:  --name STEM  (single-file only).
+    """
+    resolved = _expand_inputs(
+        files,
+        excludes=exclude,
+        include_underscore=include_underscore,
+    )
+
+    if not resolved:
+        typer.secho("✗ No files to build after expansion/filtering.", fg=typer.colors.RED, bold=True, err=True)
+        raise typer.Exit(code=1)
+
+    if name and len(resolved) > 1:
+        typer.secho(
+            f"✗ --name can only be used with a single file (got {len(resolved)}).",
+            fg=typer.colors.RED,
+            bold=True,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    successes: List[Path] = []
+    failures: List[Path] = []
+    total = len(resolved)
+    multi = total > 1
+
+    for idx, f in enumerate(resolved, start=1):
+        if multi:
+            typer.echo("")
+            typer.secho(f"[{idx}/{total}] {f}", fg=typer.colors.BLUE, bold=True)
+        ok = _compile_one(
+            f,
+            keep_spec=keep_spec,
+            keep_build=keep_build,
+            use_spec=use_spec,
+            output_dir=output_dir,
+            name=name,
+        )
+        (successes if ok else failures).append(f)
+
+    if multi:
+        typer.echo("")
+        typer.secho(
+            f"Summary: {len(successes)}/{total} built successfully",
+            fg=typer.colors.GREEN if not failures else typer.colors.YELLOW,
+            bold=True,
+        )
+        if failures:
+            typer.secho(f"Failed ({len(failures)}):", fg=typer.colors.RED, bold=True, err=True)
+            for f in failures:
+                typer.secho(f"  ✗ {f}", fg=typer.colors.RED, err=True)
+
+    if failures:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
