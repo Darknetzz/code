@@ -92,7 +92,7 @@ def main():
 
             print(''.join(board[row]))
         time.sleep(sleepTime/1000)
-        os.system('cls')
+        os.system("cls" if os.name == "nt" else "clear")
 
 if __name__ == "__main__":
     try:

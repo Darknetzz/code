@@ -1,18 +1,9 @@
 from english_words import get_english_words_set
 import random, string, os
 
-os.system('cls' if os.name == 'nt' else 'clear')
+from utils.textStyle import C as bcolors
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+os.system('cls' if os.name == 'nt' else 'clear')
 
 hangman_logo = f"""
 {bcolors.OKGREEN}

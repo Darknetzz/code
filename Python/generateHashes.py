@@ -6,15 +6,11 @@
 # ---------------------------------------------------------------------------- #
 
 
-import string, mysql.connector, string, itertools, hashlib, sys
+import string, mysql.connector, itertools, sys
 
-def hashStr(type, str):
-    m = eval(f"hashlib.{type}()")
-    m.update(str.encode())
-    hex = m.hexdigest()
-    return hex
+from utils.crypto import hash_str
 
-defaultLength = int(sys.argv[1]) or 4
+defaultLength = int(sys.argv[1]) if len(sys.argv) > 1 else 4
 chars = string.ascii_lowercase
 
 print("Please enter your database details")
@@ -40,7 +36,7 @@ for i in combinations:
     # Join array of chars into string
     cleartext = ''.join(i)
     # Hash the generated string
-    hashtext  = hashStr('md5', cleartext)
+    hashtext  = hash_str('md5', cleartext)
     # Add the hash and cleartext to database
     addHash   = f"""INSERT INTO md5 (hash, cleartext) VALUES (%s, %s)"""
     data      = (hashtext, cleartext)

@@ -3,35 +3,19 @@
 
 import os, re
 
-os.system('cls')
+from utils.textStyle import (
+    printGreen, printRed, printYellow, printCyan, printGrey,
+    printBlinking, printNegative, printCrossed,
+)
+
+if os.name == "nt":
+    os.system("cls")
+else:
+    os.system("clear")
 
 # ---------------------------------------------------------------------------- #
 #                                   Functions                                  #
 # ---------------------------------------------------------------------------- #
-def printGreen(text):
-    return f"\033[92m{text}\033[00m"
-
-def printRed(text):
-    return f"\033[91m{text}\033[00m"
-
-def printYellow(text):
-    return f"\033[93m{text}\033[00m"
-
-def printCyan(text):
-    return f"\033[96m{text}\033[00m"
-
-def printGrey(text):
-    return f"\033[1;30m{text}\033[0m"
-
-def printBlinking(text):
-    return f"\033[5m{text}\033[0m"
-
-def printNegative(text):
-    return f"\033[7m{text}\033[0m"
-
-def printCrossed(text):
-    return f"\033[9m{text}\033[0m"
-
 def recursiveFileList(cwd):
     fileList = []
     for root, dirnames, filenames in os.walk(cwd):

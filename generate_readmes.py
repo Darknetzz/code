@@ -63,11 +63,6 @@ def extract_description(readme_path: Path, dir_name: str) -> str:
         text = readme_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return "—"
-    # Match # DirName or # dir_name, then take next non-empty block until ## or end
-    title_pattern = re.compile(
-        r"^#\s+.+$",
-        re.MULTILINE,
-    )
     lines = text.splitlines()
     found_title = False
     description_lines = []
@@ -90,7 +85,7 @@ def extract_description(readme_path: Path, dir_name: str) -> str:
     return " ".join(description_lines).strip()
 
 
-def get_existing_intro(readme_path: Path, dir_display_name: str) -> str | None:
+def get_existing_intro(readme_path: Path) -> str | None:
     """
     If README exists, return the first paragraph after # Title as intro.
     Otherwise return None (caller will use default).
@@ -154,14 +149,13 @@ def build_root_readme(root: Path) -> str:
 def build_subdir_readme(
     dir_path: Path,
     subdirs: list[Path],
-    parent_is_root: bool,
 ) -> str:
     """Build Go-style README: title, description, table of subdirectories."""
     name = dir_path.name
     display_name = humanize_dir_name(name)
     readme_path = dir_path / "README.md"
 
-    intro = get_existing_intro(readme_path, display_name)
+    intro = get_existing_intro(readme_path)
     if not intro:
         intro = f"Scripts and projects in {display_name}."
 
@@ -210,7 +204,7 @@ def main() -> int:
     # 2. Each top-level subdirectory
     for subdir in get_direct_subdirs(root):
         children = get_direct_subdirs(subdir)
-        content = build_subdir_readme(subdir, children, parent_is_root=True)
+        content = build_subdir_readme(subdir, children)
         readme_path = subdir / "README.md"
         readme_path.write_text(content, encoding="utf-8")
         print(f"Updated: {readme_path.relative_to(root)}")

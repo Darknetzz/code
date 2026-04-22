@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter import font
-import random, os, importlib
+import json, random, os, importlib
 
 # Window initialize
 window   = tk.Tk()
@@ -10,26 +10,34 @@ window.title("Text editor")
 
 # Settings
 CONFIG_FILE = "textEditor.cfg"
+DEFAULT_CFG = {
+    'font'           : 'Consolas',
+    'fontSize'       : '17'      ,
+    'fontDeco'       : 'normal'  ,
+    'bgColor'        : 'Black'   ,
+    'fgColor'        : 'Green'   ,
+    'cuColor'        : 'Red'     ,
+    'disco'          : 'false'   ,
+    'syntax'         : 'Text'    ,
+    "color_Keywords" : "Pink"    ,
+    "color_Symbols"  : "Cyan"    ,
+    "color_Operators": "Grey"    ,
+    "color_Variables": "Red"     ,
+    "color_Comments" : "Darkgrey",
+}
+
+cfg = dict(DEFAULT_CFG)
+# Config is loaded as JSON (previously used exec() on a .cfg file, which was
+# arbitrary-code-execution from disk). Old Python-style .cfg files will fail
+# to parse and fall back to defaults.
 if os.path.exists(CONFIG_FILE):
-    f = open(CONFIG_FILE, 'r')
-    exec(f.read())
-    f.close()
-else:
-    cfg            = {
-        'font'           : 'Consolas', 
-        'fontSize'       : '17'      , 
-        'fontDeco'       : 'normal'  , 
-        'bgColor'        : 'Black'   , 
-        'fgColor'        : 'Green'   , 
-        'cuColor'        : 'Red'     , 
-        'disco'          : 'false'   , 
-        'syntax'         : 'Text'    , 
-        "color_Keywords" : "Pink"    , 
-        "color_Symbols"  : "Cyan"    , 
-        "color_Operators": "Grey"    , 
-        "color_Variables": "Red"     , 
-        "color_Comments" : "Darkgrey",
-    }
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            cfg.update({k: v for k, v in loaded.items() if k in DEFAULT_CFG})
+    except (OSError, ValueError) as e:
+        print(f"[WARNING] Could not read {CONFIG_FILE} as JSON: {e}. Using defaults.")
 # ---------------------------------------------------------------------------- #
 #                                   Constants                                  #
 # ---------------------------------------------------------------------------- #
@@ -213,15 +221,12 @@ def saveSettings(savecfg, windowReference = None):
         settingsStatus.destroy()
 
     try:
-        configFile = open(CONFIG_FILE, "w+")
-        configFile.write("cfg = {}\n")
-
         for settingName in savecfg:
             if len(savecfg[settingName].get()) > 0:
                 cfg[settingName] = savecfg[settingName].get()
-                configFile.write(f"cfg[\"{settingName}\"] = \"{cfg[settingName]}\"\n")
                 print(f"Setting {settingName} = {cfg[settingName]}")
-        configFile.close()
+        with open(CONFIG_FILE, "w", encoding="utf-8") as configFile:
+            json.dump(cfg, configFile, indent=2)
         textarea.config(background=cfg['bgColor'], foreground=cfg['fgColor'], insertbackground=cfg['cuColor'], font=(cfg['font'], cfg['fontSize'], cfg['fontDeco']))
         status.config(text="[SETTINGS SAVED]", foreground="Green")
         updateSettingsOverview()

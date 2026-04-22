@@ -14,9 +14,6 @@ for p in packages:
 tk = imp.importer_import_new("tkinter")
 
 
-# import tkinter as tk
-# import os, getpass, socket, shutil, shlex, subprocess, re, pyperclip, time
-
 client = socket.gethostbyname_ex(socket.getfqdn())
 ip = str(client[2])
 fqdn = str(client[0])
@@ -76,27 +73,6 @@ Have fun!
 def vprint(txt):
     if cfg["verbose"] == True:
         print(txt)
-
-# ---------------------------------------------------------------------------- #
-#                    Highlight text (can be removed I think)                   #
-# ---------------------------------------------------------------------------- #
-# def highlighter():
-#     highlightWords = {
-#         f"[{shell}]": "Pink",
-#     }
-
-#     for k,v in highlightWords.items(): # iterate over dict
-#         startIndex = "1.0"
-
-#         while True:
-#             startIndex = widgets["outputText"].search(k, startIndex, tk.END) # search for occurence of k
-#             if startIndex:
-#                 endIndex = widgets["outputText"].index('%s+%dc' % (startIndex, (len(k)))) # find end of k
-#                 widgets["outputText"].tag_add(k, startIndex, endIndex) # add tag to k
-#                 widgets["outputText"].tag_config(k, foreground=v)      # and color it with v
-#                 startIndex = endIndex # reset startIndex to continue searching
-#             else:
-#                 break
 
 # ---------------------------------------------------------------------------- #
 #               Simple function to run and return shell commands               #
@@ -255,19 +231,6 @@ def guiUpdate():
     widgets["topText"].configure(text=f"[{os.getcwd()}] [{now}]")
     widgets["statusText"].configure(text=f"[{shell.split(' ')[0]}] [{cfg['font']} {cfg['fontsize']}px] [{x}x{y}]")
     window.after(1000, guiUpdate)
-
-# # Clock update
-# def update_toptext():
-#     now = time.strftime("%H:%M:%S")
-#     widgets["topText"].configure(text=f"[{os.getcwd()}] [{now}]")
-#     window.after(1000, update_toptext)
-
-# # Top update
-# def update_statustext():
-#     x = window.winfo_width()
-#     y = window.winfo_height()
-#     widgets["statusText"].configure(text=f"[{shell.split(' ')[0]}] [{cfg['font']} {cfg['fontsize']}px] [{x}x{y}]")
-#     window.after(1000, update_statustext)
 
 # ---------------------------------------------------------------------------- #
 #                                Custom commands                               #

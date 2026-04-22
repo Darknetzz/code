@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------- #
 try:
     import subprocess, os, sys, shutil
+    from utils.textStyle import style
 except Exception as e:
     print(e)
     exit("Something is seriously wrong with your Python installation... Bye.")
@@ -72,14 +73,6 @@ LOG_WARNING    = VERBOSITY_LEVELS.index(logVerbosity)    <= VERBOSITY_LEVELS.ind
 LOG_ERROR      = VERBOSITY_LEVELS.index(logVerbosity)    <= VERBOSITY_LEVELS.index('error')
 LOG_SILENT     = VERBOSITY_LEVELS.index(logVerbosity)    == VERBOSITY_LEVELS.index('silent')
 
-COLORS = {
-    "success"  : "92m"  , # green [OK]
-    "danger"   : "91m"  , # red   [ERROR]
-    "warning"  : "93m"  , # yellow [WARNING]
-    "primary"  : "96m"  , # cyan  [INPUT, INFO etc.]
-    "secondary": "1;30m", # grey
-}
-
 AVAILABLE_PARAMS = [
     # flag      # help description                                        # active description
     ["h", "-h | (h)elp    | Display help text and exit script."         , "[NOTE] Script running with -v flag. Log will be verbose (level: info)."], 
@@ -92,9 +85,6 @@ AVAILABLE_PARAMS = [
 # ---------------------------------------------------------------------------- #
 #                               Text style functions                           #
 # ---------------------------------------------------------------------------- #
-def style(text, style = 'primary'):
-    return f"\033[{COLORS[style]}{text}\033[00m"
-
 def prints(text):
     if any(element in text for element in ERROR_PREFIXES):
         if OUTPUT_ERROR: print(style(f"{text}", "danger"))
@@ -221,6 +211,11 @@ def recursiveFileList(cwd):
         fileList.append(filenames)
     return fileList[0]
 
+# Thread-safe map of fullPath -> bool (True = OK, False = corrupted / failed).
+# Threads can't return values through Thread.join, so we collect results here
+# and tally them after join() in the caller.
+checkResults = {}
+
 # ----------------------------- FUNCTION checkVid ---------------------------- #
 def checkVid(fullPath):
     try:
@@ -231,11 +226,13 @@ def checkVid(fullPath):
             ffmpeg.input(fullPath).output("null", f="null", loglevel=ffmpegLogLevel).run()
         else:
             ffmpeg.input(fullPath).output("null", f="null", loglevel=ffmpegLogLevel).run(cmd=ffmpegPath)
-    except:
-        writeLog(f"[ERROR] Corrupted {fullPath}")
+    except Exception as e:
+        writeLog(f"[ERROR] Corrupted {fullPath} ({type(e).__name__}: {e})")
+        checkResults[fullPath] = False
         return False
     else:
         writeLog(f"[OK] {fullPath}")
+        checkResults[fullPath] = True
         return True
 
 # ----------------------------- FUNCTION writeLog ---------------------------- #
@@ -417,6 +414,7 @@ elif os.path.exists(filesToScan):
         if multiThreaded == True:
             prints(f"[DEBUG] Starting multithreaded")
             currentThreads = []
+            batchPaths     = []
             for i in range(0,threads):
                 # This is the for-loop of ONE THREAD
                 # variable i = THREAD
@@ -437,16 +435,20 @@ elif os.path.exists(filesToScan):
                     process     = threading.Thread(name   = "checkvid", target=checkVid, args=(fullPath,))
                     process.start()
                     currentThreads.append(process)
-                except:
-                    prints(f"[ERROR] Unable to start thread {threadInfo}")
+                    batchPaths.append(fullPath)
+                except Exception as e:
+                    prints(f"[ERROR] Unable to start thread {threadInfo} ({type(e).__name__}: {e})")
 
+            # Wait for every thread in this batch to finish before reading
+            # results so we never count a path whose checkVid hasn't returned.
             for currentThread in currentThreads:
-                if currentThread == True:
+                currentThread.join()
+
+            for fullPath in batchPaths:
+                if checkResults.get(fullPath, False):
                     okCount += 1
                 else:
                     corruptedCount += 1
-
-                currentThread.join()
                 
         # ---------------------------------------------------------------------------- #
         #                                 NON THREADED                                 #

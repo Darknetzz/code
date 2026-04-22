@@ -14,7 +14,7 @@ import time
 import webbrowser
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -102,13 +102,12 @@ class DirInfo:
         return self.path.name or str(self.path)
 
     def format_size(self) -> str:
-        """Format size in human-readable format."""
-        size = float(self.size)
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size < 1024.0:
-                return f"{size:.1f} {unit}"
-            size /= 1024.0
-        return f"{size:.1f} PB"
+        """Format this entry's size in human-readable form.
+
+        Delegates to the module-level :func:`format_size` so the two can't
+        drift apart when units or formatting change.
+        """
+        return format_size(self.size)
 
 
 def entry_is_directory(info: DirInfo) -> bool:
@@ -133,6 +132,55 @@ def child_count_cells(
     if not entry_is_directory(info):
         return (empty, empty)
     return (fmt.format(info.file_count), fmt.format(info.dir_count))
+
+
+class ChildRow(NamedTuple):
+    """Pre-computed fields for one row of a ``dir_info.children`` table.
+
+    Returned by :func:`iter_child_rows` so every "largest items" renderer
+    (plain text, Markdown, Rich table, HTML, ...) can share the same
+    enumeration, slicing, size formatting, and count-cell logic.
+
+    Attributes
+    ----------
+    index:
+        1-based row index (suitable for the ``#`` column).
+    child:
+        The underlying :class:`DirInfo` entry.
+    size_str:
+        Human-readable size, e.g. ``"12.3 MB"``.
+    files_str, dirs_str:
+        Count display strings; empty for file rows (see
+        :func:`child_count_cells`).
+    is_dir:
+        Whether ``child`` is a directory — lets callers pick their own
+        directory/file label (``"Dir"`` / ``"📁 Dir"`` / ...).
+    """
+    index: int
+    child: DirInfo
+    size_str: str
+    files_str: str
+    dirs_str: str
+    is_dir: bool
+
+
+def iter_child_rows(dir_info: DirInfo, limit: int) -> Iterator[ChildRow]:
+    """Yield :class:`ChildRow` tuples for the first ``limit`` children.
+
+    Single source of truth for the "enumerate / slice / format size / derive
+    count cells" pattern that used to be repeated verbatim in the plain-text,
+    Markdown, and Rich-table renderers.
+    """
+    for i, child in enumerate(dir_info.children[:limit], 1):
+        files_s, dirs_s = child_count_cells(child)
+        yield ChildRow(
+            index=i,
+            child=child,
+            size_str=format_size(child.size),
+            files_str=files_s,
+            dirs_str=dirs_s,
+            is_dir=entry_is_directory(child),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────── #
@@ -219,17 +267,22 @@ def scan_directory(
                         file_count += child_info.file_count
                         dir_count += child_info.dir_count
                     else:
-                        # Just get size without recursing
-                        child_size = get_dir_size(item, stats=stats, progress_cb=progress_cb)
+                        # Beyond max_depth: still aggregate real size/counts so
+                        # every renderer can show accurate totals even when the
+                        # subtree is collapsed.
+                        summary = get_dir_size(item, stats=stats, progress_cb=progress_cb)
                         child_info = DirInfo(
                             path=item,
-                            size=child_size,
-                            file_count=0,
-                            dir_count=0,
-                            children=[]
+                            size=summary.size,
+                            file_count=summary.files,
+                            dir_count=summary.dirs,
+                            children=[],
+                            error=summary.error,
                         )
                         children.append(child_info)
-                        total_size += child_size
+                        total_size += summary.size
+                        file_count += summary.files
+                        dir_count += summary.dirs
 
             except PermissionError:
                 continue
@@ -254,30 +307,52 @@ def scan_directory(
     )
 
 
+@dataclass
+class DirSummary:
+    """Aggregate stats for a directory, used when scanning past ``max_depth``.
+
+    Carries an ``error`` string so callers can surface ``rglob`` / permission
+    failures instead of silently reporting ``0 B``.
+    """
+    size: int = 0
+    files: int = 0
+    dirs: int = 0
+    error: Optional[str] = None
+
+
 def get_dir_size(
     path: Path,
     *,
     stats: Optional[ScanStats] = None,
     progress_cb: Optional[ProgressCb] = None,
-) -> int:
-    """Get total size of directory without detailed recursion."""
-    total = 0
+) -> DirSummary:
+    """Summarize a directory (size + counts) without building a child tree.
+
+    Used when ``scan_directory`` hits ``max_depth`` and still needs accurate
+    totals for the collapsed subtree.
+    """
+    summary = DirSummary()
     try:
         for item in path.rglob('*'):
             try:
                 if item.is_file():
                     sz = item.stat().st_size
-                    total += sz
+                    summary.size += sz
+                    summary.files += 1
                     if stats is not None:
                         stats.files += 1
                         stats.size += sz
                         if progress_cb is not None:
                             progress_cb(stats)
-            except Exception:
+                elif item.is_dir():
+                    summary.dirs += 1
+                    if stats is not None:
+                        stats.dirs += 1
+            except OSError:
                 continue
-    except Exception:
-        pass
-    return total
+    except OSError as e:
+        summary.error = f"{type(e).__name__}: {e}"
+    return summary
 
 
 def make_throttled_progress_cb(
@@ -407,13 +482,12 @@ def build_plain_table_lines(dir_info: DirInfo, target_path: Path, limit: int) ->
         f"{'#':>4}  {'Name':<42}  {'Size':>12}  {'Files':>8}  {'Dirs':>6}  {'Type'}",
         "-" * 92,
     ]
-    for i, child in enumerate(dir_info.children[:limit], 1):
-        item_type = "Dir" if entry_is_directory(child) else "File"
-        name = child.name if len(child.name) <= 42 else child.name[:39] + "..."
-        files_s, dirs_s = child_count_cells(child)
+    for row in iter_child_rows(dir_info, limit):
+        item_type = "Dir" if row.is_dir else "File"
+        name = row.child.name if len(row.child.name) <= 42 else row.child.name[:39] + "..."
         lines.append(
-            f"{i:>4}  {name:<42}  {format_size(child.size):>12}  "
-            f"{files_s:>8}  {dirs_s:>6}  {item_type}"
+            f"{row.index:>4}  {name:<42}  {row.size_str:>12}  "
+            f"{row.files_str:>8}  {row.dirs_str:>6}  {item_type}"
         )
     return lines
 
@@ -469,13 +543,12 @@ def render_report_markdown(
         lines.append("")
         lines.append("| # | Name | Size | Files | Dirs | Type |")
         lines.append("|---:|------|------:|------:|-----:|------|")
-        for i, child in enumerate(dir_info.children[:limit], 1):
-            item_type = "Dir" if entry_is_directory(child) else "File"
-            safe_name = child.name.replace("|", "\\|")
-            files_s, dirs_s = child_count_cells(child)
+        for row in iter_child_rows(dir_info, limit):
+            item_type = "Dir" if row.is_dir else "File"
+            safe_name = row.child.name.replace("|", "\\|")
             lines.append(
-                f"| {i} | {safe_name} | {format_size(child.size)} | "
-                f"{files_s} | {dirs_s} | {item_type} |"
+                f"| {row.index} | {safe_name} | {row.size_str} | "
+                f"{row.files_str} | {row.dirs_str} | {item_type} |"
             )
     lines.append("")
     return "\n".join(lines)
@@ -857,11 +930,6 @@ _ICON_SVG_EXTRA: Dict[str, str] = {
         '.5h3.5v2H2.5v-2zm4.5 0h3v2H7v-2zm4 0h1.5v2H11v-2z"/>'
     ),
 }
-
-
-# Canonical icons used in tree rows (kept as explicit names for clarity).
-_SVG_ICON_DIR = _icon("dir")
-_SVG_ICON_FILE = _icon("file")
 
 
 # Extension → icon key lookup. Keeping it flat (not nested per category)
@@ -2891,15 +2959,14 @@ def _render_console_view(dir_info: DirInfo, target_path: Path, *, tree: bool, li
     table.add_column("Dirs", justify="right")
     table.add_column("Type")
 
-    for i, child in enumerate(dir_info.children[:limit], 1):
-        item_type = "📁 Dir" if entry_is_directory(child) else "📄 File"
-        files_s, dirs_s = child_count_cells(child)
+    for row in iter_child_rows(dir_info, limit):
+        item_type = "📁 Dir" if row.is_dir else "📄 File"
         table.add_row(
-            str(i),
-            child.name,
-            format_size(child.size),
-            files_s,
-            dirs_s,
+            str(row.index),
+            row.child.name,
+            row.size_str,
+            row.files_str,
+            row.dirs_str,
             item_type,
         )
 
@@ -3035,9 +3102,13 @@ def build_rich_tree(parent, dir_info: DirInfo, limit: int, current_level: int = 
 
     for child in dir_info.children[:limit]:
         label = f"{child.name} ({format_size(child.size)})"
-        if child.children:
+        # Style by *kind*, not by whether there happen to be loaded children:
+        # empty dirs and depth-truncated dirs have no ``children`` but should
+        # still render as directories.
+        if entry_is_directory(child):
             branch = parent.add(f"[bold cyan]{label}[/bold cyan]")
-            build_rich_tree(branch, child, limit, current_level + 1, max_level)
+            if child.children:
+                build_rich_tree(branch, child, limit, current_level + 1, max_level)
         else:
             parent.add(f"[dim]{label}[/dim]")
 
