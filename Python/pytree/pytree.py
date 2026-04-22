@@ -653,11 +653,16 @@ def _heat_bg(value: int, max_value: int) -> str:
 # ``fill="currentColor"`` so the surrounding CSS decides the color. One
 # source of truth per shape, one helper to stamp them out at any size.
 
-def _svg_icon(path_d: str, *, size: int = 14, cls: str = "icon-svg") -> str:
+def _svg_icon(inner: str, *, size: int = 14, cls: str = "icon-svg") -> str:
+    """Wrap arbitrary inner SVG content in a 16x16 ``<svg>`` with
+    ``fill="currentColor"`` on the root. Icons can be single paths or
+    composites (multiple ``<path>`` / ``<rect>`` / ``<circle>`` elements)
+    so file-type glyphs can use multi-shape drawings without ceremony.
+    """
     return (
         f'<svg viewBox="0 0 16 16" width="{size}" height="{size}" '
-        f'aria-hidden="true" class="{cls}">'
-        f'<path fill="currentColor" d="{path_d}"/></svg>'
+        f'fill="currentColor" aria-hidden="true" class="{cls}">'
+        f'{inner}</svg>'
     )
 
 
@@ -760,12 +765,296 @@ _ICON_D = {
 
 
 def _icon(name: str, *, size: int = 14, cls: str = "icon-svg") -> str:
-    return _svg_icon(_ICON_D[name], size=size, cls=cls)
+    inner = _ICON_SVG_EXTRA.get(name)
+    if inner is None:
+        inner = f'<path d="{_ICON_D[name]}"/>'
+    return _svg_icon(inner, size=size, cls=cls)
+
+
+# File-type icons that are too expressive for a single ``d=`` string —
+# small mountain scenes, play triangles on a frame, note + stems, grids,
+# sliders, brackets, etc. Each value is raw inner SVG markup that gets
+# wrapped by ``_svg_icon`` so ``fill="currentColor"`` on the root cascades
+# through every child element. CSS picks the color per icon key via the
+# ``.entry-icon[data-icon="..."]`` selectors below.
+_ICON_SVG_EXTRA: Dict[str, str] = {
+    "file_code": (
+        '<path fill="none" stroke="currentColor" stroke-width="1.8" '
+        'stroke-linecap="round" stroke-linejoin="round" '
+        'd="M5.5 5 2 8l3.5 3M10.5 5 14 8l-3.5 3M9.5 3.5l-3 9"/>'
+    ),
+    "file_image": (
+        '<rect x="1.5" y="2.5" width="13" height="11" rx="1.25" '
+        'fill="none" stroke="currentColor" stroke-width="1.4"/>'
+        '<circle cx="5.5" cy="6" r="1.3"/>'
+        '<path d="M2.5 12.5l3.2-3.2 2 2 3.5-4 2.8 3.2v2H2.5z"/>'
+    ),
+    "file_video": (
+        '<rect x="1.5" y="2.5" width="13" height="11" rx="1.25" '
+        'fill="none" stroke="currentColor" stroke-width="1.4"/>'
+        '<path d="M6.5 5.2v5.6L11.3 8z"/>'
+    ),
+    "file_audio": (
+        '<path d="M13.5 1 5.5 2.8V11a2.5 2.5 0 1 1-1.5-2.3V2L13.5 .2v8.3'
+        'a2.5 2.5 0 1 1-1.5-2.3V1z"/>'
+    ),
+    "file_archive": (
+        '<path fill-rule="evenodd" d="M2 3h12v12H2V3zm5 0h2v2H7V3zm0 3h2'
+        'v2H7V6zm0 3h2v3H7V9z"/>'
+        '<path d="M1 1h14v2H1V1z"/>'
+    ),
+    "file_pdf": (
+        '<path fill-rule="evenodd" d="M4 0h9a1 1 0 0 1 1 1v14a1 1 0 0 1-'
+        '1 1H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1.5A.5.5 0 0 0 3.5 2v9.'
+        '55A3 3 0 0 1 4 12h9V1.5H4zM4 13a1 1 0 1 0 0 2h9v-2H4z"/>'
+        '<path fill="#0d1117" d="M5 4.5h6.5v1H5v-1zm0 2h6.5v1H5v-1zm0 2'
+        'h4.5v1H5v-1z"/>'
+    ),
+    "file_doc": (
+        '<path fill-rule="evenodd" d="M3.75 0A1.75 1.75 0 0 0 2 1.75v12'
+        '.5C2 15.22 2.78 16 3.75 16h9.75a1.75 1.75 0 0 0 1.75-1.75V5a.7'
+        '5.75 0 0 0-.22-.53L10.78.22A.75.75 0 0 0 10.25 0H3.75zM4.5 7.5'
+        'h7v1h-7v-1zm0 2.5h7v1h-7v-1zm0 2.5h5v1h-5v-1z"/>'
+    ),
+    "file_text": (
+        '<path fill-rule="evenodd" d="M3.75 0A1.75 1.75 0 0 0 2 1.75v12'
+        '.5C2 15.22 2.78 16 3.75 16h9.75a1.75 1.75 0 0 0 1.75-1.75V5a.7'
+        '5.75 0 0 0-.22-.53L10.78.22A.75.75 0 0 0 10.25 0H3.75zM4.5 5.5'
+        'h4v1h-4v-1zm0 2h7v1h-7v-1zm0 2.5h7v1h-7v-1zm0 2.5h5v1h-5v-1z"/>'
+    ),
+    "file_html": (
+        '<circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor"'
+        ' stroke-width="1.4"/>'
+        '<ellipse cx="8" cy="8" rx="3.25" ry="6.75" fill="none" '
+        'stroke="currentColor" stroke-width="1.4"/>'
+        '<line x1="1.25" y1="8" x2="14.75" y2="8" stroke="currentColor" '
+        'stroke-width="1.4"/>'
+    ),
+    "file_config": (
+        '<path d="M1 3.25A.75.75 0 0 1 1.75 2.5h4.5a.75.75 0 0 1 0 1.5h-'
+        '4.5A.75.75 0 0 1 1 3.25zm9 0a.75.75 0 0 1 .75-.75h3.5a.75.75 0 '
+        '0 1 0 1.5h-3.5A.75.75 0 0 1 10 3.25zM8 1.5a1.75 1.75 0 1 0 0 3.'
+        '5 1.75 1.75 0 0 0 0-3.5zM1 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 '
+        '0 1 0 1.5h-1.5A.75.75 0 0 1 1 8zm6 0a.75.75 0 0 1 .75-.75h6.5a.'
+        '75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 7 8zM5 6.25a1.75 1.75 0 1 0'
+        ' 0 3.5 1.75 1.75 0 0 0 0-3.5zM1 12.75a.75.75 0 0 1 .75-.75h6.5a'
+        '.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75zm11 0a.75.75 0 0 1'
+        ' .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75zM10 1'
+        '1a1.75 1.75 0 1 0 0 3.5 1.75 1.75 0 0 0 0-3.5z"/>'
+    ),
+    "file_exec": (
+        '<rect x="0.75" y="1.75" width="14.5" height="12.5" rx="1.25" '
+        'fill="none" stroke="currentColor" stroke-width="1.4"/>'
+        '<path fill="none" stroke="currentColor" stroke-width="1.6" '
+        'stroke-linecap="round" stroke-linejoin="round" '
+        'd="M4 6l2.5 2L4 10M9 10.25h3"/>'
+    ),
+    "file_spreadsheet": (
+        '<rect x="1.5" y="2.5" width="13" height="11" rx="1" '
+        'fill="none" stroke="currentColor" stroke-width="1.3"/>'
+        '<path d="M2.5 3.5h3.5v2H2.5V3.5zm4.5 0h3v2H7V3.5zm4 0h1.5v2H11'
+        'V3.5zM2.5 7h3.5v2H2.5V7zm4.5 0h3v2H7V7zm4 0h1.5v2H11V7zM2.5 10'
+        '.5h3.5v2H2.5v-2zm4.5 0h3v2H7v-2zm4 0h1.5v2H11v-2z"/>'
+    ),
+}
 
 
 # Canonical icons used in tree rows (kept as explicit names for clarity).
 _SVG_ICON_DIR = _icon("dir")
 _SVG_ICON_FILE = _icon("file")
+
+
+# Extension → icon key lookup. Keeping it flat (not nested per category)
+# so adding/removing mappings is a single-line change. Unknown extensions
+# fall through to the generic ``file`` icon.
+_FILE_ICON_BY_EXT: Dict[str, str] = {
+    # Source code
+    **{e: "file_code" for e in (
+        "py", "pyw", "pyi", "pyx",
+        "js", "mjs", "cjs", "jsx", "ts", "tsx",
+        "c", "cc", "cpp", "cxx", "h", "hh", "hpp", "hxx",
+        "rs", "go", "zig", "nim", "v",
+        "java", "kt", "kts", "scala", "groovy",
+        "cs", "fs", "fsx", "vb",
+        "rb", "php", "pl", "pm", "lua",
+        "swift", "m", "mm",
+        "dart", "ex", "exs", "erl", "hrl", "elm",
+        "clj", "cljs", "cljc", "edn",
+        "hs", "lhs", "ml", "mli", "ocaml",
+        "r", "rmd",
+        "sh", "bash", "zsh", "fish",
+        "ps1", "psm1", "psd1",
+        "bat", "cmd",
+        "vue", "svelte", "astro",
+        "sol",
+    )},
+    # Web / markup / styling
+    **{e: "file_html" for e in ("html", "htm", "xhtml", "xml", "xsl", "xslt")},
+    **{e: "file_code" for e in ("css", "scss", "sass", "less", "styl")},
+    # Config / data
+    **{e: "file_config" for e in (
+        "json", "jsonc", "json5",
+        "yaml", "yml",
+        "toml", "ini", "cfg", "conf", "env", "properties",
+        "plist", "reg",
+        "lock",
+        "sql", "db", "sqlite", "sqlite3",
+    )},
+    # Images
+    **{e: "file_image" for e in (
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "cur",
+        "tif", "tiff", "heic", "heif", "avif", "jxl",
+        "psd", "ai", "eps", "svg", "xcf", "sketch", "fig",
+        "raw", "arw", "cr2", "nef", "orf", "rw2",
+    )},
+    # Video
+    **{e: "file_video" for e in (
+        "mp4", "m4v", "mov", "avi", "mkv", "webm", "wmv", "flv",
+        "3gp", "3g2", "mpg", "mpeg", "mts", "m2ts", "vob", "ogv",
+    )},
+    # Audio
+    **{e: "file_audio" for e in (
+        "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac",
+        "wma", "opus", "aiff", "aif", "alac", "ape", "mid", "midi",
+    )},
+    # Archives & disk images
+    **{e: "file_archive" for e in (
+        "zip", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz",
+        "zst", "7z", "rar", "lz", "lzma", "cab", "arj",
+        "iso", "dmg", "img",
+    )},
+    # PDF
+    "pdf": "file_pdf",
+    # Office docs
+    **{e: "file_doc" for e in ("doc", "docx", "odt", "rtf", "pages")},
+    **{e: "file_spreadsheet" for e in (
+        "xls", "xlsx", "xlsm", "xlsb", "ods", "csv", "tsv", "numbers",
+    )},
+    **{e: "file_doc" for e in ("ppt", "pptx", "pptm", "odp", "key")},
+    **{e: "file_pdf" for e in ("epub", "mobi", "azw", "azw3", "djvu")},
+    # Text & notes
+    **{e: "file_text" for e in (
+        "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "asciidoc",
+        "log", "tex", "bib", "nfo", "me", "readme",
+    )},
+    # Executables / packages
+    **{e: "file_exec" for e in (
+        "exe", "msi", "app", "deb", "rpm", "apk", "appimage", "snap",
+        "pkg", "msix",
+    )},
+    # Compiled / binary objects
+    **{e: "file_exec" for e in (
+        "bin", "dll", "so", "dylib", "o", "obj", "a", "lib",
+        "class", "jar", "war", "ear",
+        "pyc", "pyo", "pyd",
+        "wasm", "elf",
+    )},
+    # Fonts
+    **{e: "file_text" for e in ("ttf", "otf", "woff", "woff2", "eot")},
+}
+
+
+# Exact filename lookup (case-insensitive) for extension-less / well-known
+# files. Evaluated before the extension map so ``Dockerfile`` beats a
+# literal ``file`` fallback.
+_FILE_ICON_BY_NAME: Dict[str, str] = {
+    "dockerfile": "file_code",
+    "containerfile": "file_code",
+    "makefile": "file_code",
+    "gnumakefile": "file_code",
+    "cmakelists.txt": "file_code",
+    "rakefile": "file_code",
+    "gemfile": "file_config",
+    "gemfile.lock": "file_config",
+    "procfile": "file_config",
+    "vagrantfile": "file_code",
+    "jenkinsfile": "file_code",
+    "readme": "file_text",
+    "readme.md": "file_text",
+    "readme.txt": "file_text",
+    "license": "file_text",
+    "license.txt": "file_text",
+    "license.md": "file_text",
+    "copying": "file_text",
+    "changelog": "file_text",
+    "changelog.md": "file_text",
+    "authors": "file_text",
+    "contributors": "file_text",
+    "todo": "file_text",
+    "notice": "file_text",
+    ".gitignore": "file_config",
+    ".gitattributes": "file_config",
+    ".gitmodules": "file_config",
+    ".editorconfig": "file_config",
+    ".env": "file_config",
+    ".env.local": "file_config",
+    ".env.example": "file_config",
+    ".npmrc": "file_config",
+    ".yarnrc": "file_config",
+    ".prettierrc": "file_config",
+    ".eslintrc": "file_config",
+    ".eslintrc.json": "file_config",
+    ".babelrc": "file_config",
+    "package.json": "file_config",
+    "package-lock.json": "file_config",
+    "yarn.lock": "file_config",
+    "pnpm-lock.yaml": "file_config",
+    "bun.lockb": "file_config",
+    "cargo.toml": "file_config",
+    "cargo.lock": "file_config",
+    "go.mod": "file_config",
+    "go.sum": "file_config",
+    "pyproject.toml": "file_config",
+    "poetry.lock": "file_config",
+    "pipfile": "file_config",
+    "pipfile.lock": "file_config",
+    "requirements.txt": "file_config",
+    "setup.py": "file_code",
+    "setup.cfg": "file_config",
+    "tox.ini": "file_config",
+    "tsconfig.json": "file_config",
+    "jsconfig.json": "file_config",
+    "webpack.config.js": "file_code",
+    "vite.config.js": "file_code",
+    "vite.config.ts": "file_code",
+    "rollup.config.js": "file_code",
+    "tailwind.config.js": "file_code",
+    "composer.json": "file_config",
+    "composer.lock": "file_config",
+}
+
+
+# Multi-part extensions (checked before the single-suffix lookup so
+# ``project.tar.gz`` is treated as an archive rather than a ``.gz`` file,
+# which would also work but says less about the on-disk type).
+_FILE_ICON_MULTIPART = (
+    (".tar.gz", "file_archive"),
+    (".tar.bz2", "file_archive"),
+    (".tar.xz", "file_archive"),
+    (".tar.zst", "file_archive"),
+    (".tar.lz", "file_archive"),
+    (".d.ts", "file_code"),
+)
+
+
+def _file_icon_key(name: str) -> str:
+    """Pick an icon key for a file based on its name.
+
+    Tries, in order: exact filename match → known multi-part suffix →
+    single suffix. Falls back to the generic ``file`` icon so the table
+    always has a sane glyph. Case is normalized to lowercase so matching
+    is locale-agnostic for ASCII names (non-ASCII filenames fall through
+    to the fallback, which is acceptable)."""
+    lname = name.lower()
+    if lname in _FILE_ICON_BY_NAME:
+        return _FILE_ICON_BY_NAME[lname]
+    for suffix, icon in _FILE_ICON_MULTIPART:
+        if lname.endswith(suffix):
+            return icon
+    ext = Path(lname).suffix.lstrip(".")
+    if ext and ext in _FILE_ICON_BY_EXT:
+        return _FILE_ICON_BY_EXT[ext]
+    return "file"
 
 
 def _pill(value_html: str, bg: str) -> str:
@@ -824,9 +1113,10 @@ def _html_tree_rows(
             if has_kids
             else '<span class="row-expand-placeholder"></span>'
         )
+        icon_key = "dir" if is_dir else _file_icon_key(child.name)
         icon_html = (
-            f'<span class="entry-icon" data-kind="{kind}">'
-            f'{_SVG_ICON_DIR if is_dir else _SVG_ICON_FILE}</span>'
+            f'<span class="entry-icon" data-kind="{kind}" '
+            f'data-icon="{icon_key}">{_icon(icon_key)}</span>'
         )
         name_inner = (
             f'{expand_html}{icon_html}'
@@ -1472,6 +1762,22 @@ td.share-cell { vertical-align: middle; }
 }
 .entry-icon[data-kind="dir"]  { color: var(--dir); }
 .entry-icon[data-kind="file"] { color: var(--file); }
+/* Per-file-type accents. The attribute selector always wins against the
+   generic kind color above (same specificity, later rule), so adding a
+   new file family is a one-line CSS change. Hues roughly match common
+   IDE file-icon conventions (green=code, purple=media, red=video/pdf). */
+.entry-icon[data-icon="file_code"]        { color: #7ee787; }
+.entry-icon[data-icon="file_image"]       { color: #d2a8ff; }
+.entry-icon[data-icon="file_video"]       { color: #ff7b72; }
+.entry-icon[data-icon="file_audio"]       { color: #ffa657; }
+.entry-icon[data-icon="file_archive"]     { color: #d4a72c; }
+.entry-icon[data-icon="file_pdf"]         { color: #f85149; }
+.entry-icon[data-icon="file_doc"]         { color: #58a6ff; }
+.entry-icon[data-icon="file_text"]        { color: #8b949e; }
+.entry-icon[data-icon="file_html"]        { color: #ff7b72; }
+.entry-icon[data-icon="file_config"]      { color: #a371f7; }
+.entry-icon[data-icon="file_exec"]        { color: #3fb950; }
+.entry-icon[data-icon="file_spreadsheet"] { color: #3fb950; }
 .entry-icon .icon-svg { display: block; }
 .tree-meta { color: var(--muted); font-weight: normal; }
 .item-row {
@@ -2813,8 +3119,9 @@ def _prompt_interactive_args() -> List[str]:
             )
             argv += ["--format", fmt]
 
-    if not Confirm.ask("Open the HTML report in your browser?", default=True):
-        argv.append("--no-open")
+    # HTML reports always open in the user's default browser after
+    # generation. Power users can still pass ``--no-open`` directly on
+    # the CLI, but we no longer prompt for it in the walkthrough.
 
     return argv
 
