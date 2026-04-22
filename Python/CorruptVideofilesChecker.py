@@ -3,10 +3,24 @@
 # ---------------------------------------------------------------------------- #
 try:
     import subprocess, os, sys, shutil
+    # Stdlib modules used throughout the script. They're also listed in the
+    # ``packages`` auto-installer below (as a safety net / historical artifact),
+    # but importing them here as well makes the dependency visible to static
+    # analyzers like Ruff. Python caches imports, so the loop below becomes a
+    # no-op for these names.
+    import datetime, itertools, platform, threading, time
     from utils.textStyle import style
 except Exception as e:
     print(e)
     exit("Something is seriously wrong with your Python installation... Bye.")
+
+# Third-party ``ffmpeg-python``. Imported here (soft fail) so Ruff can resolve
+# the name; if missing, the auto-installer loop further down will pip-install
+# it and rebind ``ffmpeg`` via ``__import__``.
+try:
+    import ffmpeg
+except ImportError:
+    ffmpeg = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------- #
 #                            Settings and parameters                           #
