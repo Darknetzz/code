@@ -114,6 +114,7 @@ RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
 RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
+PROMPT_YES_NO_ALL = "[Y/n/a] (y=yes, n=no, a=all): "
 SIZE_PRESETS: dict[str, dict[str, object]] = {
     "light": {
         "min_shrink_percent": 35.0,
@@ -1750,7 +1751,7 @@ def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> 
         return False
 
     resp = safe_input(
-        "[y/N/A] (A = yes to all such prompts this run): ",
+        PROMPT_YES_NO_ALL,
         message=(
             "File is already AV1.\n"
             "Re-encode anyway?\n"
@@ -1783,11 +1784,11 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
         # Suppress interactive prompt when _NO_PROMPT is enabled
         if _NO_PROMPT:
             return False
-        # Print question and path explicitly so [y/N/A] is always visible (Rich may not
+        # Print question and path explicitly so [Y/n/a] is always visible (Rich may not
         # display multi-line prompts correctly on all terminals)
         prompt_target = _display_path(original_path, full_path=True, fallback_label="original file")
         resp = safe_input(
-            "[y/N/A] (A = yes to all such prompts this run): ",
+            PROMPT_YES_NO_ALL,
             message=f"Delete original file?\n{prompt_target}",
         ).strip().lower()
         if resp in ("y", "yes"):
@@ -1859,7 +1860,7 @@ def maybe_rename_output_to_original(output_path: str, original_name_path: str) -
 
     prompt_target = _display_path(original_name_path, full_path=True, fallback_label="target path")
     resp = safe_input(
-        "[y/N/A] (A = yes to all such prompts this run): ",
+        PROMPT_YES_NO_ALL,
         message=(
             "Rename output to original filename (restore extension in place)?\n"
             f"{prompt_target}"
@@ -2288,7 +2289,7 @@ def convert_single_file(
                 return delete_original, 0, "skip-overwrite", "unknown | length unknown | fps unknown"
             existing_output = _display_path(output_path, full_path=True, fallback_label="output file")
             resp = safe_input(
-                "[y/N/A] (A = yes to all such prompts this run): ",
+                PROMPT_YES_NO_ALL,
                 message=f"Output file exists — delete it and re-encode?\n{existing_output}",
             ).strip().lower()
             if resp in ("a", "all"):
