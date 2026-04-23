@@ -8,6 +8,8 @@
 # av1 "/path/to/videos" -r  (recursive)
 # av1 clean "/path/to/videos" -r  (remove stale temp files; same as: av1 --clean "/path/to/videos" -r)
 # av1 "/path/to/videos"  (convert: `main` is the default when no subcommand is given)
+# av1 help              (list subcommands); av1 help main  (compressor options, like av1 --help)
+# av1 version
 # python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe  (script path first, input path second)
 
 import os
@@ -32,6 +34,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.table import Column, Table
+import click
 import typer
 
 # ============================================================================ #
@@ -47,7 +50,7 @@ except ImportError:
 
 console = Console()  # Will be reinitialized in main() if --no-color is set
 
-_CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "list", "ls", "main"})
+_CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "help", "list", "ls", "main", "version"})
 # Keep Typer group-only options here. Do not list -h/--help: those should show `main` help
 # (compressor flags) since `main` is hidden from the group command list.
 _CLI_GROUP_ONLY_FLAGS = frozenset(
@@ -76,7 +79,8 @@ app = typer.Typer(
     rich_markup_mode="rich",  # Enable Rich markup in help output
     epilog=(
         "Default: run the compressor (paths and options go on the command line; no subcommand). "
-        "Subcommands: [bold]list[/] / [bold]ls[/] — scan for videos and show codec and size; "
+        "Subcommands: [bold]help[/] [TOPIC] — group or subcommand help; [bold]version[/] — app and ffmpeg info; "
+        "[bold]list[/] / [bold]ls[/] — scan for videos and show codec and size; "
         "[bold]clean[/] / [bold]cleanup[/] — remove stale *.temp.mkv files."
     ),
 )
@@ -3308,6 +3312,48 @@ def list_videos(
 
 app.command("list")(list_videos)
 app.command("ls", hidden=True)(list_videos)
+
+
+def help_cmd(
+    ctx: typer.Context,
+    topic: Optional[str] = typer.Argument(
+        None,
+        help=(
+            "Subcommand to show help for (e.g. [bold]main[/], [bold]list[/], [bold]clean[/]). "
+            "Omit to show the top-level [bold]av1[/] command list (all subcommands)."
+        ),
+    ),
+) -> None:
+    """Show help: top-level subcommands (no topic), or help for a specific subcommand (e.g. [bold]main[/])."""
+    parent = ctx.parent
+    if parent is None or not isinstance(parent.command, click.Group):
+        typer.echo("Internal error: missing CLI group context.", err=True)
+        raise typer.Exit(code=1)
+
+    if not (topic and topic.strip()):
+        typer.echo(parent.command.get_help(parent))
+        raise typer.Exit(0)
+
+    name = topic.strip()
+    sub = parent.command.get_command(parent, name)
+    if sub is None:
+        typer.echo(
+            f"Unknown subcommand: {name!r}. Run {__app_name__} help to see available commands.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    with click.Context(sub, parent=parent, info_name=name) as subctx:
+        typer.echo(sub.get_help(subctx))
+    raise typer.Exit(0)
+
+
+def version_cmd() -> None:
+    """Show this program's version, Python, build stamp, ffmpeg, and detected encoder (same as [bold]--version[/] on the compressor)."""
+    _version_callback(True)
+
+
+app.command("help")(help_cmd)
+app.command("version")(version_cmd)
 
 
 def _run_cleanup_command(input_paths: Optional[list[str]], recursive: bool) -> None:
