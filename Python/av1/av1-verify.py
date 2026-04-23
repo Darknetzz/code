@@ -42,7 +42,7 @@ app = typer.Typer(
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
-SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
+SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv")
 PROBE_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 
 # ============================================================================ #

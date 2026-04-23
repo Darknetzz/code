@@ -92,7 +92,7 @@ DEFAULT_CPU_USAGE_PERCENT = 75
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
-SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v")
+SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv")
 TEMP_OUTPUT_SUFFIX = ".temp.mkv"
 ROOT_PREVIEW_MAX_WALK_STEPS = 750  # Cap os.walk steps for root-confirm preview (keep huge trees responsive)
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB

@@ -205,7 +205,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 - **Scaling**: `min(1920, iw)` to cap at 1920px width while preserving aspect ratio; can be overridden with `AV1_MAX_VIDEO_WIDTH`.
 - **HEVC compatibility**: Outputs tagged `hvc1` for broader device compatibility.
 - **Output container**: `.mkv` with `+faststart` flag for faster playback start.
-- **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
+- **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv` (requires FFmpeg with WMV/ASF support).
 - **Disk space safety**: Requires ~1.5× input file size free in output drive before encoding starts.
 - **Audio codec**: Opus at configurable bitrate (default 64k per stream) for smaller files and good quality.
 - **Default log location**: `%TEMP%\av1-logs\` on Windows (can override with `--log-dir` or `AV1_LOG_DIR`).
