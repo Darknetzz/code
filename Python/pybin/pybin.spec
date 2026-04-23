@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['pybin.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pybin\\pybin.py'],
     pathex=[],
     binaries=[],
     datas=[],
