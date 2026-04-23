@@ -180,6 +180,8 @@ _NO_PROMPT = False  # Suppress interactive prompts
 _HIDE_FILENAMES = False  # Redact media filenames from console output when True
 _STARTUP_SUMMARY_EMITTED = False  # Avoid duplicate startup summaries on internal re-entry
 _AUTO_REENCODE_AV1 = False  # Remember "all" choice when confirming AV1 re-encodes
+_AUTO_OVERWRITE_EXISTING = False  # Remember "all" for deleting existing outputs before encode
+_AUTO_RENAME_TO_ORIGINAL = False  # Remember "all" for restoring original filename after delete
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -1742,7 +1744,7 @@ def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> 
         return False
 
     resp = safe_input(
-        "[y/N/a]: ",
+        "[y/N/A] (A = yes to all such prompts this run): ",
         message=(
             "File is already AV1.\n"
             "Re-encode anyway?\n"
@@ -1775,10 +1777,13 @@ def maybe_delete_original(original_path: str, auto_delete: bool = False) -> bool
         # Suppress interactive prompt when _NO_PROMPT is enabled
         if _NO_PROMPT:
             return False
-        # Print question and path explicitly so [y/N/a] is always visible (Rich may not
+        # Print question and path explicitly so [y/N/A] is always visible (Rich may not
         # display multi-line prompts correctly on all terminals)
         prompt_target = _display_path(original_path, full_path=True, fallback_label="original file")
-        resp = safe_input("[y/N/a]: ", message=f"Delete original file?\n{prompt_target}").strip().lower()
+        resp = safe_input(
+            "[y/N/A] (A = yes to all such prompts this run): ",
+            message=f"Delete original file?\n{prompt_target}",
+        ).strip().lower()
         if resp in ("y", "yes"):
             os.remove(original_path)
             cprint("Original deleted.", "success")
@@ -1820,6 +1825,50 @@ def resolve_original_output_path(input_path: str, output_path: str) -> Optional[
     return original_name_path
 
 
+def maybe_rename_output_to_original(output_path: str, original_name_path: str) -> None:
+    """
+    Optionally rename encoded output to the source basename/extension (in-place workflow).
+    Interactive: y = this file, n = keep -CODEC.mkv name, A/a/all = yes to all such prompts this run.
+    """
+    global _AUTO_RENAME_TO_ORIGINAL
+
+    def _do_rename() -> None:
+        os.replace(output_path, original_name_path)
+        _sp, _lp = _path_console_log(original_name_path, fallback_label="original name")
+        cprint(f"Renamed to: {_sp}", "success", log_body=f"Renamed to: {_lp}")
+
+    if _AUTO_RENAME_TO_ORIGINAL:
+        try:
+            _do_rename()
+        except OSError as e:
+            cprint(f"Could not rename to original name: {e}", "warning")
+        return
+
+    if _NO_PROMPT:
+        try:
+            _do_rename()
+        except OSError as e:
+            cprint(f"Could not rename to original name: {e}", "warning")
+        return
+
+    prompt_target = _display_path(original_name_path, full_path=True, fallback_label="target path")
+    resp = safe_input(
+        "[y/N/A] (A = yes to all such prompts this run): ",
+        message=(
+            "Rename output to original filename (restore extension in place)?\n"
+            f"{prompt_target}"
+        ),
+    ).strip().lower()
+    try:
+        if resp in ("a", "all"):
+            _AUTO_RENAME_TO_ORIGINAL = True
+            _do_rename()
+        elif resp in ("y", "yes"):
+            _do_rename()
+    except OSError as e:
+        cprint(f"Could not rename to original name: {e}", "warning")
+
+
 def _build_output_paths(input_path: str, output_dir: Optional[str], codec: str) -> tuple[str, str, str]:
     """Resolve output directory and the final/temp output paths for a conversion."""
     filename = os.path.basename(input_path)
@@ -1842,12 +1891,7 @@ def _finalize_output_file(input_path: str, output_path: str, keep_mkv: bool, del
     original_deleted = not os.path.exists(input_path)
     original_name_path = resolve_original_output_path(input_path, output_path)
     if original_deleted and original_name_path and not keep_mkv:
-        try:
-            os.replace(output_path, original_name_path)
-            _sp, _lp = _path_console_log(original_name_path, fallback_label="original name")
-            cprint(f"Renamed to: {_sp}", "success", log_body=f"Renamed to: {_lp}")
-        except OSError as e:
-            cprint(f"Could not rename to original name: {e}", "warning")
+        maybe_rename_output_to_original(output_path, original_name_path)
     return delete_original
 
 
@@ -2101,7 +2145,7 @@ def convert_single_file(
     - bitrate_decision: Short human-readable bitrate strategy used for this file
     - media_info: Short media metadata string (resolution, length, fps)
     """
-    global ACTIVE_ENCODER, FFMPEG_CMD
+    global ACTIVE_ENCODER, FFMPEG_CMD, _AUTO_OVERWRITE_EXISTING
     display_name = _display_path(input_path)
     display_name_log = _display_path(input_path, full_path=True, fallback_label="hidden")
     progress_name = progress_label or display_name
@@ -2159,9 +2203,18 @@ def convert_single_file(
             return delete_original, 0, "skip-disk", "unknown | length unknown | fps unknown"
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-        if not overwrite:
+        effective_overwrite = overwrite or _AUTO_OVERWRITE_EXISTING
+        if not effective_overwrite:
+            if _NO_PROMPT:
+                return delete_original, 0, "skip-overwrite", "unknown | length unknown | fps unknown"
             existing_output = _display_path(output_path, full_path=True, fallback_label="output file")
-            if safe_input(f"File exists: {existing_output}. Delete? [y/N]: ").lower() not in ("y", "yes"):
+            resp = safe_input(
+                "[y/N/A] (A = yes to all such prompts this run): ",
+                message=f"Output file exists — delete it and re-encode?\n{existing_output}",
+            ).strip().lower()
+            if resp in ("a", "all"):
+                _AUTO_OVERWRITE_EXISTING = True
+            elif resp not in ("y", "yes"):
                 return delete_original, 0, "skip-overwrite", "unknown | length unknown | fps unknown"
 
     # Probe once and reuse metadata for bitrate decisions + user-facing output.
@@ -3539,6 +3592,11 @@ def main(
     else:
         _confirm_root_like_input_paths(input_paths, intent="convert", recursive=recursive)
         check_ffmpeg()
+
+        global _AUTO_REENCODE_AV1, _AUTO_OVERWRITE_EXISTING, _AUTO_RENAME_TO_ORIGINAL
+        _AUTO_REENCODE_AV1 = False
+        _AUTO_OVERWRITE_EXISTING = False
+        _AUTO_RENAME_TO_ORIGINAL = False
 
         has_patterns = any("*" in input_path or "?" in input_path for input_path in input_paths)
         if len(input_paths) > 1 or has_patterns:
