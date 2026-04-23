@@ -731,7 +731,9 @@ def _print_startup_summary(
     bitrate: Optional[str],
     max_output_size: Optional[str],
     min_shrink_percent: Optional[float],
+    force: bool,
     delete_original: bool,
+    rename_original: bool,
     overwrite: bool,
     dry_run: bool,
     recursive: bool,
@@ -778,8 +780,12 @@ def _print_startup_summary(
         options.append(f"size-preset={size_preset}")
     if max_video_width != MAX_VIDEO_WIDTH:
         options.append(f"max-width={max_video_width}")
+    if force:
+        options.append("force")
     if delete_original:
         options.append("delete-original")
+    if rename_original:
+        options.append("rename-original")
     if overwrite:
         options.append("overwrite")
     if dry_run:
@@ -3442,6 +3448,13 @@ def main(
         help="Minimum percent reduction in file size. Default: 50, meaning the output targets at most 50% of the original size unless another constraint overrides it.",
         rich_help_panel="Input/Output",
     ),
+    force: bool = typer.Option(
+        False,
+        "-f",
+        "--force",
+        help="Force post-conversion in-place behavior: equivalent to --delete-original + --rename-original for this run.",
+        rich_help_panel="File Handling",
+    ),
     size_preset: Optional[str] = typer.Option(
         None,
         "--size-preset",
@@ -3463,6 +3476,13 @@ def main(
         "--clean",
         "--cleanup",
         help="Remove stale AV1 temp files (*.temp.mkv) under the given paths (or the current directory) and exit. Does not convert. Same behavior as the `clean` subcommand.",
+        rich_help_panel="File Handling",
+    ),
+    rename_original: bool = typer.Option(
+        False,
+        "-R",
+        "--rename-original",
+        help="Automatically rename output back to the original filename/extension when in-place renaming is possible (skip rename prompts for this run).",
         rich_help_panel="File Handling",
     ),
     keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep the converted file as .mkv instead of renaming it back to the original extension when possible. Default: restore the original filename/extension in place when safe.", rich_help_panel="File Handling"),
@@ -3519,6 +3539,9 @@ def main(
     
             [yellow]Convert single file and delete original[/]:
                 $ av1 "C:\\Videos\\movie.mp4" --delete-original
+
+            [yellow]Force in-place replacement (delete + auto-rename)[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --force
     
             [yellow]Wildcard pattern matching[/]:
                 $ av1 "episode_*.mkv"
@@ -3575,8 +3598,12 @@ def main(
             incompatible.append("--size-preset")
         if max_width is not None:
             incompatible.append("--max-width")
+        if force:
+            incompatible.append("--force / -f")
         if delete_original:
             incompatible.append("--delete-original / -d")
+        if rename_original:
+            incompatible.append("--rename-original / -R")
         if overwrite:
             incompatible.append("--overwrite / -o")
         if keep_mkv:
@@ -3672,6 +3699,12 @@ def main(
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)
+    if force:
+        delete_original = True
+        rename_original = True
+    if keep_mkv and rename_original:
+        cprint("--rename-original/--force cannot be combined with --keep-mkv.", "error")
+        raise typer.Exit(code=1)
     effective_max_video_width = MAX_VIDEO_WIDTH
     if max_width is not None:
         if max_width < 64:
@@ -3729,7 +3762,9 @@ def main(
         bitrate=bitrate,
         max_output_size=max_output_size,
         min_shrink_percent=min_shrink_percent,
+        force=force,
         delete_original=delete_original,
+        rename_original=rename_original,
         overwrite=overwrite,
         dry_run=dry_run,
         recursive=recursive,
@@ -3763,7 +3798,7 @@ def main(
         global _AUTO_REENCODE_AV1, _AUTO_OVERWRITE_EXISTING, _AUTO_RENAME_TO_ORIGINAL
         _AUTO_REENCODE_AV1 = False
         _AUTO_OVERWRITE_EXISTING = False
-        _AUTO_RENAME_TO_ORIGINAL = False
+        _AUTO_RENAME_TO_ORIGINAL = bool(rename_original)
 
         has_patterns = any("*" in input_path or "?" in input_path for input_path in input_paths)
         if len(input_paths) > 1 or has_patterns:
