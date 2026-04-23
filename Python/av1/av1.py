@@ -31,7 +31,7 @@ if platform.system() == 'Windows':
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.table import Column
+from rich.table import Column, Table
 import typer
 
 # ============================================================================ #
@@ -47,7 +47,7 @@ except ImportError:
 
 console = Console()  # Will be reinitialized in main() if --no-color is set
 
-_CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "main"})
+_CLI_KNOWN_SUBCOMMANDS = frozenset({"clean", "cleanup", "list", "ls", "main"})
 # Keep Typer group-only options here. Do not list -h/--help: those should show `main` help
 # (compressor flags) since `main` is hidden from the group command list.
 _CLI_GROUP_ONLY_FLAGS = frozenset(
@@ -76,7 +76,8 @@ app = typer.Typer(
     rich_markup_mode="rich",  # Enable Rich markup in help output
     epilog=(
         "Default: run the compressor (paths and options go on the command line; no subcommand). "
-        "Use [bold]clean[/] or [bold]cleanup[/] only to remove stale *.temp.mkv files."
+        "Subcommands: [bold]list[/] / [bold]ls[/] — scan for videos and show codec and size; "
+        "[bold]clean[/] / [bold]cleanup[/] — remove stale *.temp.mkv files."
     ),
 )
 
@@ -593,7 +594,7 @@ def _preview_recursive_work_dirs(
 def _confirm_root_like_input_paths(
     input_paths: list[str],
     *,
-    intent: Literal["convert", "probe", "clean"],
+    intent: Literal["convert", "probe", "clean", "list"],
     recursive: bool = False,
 ) -> None:
     """If any existing directory argument is a volume/share root, require explicit confirmation."""
@@ -623,6 +624,7 @@ def _confirm_root_like_input_paths(
     action = {
         "convert": "convert, dry-run, or recurse into",
         "probe": "probe media under",
+        "list": "list media under",
         "clean": "delete stale *.temp.mkv under",
     }[intent]
     mode: Literal["video", "temp"] = "temp" if intent == "clean" else "video"
@@ -1918,10 +1920,11 @@ def check_disk_space(file_path: str, output_dir: str) -> bool:
 # ============================================================================ #
 #                         FUNCTION: validate_video_file                        #
 # ============================================================================ #
-def validate_video_file(file_path: str) -> bool:
+def validate_video_file(file_path: str, *, quiet: bool = False) -> bool:
     """
     Validates that a file is a supported video file.
     Returns True if valid, False otherwise.
+    If quiet, do not log warnings (used for batch listing).
     """
     if not os.path.isfile(file_path):
         return False
@@ -1933,28 +1936,29 @@ def validate_video_file(file_path: str) -> bool:
     try:
         sz = os.path.getsize(file_path)
         if sz < MIN_FILE_SIZE_BYTES:
-            _sp, _lp = _path_console_log(file_path)
-            sz_h = _format_size(float(sz))
-            min_h = _format_size(float(MIN_FILE_SIZE_BYTES))
-            detail = f"{sz_h} ({sz} bytes); minimum {min_h} ({MIN_FILE_SIZE_BYTES} bytes)"
-            cprint(
-                f"File too small: {_sp} ({detail})",
-                "warning",
-                log_body=f"File too small: {_lp} ({detail})",
-            )
-            try:
-                _LOG_EVENTS.append({
-                    "ts": datetime.now(UTC).isoformat(timespec="seconds"),
-                    "level": "warning",
-                    "message": "skip_too_small",
-                    "data": {
-                        "file": _display_path(file_path, full_path=True, fallback_label="hidden"),
-                        "size_bytes": sz,
-                        "min_size_bytes": MIN_FILE_SIZE_BYTES,
-                    },
-                })
-            except Exception:
-                pass
+            if not quiet:
+                _sp, _lp = _path_console_log(file_path)
+                sz_h = _format_size(float(sz))
+                min_h = _format_size(float(MIN_FILE_SIZE_BYTES))
+                detail = f"{sz_h} ({sz} bytes); minimum {min_h} ({MIN_FILE_SIZE_BYTES} bytes)"
+                cprint(
+                    f"File too small: {_sp} ({detail})",
+                    "warning",
+                    log_body=f"File too small: {_lp} ({detail})",
+                )
+                try:
+                    _LOG_EVENTS.append({
+                        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+                        "level": "warning",
+                        "message": "skip_too_small",
+                        "data": {
+                            "file": _display_path(file_path, full_path=True, fallback_label="hidden"),
+                            "size_bytes": sz,
+                            "min_size_bytes": MIN_FILE_SIZE_BYTES,
+                        },
+                    })
+                except Exception:
+                    pass
             return False
     except OSError:
         return False
@@ -2112,6 +2116,77 @@ def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
         cprint(f"   Bitrate:   {_format_bitrate_display(stream_info.get('bitrate'))}", "info")
         cprint(f"   Duration:  {_format_duration(stream_info.get('duration'))}", "info")
         cprint(f"   Filesize:  {_format_size(float(file_size)) if file_size else 'unknown'}", "info")
+
+
+def _run_list_command(
+    input_paths: Optional[list[str]],
+    recursive: bool,
+    no_color: bool,
+    hide_filenames: bool,
+    ffprobe_path: Optional[str],
+) -> None:
+    """
+    List supported video files under the given path(s) with video codec and on-disk size.
+    Defaults to the current working directory when no paths are given.
+    """
+    global _NO_COLOR, _HIDE_FILENAMES, console, FFPROBE_CMD
+
+    env_no_color = os.getenv("AV1_NO_COLOR")
+    if env_no_color and _env_bool(env_no_color):
+        no_color = True
+    env_hide = os.getenv("AV1_HIDE_FILENAMES")
+    if env_hide and _env_bool(env_hide):
+        hide_filenames = True
+
+    if ffprobe_path:
+        FFPROBE_CMD = ffprobe_path
+    _NO_COLOR = no_color
+    _HIDE_FILENAMES = hide_filenames
+    if no_color:
+        console = Console(no_color=True, force_terminal=True)
+
+    if not input_paths:
+        input_paths = [os.getcwd()]
+
+    check_ffprobe()
+
+    video_files = _resolve_video_input_files(input_paths, recursive=recursive)
+    if not video_files:
+        cprint("❌ No video files found.", "error")
+        raise typer.Exit(code=1)
+
+    _confirm_root_like_input_paths(list(input_paths), intent="list", recursive=recursive)
+
+    base_path = _resolve_batch_base_path(video_files)
+    table = Table(show_header=True, header_style="bold", show_lines=False)
+    table.add_column("File", overflow="fold", no_wrap=False)
+    table.add_column("Codec", overflow="fold")
+    table.add_column("Size", justify="right", overflow="fold")
+
+    total_bytes = 0
+    for file_path in video_files:
+        try:
+            sz = os.path.getsize(file_path)
+        except OSError:
+            sz = 0
+        total_bytes += sz
+        size_str = _format_size(float(sz))
+        display = _display_path(file_path, base_path=base_path, fallback_label="file")
+        if not validate_video_file(file_path, quiet=True):
+            codec_str = "—"
+        else:
+            info = get_video_stream_info(file_path)
+            codec_str = str(info.get("codec") or "unknown")
+        table.add_row(display, codec_str, size_str)
+
+    mode = "recursive" if recursive else "non-recursive"
+    cprint(f"📋 Video files ({len(video_files)}, {mode})", "info")
+    console.print(table)
+    cprint(
+        f"Total: {_format_size(float(total_bytes))} ({total_bytes} bytes) — {len(video_files)} file(s)",
+        "info",
+    )
+
 
 # ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
@@ -3189,6 +3264,51 @@ def convert_videos(
         )
     else:
         cprint("❌ Invalid path: File or directory does not exist.", "error")
+
+def list_videos(
+    input_paths: Optional[list[str]] = typer.Argument(
+        None,
+        help="Files, directories, or wildcard patterns to scan. Default: current working directory.",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "-r",
+        "--recursive",
+        help="Include videos in subfolders (walk the directory tree).",
+        rich_help_panel="File Handling",
+    ),
+    no_color: bool = typer.Option(
+        False,
+        "--no-color",
+        help="Disable ANSI/Rich colors in the table output.",
+        rich_help_panel="Display",
+    ),
+    hide_filenames: bool = typer.Option(
+        False,
+        "--hide-filenames",
+        help="Redact filenames in the table (use placeholder labels).",
+        rich_help_panel="Display",
+    ),
+    ffprobe: Optional[str] = typer.Option(
+        None,
+        "--ffprobe",
+        help="Path to the ffprobe executable. Default: AV1_FFPROBE_PATH, PATH, or 'ffprobe'.",
+        rich_help_panel="FFmpeg",
+    ),
+) -> None:
+    """List video files (by supported extension) and show each file's video codec and size."""
+    _run_list_command(
+        input_paths,
+        recursive=recursive,
+        no_color=no_color,
+        hide_filenames=hide_filenames,
+        ffprobe_path=ffprobe,
+    )
+
+
+app.command("list")(list_videos)
+app.command("ls", hidden=True)(list_videos)
+
 
 def _run_cleanup_command(input_paths: Optional[list[str]], recursive: bool) -> None:
     """Shared implementation for cleanup command aliases."""
