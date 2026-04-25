@@ -4,29 +4,28 @@ SnapBot - Snapchat Browser Automation
 Uses Selenium to automate Snapchat via browser (more reliable than API)
 """
 
-import os
 import json
+import os
 import sys
 import time
 import zipfile
-from pathlib import Path
-from typing import Optional, Dict
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 from urllib.request import urlretrieve
 
 import typer
 from rich.console import Console
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Confirm, Prompt
 
 # Selenium imports
 try:
     from selenium import webdriver
-    from selenium.webdriver.common.by import By
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import NoSuchElementException
+    from selenium.webdriver.support.ui import WebDriverWait
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -48,6 +47,25 @@ CHROME_VERSION_API = "https://googlechromelabs.github.io/chrome-for-testing/last
 
 # Fallback URLs if API fails (updated regularly)
 FALLBACK_CHROME_VERSION = "143.0.7499.40"  # Latest stable as of Dec 2025
+
+
+def get_app_config_dir() -> Path:
+    """Return a user config/cache directory instead of writing beside the script."""
+    if sys.platform == "win32":
+        base = Path(os.getenv("APPDATA") or Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.getenv("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "snapbot"
+
+
+def get_config_path() -> Path:
+    return get_app_config_dir() / CONFIG_FILE
+
+
+def get_credentials_path() -> Path:
+    return get_app_config_dir() / CREDENTIALS_FILE
 
 
 # ─────────────────────────────────────────────────────────────────────── #
@@ -173,7 +191,7 @@ def download_chromium() -> bool:
     try:
         # Download Chrome
         console.print(f"[bold]Downloading latest portable Chromium ({arch})...[/bold]")
-        console.print(f"[dim]This is a one-time download (~150 MB)[/dim]")
+        console.print("[dim]This is a one-time download (~150 MB)[/dim]")
         
         def reporthook(blocknum, blocksize, totalsize):
             downloaded = blocknum * blocksize
@@ -217,13 +235,14 @@ def download_chromium() -> bool:
 #                              CONFIG MANAGEMENT                          #
 # ─────────────────────────────────────────────────────────────────────── #
 
-def load_credentials() -> Optional[Dict]:
-    """Load credentials from config file."""
-    if not Path(CREDENTIALS_FILE).exists():
+def load_credentials() -> Optional[dict]:
+    """Load saved non-secret login metadata."""
+    credentials_path = get_credentials_path()
+    if not credentials_path.exists():
         return None
     
     try:
-        with open(CREDENTIALS_FILE, 'r') as f:
+        with open(credentials_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         console.print(f"[bold red]Error loading credentials: {e}[/bold red]")
@@ -231,27 +250,34 @@ def load_credentials() -> Optional[Dict]:
 
 
 def save_credentials(username: str, password: str) -> None:
-    """Save credentials to config file."""
+    """Save non-secret login metadata; never persist Snapchat passwords."""
+    if password:
+        console.print("[bold yellow]Not saving password; browser profile stores the authenticated session.[/bold yellow]")
     try:
+        credentials_path = get_credentials_path()
+        credentials_path.parent.mkdir(parents=True, exist_ok=True)
         credentials = {
             "username": username,
-            "password": password,
             "last_login": datetime.now().isoformat()
         }
-        with open(CREDENTIALS_FILE, 'w') as f:
+        with open(credentials_path, 'w', encoding="utf-8") as f:
             json.dump(credentials, f, indent=2)
         # Restrict file permissions for security
-        os.chmod(CREDENTIALS_FILE, 0o600)
-        console.print("[bold green]✅ Credentials saved[/bold green]")
+        try:
+            os.chmod(credentials_path, 0o600)
+        except OSError:
+            pass
+        console.print("[bold green]✅ Login metadata saved[/bold green]")
     except Exception as e:
         console.print(f"[bold red]Error saving credentials: {e}[/bold red]")
 
 
-def load_config() -> Dict:
+def load_config() -> dict:
     """Load or create configuration file."""
-    if Path(CONFIG_FILE).exists():
+    config_path = get_config_path()
+    if config_path.exists():
         try:
-            with open(CONFIG_FILE, 'r') as f:
+            with open(config_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             console.print(f"[bold yellow]Error loading config: {e}[/bold yellow]")
@@ -260,7 +286,7 @@ def load_config() -> Dict:
     return get_default_config()
 
 
-def get_default_config() -> Dict:
+def get_default_config() -> dict:
     """Get default configuration."""
     return {
         "version": SCRIPT_VERSION,
@@ -270,10 +296,12 @@ def get_default_config() -> Dict:
     }
 
 
-def save_config(config: Dict) -> None:
+def save_config(config: dict) -> None:
     """Save configuration file."""
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        config_path = get_config_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, 'w', encoding="utf-8") as f:
             json.dump(config, f, indent=2)
     except Exception as e:
         console.print(f"[bold red]Error saving config: {e}[/bold red]")
@@ -543,14 +571,14 @@ def config(
 def clear_cache():
     """Clear saved credentials and configuration."""
     
-    files_to_clear = [CREDENTIALS_FILE, CONFIG_FILE]
+    files_to_clear = [get_credentials_path(), get_config_path()]
     cleared = []
     
     for file in files_to_clear:
-        if Path(file).exists():
+        if file.exists():
             try:
-                Path(file).unlink()
-                cleared.append(file)
+                file.unlink()
+                cleared.append(str(file))
             except Exception as e:
                 console.print(f"[bold red]Error clearing {file}: {e}[/bold red]")
     
@@ -627,7 +655,7 @@ def version():
     # Show Chromium version if installed
     chrome_binary = get_chrome_binary_path()
     if chrome_binary:
-        console.print(f"[bold green]✅[/bold green] [dim]Portable Chromium installed[/dim]")
+        console.print("[bold green]✅[/bold green] [dim]Portable Chromium installed[/dim]")
 
 
 if __name__ == "__main__":

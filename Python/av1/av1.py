@@ -12,20 +12,20 @@
 # av1 version
 # python "Python/av1/av1.py" "C:\\Videos\\movie.mp4" --probe  (script path first, input path second)
 
-import os
-import subprocess
-import shutil
-import sys
-import json
-import platform
 import glob
-import time
-import signal
-import threading
+import json
+import os
+import platform
 import queue
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
 from dataclasses import dataclass
-from datetime import datetime, UTC
-from typing import Callable, Literal, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Callable, Literal, Optional
 
 # Force UTF-8 encoding on Windows
 if platform.system() == 'Windows' and sys.stdout.isatty() and sys.stderr.isatty():
@@ -33,12 +33,12 @@ if platform.system() == 'Windows' and sys.stdout.isatty() and sys.stderr.isatty(
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-from rich.console import Console
-from rich.markup import escape
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.table import Column, Table
 import click
 import typer
+from rich.console import Console
+from rich.markup import escape
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+from rich.table import Column, Table
 
 # ============================================================================ #
 #                           APP & CLI CONFIGURATION                            #
@@ -922,7 +922,7 @@ def apply_output_size_bitrate_caps(
     input_stream_bps: Optional[int],
     max_output_bytes: Optional[int],
     min_shrink_percent: Optional[float],
-) -> Tuple[int, list[str]]:
+) -> tuple[int, list[str]]:
     """
     Lower target video bitrate to satisfy --max-output-size and/or --min-shrink when possible.
     Returns (adjusted_bps, list of short reasons for logging).
@@ -2284,7 +2284,7 @@ class ConversionRetryOptions:
     max_video_width: Optional[int]
 
 
-def _retry_convert_single_file(options: ConversionRetryOptions) -> Tuple[bool, int, str, str]:
+def _retry_convert_single_file(options: ConversionRetryOptions) -> tuple[bool, int, str, str]:
     """Retry a conversion without dropping less-common options."""
     return convert_single_file(
         options.input_path,
@@ -2440,7 +2440,7 @@ def convert_single_file(
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
     max_video_width: Optional[int] = None,
-) -> Tuple[bool, int, str, str]:
+) -> tuple[bool, int, str, str]:
     """
     Converts a single video file to the target codec.
     Returns a tuple: (auto_delete_flag, size_saved_bytes, bitrate_decision, media_info)
@@ -3057,7 +3057,7 @@ def process_batch_files(
     total_original_size = 0
     total_new_size = 0
     files_converted = 0
-    per_file_stats: list[Tuple[str, str, int, int, float]] = []
+    per_file_stats: list[tuple[str, str, int, int, float]] = []
     cumulative_saved = 0
     batch_start_time = time.time()
     file_times: list[float] = []
