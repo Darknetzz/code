@@ -21,11 +21,14 @@ import platform
 import glob
 import time
 import signal
+import threading
+import queue
+from dataclasses import dataclass
 from datetime import datetime, UTC
 from typing import Callable, Literal, Optional, Tuple
 
 # Force UTF-8 encoding on Windows
-if platform.system() == 'Windows':
+if platform.system() == 'Windows' and sys.stdout.isatty() and sys.stderr.isatty():
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
@@ -114,6 +117,7 @@ RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
 RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
+FFMPEG_STALL_TIMEOUT = 300  # Abort ffmpeg if it emits no progress/output for this many seconds
 PROMPT_YES_NO_ALL = "[Y/n/a] (y=yes, n=no, a=all): "
 SIZE_PRESETS: dict[str, dict[str, object]] = {
     "light": {
@@ -137,7 +141,8 @@ SIZE_PRESETS: dict[str, dict[str, object]] = {
 #   AV1_AUDIO_BITRATE, AV1_MAX_VIDEO_WIDTH, AV1_BITRATE_REDUCTION_FACTOR,
 #   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK, AV1_CPU_THREADS,
 #   AV1_NO_COLOR, AV1_NO_PROMPT, AV1_HIDE_FILENAMES, AV1_LOG_TYPE, AV1_LOG_DIR,
-#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING
+#   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING,
+#   AV1_FFMPEG_STALL_TIMEOUT
 
 def _env_bool(val: str) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
@@ -158,6 +163,9 @@ try:
     _env_val = os.getenv("AV1_BITRATE_FALLBACK")
     if _env_val:
         BITRATE_FALLBACK = int(_env_val)
+    _env_val = os.getenv("AV1_FFMPEG_STALL_TIMEOUT")
+    if _env_val:
+        FFMPEG_STALL_TIMEOUT = int(_env_val)
 except Exception:
     # Ignore invalid env overrides and proceed with defaults
     pass
@@ -2199,6 +2207,216 @@ def _run_list_command(
     )
 
 
+def _terminate_ffmpeg_process(process: subprocess.Popen, command: list[str], reason: str) -> None:
+    """Stop a hung ffmpeg process without leaving it running in the background."""
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+            process.wait(timeout=5)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    raise subprocess.TimeoutExpired(command, FFMPEG_STALL_TIMEOUT, output=reason)
+
+
+def _iter_ffmpeg_output_with_stall_timeout(
+    process: subprocess.Popen,
+    command: list[str],
+    stall_timeout: int,
+):
+    """Yield ffmpeg output lines while aborting if progress stalls."""
+    if process.stdout is None:
+        return
+
+    lines = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            for stdout_line in process.stdout:
+                lines.put(stdout_line)
+        finally:
+            lines.put(None)
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+    last_output = time.monotonic()
+
+    while True:
+        try:
+            line = lines.get(timeout=0.5)
+        except queue.Empty:
+            if process.poll() is not None:
+                break
+            if stall_timeout > 0 and (time.monotonic() - last_output) > stall_timeout:
+                _terminate_ffmpeg_process(process, command, "ffmpeg produced no output before stall timeout")
+            continue
+
+        if line is None:
+            break
+        last_output = time.monotonic()
+        yield line
+
+
+@dataclass(frozen=True)
+class ConversionRetryOptions:
+    """Options that must stay identical when a conversion retries with another encoder."""
+    input_path: str
+    output_dir: Optional[str]
+    bitrate: Optional[str]
+    delete_original: bool
+    overwrite: bool
+    dry_run: bool
+    keep_mkv: bool
+    show_progress: bool
+    batch_index: Optional[int]
+    batch_total: Optional[int]
+    progress_label: Optional[str]
+    progress_callback: Optional[Callable[[Optional[float], str, str], None]]
+    cpu_threads: Optional[int]
+    prompt_av1: bool
+    reencode_av1: bool
+    max_output_bytes: Optional[int]
+    min_shrink_percent: Optional[float]
+    max_video_width: Optional[int]
+
+
+def _retry_convert_single_file(options: ConversionRetryOptions) -> Tuple[bool, int, str, str]:
+    """Retry a conversion without dropping less-common options."""
+    return convert_single_file(
+        options.input_path,
+        options.output_dir,
+        options.bitrate,
+        options.delete_original,
+        options.overwrite,
+        options.dry_run,
+        options.keep_mkv,
+        options.show_progress,
+        batch_index=options.batch_index,
+        batch_total=options.batch_total,
+        progress_label=options.progress_label,
+        progress_callback=options.progress_callback,
+        cpu_threads=options.cpu_threads,
+        prompt_av1=options.prompt_av1,
+        reencode_av1=options.reencode_av1,
+        max_output_bytes=options.max_output_bytes,
+        min_shrink_percent=options.min_shrink_percent,
+        max_video_width=options.max_video_width,
+    )
+
+
+def _parse_bitrate_to_bps(bitrate: str) -> int:
+    """Parse bitrate strings such as 2500k, 2.5m, or raw bits per second."""
+    normalized = str(bitrate).strip().lower()
+    if normalized.endswith("m"):
+        return int(float(normalized[:-1]) * 1_000_000)
+    if normalized.endswith("k"):
+        return int(float(normalized[:-1]) * 1_000)
+    return int(normalized)
+
+
+def _select_pixel_format(hw_type: str) -> str:
+    """Return the pixel format expected by the active encoder type."""
+    return "yuv420p" if hw_type == "cpu" else "nv12"
+
+
+def _build_video_filter_chain(hw_type: str, max_video_width: int, pix_fmt: str) -> str:
+    """Build the scaling/filter chain for the selected encoder family."""
+    if hw_type == "vaapi":
+        return f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+    if hw_type == "amd":
+        return (
+            f"scale='trunc(min({max_video_width},iw)/64)*64':'trunc(trunc(min({max_video_width},iw)/64)*64*ih/iw/16)*16',"
+            f"format={pix_fmt}"
+        )
+    return f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+
+
+def _append_encoder_rate_control_args(
+    command: list[str],
+    *,
+    hw_type: str,
+    target_bitrate_int: int,
+    effective_cpu_threads: int,
+) -> None:
+    """Append encoder-specific options without mixing hardware and CPU-only flags."""
+    bitrate_args = [
+        "-b:v", str(target_bitrate_int),
+        "-maxrate", str(int(target_bitrate_int * BITRATE_MAXRATE_MULTIPLIER)),
+        "-bufsize", str(int(target_bitrate_int * BITRATE_BUFSIZE_MULTIPLIER)),
+    ]
+    if hw_type == "nvidia":
+        command.extend(["-preset", "p7", "-rc", "vbr"])
+        command.extend(bitrate_args)
+    elif hw_type == "amd":
+        command.extend(["-usage", "0", "-quality", "70", "-profile:v", "1", "-rc", "1", "-align", "3"])
+        command.extend(["-b:v", str(target_bitrate_int)])
+    elif hw_type == "vaapi":
+        command.extend(bitrate_args)
+    else:
+        command.extend(["-preset", "8", "-g", "240", "-svtav1-params", f"lp={effective_cpu_threads}"])
+        command.extend(["-b:v", str(target_bitrate_int)])
+
+
+def _build_audio_args(audio_channels: Optional[int], temp_output: str) -> list[str]:
+    """Build audio encoding arguments, preserving the special 5.1(side) mapping."""
+    if audio_channels == 6:
+        return [
+            "-af",
+            "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            AUDIO_BITRATE,
+            temp_output,
+        ]
+    return ["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output]
+
+
+def _build_ffmpeg_command(
+    *,
+    ffmpeg_cmd: str,
+    input_path: str,
+    output_path: str,
+    temp_output: str,
+    encoder_name: str,
+    hw_type: str,
+    codec: str,
+    target_bitrate_int: int,
+    effective_cpu_threads: int,
+    effective_max_width: int,
+    audio_channels: Optional[int],
+) -> tuple[list[str], str]:
+    """Build the ffmpeg command and return it with the selected pixel format."""
+    pix_fmt = _select_pixel_format(hw_type)
+    command = [ffmpeg_cmd, "-y", "-hide_banner", "-progress", "pipe:1", "-nostats"]
+    if hw_type == "vaapi":
+        command.extend(["-vaapi_device", os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")])
+
+    command.extend(["-i", input_path])
+    command.extend(["-vf", _build_video_filter_chain(hw_type, effective_max_width, pix_fmt)])
+    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
+        command.extend(["-movflags", "+faststart"])
+
+    command.extend(["-c:v", encoder_name])
+    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
+        command.extend(["-metadata", "major_brand=mp42", "-metadata", "compatible_brands=mp42av01iso2mp41"])
+    if codec == "hevc":
+        command.extend(["-tag:v", "hvc1"])
+
+    _append_encoder_rate_control_args(
+        command,
+        hw_type=hw_type,
+        target_bitrate_int=target_bitrate_int,
+        effective_cpu_threads=effective_cpu_threads,
+    )
+    command.extend(_build_audio_args(audio_channels, temp_output))
+    return command, pix_fmt
+
+
 # ============================================================================ #
 #                         FUNCTION: convert_single_file                        #
 # ============================================================================ #
@@ -2322,12 +2540,7 @@ def convert_single_file(
     bitrate_decision = "auto"
     if bitrate:
         try:
-            if isinstance(bitrate, str) and bitrate.lower().endswith('m'):
-                target_bitrate_int = int(float(bitrate[:-1]) * 1_000_000)
-            elif isinstance(bitrate, str) and bitrate.lower().endswith('k'):
-                target_bitrate_int = int(float(bitrate[:-1]) * 1_000)
-            else:
-                target_bitrate_int = int(bitrate)
+            target_bitrate_int = _parse_bitrate_to_bps(bitrate)
             bitrate_decision = f"manual {target_bitrate_int/1_000_000:.2f}M"
         except ValueError:
             cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
@@ -2385,93 +2598,25 @@ def convert_single_file(
         cprint(f"   Filesize:   {_format_size(float(file_size_bytes)) if file_size_bytes > 0 else 'unknown'}", "info")
         cprint(f"   Duration:   {_format_duration(duration)}", "info")
 
-    # --- BUILD COMMAND ---
-    # Pixel format selection: CPU uses yuv420p, GPU encoders typically use nv12, VAAPI uses same
-    if ACTIVE_ENCODER["hw_type"] == "cpu":
-        pix_fmt = "yuv420p"
-    elif ACTIVE_ENCODER["hw_type"] == "vaapi":
-        pix_fmt = "nv12"  # VAAPI encoder input format
-    else:
-        pix_fmt = "nv12"  # NVIDIA/AMD default
-    
-    command = [FFMPEG_CMD, "-y", "-hide_banner", "-progress", "pipe:1", "-nostats"]
-    
-    # VAAPI requires device specification before input
-    if ACTIVE_ENCODER["hw_type"] == "vaapi":
-        vaapi_dev = os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")
-        command.extend(["-vaapi_device", vaapi_dev])
-    
-    command.extend(["-i", input_path])
-    
-    # Build filter chain - VAAPI needs hwupload after format conversion
-    if ACTIVE_ENCODER["hw_type"] == "vaapi":
-        # VAAPI: scale -> format -> hwupload (upload to hardware)
-        filter_chain = f"scale='min({effective_max_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
-    elif ACTIVE_ENCODER["hw_type"] == "amd":
-        # AMF AV1 requires 64x16 resolution alignment; scale to aligned dimensions to avoid -22
-        filter_chain = (
-            f"scale='trunc(min({effective_max_width},iw)/64)*64':'trunc(trunc(min({effective_max_width},iw)/64)*64*ih/iw/16)*16',"
-            f"format={pix_fmt}"
-        )
-    else:
-        # Other encoders: just scale and format
-        filter_chain = f"scale='min({effective_max_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
-    
-    command.extend(["-vf", filter_chain])
-    # movflags +faststart only applies to MP4/MOV; with MKV it causes "Invalid argument" (-22)
-    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
-        command.extend(["-movflags", "+faststart"])
-
     # --- ENCODER SPECIFIC SETTINGS ---
     encoder_name = ACTIVE_ENCODER["encoder"]
     hw_type = ACTIVE_ENCODER["hw_type"]
     codec = ACTIVE_ENCODER["codec"]
 
-    command.extend(["-c:v", encoder_name])
-
-    # Container-specific metadata (MP4/MOV only; MKV muxer can reject these and cause -22)
-    if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
-        command.extend(["-metadata", "major_brand=mp42", "-metadata", "compatible_brands=mp42av01iso2mp41"])
-    if codec == "hevc":
-        command.extend(["-tag:v", "hvc1"])
-
-    # Rate Control: 50% Reduction Strategy (VBR)
-    # We use typical flags: -b:v (target), -maxrate (peak), -bufsize
-    bitrate_args = [
-        "-b:v", str(target_bitrate_int),
-        "-maxrate", str(int(target_bitrate_int * BITRATE_MAXRATE_MULTIPLIER)),
-        "-bufsize", str(int(target_bitrate_int * BITRATE_BUFSIZE_MULTIPLIER))
-    ]
-
-    # Apply Vendor Specific Flags
-    if hw_type == "nvidia":
-        # NVIDIA (NVENC)
-        # -preset p7: Slowest/Best Quality (Hardware is fast enough to afford this)
-        # -rc vbr: Explicitly set VBR mode
-        command.extend(["-preset", "p7", "-rc", "vbr"])
-        command.extend(bitrate_args)
-        
-    elif hw_type == "amd":
-        # AMD (AMF) – numeric values (usage=0 transcoding, quality=70 balanced, profile=1 main, rc=1 vbr_latency)
-        # -align 3 (none): accept any resolution; default can fail with -22 on some drivers
-        # Note: AMD AV1 AMF only reliably supports -b:v; -maxrate/-bufsize are not used
-        command.extend(["-usage", "0", "-quality", "70", "-profile:v", "1", "-rc", "1", "-align", "3"])
-        command.extend(["-b:v", str(target_bitrate_int)])
-        
-    else:
-        # CPU (SVT-AV1)
-        # SVT-AV1 uses different bitrate control - use only -b:v, not -maxrate/-bufsize
-        command.extend(["-preset", "8", "-g", "240", "-svtav1-params", f"lp={effective_cpu_threads}"])
-        # Use only target bitrate for CPU encoder (SVT-AV1 handles rate control internally)
-        command.extend(["-b:v", str(target_bitrate_int)])
-
-    # Audio: Convert to Opus
-    # Only use 5.1(side)->5.1 channelmap when source has exactly 6 channels; otherwise FFmpeg returns -22
     audio_channels = get_audio_channels(input_path)
-    if audio_channels == 6:
-        command.extend(["-af", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR", "-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
-    else:
-        command.extend(["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output])
+    command, pix_fmt = _build_ffmpeg_command(
+        ffmpeg_cmd=FFMPEG_CMD,
+        input_path=input_path,
+        output_path=output_path,
+        temp_output=temp_output,
+        encoder_name=encoder_name,
+        hw_type=hw_type,
+        codec=codec,
+        target_bitrate_int=target_bitrate_int,
+        effective_cpu_threads=effective_cpu_threads,
+        effective_max_width=effective_max_width,
+        audio_channels=audio_channels,
+    )
 
     if not _SUPPRESS_OUTPUT:
         cprint(f"   Encoder: {encoder_name} ({codec.upper()}, {hw_type.upper()})", "info")
@@ -2496,6 +2641,26 @@ def convert_single_file(
         file_event["max_output_bytes"] = max_output_bytes
     if min_shrink_percent is not None:
         file_event["min_shrink_percent"] = min_shrink_percent
+    retry_options = ConversionRetryOptions(
+        input_path=input_path,
+        output_dir=output_dir,
+        bitrate=bitrate,
+        delete_original=delete_original,
+        overwrite=overwrite,
+        dry_run=dry_run,
+        keep_mkv=keep_mkv,
+        show_progress=show_progress,
+        batch_index=batch_index,
+        batch_total=batch_total,
+        progress_label=progress_label,
+        progress_callback=progress_callback,
+        cpu_threads=cpu_threads,
+        prompt_av1=prompt_av1,
+        reencode_av1=reencode_av1,
+        max_output_bytes=max_output_bytes,
+        min_shrink_percent=min_shrink_percent,
+        max_video_width=max_video_width,
+    )
 
     # Dry run: Show planned command and summary, then return without executing
     if dry_run:
@@ -2573,57 +2738,56 @@ def convert_single_file(
 
         progress_state: dict[str, str] = {}
         try:
-            if process.stdout:
-                for raw_line in process.stdout:
-                    line = raw_line.strip()
-                    if not line:
-                        continue
+            for raw_line in _iter_ffmpeg_output_with_stall_timeout(process, command, FFMPEG_STALL_TIMEOUT):
+                line = raw_line.strip()
+                if not line:
+                    continue
 
-                    if "=" in line:
-                        key, value = line.split("=", 1)
-                        progress_state[key.strip()] = value.strip()
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    progress_state[key.strip()] = value.strip()
 
-                        if key.strip() == "progress":
-                            current_time = _parse_ffmpeg_out_time(progress_state.get("out_time", ""))
-                            progress_fraction = None
-                            if total_duration and isinstance(current_time, (int, float)):
-                                progress_fraction = min(max(float(current_time) / float(total_duration), 0.0), 1.0)
+                    if key.strip() == "progress":
+                        current_time = _parse_ffmpeg_out_time(progress_state.get("out_time", ""))
+                        progress_fraction = None
+                        if total_duration and isinstance(current_time, (int, float)):
+                            progress_fraction = min(max(float(current_time) / float(total_duration), 0.0), 1.0)
 
-                            speed_value = progress_state.get("speed", "")
-                            speed_number = _parse_ffmpeg_speed(speed_value)
-                            eta_seconds = None
-                            if total_duration and isinstance(current_time, (int, float)) and speed_number:
-                                remaining = max(float(total_duration) - float(current_time), 0.0)
-                                eta_seconds = remaining / speed_number if speed_number > 0 else None
-                            elif total_duration and progress_fraction and progress_fraction > 0:
-                                elapsed_media = max(float(current_time or 0), 0.0)
-                                eta_seconds = max(float(total_duration) - elapsed_media, 0.0)
+                        speed_value = progress_state.get("speed", "")
+                        speed_number = _parse_ffmpeg_speed(speed_value)
+                        eta_seconds = None
+                        if total_duration and isinstance(current_time, (int, float)) and speed_number:
+                            remaining = max(float(total_duration) - float(current_time), 0.0)
+                            eta_seconds = remaining / speed_number if speed_number > 0 else None
+                        elif total_duration and progress_fraction and progress_fraction > 0:
+                            elapsed_media = max(float(current_time or 0), 0.0)
+                            eta_seconds = max(float(total_duration) - elapsed_media, 0.0)
 
-                            eta_field = "Done" if progress_state.get("progress") == "end" else f"ETA: {_format_eta_seconds(eta_seconds)}"
-                            progress_text = _format_progress_clock(current_time, total_duration)
-                            rate_text = _format_rate_display(progress_state.get("fps", ""), speed_value)
+                        eta_field = "Done" if progress_state.get("progress") == "end" else f"ETA: {_format_eta_seconds(eta_seconds)}"
+                        progress_text = _format_progress_clock(current_time, total_duration)
+                        rate_text = _format_rate_display(progress_state.get("fps", ""), speed_value)
 
-                            if file_task is not None and _PROGRESS_CONTEXT:
-                                file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
-                                update_kwargs = {
-                                    "fps": _progress_field(rate_text),
-                                    "eta": _progress_field(eta_field),
-                                    "size": _progress_field(file_size_str),
-                                    "progress_text": _progress_field(progress_text),
-                                }
-                                if progress_fraction is not None:
-                                    update_kwargs["completed"] = progress_fraction * 100
-                                _PROGRESS_CONTEXT.update(file_task, **update_kwargs)
+                        if file_task is not None and _PROGRESS_CONTEXT:
+                            file_size_str = _format_size(file_size_bytes) if file_size_bytes > 0 else ""
+                            update_kwargs = {
+                                "fps": _progress_field(rate_text),
+                                "eta": _progress_field(eta_field),
+                                "size": _progress_field(file_size_str),
+                                "progress_text": _progress_field(progress_text),
+                            }
+                            if progress_fraction is not None:
+                                update_kwargs["completed"] = progress_fraction * 100
+                            _PROGRESS_CONTEXT.update(file_task, **update_kwargs)
 
-                            if progress_callback:
-                                progress_callback(progress_fraction, progress_text, eta_field)
+                        if progress_callback:
+                            progress_callback(progress_fraction, progress_text, eta_field)
 
-                            progress_state.clear()
-                        continue
+                        progress_state.clear()
+                    continue
 
-                    line_lower = line.lower()
-                    if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
-                        error_lines.append(line)
+                line_lower = line.lower()
+                if any(keyword in line_lower for keyword in ["error", "failed", "cannot", "invalid", "unsupported"]):
+                    error_lines.append(line)
 
             process.wait()
             if file_task is not None and _PROGRESS_CONTEXT:
@@ -2769,25 +2933,7 @@ def convert_single_file(
                         
                         # Retry with system ffmpeg
                         try:
-                            result = convert_single_file(
-                                input_path,
-                                output_dir,
-                                bitrate,
-                                delete_original,
-                                overwrite,
-                                dry_run,
-                                keep_mkv,
-                                show_progress,
-                                batch_index=batch_index,
-                                batch_total=batch_total,
-                                progress_label=progress_label,
-                                progress_callback=progress_callback,
-                                cpu_threads=cpu_threads,
-                                prompt_av1=prompt_av1,
-                                reencode_av1=reencode_av1,
-                                max_output_bytes=max_output_bytes,
-                                min_shrink_percent=min_shrink_percent,
-                            )
+                            result = _retry_convert_single_file(retry_options)
                             # Keep system ffmpeg for this session (hardware encoding works)
                             return result
                         except Exception:
@@ -2822,25 +2968,7 @@ def convert_single_file(
                         
                         # Retry conversion with CPU encoder
                         try:
-                            result = convert_single_file(
-                                input_path,
-                                output_dir,
-                                bitrate,
-                                delete_original,
-                                overwrite,
-                                dry_run,
-                                keep_mkv,
-                                show_progress,
-                                batch_index=batch_index,
-                                batch_total=batch_total,
-                                progress_label=progress_label,
-                                progress_callback=progress_callback,
-                                cpu_threads=cpu_threads,
-                                prompt_av1=prompt_av1,
-                                reencode_av1=reencode_av1,
-                                max_output_bytes=max_output_bytes,
-                                min_shrink_percent=min_shrink_percent,
-                            )
+                            result = _retry_convert_single_file(retry_options)
                             # Restore original encoder after retry
                             ACTIVE_ENCODER = original_encoder
                             return result
@@ -2937,153 +3065,156 @@ def process_batch_files(
     # Set up graceful cancellation handler
     global _USER_CANCELLED
     _USER_CANCELLED = False
+    previous_sigint_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, _signal_handler)
     
-    with _build_progress(transient=transient_progress, batch_mode=True) as progress:
-        global _PROGRESS_CONTEXT
-        _PROGRESS_CONTEXT = progress
-        overall_task = progress.add_task(
-            _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
-            total=len(video_files),
-            progress_text=_progress_field(_format_batch_elapsed_text(0)),
-            saved=_progress_field(_format_saved(0)),
-            size=_progress_field(""),
-            eta=_progress_field(""),
-        )
-        auto_delete = delete_original
-        last_logged_dir: Optional[str] = None
-
-        for idx, file_path in enumerate(video_files, 1):
-            # Check if user cancelled
-            if _USER_CANCELLED:
-                progress.console.print("[yellow]\n⏸️  Batch conversion interrupted. Finishing current file...[/]")
-                break
-
-            try:
-                current_dir = os.path.dirname(os.path.normpath(os.path.abspath(file_path)))
-            except Exception:
-                current_dir = ""
-            if current_dir != last_logged_dir:
-                _append_log_directory_header(current_dir if current_dir else os.getcwd())
-                last_logged_dir = current_dir
-
-            # Show relative path for recursive mode
-            display_path = _display_batch_item(file_path, input_path, recursive, idx, len(video_files))
-            file_start = time.time()
-            elapsed = int(time.time() - batch_start_time)
-            completed_before_current = idx - 1
-
-            progress.update(
-                overall_task,
-                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
-                completed=completed_before_current,
-                progress_text=_progress_field(_format_batch_elapsed_text(elapsed)),
-                saved=_progress_field(_format_saved(cumulative_saved)),
+    try:
+        with _build_progress(transient=transient_progress, batch_mode=True) as progress:
+            global _PROGRESS_CONTEXT, _SUPPRESS_OUTPUT
+            _PROGRESS_CONTEXT = progress
+            overall_task = progress.add_task(
+                _format_batch_progress_description(0, len(video_files), 0, "waiting..."),
+                total=len(video_files),
+                progress_text=_progress_field(_format_batch_elapsed_text(0)),
+                saved=_progress_field(_format_saved(0)),
                 size=_progress_field(""),
-                eta=_progress_field(_format_batch_eta_text(completed_before_current, len(video_files), elapsed)),
+                eta=_progress_field(""),
             )
-            
-            # Capture original size before conversion
-            try:
-                original_size = os.path.getsize(file_path)
-            except OSError:
-                original_size = 0
-            current_size_text = _format_size(float(original_size)) if original_size > 0 else "unknown"
+            auto_delete = delete_original
+            last_logged_dir: Optional[str] = None
 
-            progress.update(
-                overall_task,
-                size=_progress_field(current_size_text),
-            )
-            
-            # Determine output directory
-            if output_dir and output_dir != input_path:
-                # User provided explicit output directory - preserve folder structure
-                rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
-                current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
-            else:
-                # No explicit output dir or same as input - use file's own directory
-                current_output_dir = resolve_output_dir(None, file_path)
-            
-            # Suppress output during conversion
-            global _SUPPRESS_OUTPUT
-            _SUPPRESS_OUTPUT = True
+            for idx, file_path in enumerate(video_files, 1):
+                # Check if user cancelled
+                if _USER_CANCELLED:
+                    progress.console.print("[yellow]\n⏸️  Batch conversion interrupted. Finishing current file...[/]")
+                    break
 
-            def _update_batch_progress(current_fraction: Optional[float], _current_progress_text: str, _current_eta: str) -> None:
-                elapsed_now = int(time.time() - batch_start_time)
-                completed_value = idx - 1
-                if isinstance(current_fraction, (int, float)):
-                    completed_value += min(max(float(current_fraction), 0.0), 1.0)
+                try:
+                    current_dir = os.path.dirname(os.path.normpath(os.path.abspath(file_path)))
+                except Exception:
+                    current_dir = ""
+                if current_dir != last_logged_dir:
+                    _append_log_directory_header(current_dir if current_dir else os.getcwd())
+                    last_logged_dir = current_dir
+
+                # Show relative path for recursive mode
+                display_path = _display_batch_item(file_path, input_path, recursive, idx, len(video_files))
+                file_start = time.time()
+                elapsed = int(time.time() - batch_start_time)
+                completed_before_current = idx - 1
+
                 progress.update(
                     overall_task,
-                    description=_format_batch_progress_description(idx, len(video_files), elapsed_now, display_path),
-                    completed=completed_value,
-                    progress_text=_progress_field(_format_batch_elapsed_text(elapsed_now)),
+                    description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
+                    completed=completed_before_current,
+                    progress_text=_progress_field(_format_batch_elapsed_text(elapsed)),
                     saved=_progress_field(_format_saved(cumulative_saved)),
-                    size=_progress_field(current_size_text),
-                    eta=_progress_field(_format_batch_eta_text(completed_value, len(video_files), elapsed_now)),
-                )
-
-            auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
-                file_path,
-                current_output_dir,
-                bitrate,
-                auto_delete,
-                overwrite,
-                dry_run,
-                keep_mkv,
-                show_progress=True,
-                batch_index=idx,
-                batch_total=len(video_files),
-                progress_label=display_path,
-                progress_callback=_update_batch_progress,
-                cpu_threads=cpu_threads,
-                prompt_av1=prompt_av1,
-                reencode_av1=reencode_av1,
-                max_output_bytes=max_output_bytes,
-                min_shrink_percent=min_shrink_percent,
-                max_video_width=max_video_width,
-            )
-            _SUPPRESS_OUTPUT = False
-            
-            # Track statistics if conversion happened
-            if size_saved != 0:
-                files_converted += 1
-                total_original_size += original_size
-                total_new_size += (original_size - size_saved)
-                cumulative_saved += size_saved
-                saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
-                per_file_stats.append(
-                    (
-                        display_path,
-                        _display_path(file_path, full_path=True, fallback_label="hidden"),
-                        original_size,
-                        size_saved,
-                        saved_percent,
-                    )
+                    size=_progress_field(""),
+                    eta=_progress_field(_format_batch_eta_text(completed_before_current, len(video_files), elapsed)),
                 )
                 
-                # Track file encoding time for ETA
-                file_time = time.time() - file_start
-                file_times.append(file_time)
-            
-            # Update auto-delete flag based on user's "all" choice
-            if auto_delete_result:
-                auto_delete = True
+                # Capture original size before conversion
+                try:
+                    original_size = os.path.getsize(file_path)
+                except OSError:
+                    original_size = 0
+                current_size_text = _format_size(float(original_size)) if original_size > 0 else "unknown"
 
-            elapsed = int(time.time() - batch_start_time)
-            completed_after_current = idx
+                progress.update(
+                    overall_task,
+                    size=_progress_field(current_size_text),
+                )
+                
+                # Determine output directory
+                if output_dir and output_dir != input_path:
+                    # User provided explicit output directory - preserve folder structure
+                    rel_dir = os.path.dirname(os.path.relpath(file_path, input_path))
+                    current_output_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
+                else:
+                    # No explicit output dir or same as input - use file's own directory
+                    current_output_dir = resolve_output_dir(None, file_path)
+                
+                # Suppress output during conversion
+                _SUPPRESS_OUTPUT = True
 
-            progress.update(
-                overall_task,
-                description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
-                completed=completed_after_current,
-                progress_text=_progress_field(_format_batch_elapsed_text(elapsed)),
-                saved=_progress_field(_format_saved(cumulative_saved)),
-                size=_progress_field(current_size_text),
-                eta=_progress_field(_format_batch_eta_text(completed_after_current, len(video_files), elapsed)),
-            )
+                def _update_batch_progress(current_fraction: Optional[float], _current_progress_text: str, _current_eta: str) -> None:
+                    elapsed_now = int(time.time() - batch_start_time)
+                    completed_value = idx - 1
+                    if isinstance(current_fraction, (int, float)):
+                        completed_value += min(max(float(current_fraction), 0.0), 1.0)
+                    progress.update(
+                        overall_task,
+                        description=_format_batch_progress_description(idx, len(video_files), elapsed_now, display_path),
+                        completed=completed_value,
+                        progress_text=_progress_field(_format_batch_elapsed_text(elapsed_now)),
+                        saved=_progress_field(_format_saved(cumulative_saved)),
+                        size=_progress_field(current_size_text),
+                        eta=_progress_field(_format_batch_eta_text(completed_value, len(video_files), elapsed_now)),
+                    )
 
-        _PROGRESS_CONTEXT = None
+                auto_delete_result, size_saved, bitrate_decision, media_info = convert_single_file(
+                    file_path,
+                    current_output_dir,
+                    bitrate,
+                    auto_delete,
+                    overwrite,
+                    dry_run,
+                    keep_mkv,
+                    show_progress=True,
+                    batch_index=idx,
+                    batch_total=len(video_files),
+                    progress_label=display_path,
+                    progress_callback=_update_batch_progress,
+                    cpu_threads=cpu_threads,
+                    prompt_av1=prompt_av1,
+                    reencode_av1=reencode_av1,
+                    max_output_bytes=max_output_bytes,
+                    min_shrink_percent=min_shrink_percent,
+                    max_video_width=max_video_width,
+                )
+                _SUPPRESS_OUTPUT = False
+                
+                # Track statistics if conversion happened
+                if size_saved != 0:
+                    files_converted += 1
+                    total_original_size += original_size
+                    total_new_size += (original_size - size_saved)
+                    cumulative_saved += size_saved
+                    saved_percent = (size_saved / original_size * 100) if original_size > 0 else 0
+                    per_file_stats.append(
+                        (
+                            display_path,
+                            _display_path(file_path, full_path=True, fallback_label="hidden"),
+                            original_size,
+                            size_saved,
+                            saved_percent,
+                        )
+                    )
+                    
+                    # Track file encoding time for ETA
+                    file_time = time.time() - file_start
+                    file_times.append(file_time)
+                
+                # Update auto-delete flag based on user's "all" choice
+                if auto_delete_result:
+                    auto_delete = True
+
+                elapsed = int(time.time() - batch_start_time)
+                completed_after_current = idx
+
+                progress.update(
+                    overall_task,
+                    description=_format_batch_progress_description(idx, len(video_files), elapsed, display_path),
+                    completed=completed_after_current,
+                    progress_text=_progress_field(_format_batch_elapsed_text(elapsed)),
+                    saved=_progress_field(_format_saved(cumulative_saved)),
+                    size=_progress_field(current_size_text),
+                    eta=_progress_field(_format_batch_eta_text(completed_after_current, len(video_files), elapsed)),
+                )
+
+            _PROGRESS_CONTEXT = None
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint_handler)
     
     # Display batch summary
     batch_elapsed = int(time.time() - batch_start_time)
@@ -3212,7 +3343,10 @@ def convert_videos(
     """
     if os.path.isfile(input_path):
         # Single file - set up progress context for progress bar
-        global _PROGRESS_CONTEXT
+        global _PROGRESS_CONTEXT, _USER_CANCELLED
+        _USER_CANCELLED = False
+        previous_sigint_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, _signal_handler)
         with _build_progress(transient=False, batch_mode=False) as progress:
             _PROGRESS_CONTEXT = progress
             try:
@@ -3234,6 +3368,7 @@ def convert_videos(
                 )
             finally:
                 _PROGRESS_CONTEXT = None
+                signal.signal(signal.SIGINT, previous_sigint_handler)
     elif os.path.isdir(input_path):
         if output_dir is None:
             output_dir = input_path
