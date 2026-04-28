@@ -3,7 +3,8 @@
 #   Collects and summarizes Windows Event Viewer entries.
 #
 #   Examples:
-#     .\Analyze-EventLogs.ps1 -DaysBack 7
+#     .\Analyze-EventLogs.ps1
+#     .\Analyze-EventLogs.ps1 -DaysBack 7 -Output Terminal
 #     .\Analyze-EventLogs.ps1 -DaysBack 14 -Output Html -OutputPath .\event-report.html
 #     .\Analyze-EventLogs.ps1 -DaysBack 3 -Logs System,Application -Levels Critical,Error,Warning -Output Both
 #
@@ -28,10 +29,13 @@ param(
 
     [Parameter()]
     [ValidateSet("Terminal", "Html", "Both")]
-    [string]$Output = "Terminal",
+    [string]$Output = "Html",
 
     [Parameter()]
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [Parameter()]
+    [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Continue"
@@ -478,11 +482,20 @@ if ($Output -in @("Terminal", "Both")) {
 if ($Output -in @("Html", "Both")) {
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         $fileName = "EventLogReport_{0}.html" -f (Get-Date -Format "yyyyMMdd_HHmmss")
-        $OutputPath = Join-Path (Get-Location).Path $fileName
+        $OutputPath = Join-Path ([System.IO.Path]::GetTempPath()) $fileName
     }
 
     $html = New-HtmlReport -Report $report -RecurringEvents $recurringEvents -LevelCounts $levelCounts -RecentEvents $recentEvents -CollectionErrors $collectionErrors
     $resolvedOutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     $html | Out-File -FilePath $resolvedOutputPath -Encoding UTF8
     Write-Host "HTML report written to: $resolvedOutputPath" -ForegroundColor Green
+
+    if (-not $NoOpen) {
+        try {
+            Invoke-Item -LiteralPath $resolvedOutputPath
+        }
+        catch {
+            Write-Warning "Could not open HTML report automatically: $($_.Exception.Message)"
+        }
+    }
 }
