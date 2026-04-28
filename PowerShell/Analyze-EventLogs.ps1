@@ -260,6 +260,14 @@ function New-HtmlReport {
 
     $generatedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
+    $logOptions = ($Report.Logs | Sort-Object -Unique | ForEach-Object {
+        "<option value=""$((ConvertTo-HtmlSafe $_))"">$((ConvertTo-HtmlSafe $_))</option>"
+    }) -join "`n"
+
+    $levelOptions = ($Report.Levels | Sort-Object -Unique | ForEach-Object {
+        "<option value=""$((ConvertTo-HtmlSafe $_))"">$((ConvertTo-HtmlSafe $_))</option>"
+    }) -join "`n"
+
     $levelCards = if ($LevelCounts.Count -gt 0) {
         ($LevelCounts | ForEach-Object {
             "<div class=""card""><span>$((ConvertTo-HtmlSafe $_.Level))</span><strong>$((ConvertTo-HtmlSafe $_.Count))</strong></div>"
@@ -281,7 +289,7 @@ function New-HtmlReport {
     $recurringRows = if ($RecurringEvents.Count -gt 0) {
         ($RecurringEvents | ForEach-Object {
             @"
-<tr>
+<tr data-log="$((ConvertTo-HtmlSafe $_.Log))" data-level="$((ConvertTo-HtmlSafe $_.LevelDisplayName))">
   <td class="count">$((ConvertTo-HtmlSafe $_.Count))</td>
   <td>$((ConvertTo-HtmlSafe $_.Latest))</td>
   <td>$((ConvertTo-HtmlSafe $_.First))</td>
@@ -301,7 +309,7 @@ function New-HtmlReport {
     $recentRows = if ($RecentEvents.Count -gt 0) {
         ($RecentEvents | ForEach-Object {
             @"
-<tr>
+<tr data-log="$((ConvertTo-HtmlSafe $_.Log))" data-level="$((ConvertTo-HtmlSafe $_.LevelDisplayName))">
   <td>$((ConvertTo-HtmlSafe $_.TimeCreated))</td>
   <td>$((ConvertTo-HtmlSafe $_.Log))</td>
   <td><span class="pill $((ConvertTo-HtmlSafe $_.LevelDisplayName).ToLowerInvariant())">$((ConvertTo-HtmlSafe $_.LevelDisplayName))</span></td>
@@ -362,11 +370,40 @@ function New-HtmlReport {
     .card span { display: block; color: var(--muted); font-size: 0.86rem; }
     .card strong { display: block; margin-top: 8px; font-size: 1.45rem; color: var(--accent); }
     .panel { overflow: hidden; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: -4px 0 12px;
+    }
+    .controls input, .controls select {
+      min-width: 180px;
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 9px 11px;
+      outline: none;
+    }
+    .controls input:focus, .controls select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
+    }
+    .table-status {
+      align-self: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; min-width: 920px; }
     th, td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
     th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; background: rgba(31, 41, 55, 0.8); }
+    th[data-sort] { cursor: pointer; user-select: none; }
+    th[data-sort]::after { content: " ↕"; color: var(--muted); font-weight: 400; }
+    th.sort-asc::after { content: " ↑"; color: var(--accent); }
+    th.sort-desc::after { content: " ↓"; color: var(--accent); }
     tr:hover td { background: rgba(103, 232, 249, 0.04); }
+    tr.is-hidden { display: none; }
     .count { color: var(--accent); font-weight: 700; }
     .message { min-width: 360px; max-width: 720px; }
     .pill {
@@ -404,10 +441,22 @@ function New-HtmlReport {
     </section>
 
     <h2>Top Recurring Events</h2>
+    <div class="controls" data-controls-for="recurring-events">
+      <input type="search" placeholder="Filter recurring events..." data-filter-text aria-label="Filter recurring events">
+      <select data-filter-log aria-label="Filter recurring events by log">
+        <option value="">All logs</option>
+        $logOptions
+      </select>
+      <select data-filter-level aria-label="Filter recurring events by level">
+        <option value="">All levels</option>
+        $levelOptions
+      </select>
+      <span class="table-status" data-table-status></span>
+    </div>
     <section class="panel table-wrap">
-      <table>
+      <table id="recurring-events" class="interactive-table">
         <thead>
-          <tr><th>Count</th><th>Latest</th><th>First</th><th>Log</th><th>Level</th><th>ID</th><th>Provider</th><th>Example message</th></tr>
+          <tr><th data-sort="number">Count</th><th data-sort="date">Latest</th><th data-sort="date">First</th><th data-sort="text">Log</th><th data-sort="text">Level</th><th data-sort="number">ID</th><th data-sort="text">Provider</th><th data-sort="text">Example message</th></tr>
         </thead>
         <tbody>
           $recurringRows
@@ -416,10 +465,22 @@ function New-HtmlReport {
     </section>
 
     <h2>Recent Critical/Error Events</h2>
+    <div class="controls" data-controls-for="recent-events">
+      <input type="search" placeholder="Filter recent events..." data-filter-text aria-label="Filter recent events">
+      <select data-filter-log aria-label="Filter recent events by log">
+        <option value="">All logs</option>
+        $logOptions
+      </select>
+      <select data-filter-level aria-label="Filter recent events by level">
+        <option value="">All levels</option>
+        $levelOptions
+      </select>
+      <span class="table-status" data-table-status></span>
+    </div>
     <section class="panel table-wrap">
-      <table>
+      <table id="recent-events" class="interactive-table">
         <thead>
-          <tr><th>Time</th><th>Log</th><th>Level</th><th>ID</th><th>Provider</th><th>Message</th></tr>
+          <tr><th data-sort="date">Time</th><th data-sort="text">Log</th><th data-sort="text">Level</th><th data-sort="number">ID</th><th data-sort="text">Provider</th><th data-sort="text">Message</th></tr>
         </thead>
         <tbody>
           $recentRows
@@ -444,6 +505,95 @@ function New-HtmlReport {
       Generated by Analyze-EventLogs.ps1.
     </footer>
   </main>
+  <script>
+    function getCellValue(row, columnIndex, sortType) {
+      const cell = row.cells[columnIndex];
+      const value = cell ? cell.textContent.trim() : "";
+
+      if (sortType === "number") {
+        const parsedNumber = Number(value.replace(/[^0-9.-]/g, ""));
+        return Number.isNaN(parsedNumber) ? 0 : parsedNumber;
+      }
+
+      if (sortType === "date") {
+        const parsedDate = Date.parse(value);
+        return Number.isNaN(parsedDate) ? 0 : parsedDate;
+      }
+
+      return value.toLowerCase();
+    }
+
+    function applyTableFilters(table, controls) {
+      const textFilter = (controls.querySelector("[data-filter-text]")?.value || "").toLowerCase();
+      const logFilter = controls.querySelector("[data-filter-log]")?.value || "";
+      const levelFilter = controls.querySelector("[data-filter-level]")?.value || "";
+      const rows = Array.from(table.tBodies[0].rows);
+      let visibleCount = 0;
+
+      rows.forEach(function(row) {
+        const rowText = row.textContent.toLowerCase();
+        const rowLog = row.dataset.log || "";
+        const rowLevel = row.dataset.level || "";
+        const isMatch =
+          (!textFilter || rowText.includes(textFilter)) &&
+          (!logFilter || rowLog === logFilter) &&
+          (!levelFilter || rowLevel === levelFilter);
+
+        row.classList.toggle("is-hidden", !isMatch);
+        if (isMatch) {
+          visibleCount += 1;
+        }
+      });
+
+      const status = controls.querySelector("[data-table-status]");
+      if (status) {
+        status.textContent = visibleCount + " of " + rows.length + " shown";
+      }
+    }
+
+    function sortTable(table, header, columnIndex) {
+      const sortType = header.dataset.sort || "text";
+      const nextDirection = header.classList.contains("sort-asc") ? "desc" : "asc";
+      const rows = Array.from(table.tBodies[0].rows);
+
+      table.querySelectorAll("th[data-sort]").forEach(function(sortHeader) {
+        sortHeader.classList.remove("sort-asc", "sort-desc");
+      });
+      header.classList.add(nextDirection === "asc" ? "sort-asc" : "sort-desc");
+
+      rows.sort(function(left, right) {
+        const leftValue = getCellValue(left, columnIndex, sortType);
+        const rightValue = getCellValue(right, columnIndex, sortType);
+
+        if (leftValue < rightValue) {
+          return nextDirection === "asc" ? -1 : 1;
+        }
+        if (leftValue > rightValue) {
+          return nextDirection === "asc" ? 1 : -1;
+        }
+        return 0;
+      });
+
+      rows.forEach(function(row) {
+        table.tBodies[0].appendChild(row);
+      });
+    }
+
+    document.querySelectorAll(".interactive-table").forEach(function(table) {
+      const controls = document.querySelector('[data-controls-for="' + table.id + '"]');
+      if (controls) {
+        controls.querySelectorAll("input, select").forEach(function(control) {
+          control.addEventListener("input", function() { applyTableFilters(table, controls); });
+          control.addEventListener("change", function() { applyTableFilters(table, controls); });
+        });
+        applyTableFilters(table, controls);
+      }
+
+      table.querySelectorAll("th[data-sort]").forEach(function(header, columnIndex) {
+        header.addEventListener("click", function() { sortTable(table, header, columnIndex); });
+      });
+    });
+  </script>
 </body>
 </html>
 "@
