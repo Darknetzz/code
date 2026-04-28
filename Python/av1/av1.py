@@ -149,6 +149,7 @@ def _env_bool(val: str) -> bool:
 
 FFMPEG_CMD = os.getenv("AV1_FFMPEG_PATH") or "ffmpeg"
 FFPROBE_CMD = os.getenv("AV1_FFPROBE_PATH") or "ffprobe"
+SUBPROCESS_TEXT_KWARGS = {"text": True, "encoding": "utf-8", "errors": "replace"}
 
 try:
     _env_val = os.getenv("AV1_AUDIO_BITRATE")
@@ -233,7 +234,7 @@ def _version_callback(value: bool) -> None:
             
             # Get version
             version_cmd = [FFMPEG_CMD, "-version"]
-            result = subprocess.run(version_cmd, capture_output=True, text=True, timeout=5)
+            result = subprocess.run(version_cmd, capture_output=True, timeout=5, **SUBPROCESS_TEXT_KWARGS)
             if result.returncode == 0:
                 # Parse version from first line (e.g., "ffmpeg version 6.1.1-3ubuntu5" or "ffmpeg version N-122320-g38e89fe502-20260101")
                 first_line = result.stdout.split('\n')[0] if result.stdout else ""
@@ -1012,6 +1013,15 @@ def _styled_progress_filename(label: str) -> str:
     return _styled_filename(label)
 
 
+def _format_batch_position(current: int, total: int) -> str:
+    """Render the current item position with a count-based percentage."""
+    if total <= 0:
+        return "0/0 (0%)"
+    bounded_current = min(max(current, 0), total)
+    percent = (bounded_current / total) * 100
+    return f"{bounded_current}/{total} ({percent:.0f}%)"
+
+
 def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
     """Create a progress layout that avoids wrapping in narrow terminals."""
     description_column = Column(
@@ -1079,10 +1089,11 @@ def _build_progress(transient: bool, batch_mode: bool = False) -> Progress:
 
 def _format_batch_progress_description(current: int, total: int, _elapsed_seconds: int, current_item: str) -> str:
     """Build a compact batch progress description for the terminal."""
+    batch_position = _format_batch_position(current, total)
     if current_item == "waiting...":
-        return f"[dim]{escape(current_item)} ({current}/{total})[/]"
+        return f"[yellow]{escape(batch_position)}[/] [dim]{escape(current_item)}[/]"
     short_item = _truncate_middle(current_item, 52)
-    return f"{_styled_progress_filename(short_item)} [yellow]({current}/{total})[/]"
+    return f"[yellow]{escape(batch_position)}[/] {_styled_progress_filename(short_item)}"
 
 
 def _format_batch_elapsed_text(elapsed_seconds: int) -> str:
@@ -1114,7 +1125,8 @@ def _format_file_progress_description(file_label: str, current: Optional[int] = 
     short_label = _truncate_middle(file_label, 48)
     branch = "[dim]  └─[/]"
     if current is not None and total is not None and total > 0:
-        return f"{branch} {_styled_progress_filename(short_label)} [yellow]({current}/{total})[/]"
+        batch_position = _format_batch_position(current, total)
+        return f"{branch} [yellow]{escape(batch_position)}[/] {_styled_progress_filename(short_label)}"
     return f"{branch} [dim]Encoding[/] {_styled_progress_filename(short_label)}"
 
 
@@ -1150,7 +1162,7 @@ def get_video_stream_info(file_path: str) -> dict:
             "-of", "json",
             file_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
+        result = subprocess.run(cmd, capture_output=True, timeout=PROGRESS_TIMEOUT, **SUBPROCESS_TEXT_KWARGS)
         if result.returncode != 0 or not result.stdout.strip():
             return info
 
@@ -1472,7 +1484,7 @@ def get_audio_channels(file_path: str) -> Optional[int]:
             "-of", "default=noprint_wrappers=1:nokey=1",
             file_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
+        result = subprocess.run(cmd, capture_output=True, timeout=PROGRESS_TIMEOUT, **SUBPROCESS_TEXT_KWARGS)
         val = result.stdout.strip()
         if val.isdigit():
             return int(val)
@@ -1506,7 +1518,13 @@ def check_encoder_support(encoder_name: str) -> bool:
             ]
 
             try:
-                proc = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                proc = subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    timeout=ENCODER_TEST_TIMEOUT,
+                    **SUBPROCESS_TEXT_KWARGS,
+                )
                 if proc.returncode == 0:
                     return True
 
@@ -1530,7 +1548,13 @@ def check_encoder_support(encoder_name: str) -> bool:
                                 "-vf", "format=nv12,hwupload", "-c:v", encoder_name, "-f", "null", "-"
                             ]
                             try:
-                                proc2 = subprocess.run(fallback_cmd, check=False, capture_output=True, text=True, timeout=ENCODER_TEST_TIMEOUT)
+                                proc2 = subprocess.run(
+                                    fallback_cmd,
+                                    check=False,
+                                    capture_output=True,
+                                    timeout=ENCODER_TEST_TIMEOUT,
+                                    **SUBPROCESS_TEXT_KWARGS,
+                                )
                                 if proc2.returncode == 0:
                                     # Switch global ffmpeg to the working distro binary for hardware encoding
                                     FFMPEG_CMD = fallback
@@ -1667,7 +1691,7 @@ def inspect_transcoding_need(file_path: str) -> str:
     """
     try:
         cmd = [FFPROBE_CMD, "-v", "error", "-print_format", "json", "-show_streams", file_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=PROGRESS_TIMEOUT)
+        result = subprocess.run(cmd, capture_output=True, timeout=PROGRESS_TIMEOUT, **SUBPROCESS_TEXT_KWARGS)
 
         if result.returncode != 0:
             stderr_lower = result.stderr.lower() if result.stderr else ""
@@ -2719,8 +2743,8 @@ def convert_single_file(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
             bufsize=1,
+            **SUBPROCESS_TEXT_KWARGS,
         )
 
         file_task = None
