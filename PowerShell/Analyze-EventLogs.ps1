@@ -13,7 +13,7 @@
 param(
     [Parameter()]
     [ValidateRange(1, 3650)]
-    [int]$DaysBack = 7,
+    [int]$DaysBack = 14,
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
