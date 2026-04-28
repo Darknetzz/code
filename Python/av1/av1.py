@@ -197,6 +197,7 @@ _STARTUP_SUMMARY_EMITTED = False  # Avoid duplicate startup summaries on interna
 _AUTO_REENCODE_AV1 = False  # Remember "all" choice when confirming AV1 re-encodes
 _AUTO_OVERWRITE_EXISTING = False  # Remember "all" for deleting existing outputs before encode
 _AUTO_RENAME_TO_ORIGINAL = False  # Remember "all" for restoring original filename after delete
+_ACTIVE_FFMPEG_PROCESS: Optional[subprocess.Popen] = None  # Child process to stop on Ctrl+C
 
 # ============================================================================ #
 #                          VERSION FLAG CALLBACK                               #
@@ -1247,9 +1248,28 @@ def get_recommended_bitrate(width: int, height: int, fps: float) -> int:
 
 def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
-    global _USER_CANCELLED
+    global _USER_CANCELLED, _ACTIVE_FFMPEG_PROCESS
     _USER_CANCELLED = True
-    cprint("\n\n⏸️  Gracefully stopping after current file...\n   (Press Ctrl+C again to force quit)", "warning")
+
+    active_process = _ACTIVE_FFMPEG_PROCESS
+    stopping_active_file = active_process is not None and active_process.poll() is None
+    if stopping_active_file:
+        try:
+            active_process.terminate()
+        except Exception:
+            pass
+
+    message = (
+        "\n\n[yellow]⏸️  Stopping current ffmpeg process and ending batch...[/]\n"
+        "   [dim](Press Ctrl+C again to force quit)[/]"
+        if stopping_active_file
+        else "\n\n[yellow]⏸️  Stopping batch...[/]\n   [dim](Press Ctrl+C again to force quit)[/]"
+    )
+    try:
+        console.print(message)
+    except Exception:
+        print("\nStopping batch... (Press Ctrl+C again to force quit)")
+
     # Restore default handler so second Ctrl+C will force quit
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -2473,7 +2493,7 @@ def convert_single_file(
     - bitrate_decision: Short human-readable bitrate strategy used for this file
     - media_info: Short media metadata string (resolution, length, fps)
     """
-    global ACTIVE_ENCODER, FFMPEG_CMD, _AUTO_OVERWRITE_EXISTING
+    global ACTIVE_ENCODER, FFMPEG_CMD, _AUTO_OVERWRITE_EXISTING, _ACTIVE_FFMPEG_PROCESS
     display_name = _display_path(input_path)
     display_name_log = _display_path(input_path, full_path=True, fallback_label="hidden")
     progress_name = progress_label or display_name
@@ -2746,6 +2766,7 @@ def convert_single_file(
             bufsize=1,
             **SUBPROCESS_TEXT_KWARGS,
         )
+        _ACTIVE_FFMPEG_PROCESS = process
 
         file_task = None
         if _PROGRESS_CONTEXT and show_progress:
@@ -2825,6 +2846,8 @@ def convert_single_file(
                     final_update["completed"] = 100
                 _PROGRESS_CONTEXT.update(file_task, **final_update)
         finally:
+            if _ACTIVE_FFMPEG_PROCESS is process:
+                _ACTIVE_FFMPEG_PROCESS = None
             if file_task is not None and _PROGRESS_CONTEXT:
                 _PROGRESS_CONTEXT.remove_task(file_task)
 
