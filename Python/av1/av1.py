@@ -91,7 +91,7 @@ app = typer.Typer(
 # ============================================================================ #
 #                        ENCODING CONFIGURATION CONSTANTS                      #
 # ============================================================================ #
-BITRATE_REDUCTION_FACTOR = 0.5
+BITRATE_REDUCTION_FACTOR = 0.65
 BITRATE_FALLBACK = 2_000_000
 BITRATE_MAXRATE_MULTIPLIER = 1.2
 BITRATE_BUFSIZE_MULTIPLIER = 2.0
@@ -121,16 +121,16 @@ FFMPEG_STALL_TIMEOUT = 300  # Abort ffmpeg if it emits no progress/output for th
 PROMPT_YES_NO_ALL = "[Y/n/a] (y=yes, n=no, a=all): "
 SIZE_PRESETS: dict[str, dict[str, object]] = {
     "light": {
-        "min_shrink_percent": 35.0,
+        "min_shrink_percent": 25.0,
         "max_video_width": 1920,
     },
     "balanced": {
-        "min_shrink_percent": 55.0,
-        "max_video_width": 1280,
+        "min_shrink_percent": 50.0,
+        "max_video_width": 1920,
     },
     "aggressive": {
-        "min_shrink_percent": 70.0,
-        "max_video_width": 960,
+        "min_shrink_percent": 65.0,
+        "max_video_width": 1280,
     },
 }
 
@@ -3627,7 +3627,7 @@ def main(
     min_shrink: Optional[float] = typer.Option(
         None,
         "--min-shrink",
-        help="Minimum percent reduction in file size. Default: 50, meaning the output targets at most 50% of the original size unless another constraint overrides it.",
+        help="Minimum percent reduction in file size. Default: 35, meaning the output targets at most 65% of the original size unless another constraint overrides it.",
         rich_help_panel="Input/Output",
     ),
     force: bool = typer.Option(
@@ -3877,7 +3877,7 @@ def main(
             cprint(f"Invalid AV1_MIN_SHRINK: {os.getenv('AV1_MIN_SHRINK')!r}", "error")
             raise typer.Exit(code=1)
     if min_shrink_percent is None:
-        min_shrink_percent = 50.0
+        min_shrink_percent = 35.0
     if min_shrink_percent is not None and (min_shrink_percent <= 0 or min_shrink_percent >= 100):
         cprint("--min-shrink / AV1_MIN_SHRINK must be strictly between 0 and 100.", "error")
         raise typer.Exit(code=1)

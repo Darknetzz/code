@@ -1,11 +1,11 @@
 # av1
 
-A fast, reliable video batch converter that targets the best available encoder on your system (AV1 on NVIDIA/AMD GPUs when possible, otherwise HEVC or CPU AV1), with safe defaults to reduce file size by ~50% while preserving quality.
+A fast, reliable video batch converter that targets the best available encoder on your system (AV1 on NVIDIA/AMD GPUs when possible, otherwise HEVC or CPU AV1), with conservative defaults to reduce file size by ~35% while preserving quality.
 
 ## Features
 
 - **Auto-detects best encoder**: `av1_nvenc` → `av1_amf` → `hevc_nvenc` → `hevc_amf` → `libsvtav1`
-- **Smart bitrate selection**: Probes input bitrate and targets ~50% reduction (configurable)
+- **Smart bitrate selection**: Probes input bitrate and targets ~35% reduction by default, with optional presets for stronger compression
 - **Preserves audio**: Multi-channel audio using Opus codec (configurable bitrate)
 - **Safe batch processing**: Disk space checks, temp file swap, overwrite prompts, graceful Ctrl+C handling
 - **Skips re-encoding**: Skips files that already use the target codec
@@ -158,8 +158,8 @@ Options:
    - Skips files that are already AV1 by default when AV1 is the active target.
    - Use `--prompt-av1` to ask per file, or `--reencode-av1` to always re-encode them without prompting.
    - Skips if already encoded with the target codec in other cases (optimization).
-   - Probes input bitrate and calculates target (50% reduction by default).
-   - Applies safe scaling (max width 1920, maintains aspect ratio).
+   - Probes input bitrate and calculates target (~35% reduction by default).
+   - Applies safe scaling (max width 1920 by default, maintains aspect ratio, only downsizes sources wider than the active max width).
    - Encodes with VBR using `-b:v` (target), `-maxrate` (peak), `-bufsize` (buffer).
    - Preserves audio channels, re-encodes to Opus (configurable).
    - Writes to temp `.temp.mkv`, atomically swaps on success.
@@ -179,7 +179,7 @@ $env:AV1_FFPROBE_PATH = "C:\custom\ffprobe.exe"
 # Encoding parameters
 $env:AV1_AUDIO_BITRATE = "96k"               # Opus audio bitrate (default: 64k)
 $env:AV1_MAX_VIDEO_WIDTH = "1280"            # Max output width (default: 1920)
-$env:AV1_BITRATE_REDUCTION_FACTOR = "0.45"   # Bitrate reduction ratio (default: 0.5)
+$env:AV1_BITRATE_REDUCTION_FACTOR = "0.6"    # Bitrate factor (default: 0.65, roughly 35% reduction)
 $env:AV1_BITRATE_FALLBACK = "1800000"        # Fallback in bps if probe fails (default: 2M)
 
 # Logging and display
@@ -193,7 +193,7 @@ Example: Automation script with custom defaults
 ```powershell
 $env:AV1_LOG_TYPE = "json"
 $env:AV1_NO_PROMPT = "1"
-$env:AV1_BITRATE_REDUCTION_FACTOR = "0.6"  # 40% reduction instead of 50%
+$env:AV1_BITRATE_REDUCTION_FACTOR = "0.6"  # 40% reduction instead of the default ~35%
 
 python .\av1.py "D:\Videos" --recursive --delete-original
 # Logs will be JSON, no prompts, and use 40% bitrate reduction
@@ -202,7 +202,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 ## Notes and defaults
 
 - **Pixel format**: `nv12` for hardware encoders, `yuv420p` for CPU (automatically selected).
-- **Scaling**: `min(1920, iw)` to cap at 1920px width while preserving aspect ratio; can be overridden with `AV1_MAX_VIDEO_WIDTH`.
+- **Scaling**: `min(1920, iw)` caps width at 1920px while preserving aspect ratio, so lower-resolution sources are not upscaled; override with `--max-width` or `AV1_MAX_VIDEO_WIDTH`.
 - **HEVC compatibility**: Outputs tagged `hvc1` for broader device compatibility.
 - **Output container**: `.mkv` with `+faststart` flag for faster playback start.
 - **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv` (requires FFmpeg with WMV/ASF support).
@@ -220,7 +220,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 - **Automation-friendly**: Combine `--no-prompt`, `--no-color`, and `--log-type json` for unattended batch jobs.
 - **Environment overrides**: Set `AV1_*` env vars for system-wide defaults; CLI flags always take precedence.
 - Use `--recursive` to process entire folder trees, preserving directory structure when using separate output folder.
-- For archival quality, raise the bitrate or use CPU AV1 with `AV1_BITRATE_REDUCTION_FACTOR=0.3`.
+- For archival quality, raise the bitrate and avoid strict `--min-shrink`/`--size-preset` caps; CPU AV1 usually produces better compression at the same bitrate.
 - If outputs are larger, source may already be efficient. The script warns and lets you choose deletion.
 - Start with `--dry-run --recursive` to preview all files before committing to conversion.
 - Use `--keep-mkv` to preserve `.mkv` extension when converting in-place (useful for consistent naming).
@@ -288,7 +288,7 @@ Example JSON log structure:
 - **"ffprobe is not found"** → Similar to above; tool will auto-fallback to PATH if specified path is invalid.
 - **"Insufficient disk space"** → Free space or change `--output-dir` to a drive with more room. Tool validates 1.5× file size before encoding.
 - **Hardware encoder not detected** → Update GPU drivers; verify FFmpeg build includes NVENC/AMF. Use `--dry-run` to see which encoder was selected.
-- **Output larger than input** → Source may already be highly compressed or incompressible (entropy). Raise `AV1_MAX_VIDEO_WIDTH` for aggressive scaling or reduce `AV1_BITRATE_REDUCTION_FACTOR` for higher quality.
+- **Output larger than input** → Source may already be highly compressed or incompressible (entropy). Use `--min-shrink`, `--max-output-size`, or a size preset for stronger compression; raise `AV1_BITRATE_REDUCTION_FACTOR` for higher quality.
 - **Progress bar crashes with KeyError** → Ensure all `_LOG_EVENTS` fields match the Progress bar columns (should be resolved in latest version).
 - **Parallel option disabled** → Currently marked experimental; full support coming soon. Sequential processing is fast enough for most use cases.
 
