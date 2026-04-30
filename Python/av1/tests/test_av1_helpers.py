@@ -101,6 +101,15 @@ def test_cpu_command_includes_svt_thread_setting():
     assert "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR" in command
 
 
+def test_request_cancel_encoding_sets_cancelled_flag():
+    av1._USER_CANCELLED = False
+    try:
+        av1.request_cancel_encoding()
+        assert av1._USER_CANCELLED is True
+    finally:
+        av1._USER_CANCELLED = False
+
+
 def test_inspect_transcoding_need_uses_active_codec(monkeypatch):
     payload = {
         "streams": [

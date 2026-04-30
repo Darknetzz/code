@@ -84,7 +84,8 @@ app = typer.Typer(
         "Default: run the compressor (paths and options go on the command line; no subcommand). "
         "Subcommands: [bold]help[/] [TOPIC] — group or subcommand help; [bold]version[/] — app and ffmpeg info; "
         "[bold]list[/] / [bold]ls[/] — scan for videos and show codec and size; "
-        "[bold]clean[/] / [bold]cleanup[/] — remove stale *.temp.mkv files."
+        "[bold]clean[/] / [bold]cleanup[/] — remove stale *.temp.mkv files. "
+        "[bold]Ctrl+C[/] — terminate the running ffmpeg encode (pause/stop); from Python call [bold]request_cancel_encoding()[/]."
     ),
 )
 
@@ -1224,6 +1225,25 @@ def get_video_stream_info(file_path: str) -> dict:
     return info
 
 
+def request_cancel_encoding() -> None:
+    """
+    Stop the current encode by terminating the active ffmpeg process (if any).
+
+    Sets the global cancel flag used by batch processing. Safe to call from another
+    thread while ``convert_single_file`` is running. Idempotent.
+
+    This is the programmatic equivalent of pressing Ctrl+C once (graceful terminate).
+    """
+    global _USER_CANCELLED, _ACTIVE_FFMPEG_PROCESS
+    _USER_CANCELLED = True
+    proc = _ACTIVE_FFMPEG_PROCESS
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+
 def get_recommended_bitrate(width: int, height: int, fps: float) -> int:
     """
     Estimate an efficient bitrate for given resolution/FPS.
@@ -1248,16 +1268,9 @@ def get_recommended_bitrate(width: int, height: int, fps: float) -> int:
 
 def _signal_handler(sig: int, frame) -> None:
     """Handle Ctrl+C gracefully during batch processing."""
-    global _USER_CANCELLED, _ACTIVE_FFMPEG_PROCESS
-    _USER_CANCELLED = True
-
     active_process = _ACTIVE_FFMPEG_PROCESS
     stopping_active_file = active_process is not None and active_process.poll() is None
-    if stopping_active_file:
-        try:
-            active_process.terminate()
-        except Exception:
-            pass
+    request_cancel_encoding()
 
     message = (
         "\n\n[yellow]⏸️  Stopping current ffmpeg process and ending batch...[/]\n"
@@ -2251,8 +2264,10 @@ def _run_list_command(
     )
 
 
-def _terminate_ffmpeg_process(process: subprocess.Popen, command: list[str], reason: str) -> None:
-    """Stop a hung ffmpeg process without leaving it running in the background."""
+def _gracefully_stop_ffmpeg_process(process: subprocess.Popen) -> None:
+    """Terminate ffmpeg and wait; kill if it does not exit (user cancel or cleanup)."""
+    if process.poll() is not None:
+        return
     try:
         process.terminate()
         process.wait(timeout=5)
@@ -2264,6 +2279,11 @@ def _terminate_ffmpeg_process(process: subprocess.Popen, command: list[str], rea
             pass
     except Exception:
         pass
+
+
+def _terminate_ffmpeg_process(process: subprocess.Popen, command: list[str], reason: str) -> None:
+    """Stop a hung ffmpeg process without leaving it running in the background."""
+    _gracefully_stop_ffmpeg_process(process)
     raise subprocess.TimeoutExpired(command, FFMPEG_STALL_TIMEOUT, output=reason)
 
 
@@ -2290,6 +2310,9 @@ def _iter_ffmpeg_output_with_stall_timeout(
     last_output = time.monotonic()
 
     while True:
+        if _USER_CANCELLED:
+            _gracefully_stop_ffmpeg_process(process)
+            break
         try:
             line = lines.get(timeout=0.5)
         except queue.Empty:
@@ -3220,6 +3243,9 @@ def process_batch_files(
                     max_video_width=max_video_width,
                 )
                 _SUPPRESS_OUTPUT = False
+
+                if _USER_CANCELLED:
+                    break
                 
                 # Track statistics if conversion happened
                 if size_saved != 0:
