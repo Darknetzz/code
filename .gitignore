@@ -2,7 +2,8 @@
 
 # Added by cargo
 
-/target
+# Cargo (any crate, not only repo root)
+target/
 lib
 logs
 chromium
