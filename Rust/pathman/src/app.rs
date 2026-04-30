@@ -256,11 +256,42 @@ impl eframe::App for PathmanApp {
             });
             #[cfg(windows)]
             if self.scope == Scope::User {
-                ui.label(egui::RichText::new(format!(
-                    "Effective PATH preview (machine ∪ user): {}",
-                    self.preview_merged
-                ))
-                .small());
+                let preview_entries = path_model::split(&self.preview_merged);
+                let n = preview_entries.len();
+                let header = format!("Effective PATH (machine + user), {n} entries — read-only");
+                egui::CollapsingHeader::new(header)
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(
+                                "Order for new processes: system entries first, then user.",
+                            )
+                            .small()
+                            .weak(),
+                        );
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(160.0)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.spacing_mut().item_spacing.y = 2.0;
+                                for (i, line) in preview_entries.iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(format!("{}.", i + 1))
+                                                .small()
+                                                .weak()
+                                                .monospace(),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new(line.as_str())
+                                                .small()
+                                                .monospace(),
+                                        );
+                                    });
+                                }
+                            });
+                    });
             }
             #[cfg(not(windows))]
             if self.scope == Scope::User {
@@ -349,25 +380,65 @@ impl eframe::App for PathmanApp {
                 let mut remove_at: Option<usize> = None;
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
+                const BTN_W: f32 = 28.0;
                 for (i, e) in self.entries.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
-                        if self.warn_missing && !path_model::entry_exists(e) {
-                            ui.label(egui::RichText::new("⚠").color(egui::Color32::YELLOW));
-                        } else {
-                            ui.label(" ");
+                        let warn = self.warn_missing && !path_model::entry_exists(e);
+                        let mark = if warn { "[!]" } else { "   " };
+                        let mark_resp = ui.label(
+                            egui::RichText::new(mark)
+                                .small()
+                                .monospace()
+                                .color(if warn {
+                                    egui::Color32::from_rgb(220, 180, 60)
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                }),
+                        );
+                        if warn {
+                            mark_resp.on_hover_text("Path not found or not a directory");
                         }
-                        let te_resp =
-                            ui.add(TextEdit::singleline(e).desired_width(520.0));
+                        let path_w = (ui.available_width() - 3.0 * BTN_W - 24.0).max(120.0);
+                        let te_resp = ui.add(
+                            TextEdit::singleline(e)
+                                .desired_width(path_w)
+                                .font(egui::TextStyle::Monospace),
+                        );
                         if te_resp.changed() {
                             self.dirty = true;
                         }
-                        if ui.small_button("↑").clicked() {
+                        let btn_h = te_resp
+                            .rect
+                            .height()
+                            .max(ui.spacing().interact_size.y);
+                        if ui
+                            .add_sized(
+                                [BTN_W, btn_h],
+                                egui::Button::new("^"),
+                            )
+                            .on_hover_text("Move up")
+                            .clicked()
+                        {
                             move_up = Some(i);
                         }
-                        if ui.small_button("↓").clicked() {
+                        if ui
+                            .add_sized(
+                                [BTN_W, btn_h],
+                                egui::Button::new("v"),
+                            )
+                            .on_hover_text("Move down")
+                            .clicked()
+                        {
                             move_dn = Some(i);
                         }
-                        if ui.small_button("✕").clicked() {
+                        if ui
+                            .add_sized(
+                                [BTN_W, btn_h],
+                                egui::Button::new("X"),
+                            )
+                            .on_hover_text("Remove row")
+                            .clicked()
+                        {
                             remove_at = Some(i);
                         }
                     });
