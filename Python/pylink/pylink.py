@@ -41,6 +41,11 @@ def show_link_context(link_path: Path, target_path: Path, flag: str = "") -> Non
         typer.echo(f"Type:   {flag}")
 
 
+def normalize_absolute_path(path: Path) -> Path:
+    """Normalize to absolute path without dereferencing symlinks/junctions."""
+    return Path(os.path.abspath(str(path)))
+
+
 def is_drive_root(path: Path) -> bool:
     """Return True when path points to a Windows drive root like D:\\."""
     return path.anchor and str(path).rstrip("\\/").lower() == path.anchor.rstrip("\\/").lower()
@@ -89,8 +94,8 @@ def create_windows_link(link_path: Path, target_path: Path, flag: str) -> str:
 
 @app.command()
 def create_link(
-    target_path: Annotated[Path, typer.Argument(help="TARGET: Existing file/directory path to point at (required unless --no-validate-target)")],
-    link_path: Optional[Path] = typer.Argument(None, help="LINK: Path to create (defaults to CWD/<target basename> if omitted; always shown as absolute path)"),
+    target_path_raw: Annotated[str, typer.Argument(help="TARGET: Existing file/directory path to point at (required unless --no-validate-target)")],
+    link_path_raw: Annotated[Optional[str], typer.Argument(help="LINK: Path to create (defaults to CWD/<target basename> if omitted; always shown as absolute path)")] = None,
     directory: bool = typer.Option(False, "--dir", "-d", help="Force a directory symbolic link (/D)"),
     junction: bool = typer.Option(False, "--junction", "-j", help="Force a directory junction (/J); recommended for Windows directory links"),
     hard: bool = typer.Option(False, "--hard", "-h", help="Force a hard link (/H, files only, same volume)"),
@@ -108,6 +113,9 @@ def create_link(
     if sys.platform != "win32":
         typer.secho("Error: pylink only supports Windows.", fg=typer.colors.RED, bold=True)
         raise typer.Exit(code=1)
+
+    target_path = Path(target_path_raw)
+    link_path = Path(link_path_raw) if link_path_raw is not None else None
 
     # 1. Challenge: Validate Mutually Exclusive Options manually
     # Typer doesn't have "mutually_exclusive_group" like argparse yet, so we code it.
@@ -128,8 +136,8 @@ def create_link(
     if not link_path.is_absolute():
         link_path = Path.cwd() / link_path
 
-    target_path = target_path.resolve(strict=False)
-    link_path = link_path.resolve(strict=False)
+    target_path = normalize_absolute_path(target_path).resolve(strict=False)
+    link_path = normalize_absolute_path(link_path)
 
     # 3. Validate target before any creation attempt (unless user opts out).
     if not no_validate_target and not target_path.exists():

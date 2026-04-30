@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['pylink.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pylink\\pylink.py'],
     pathex=[],
     binaries=[],
     datas=[],
