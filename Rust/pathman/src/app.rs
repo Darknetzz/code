@@ -376,72 +376,80 @@ impl eframe::App for PathmanApp {
                 }
             });
 
-            ScrollArea::vertical().show(ui, |ui| {
+            let list_viewport_w = ui.available_width();
+            ScrollArea::vertical()
+                .id_salt("path_entries")
+                .max_width(list_viewport_w)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                ui.set_max_width(list_viewport_w);
                 let mut remove_at: Option<usize> = None;
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
-                const BTN_W: f32 = 28.0;
+                const BTN_W: f32 = 30.0;
+                let btn_h = ui.spacing().interact_size.y;
                 for (i, e) in self.entries.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        let warn = self.warn_missing && !path_model::entry_exists(e);
-                        let mark = if warn { "[!]" } else { "   " };
-                        let mark_resp = ui.label(
-                            egui::RichText::new(mark)
-                                .small()
-                                .monospace()
-                                .color(if warn {
-                                    egui::Color32::from_rgb(220, 180, 60)
-                                } else {
-                                    egui::Color32::TRANSPARENT
-                                }),
-                        );
-                        if warn {
-                            mark_resp.on_hover_text("Path not found or not a directory");
-                        }
-                        let path_w = (ui.available_width() - 3.0 * BTN_W - 24.0).max(120.0);
-                        let te_resp = ui.add(
-                            TextEdit::singleline(e)
-                                .desired_width(path_w)
-                                .font(egui::TextStyle::Monospace),
-                        );
-                        if te_resp.changed() {
-                            self.dirty = true;
-                        }
-                        let btn_h = te_resp
-                            .rect
-                            .height()
-                            .max(ui.spacing().interact_size.y);
-                        if ui
-                            .add_sized(
-                                [BTN_W, btn_h],
-                                egui::Button::new("^"),
-                            )
-                            .on_hover_text("Move up")
-                            .clicked()
-                        {
-                            move_up = Some(i);
-                        }
-                        if ui
-                            .add_sized(
-                                [BTN_W, btn_h],
-                                egui::Button::new("v"),
-                            )
-                            .on_hover_text("Move down")
-                            .clicked()
-                        {
-                            move_dn = Some(i);
-                        }
-                        if ui
-                            .add_sized(
-                                [BTN_W, btn_h],
-                                egui::Button::new("X"),
-                            )
-                            .on_hover_text("Remove row")
-                            .clicked()
-                        {
-                            remove_at = Some(i);
-                        }
-                    });
+                    // Right-to-left: first allocated sits on the right, so buttons stay aligned
+                    // with the viewport; TextEdit + INFINITY fills remaining space to the left.
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center)
+                            .with_main_justify(true),
+                        |ui| {
+                            if ui
+                                .add_sized(
+                                    [BTN_W, btn_h],
+                                    egui::Button::new("X"),
+                                )
+                                .on_hover_text("Remove row")
+                                .clicked()
+                            {
+                                remove_at = Some(i);
+                            }
+                            if ui
+                                .add_sized(
+                                    [BTN_W, btn_h],
+                                    egui::Button::new("v"),
+                                )
+                                .on_hover_text("Move down")
+                                .clicked()
+                            {
+                                move_dn = Some(i);
+                            }
+                            if ui
+                                .add_sized(
+                                    [BTN_W, btn_h],
+                                    egui::Button::new("^"),
+                                )
+                                .on_hover_text("Move up")
+                                .clicked()
+                            {
+                                move_up = Some(i);
+                            }
+                            let te_resp = ui.add(
+                                TextEdit::singleline(e)
+                                    .desired_width(f32::INFINITY)
+                                    .font(egui::TextStyle::Monospace),
+                            );
+                            if te_resp.changed() {
+                                self.dirty = true;
+                            }
+                            let warn = self.warn_missing && !path_model::entry_exists(e);
+                            let mark = if warn { "[!]" } else { "   " };
+                            let mark_resp = ui.label(
+                                egui::RichText::new(mark)
+                                    .small()
+                                    .monospace()
+                                    .color(if warn {
+                                        egui::Color32::from_rgb(220, 180, 60)
+                                    } else {
+                                        egui::Color32::TRANSPARENT
+                                    }),
+                            );
+                            if warn {
+                                mark_resp.on_hover_text("Path not found or not a directory");
+                            }
+                        },
+                    );
                 }
                 if let Some(i) = remove_at {
                     if i < self.entries.len() {
