@@ -43,7 +43,7 @@ fn origin_badge_label(origin: PathOrigin) -> &'static str {
     }
 }
 
-/// Row strip fill and badge text color for Effective scope (readable on dark panels).
+/// Row strip fill and accent color for path rows (Effective merged view; User tab = user tint; System tab = machine tint).
 fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) {
     match origin {
         PathOrigin::Machine => (
@@ -692,9 +692,16 @@ impl eframe::App for PathmanApp {
                             });
                     }
                 } else {
-                    // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps.
+                    // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps. Same row tints as Effective (user vs machine).
                     let row_reserve = MARK_W + 3.0 * BTN_W + 4.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
+
+                    let row_origin = match self.scope {
+                        Scope::User => PathOrigin::User,
+                        Scope::System => PathOrigin::Machine,
+                        Scope::Effective => unreachable!(),
+                    };
+                    let (strip_fill, origin_color) = effective_origin_style(row_origin);
 
                     for (i, e) in self.entries.iter_mut().enumerate() {
                         let expanded = path_model::expanded_path(e.as_str());
@@ -706,74 +713,85 @@ impl eframe::App for PathmanApp {
                             egui::Color32::TRANSPARENT
                         };
 
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                let mark_resp = ui.add_sized(
-                                    [MARK_W, btn_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(mark)
-                                            .small()
-                                            .monospace()
-                                            .color(mark_color),
-                                    ),
-                                );
-                                if warn {
-                                    mark_resp.on_hover_text(
-                                        "Path not found or not a directory (after expanding env vars)",
-                                    );
-                                }
+                        egui::Frame::none()
+                            .fill(strip_fill)
+                            .inner_margin(egui::Margin::symmetric(6.0, 3.0))
+                            .rounding(4.0)
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        let mark_resp = ui.add_sized(
+                                            [MARK_W, btn_h],
+                                            egui::Label::new(
+                                                egui::RichText::new(mark)
+                                                    .small()
+                                                    .monospace()
+                                                    .color(mark_color),
+                                            ),
+                                        );
+                                        if warn {
+                                            mark_resp.on_hover_text(
+                                                "Path not found or not a directory (after expanding env vars)",
+                                            );
+                                        }
 
-                                let te_resp = ui.add_sized(
-                                    egui::vec2(text_column_w, btn_h),
-                                    TextEdit::singleline(e)
-                                        .desired_width(text_column_w)
-                                        .clip_text(true)
-                                        .font(egui::TextStyle::Monospace)
-                                        .id_salt(i),
-                                );
-                                if te_resp.changed() {
-                                    self.dirty = true;
-                                }
+                                        let te_resp = ui.add_sized(
+                                            egui::vec2(text_column_w, btn_h),
+                                            TextEdit::singleline(e)
+                                                .desired_width(text_column_w)
+                                                .clip_text(true)
+                                                .font(egui::TextStyle::Monospace)
+                                                .id_salt(i),
+                                        );
+                                        if te_resp.changed() {
+                                            self.dirty = true;
+                                        }
 
-                                if path_row_icon_button(ui, [BTN_W, btn_h], PathRowIcon::MoveUp, "Move up")
-                                    .clicked()
-                                {
-                                    move_up = Some(i);
-                                }
-                                if path_row_icon_button(
-                                    ui,
-                                    [BTN_W, btn_h],
-                                    PathRowIcon::MoveDown,
-                                    "Move down",
-                                )
-                                .clicked()
-                                {
-                                    move_dn = Some(i);
-                                }
-                                if path_row_icon_button(
-                                    ui,
-                                    [BTN_W, btn_h],
-                                    PathRowIcon::Remove,
-                                    "Remove row",
-                                )
-                                .clicked()
-                                {
-                                    remove_at = Some(i);
-                                }
-                            });
+                                        if path_row_icon_button(
+                                            ui,
+                                            [BTN_W, btn_h],
+                                            PathRowIcon::MoveUp,
+                                            "Move up",
+                                        )
+                                        .clicked()
+                                        {
+                                            move_up = Some(i);
+                                        }
+                                        if path_row_icon_button(
+                                            ui,
+                                            [BTN_W, btn_h],
+                                            PathRowIcon::MoveDown,
+                                            "Move down",
+                                        )
+                                        .clicked()
+                                        {
+                                            move_dn = Some(i);
+                                        }
+                                        if path_row_icon_button(
+                                            ui,
+                                            [BTN_W, btn_h],
+                                            PathRowIcon::Remove,
+                                            "Remove row",
+                                        )
+                                        .clicked()
+                                        {
+                                            remove_at = Some(i);
+                                        }
+                                    });
 
-                            if expanded != *e {
-                                ui.horizontal(|ui| {
-                                    ui.add_space(MARK_W + gap);
-                                    ui.label(
-                                        egui::RichText::new(format!("→ {expanded}"))
-                                            .small()
-                                            .weak()
-                                            .monospace(),
-                                    );
+                                    if expanded != *e {
+                                        ui.horizontal(|ui| {
+                                            ui.add_space(MARK_W + gap);
+                                            ui.label(
+                                                egui::RichText::new(format!("→ {expanded}"))
+                                                    .small()
+                                                    .color(origin_color.gamma_multiply(0.75))
+                                                    .monospace(),
+                                            );
+                                        });
+                                    }
                                 });
-                            }
-                        });
+                            });
                     }
                 }
 

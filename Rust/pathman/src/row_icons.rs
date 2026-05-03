@@ -34,10 +34,12 @@ pub fn path_row_icon_button(
 
         let pad = (rect.width().min(rect.height()) * 0.20).max(3.0);
         let inner = rect.shrink(pad);
-        let stroke = Stroke::new(
-            (visuals.fg_stroke.width * 1.35).max(1.2),
-            visuals.fg_stroke.color,
-        );
+        let line_width = (visuals.fg_stroke.width * 1.35).max(1.2);
+        let stroke_color = match icon {
+            PathRowIcon::Remove => egui::Color32::from_rgb(235, 95, 95),
+            _ => visuals.fg_stroke.color,
+        };
+        let stroke = Stroke::new(line_width, stroke_color);
 
         match icon {
             PathRowIcon::MoveUp => {
