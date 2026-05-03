@@ -43,6 +43,20 @@ fn origin_badge_label(origin: PathOrigin) -> &'static str {
     }
 }
 
+/// Row strip fill and badge text color for Effective scope (readable on dark panels).
+fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) {
+    match origin {
+        PathOrigin::Machine => (
+            egui::Color32::from_rgb(26, 34, 52),
+            egui::Color32::from_rgb(130, 185, 255),
+        ),
+        PathOrigin::User => (
+            egui::Color32::from_rgb(34, 42, 30),
+            egui::Color32::from_rgb(165, 215, 145),
+        ),
+    }
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -567,106 +581,115 @@ impl eframe::App for PathmanApp {
                             egui::Color32::TRANSPARENT
                         };
 
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                let mark_resp = ui.add_sized(
-                                    [MARK_W, btn_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(mark)
-                                            .small()
-                                            .monospace()
-                                            .color(mark_color),
-                                    ),
-                                );
-                                if warn {
-                                    mark_resp.on_hover_text(
-                                        "Path not found or not a directory (after expanding env vars)",
-                                    );
-                                }
+                        let (strip_fill, origin_color) = effective_origin_style(origin);
 
-                                ui.add_sized(
-                                    [ORIGIN_W, btn_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(origin_badge_label(origin))
-                                            .small()
-                                            .weak(),
-                                    ),
-                                );
+                        egui::Frame::none()
+                            .fill(strip_fill)
+                            .inner_margin(egui::Margin::symmetric(6.0, 3.0))
+                            .rounding(4.0)
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        let mark_resp = ui.add_sized(
+                                            [MARK_W, btn_h],
+                                            egui::Label::new(
+                                                egui::RichText::new(mark)
+                                                    .small()
+                                                    .monospace()
+                                                    .color(mark_color),
+                                            ),
+                                        );
+                                        if warn {
+                                            mark_resp.on_hover_text(
+                                                "Path not found or not a directory (after expanding env vars)",
+                                            );
+                                        }
 
-                                let e = &mut self.effective_segments[i].1;
-                                let te_resp = ui.add_sized(
-                                    egui::vec2(text_column_w, btn_h),
-                                    TextEdit::singleline(e)
-                                        .desired_width(text_column_w)
-                                        .clip_text(true)
-                                        .font(egui::TextStyle::Monospace)
-                                        .id_salt(("eff", i)),
-                                );
-                                if te_resp.changed() {
-                                    self.dirty = true;
-                                }
+                                        ui.add_sized(
+                                            [ORIGIN_W, btn_h],
+                                            egui::Label::new(
+                                                egui::RichText::new(origin_badge_label(origin))
+                                                    .small()
+                                                    .strong()
+                                                    .color(origin_color),
+                                            ),
+                                        );
 
-                                if ui
-                                    .add_enabled_ui(can_up, |ui| {
-                                        path_row_icon_button(
+                                        let e = &mut self.effective_segments[i].1;
+                                        let te_resp = ui.add_sized(
+                                            egui::vec2(text_column_w, btn_h),
+                                            TextEdit::singleline(e)
+                                                .desired_width(text_column_w)
+                                                .clip_text(true)
+                                                .font(egui::TextStyle::Monospace)
+                                                .id_salt(("eff", i)),
+                                        );
+                                        if te_resp.changed() {
+                                            self.dirty = true;
+                                        }
+
+                                        if ui
+                                            .add_enabled_ui(can_up, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [BTN_W, btn_h],
+                                                    PathRowIcon::MoveUp,
+                                                    if can_up {
+                                                        "Move up"
+                                                    } else {
+                                                        "Cannot cross machine / user boundary"
+                                                    },
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_up = Some(i);
+                                        }
+                                        if ui
+                                            .add_enabled_ui(can_dn, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [BTN_W, btn_h],
+                                                    PathRowIcon::MoveDown,
+                                                    if can_dn {
+                                                        "Move down"
+                                                    } else {
+                                                        "Cannot cross machine / user boundary"
+                                                    },
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_dn = Some(i);
+                                        }
+                                        if path_row_icon_button(
                                             ui,
                                             [BTN_W, btn_h],
-                                            PathRowIcon::MoveUp,
-                                            if can_up {
-                                                "Move up"
-                                            } else {
-                                                "Cannot cross machine / user boundary"
-                                            },
+                                            PathRowIcon::Remove,
+                                            "Remove row",
                                         )
-                                    })
-                                    .inner
-                                    .clicked()
-                                {
-                                    move_up = Some(i);
-                                }
-                                if ui
-                                    .add_enabled_ui(can_dn, |ui| {
-                                        path_row_icon_button(
-                                            ui,
-                                            [BTN_W, btn_h],
-                                            PathRowIcon::MoveDown,
-                                            if can_dn {
-                                                "Move down"
-                                            } else {
-                                                "Cannot cross machine / user boundary"
-                                            },
-                                        )
-                                    })
-                                    .inner
-                                    .clicked()
-                                {
-                                    move_dn = Some(i);
-                                }
-                                if path_row_icon_button(
-                                    ui,
-                                    [BTN_W, btn_h],
-                                    PathRowIcon::Remove,
-                                    "Remove row",
-                                )
-                                .clicked()
-                                {
-                                    remove_at = Some(i);
-                                }
-                            });
+                                        .clicked()
+                                        {
+                                            remove_at = Some(i);
+                                        }
+                                    });
 
-                            let row_text = self.effective_segments[i].1.clone();
-                            if expanded != row_text {
-                                ui.horizontal(|ui| {
-                                    ui.add_space(MARK_W + gap + ORIGIN_W + gap);
-                                    ui.label(
-                                        egui::RichText::new(format!("→ {expanded}"))
-                                            .small()
-                                            .weak()
-                                            .monospace(),
-                                    );
+                                    let row_text = self.effective_segments[i].1.clone();
+                                    if expanded != row_text {
+                                        ui.horizontal(|ui| {
+                                            ui.add_space(MARK_W + gap + ORIGIN_W + gap);
+                                            ui.label(
+                                                egui::RichText::new(format!("→ {expanded}"))
+                                                    .small()
+                                                    .color(origin_color.gamma_multiply(0.75))
+                                                    .monospace(),
+                                            );
+                                        });
+                                    }
                                 });
-                            }
-                        });
+                            });
                     }
                 } else {
                     // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps.
