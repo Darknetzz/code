@@ -11,10 +11,10 @@ use crate::row_icons::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scope {
-    #[default]
     User,
     System,
-    /// Merged machine + user view (editable).
+    /// Merged machine + user view (editable). Default: full PATH picture and cross-store editing.
+    #[default]
     Effective,
 }
 
