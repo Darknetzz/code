@@ -528,6 +528,13 @@ impl eframe::App for PathmanApp {
                 s.button_padding = egui::vec2(10.0, 6.0);
                 ui.horizontal(|ui| {
                 if ui
+                    .selectable_label(self.scope == Scope::Effective, "Effective")
+                    .clicked()
+                {
+                    self.scope = Scope::Effective;
+                    self.reload_from_store();
+                }
+                if ui
                     .selectable_label(self.scope == Scope::User, "User")
                     .clicked()
                 {
@@ -539,13 +546,6 @@ impl eframe::App for PathmanApp {
                     .clicked()
                 {
                     self.scope = Scope::System;
-                    self.reload_from_store();
-                }
-                if ui
-                    .selectable_label(self.scope == Scope::Effective, "Effective")
-                    .clicked()
-                {
-                    self.scope = Scope::Effective;
                     self.reload_from_store();
                 }
                 ui.separator();
