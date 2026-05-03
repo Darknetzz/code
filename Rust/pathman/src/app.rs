@@ -46,6 +46,10 @@ pub struct PathmanApp {
     /// Summary of edits vs on-disk PATH (`Changes…`).
     show_change_summary: bool,
     change_summary_text: String,
+    /// Set when a save succeeded; next `update` turns this into [`Self::saved_feedback_until`].
+    pending_saved_feedback: bool,
+    /// Show green "Saved" in the toolbar until this egui time (seconds).
+    saved_feedback_until: Option<f64>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -329,6 +333,8 @@ impl PathmanApp {
             duplicate_view_filter: None,
             show_change_summary: false,
             change_summary_text: String::new(),
+            pending_saved_feedback: false,
+            saved_feedback_until: None,
         };
         app.reload_from_store();
         app
@@ -522,9 +528,19 @@ impl PathmanApp {
         match res {
             Ok(()) => {
                 self.dirty = false;
-                self.set_status_ok("Saved. Open a new terminal for changes to apply.".into());
-                if self.scope == Scope::Effective {
-                    let _ = self.load_effective();
+                let reload = match self.scope {
+                    Scope::User => self.load_user(),
+                    Scope::System => self.load_system(),
+                    Scope::Effective => self.load_effective(),
+                };
+                match reload {
+                    Ok(()) => {
+                        self.set_status_ok("Saved. Open a new terminal for changes to apply.".into());
+                        self.pending_saved_feedback = true;
+                    }
+                    Err(e) => self.set_status_err(format!(
+                        "Save succeeded but reload from disk failed: {e:#}"
+                    )),
                 }
             }
             Err(e) => self.set_status_err(format!("Save failed: {e:#}")),
@@ -749,6 +765,11 @@ fn read_unix_system_file_raw() -> anyhow::Result<String> {
 
 impl eframe::App for PathmanApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.pending_saved_feedback {
+            self.pending_saved_feedback = false;
+            self.saved_feedback_until = Some(ctx.input(|i| i.time) + 2.0);
+        }
+
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("pathman");
@@ -804,7 +825,18 @@ impl eframe::App for PathmanApp {
                 if do_save {
                     self.save();
                 }
-                if self.dirty {
+                let now = ctx.input(|i| i.time);
+                let show_saved_badge = !self.dirty
+                    && self
+                        .saved_feedback_until
+                        .is_some_and(|until| now < until);
+                if show_saved_badge {
+                    ui.label(
+                        egui::RichText::new("Saved")
+                            .strong()
+                            .color(egui::Color32::from_rgb(72, 175, 95)),
+                    );
+                } else if self.dirty {
                     ui.label(
                         egui::RichText::new("Unsaved changes")
                             .italics()
