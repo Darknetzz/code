@@ -1569,8 +1569,26 @@ impl eframe::App for PathmanApp {
                             }
                         }
                     } else if i < self.entries.len() {
+                        let machine_for_cross = self.read_machine_slice_for_marks();
+                        let user_for_cross = self.read_user_slice_for_marks();
+                        let cross_keys_tab = match self.scope {
+                            Scope::User => {
+                                path_model::cross_origin_key_set(&machine_for_cross, &self.entries)
+                            }
+                            Scope::System => {
+                                path_model::cross_origin_key_set(&self.entries, &user_for_cross)
+                            }
+                            Scope::Effective => unreachable!(),
+                        };
+                        let within_counts_tab = path_model::duplicate_key_counts(&self.entries);
                         let prev = (0..i).rev().find(|&j| {
-                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                            let d = tab_row_is_duplicate(
+                                &self.entries,
+                                j,
+                                &cross_keys_tab,
+                                &within_counts_tab,
+                            );
+                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
                         });
                         if let Some(p) = prev {
                             self.entries.swap(i, p);
@@ -1582,9 +1600,23 @@ impl eframe::App for PathmanApp {
                     if self.scope == Scope::Effective {
                         let n = self.effective_segments.len();
                         if i < n {
+                            let (m_segs, u_segs) =
+                                path_model::split_origins(&self.effective_segments);
+                            let cross_keys_eff =
+                                path_model::cross_origin_key_set(&m_segs, &u_segs);
+                            let cnt_m = path_model::duplicate_key_counts(&m_segs);
+                            let cnt_u = path_model::duplicate_key_counts(&u_segs);
                             let next = (i + 1..n).find(|&j| {
+                                let d = effective_row_is_duplicate(
+                                    &self.effective_segments,
+                                    j,
+                                    &cross_keys_eff,
+                                    &cnt_m,
+                                    &cnt_u,
+                                );
                                 self.row_passes_duplicate_filter(
                                     self.effective_segments[j].1.as_str(),
+                                    d,
                                 )
                             });
                             if let Some(ni) = next {
@@ -1597,8 +1629,29 @@ impl eframe::App for PathmanApp {
                     } else {
                         let n = self.entries.len();
                         if i < n {
+                            let machine_for_cross = self.read_machine_slice_for_marks();
+                            let user_for_cross = self.read_user_slice_for_marks();
+                            let cross_keys_tab = match self.scope {
+                                Scope::User => path_model::cross_origin_key_set(
+                                    &machine_for_cross,
+                                    &self.entries,
+                                ),
+                                Scope::System => path_model::cross_origin_key_set(
+                                    &self.entries,
+                                    &user_for_cross,
+                                ),
+                                Scope::Effective => unreachable!(),
+                            };
+                            let within_counts_tab =
+                                path_model::duplicate_key_counts(&self.entries);
                             let next = (i + 1..n).find(|&j| {
-                                self.row_passes_duplicate_filter(self.entries[j].as_str())
+                                let d = tab_row_is_duplicate(
+                                    &self.entries,
+                                    j,
+                                    &cross_keys_tab,
+                                    &within_counts_tab,
+                                );
+                                self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
                             });
                             if let Some(ni) = next {
                                 self.entries.swap(i, ni);
