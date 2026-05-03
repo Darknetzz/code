@@ -12,6 +12,9 @@ pub struct AppConfig {
     /// Absolute or home-relative path to the shell file we manage (Unix user scope).
     #[serde(default)]
     pub user_shell_path: Option<String>,
+    /// When true, remove (X) deletes the row immediately without a confirmation dialog.
+    #[serde(default)]
+    pub skip_remove_confirmation: bool,
 }
 
 impl AppConfig {

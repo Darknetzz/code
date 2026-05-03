@@ -676,6 +676,32 @@ impl PathmanApp {
         }
     }
 
+    fn apply_remove_row(&mut self, i: usize) {
+        match self.scope {
+            Scope::Effective => {
+                if i < self.effective_segments.len() {
+                    self.effective_segments.remove(i);
+                    self.dirty = true;
+                }
+            }
+            Scope::User | Scope::System => {
+                if i < self.entries.len() {
+                    self.entries.remove(i);
+                    self.dirty = true;
+                }
+            }
+        }
+    }
+
+    /// Remove row immediately or open confirmation per [`AppConfig::skip_remove_confirmation`].
+    fn request_remove_row(&mut self, i: usize) {
+        if self.config.skip_remove_confirmation {
+            self.apply_remove_row(i);
+        } else {
+            self.confirm_remove_index = Some(i);
+        }
+    }
+
     fn apply_config_shell_path(&mut self) {
         let p = self.shell_path_edit.trim();
         if p.is_empty() {
@@ -831,6 +857,19 @@ impl eframe::App for PathmanApp {
                     self.toggle_missing_path_filter();
                 }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
+                let skip_rm = ui
+                    .checkbox(
+                        &mut self.config.skip_remove_confirmation,
+                        "Skip delete confirmation",
+                    )
+                    .on_hover_text(
+                        "When checked, the X button removes a row immediately (still requires Save to write to disk). Stored in pathman.toml.",
+                    );
+                if skip_rm.changed() {
+                    if let Err(e) = self.config.save() {
+                        self.set_status_err(format!("Could not save preference: {e:#}"));
+                    }
+                }
                 });
             });
             #[cfg(not(windows))]
@@ -988,20 +1027,7 @@ impl eframe::App for PathmanApp {
                         });
                     });
                 if remove_confirmed {
-                    match self.scope {
-                        Scope::Effective => {
-                            if i < self.effective_segments.len() {
-                                self.effective_segments.remove(i);
-                                self.dirty = true;
-                            }
-                        }
-                        Scope::User | Scope::System => {
-                            if i < self.entries.len() {
-                                self.entries.remove(i);
-                                self.dirty = true;
-                            }
-                        }
-                    }
+                    self.apply_remove_row(i);
                 }
                 if remove_confirmed || remove_cancel || !window_open {
                     self.confirm_remove_index = None;
@@ -1566,7 +1592,7 @@ impl eframe::App for PathmanApp {
                                         )
                                         .clicked()
                                         {
-                                            self.confirm_remove_index = Some(i);
+                                            self.request_remove_row(i);
                                         }
                                     });
 
@@ -1769,7 +1795,7 @@ impl eframe::App for PathmanApp {
                                         )
                                         .clicked()
                                         {
-                                            self.confirm_remove_index = Some(i);
+                                            self.request_remove_row(i);
                                         }
                                     });
 
