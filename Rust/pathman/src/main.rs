@@ -72,7 +72,7 @@ fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("pathman")
-            .with_inner_size([820.0, 600.0])
+            .with_inner_size([960.0, 680.0])
             .with_min_inner_size([640.0, 420.0]),
         ..Default::default()
     };
