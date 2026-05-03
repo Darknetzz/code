@@ -5,7 +5,9 @@ use eframe::egui::{ScrollArea, TextEdit};
 
 use crate::config::AppConfig;
 use crate::path_model::{self, PathOrigin};
-use crate::row_icons::{path_row_icon_button, PathRowIcon};
+use crate::row_icons::{
+    mix_srgb, path_add_toolbar_button, path_row_icon_button, AddToolbarIcon, PathRowIcon,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scope {
@@ -53,6 +55,14 @@ fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) 
             egui::Color32::from_rgb(165, 215, 145),
         ),
     }
+}
+
+/// Fill, accent, and label colors for “add to user / machine” toolbar buttons (matches row strip hues).
+fn origin_add_button_theme(origin: PathOrigin) -> (egui::Color32, egui::Color32, egui::Color32) {
+    let (strip_fill, accent) = effective_origin_style(origin);
+    let fill = mix_srgb(strip_fill, accent, 0.14);
+    let text = egui::Color32::from_rgb(248, 248, 252);
+    (fill, accent, text)
 }
 
 impl PathmanApp {
@@ -423,10 +433,20 @@ impl eframe::App for PathmanApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.scope == Scope::Effective {
-                ui.scope(|ui| {
-                    ui.style_mut().spacing.button_padding = egui::vec2(12.0, 6.0);
-                    ui.horizontal(|ui| {
-                    if ui.button("Add folder… (user)").clicked() {
+                let (fill_u, acc_u, txt_u) = origin_add_button_theme(PathOrigin::User);
+                let (fill_m, acc_m, txt_m) = origin_add_button_theme(PathOrigin::Machine);
+                ui.horizontal(|ui| {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add folder… (user)",
+                        AddToolbarIcon::Folder,
+                        fill_u,
+                        acc_u,
+                        txt_u,
+                        "Pick a folder to append to user PATH",
+                    )
+                    .clicked()
+                    {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             self.effective_segments.push((
                                 PathOrigin::User,
@@ -435,7 +455,17 @@ impl eframe::App for PathmanApp {
                             self.dirty = true;
                         }
                     }
-                    if ui.button("Add folder… (machine)").clicked() {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add folder… (machine)",
+                        AddToolbarIcon::Folder,
+                        fill_m,
+                        acc_m,
+                        txt_m,
+                        "Pick a folder to insert into machine PATH (before user entries)",
+                    )
+                    .clicked()
+                    {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             let pos = self
                                 .effective_segments
@@ -449,12 +479,32 @@ impl eframe::App for PathmanApp {
                             self.dirty = true;
                         }
                     }
-                    if ui.button("Add text row (user)").clicked() {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add text row (user)",
+                        AddToolbarIcon::TextRow,
+                        fill_u,
+                        acc_u,
+                        txt_u,
+                        "Append an empty row to user PATH",
+                    )
+                    .clicked()
+                    {
                         self.effective_segments
                             .push((PathOrigin::User, String::new()));
                         self.dirty = true;
                     }
-                    if ui.button("Add text row (machine)").clicked() {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add text row (machine)",
+                        AddToolbarIcon::TextRow,
+                        fill_m,
+                        acc_m,
+                        txt_m,
+                        "Insert an empty machine PATH row (before user entries)",
+                    )
+                    .clicked()
+                    {
                         let pos = self
                             .effective_segments
                             .iter()
@@ -464,23 +514,47 @@ impl eframe::App for PathmanApp {
                             .insert(pos, (PathOrigin::Machine, String::new()));
                         self.dirty = true;
                     }
-                    });
                 });
             } else {
-                ui.scope(|ui| {
-                    ui.style_mut().spacing.button_padding = egui::vec2(12.0, 6.0);
-                    ui.horizontal(|ui| {
-                    if ui.button("Add folder…").clicked() {
+                let (row_origin, hint_scope) = match self.scope {
+                    Scope::User => (PathOrigin::User, "user"),
+                    Scope::System => (PathOrigin::Machine, "machine (system)"),
+                    Scope::Effective => unreachable!(),
+                };
+                let (fill, acc, txt) = origin_add_button_theme(row_origin);
+                let tip_folder = format!("Pick a folder to append to {hint_scope} PATH");
+                let tip_row = format!("Append an empty row to {hint_scope} PATH");
+                ui.horizontal(|ui| {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add folder…",
+                        AddToolbarIcon::Folder,
+                        fill,
+                        acc,
+                        txt,
+                        &tip_folder,
+                    )
+                    .clicked()
+                    {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             self.entries.push(p.to_string_lossy().to_string());
                             self.dirty = true;
                         }
                     }
-                    if ui.button("Add text row").clicked() {
+                    if path_add_toolbar_button(
+                        ui,
+                        "Add text row",
+                        AddToolbarIcon::TextRow,
+                        fill,
+                        acc,
+                        txt,
+                        &tip_row,
+                    )
+                    .clicked()
+                    {
                         self.entries.push(String::new());
                         self.dirty = true;
                     }
-                    });
                 });
             }
 

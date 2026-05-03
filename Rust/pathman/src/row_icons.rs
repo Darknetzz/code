@@ -1,7 +1,135 @@
 //! Vector-drawn row action icons. Unicode glyphs are not reliable with egui's bundled fonts
 //! (missing glyph → “tofu” boxes), so we paint triangles and an × with epaint.
 
-use eframe::egui::{self, Sense, Stroke};
+use eframe::egui::{self, Sense, Stroke, TextStyle, TextWrapMode, WidgetText};
+
+pub(crate) fn mix_srgb(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    let t = t.clamp(0.0, 1.0);
+    egui::Color32::from_rgb(
+        ((a.r() as f32) * (1.0 - t) + (b.r() as f32) * t).round() as u8,
+        ((a.g() as f32) * (1.0 - t) + (b.g() as f32) * t).round() as u8,
+        ((a.b() as f32) * (1.0 - t) + (b.b() as f32) * t).round() as u8,
+    )
+}
+
+/// Folder / “add text” icons for the add-path toolbar (drawn, no font glyphs).
+#[derive(Clone, Copy)]
+pub enum AddToolbarIcon {
+    Folder,
+    TextRow,
+}
+
+fn paint_add_toolbar_icon(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    icon: AddToolbarIcon,
+    color: egui::Color32,
+    line_w: f32,
+) {
+    let stroke = Stroke::new(line_w, color);
+    let inner = rect.shrink(rect.width().min(rect.height()) * 0.14);
+    match icon {
+        AddToolbarIcon::Folder => {
+            let tab_w = inner.width() * 0.52;
+            let tab_h = inner.height() * 0.28;
+            let tab = egui::Rect::from_min_size(
+                inner.left_top() + egui::vec2(0.0, 0.0),
+                egui::vec2(tab_w, tab_h),
+            );
+            let r = 1.2_f32;
+            painter.rect_stroke(tab, r, stroke);
+            let body = egui::Rect::from_min_max(
+                egui::pos2(inner.left(), tab.bottom() - 0.5),
+                inner.right_bottom(),
+            );
+            painter.rect_stroke(body, r, stroke);
+        }
+        AddToolbarIcon::TextRow => {
+            let n = 3;
+            let gap = inner.height() * 0.2;
+            let line_h = ((inner.height() - gap * (n - 1) as f32) / n as f32).max(1.0);
+            let w_full = inner.width() * 0.92;
+            let w_short = inner.width() * 0.62;
+            for i in 0..n {
+                let y = inner.top() + i as f32 * (line_h + gap) + line_h * 0.5;
+                let w = if i == n - 1 { w_short } else { w_full };
+                let left = inner.left() + (inner.width() - w) * 0.5;
+                let right = left + w;
+                painter.line_segment(
+                    [egui::pos2(left, y), egui::pos2(right, y)],
+                    stroke,
+                );
+            }
+        }
+    }
+}
+
+/// Add-folder / add-text toolbar button with drawn icon and origin-colored chrome.
+pub fn path_add_toolbar_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    icon: AddToolbarIcon,
+    fill: egui::Color32,
+    accent: egui::Color32,
+    text_color: egui::Color32,
+    tooltip: &str,
+) -> egui::Response {
+    let pad_x = 10.0_f32;
+    let pad_y = 6.0_f32;
+    let gap = 8.0_f32;
+    let icon_side = 17.0_f32;
+    let min_h = ui.spacing().interact_size.y;
+
+    let galley = WidgetText::from(
+        egui::RichText::new(label)
+            .color(text_color)
+            .text_style(TextStyle::Button),
+    )
+    .into_galley(
+        ui,
+        Some(TextWrapMode::Extend),
+        f32::INFINITY,
+        TextStyle::Button,
+    );
+
+    let w = pad_x + icon_side + gap + galley.size().x + pad_x;
+    let h = (pad_y * 2.0 + galley.size().y)
+        .max(pad_y * 2.0 + icon_side)
+        .max(min_h);
+
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response.on_hover_text(tooltip);
+    }
+
+    let hover = response.hovered();
+    let bg = if hover {
+        mix_srgb(fill, accent, 0.18)
+    } else {
+        fill
+    };
+
+    let rounding = ui.style().visuals.widgets.inactive.rounding;
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, rounding, bg);
+    let stroke_color = mix_srgb(accent, egui::Color32::WHITE, if hover { 0.15 } else { 0.0 });
+    painter.rect_stroke(rect, rounding, Stroke::new(1.0, stroke_color));
+
+    let icon_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.left() + pad_x + icon_side * 0.5, rect.center().y),
+        egui::vec2(icon_side, icon_side),
+    );
+    let line_w = (ui.style().visuals.widgets.inactive.fg_stroke.width * 1.4).max(1.2);
+    paint_add_toolbar_icon(&painter, icon_rect, icon, accent, line_w);
+
+    let text_pos = egui::pos2(
+        rect.left() + pad_x + icon_side + gap,
+        rect.center().y - 0.5 * galley.size().y,
+    );
+    painter.galley(text_pos, galley, text_color);
+
+    response.on_hover_text(tooltip)
+}
 
 #[derive(Clone, Copy)]
 pub enum PathRowIcon {
