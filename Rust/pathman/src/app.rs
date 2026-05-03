@@ -43,6 +43,9 @@ pub struct PathmanApp {
     show_duplicate_tool: bool,
     /// List shows only rows matching the clicked mark (duplicate group or missing paths).
     duplicate_view_filter: Option<DuplicateViewFilter>,
+    /// Summary of edits vs on-disk PATH (`Changes…`).
+    show_change_summary: bool,
+    change_summary_text: String,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -243,6 +246,58 @@ fn tab_cross_keys_and_dup_counts(
     (cross_keys_tab, path_model::duplicate_key_counts(entries))
 }
 
+/// Multiset difference between saved vs pending entry lists (order ignored).
+fn multiset_path_diff(baseline: &[String], pending: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut delta: HashMap<String, i32> = HashMap::new();
+    for s in baseline {
+        *delta.entry(s.clone()).or_insert(0) += 1;
+    }
+    for s in pending {
+        *delta.entry(s.clone()).or_insert(0) -= 1;
+    }
+    let mut removed = Vec::new();
+    let mut added = Vec::new();
+    for (k, v) in delta {
+        if v > 0 {
+            for _ in 0..v {
+                removed.push(k.clone());
+            }
+        } else if v < 0 {
+            for _ in 0..(-v) {
+                added.push(k.clone());
+            }
+        }
+    }
+    removed.sort();
+    added.sort();
+    (removed, added)
+}
+
+fn format_path_store_diff(title: &str, baseline: &[String], pending: &[String]) -> String {
+    if baseline == pending {
+        return format!("{title}\n  (no changes)\n\n");
+    }
+    let (removed, added) = multiset_path_diff(baseline, pending);
+    if removed.is_empty() && added.is_empty() {
+        return format!("{title}\n  Order changed only (same paths).\n\n");
+    }
+    let mut out = format!("{title}\n");
+    if !removed.is_empty() {
+        out.push_str("  Removed when saving:\n");
+        for r in &removed {
+            out.push_str(&format!("    − {}\n", r));
+        }
+    }
+    if !added.is_empty() {
+        out.push_str("  Added when saving:\n");
+        for a in &added {
+            out.push_str(&format!("    + {}\n", a));
+        }
+    }
+    out.push('\n');
+    out
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -272,6 +327,8 @@ impl PathmanApp {
             show_shell_settings: false,
             show_duplicate_tool: false,
             duplicate_view_filter: None,
+            show_change_summary: false,
+            change_summary_text: String::new(),
         };
         app.reload_from_store();
         app
@@ -282,6 +339,7 @@ impl PathmanApp {
         self.show_confirm_dedupe = false;
         self.show_duplicate_tool = false;
         self.duplicate_view_filter = None;
+        self.show_change_summary = false;
         self.status_clear();
         let r = match self.scope {
             Scope::User => self.load_user(),
@@ -553,6 +611,71 @@ impl PathmanApp {
         }
     }
 
+    fn read_disk_user(&self) -> anyhow::Result<Vec<String>> {
+        #[cfg(windows)]
+        {
+            Ok(path_model::split(&crate::persist::read_user_path()?))
+        }
+        #[cfg(not(windows))]
+        {
+            crate::persist::read_user_entries(&self.config)
+        }
+    }
+
+    fn read_disk_machine(&self) -> anyhow::Result<Vec<String>> {
+        #[cfg(windows)]
+        {
+            Ok(path_model::split(&crate::persist::read_machine_path()?))
+        }
+        #[cfg(not(windows))]
+        {
+            crate::persist::read_system_entries()
+        }
+    }
+
+    /// Human-readable diff of the current editor state vs PATH read from disk (same shape as Save).
+    fn compute_change_summary(&self) -> String {
+        let inner = || -> anyhow::Result<String> {
+            let mut out = String::from(
+                "Compared to what is saved on disk right now (nothing is written until you click Save):\n\n",
+            );
+            match self.scope {
+                Scope::User => {
+                    let disk = path_model::dedupe_adjacent(&self.read_disk_user()?);
+                    let pending = path_model::dedupe_adjacent(&self.entries);
+                    out.push_str(&format_path_store_diff("User PATH", &disk, &pending));
+                }
+                Scope::System => {
+                    let disk = path_model::dedupe_adjacent(&self.read_disk_machine()?);
+                    let pending = path_model::dedupe_adjacent(&self.entries);
+                    out.push_str(&format_path_store_diff(
+                        "Machine (system) PATH",
+                        &disk,
+                        &pending,
+                    ));
+                }
+                Scope::Effective => {
+                    let dm = path_model::dedupe_adjacent(&self.read_disk_machine()?);
+                    let du = path_model::dedupe_adjacent(&self.read_disk_user()?);
+                    let mut segs = self.effective_segments.clone();
+                    path_model::dedupe_adjacent_tagged(&mut segs);
+                    let (pm, pu) = path_model::split_origins(&segs);
+                    out.push_str(&format_path_store_diff(
+                        "Machine (system) PATH",
+                        &dm,
+                        &pm,
+                    ));
+                    out.push_str(&format_path_store_diff("User PATH", &du, &pu));
+                }
+            }
+            Ok(out)
+        };
+        match inner() {
+            Ok(s) => s,
+            Err(e) => format!("Could not read PATH from disk to compare:\n{e:#}"),
+        }
+    }
+
     fn apply_config_shell_path(&mut self) {
         let p = self.shell_path_edit.trim();
         if p.is_empty() {
@@ -661,6 +784,10 @@ impl eframe::App for PathmanApp {
                             .italics()
                             .color(egui::Color32::from_rgb(255, 165, 70)),
                     );
+                }
+                if ui.button("Changes…").clicked() {
+                    self.change_summary_text = self.compute_change_summary();
+                    self.show_change_summary = true;
                 }
                 if ui.button("Dedupe").clicked() {
                     let n_drop = match self.scope {
@@ -785,6 +912,32 @@ impl eframe::App for PathmanApp {
         if confirm_save {
             self.show_confirm_system = false;
             self.save();
+        }
+
+        if self.show_change_summary {
+            egui::Window::new("Changes vs saved PATH")
+                .open(&mut self.show_change_summary)
+                .default_size([560.0, 440.0])
+                .show(ctx, |ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            "Entries marked − would be removed from the saved store when you save; + would be added. Order-only edits appear under “Order changed only”.",
+                        )
+                        .small()
+                        .weak(),
+                    );
+                    ui.add_space(6.0);
+                    ScrollArea::vertical()
+                        .max_height(ui.available_height().max(120.0))
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&self.change_summary_text).monospace(),
+                                )
+                                .wrap(),
+                            );
+                        });
+                });
         }
 
         // Remove row (after X): confirm
