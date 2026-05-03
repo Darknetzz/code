@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use eframe::egui;
-use eframe::egui::{ScrollArea, TextEdit};
+use eframe::egui::{ScrollArea, Sense, TextEdit};
 
 use crate::config::AppConfig;
 use crate::path_model::{self, PathOrigin};
@@ -40,6 +40,14 @@ pub struct PathmanApp {
     show_shell_settings: bool,
     /// System + user duplicate report (read from disk).
     show_duplicate_tool: bool,
+    /// List shows only rows matching the clicked mark (duplicate group or missing paths).
+    duplicate_view_filter: Option<DuplicateViewFilter>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum DuplicateViewFilter {
+    PathDuplicate { key: String, banner: String },
+    MissingPaths,
 }
 
 fn origin_badge_label(origin: PathOrigin) -> &'static str {
@@ -160,6 +168,18 @@ fn path_row_mark(
     ("   ".into(), egui::Color32::TRANSPARENT, None)
 }
 
+fn mark_tooltip_with_filter_hint(base: Option<String>, interactive: bool) -> Option<String> {
+    if !interactive {
+        return base;
+    }
+    let hint =
+        "Click mark to show only these rows (click again or “Show all rows” to clear).";
+    Some(match base {
+        Some(b) => format!("{b}\n\n{hint}"),
+        None => hint.to_string(),
+    })
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -188,6 +208,7 @@ impl PathmanApp {
             shell_path_edit,
             show_shell_settings: false,
             show_duplicate_tool: false,
+            duplicate_view_filter: None,
         };
         app.reload_from_store();
         app
@@ -197,6 +218,7 @@ impl PathmanApp {
         self.confirm_remove_index = None;
         self.show_confirm_dedupe = false;
         self.show_duplicate_tool = false;
+        self.duplicate_view_filter = None;
         self.status_clear();
         let r = match self.scope {
             Scope::User => self.load_user(),
@@ -247,6 +269,35 @@ impl PathmanApp {
         #[cfg(not(windows))]
         {
             crate::persist::read_user_entries(&self.config).unwrap_or_default()
+        }
+    }
+
+    fn row_passes_duplicate_filter(&self, path_str: &str) -> bool {
+        match &self.duplicate_view_filter {
+            None => true,
+            Some(DuplicateViewFilter::PathDuplicate { key, .. }) => {
+                let k = path_model::path_duplicate_key(path_str);
+                !k.is_empty() && k == *key
+            }
+            Some(DuplicateViewFilter::MissingPaths) => !path_model::entry_exists(path_str),
+        }
+    }
+
+    fn toggle_path_duplicate_filter(&mut self, key: String, banner: String) {
+        match &self.duplicate_view_filter {
+            Some(DuplicateViewFilter::PathDuplicate { key: k, .. }) if k == &key => {
+                self.duplicate_view_filter = None;
+            }
+            _ => {
+                self.duplicate_view_filter = Some(DuplicateViewFilter::PathDuplicate { key, banner });
+            }
+        }
+    }
+
+    fn toggle_missing_path_filter(&mut self) {
+        match self.duplicate_view_filter {
+            Some(DuplicateViewFilter::MissingPaths) => self.duplicate_view_filter = None,
+            _ => self.duplicate_view_filter = Some(DuplicateViewFilter::MissingPaths),
         }
     }
 
@@ -945,6 +996,35 @@ impl eframe::App for PathmanApp {
                 });
             }
 
+            if self.duplicate_view_filter.is_some() {
+                ui.horizontal(|ui| {
+                    match &self.duplicate_view_filter {
+                        Some(DuplicateViewFilter::PathDuplicate { banner, .. }) => {
+                            ui.label(
+                                egui::RichText::new(format!("Filtered — {banner}"))
+                                    .small()
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("(same PATH entry)").small().weak(),
+                            );
+                        }
+                        Some(DuplicateViewFilter::MissingPaths) => {
+                            ui.label(
+                                egui::RichText::new("Filtered — rows whose path is missing on disk")
+                                    .small()
+                                    .strong(),
+                            );
+                        }
+                        None => {}
+                    }
+                    if ui.small_button("Show all rows").clicked() {
+                        self.duplicate_view_filter = None;
+                    }
+                });
+                ui.add_space(4.0);
+            }
+
             let list_viewport_w = ui.available_width();
             ScrollArea::vertical()
                 .id_salt(if self.scope == Scope::Effective {
@@ -982,18 +1062,30 @@ impl eframe::App for PathmanApp {
 
                     let n_seg = self.effective_segments.len();
                     for i in 0..n_seg {
-                        let can_up = i > 0
-                            && self.effective_segments[i].0 == self.effective_segments[i - 1].0;
-                        let can_dn = i + 1 < n_seg
-                            && self.effective_segments[i].0 == self.effective_segments[i + 1].0;
+                        let row_path_clone = self.effective_segments[i].1.clone();
+                        let warn =
+                            self.warn_missing && !path_model::entry_exists(row_path_clone.as_str());
+                        if !self.row_passes_duplicate_filter(row_path_clone.as_str()) {
+                            continue;
+                        }
+
+                        let prev_vis = (0..i).rev().find(|&j| {
+                            self.row_passes_duplicate_filter(self.effective_segments[j].1.as_str())
+                        });
+                        let can_up = prev_vis.map_or(false, |p| {
+                            self.effective_segments[i].0 == self.effective_segments[p].0
+                        });
+                        let next_vis = (i + 1..n_seg).find(|&j| {
+                            self.row_passes_duplicate_filter(self.effective_segments[j].1.as_str())
+                        });
+                        let can_dn = next_vis.map_or(false, |n| {
+                            self.effective_segments[i].0 == self.effective_segments[n].0
+                        });
+
                         let origin = self.effective_segments[i].0;
-                        let expanded = path_model::expanded_path(self.effective_segments[i].1.as_str());
-                        let warn = self.warn_missing
-                            && !path_model::entry_exists(self.effective_segments[i].1.as_str());
-                        let key =
-                            path_model::path_duplicate_key(self.effective_segments[i].1.as_str());
-                        let cross =
-                            !key.is_empty() && cross_keys_eff.contains(&key);
+                        let expanded = path_model::expanded_path(row_path_clone.as_str());
+                        let key = path_model::path_duplicate_key(row_path_clone.as_str());
+                        let cross = !key.is_empty() && cross_keys_eff.contains(&key);
                         let within_n = match origin {
                             PathOrigin::Machine => *cnt_m.get(&key).unwrap_or(&1),
                             PathOrigin::User => *cnt_u.get(&key).unwrap_or(&1),
@@ -1004,6 +1096,8 @@ impl eframe::App for PathmanApp {
                             within_n,
                             PathMarkContext::Effective(origin),
                         );
+                        let mark_interactive = warn || cross || within_n > 1;
+                        let mark_tip = mark_tooltip_with_filter_hint(mark_tip, mark_interactive);
 
                         let (strip_fill, origin_color) = effective_origin_style(origin);
 
@@ -1014,17 +1108,31 @@ impl eframe::App for PathmanApp {
                             .show(ui, |ui| {
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
-                                        let mark_resp = ui.add_sized(
+                                        let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
                                             egui::Label::new(
-                                                egui::RichText::new(mark)
+                                                egui::RichText::new(&mark)
                                                     .small()
                                                     .monospace()
                                                     .color(mark_color),
-                                            ),
+                                            )
+                                            .sense(if mark_interactive {
+                                                Sense::click()
+                                            } else {
+                                                Sense::hover()
+                                            }),
                                         );
                                         if let Some(t) = mark_tip {
-                                            mark_resp.on_hover_text(t);
+                                            mark_resp = mark_resp.on_hover_text(t);
+                                        }
+                                        if mark_resp.clicked() && mark_interactive {
+                                            if warn {
+                                                self.toggle_missing_path_filter();
+                                            } else if !key.is_empty() && (cross || within_n > 1) {
+                                                let ban =
+                                                    truncate_path_confirm(row_path_clone.as_str(), 56);
+                                                self.toggle_path_duplicate_filter(key, ban);
+                                            }
                                         }
 
                                         ui.add_sized(
@@ -1144,14 +1252,32 @@ impl eframe::App for PathmanApp {
                         Scope::Effective => unreachable!(),
                     };
 
-                    for (i, e) in self.entries.iter_mut().enumerate() {
-                        let expanded = path_model::expanded_path(e.as_str());
-                        let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
-                        let key = path_model::path_duplicate_key(e.as_str());
+                    let n_entries = self.entries.len();
+                    for i in 0..n_entries {
+                        if !self.row_passes_duplicate_filter(self.entries[i].as_str()) {
+                            continue;
+                        }
+
+                        let prev_vis = (0..i).rev().find(|&j| {
+                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                        });
+                        let can_up = prev_vis.is_some();
+                        let next_vis = (i + 1..n_entries).find(|&j| {
+                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                        });
+                        let can_dn = next_vis.is_some();
+
+                        let expanded = path_model::expanded_path(self.entries[i].as_str());
+                        let warn =
+                            self.warn_missing && !path_model::entry_exists(self.entries[i].as_str());
+                        let key = path_model::path_duplicate_key(self.entries[i].as_str());
                         let cross = !key.is_empty() && cross_keys_tab.contains(&key);
                         let within_n = *within_counts_tab.get(&key).unwrap_or(&1);
                         let (mark, mark_color, mark_tip) =
                             path_row_mark(warn, cross, within_n, mark_ctx_tab);
+                        let mark_interactive = warn || cross || within_n > 1;
+                        let mark_tip =
+                            mark_tooltip_with_filter_hint(mark_tip, mark_interactive);
 
                         egui::Frame::none()
                             .fill(strip_fill)
@@ -1160,17 +1286,31 @@ impl eframe::App for PathmanApp {
                             .show(ui, |ui| {
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
-                                        let mark_resp = ui.add_sized(
+                                        let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
                                             egui::Label::new(
-                                                egui::RichText::new(mark)
+                                                egui::RichText::new(&mark)
                                                     .small()
                                                     .monospace()
                                                     .color(mark_color),
-                                            ),
+                                            )
+                                            .sense(if mark_interactive {
+                                                Sense::click()
+                                            } else {
+                                                Sense::hover()
+                                            }),
                                         );
                                         if let Some(t) = mark_tip {
-                                            mark_resp.on_hover_text(t);
+                                            mark_resp = mark_resp.on_hover_text(t);
+                                        }
+                                        if mark_resp.clicked() && mark_interactive {
+                                            if warn {
+                                                self.toggle_missing_path_filter();
+                                            } else if !key.is_empty() && (cross || within_n > 1) {
+                                                let ban =
+                                                    truncate_path_confirm(self.entries[i].as_str(), 56);
+                                                self.toggle_path_duplicate_filter(key, ban);
+                                            }
                                         }
 
                                         ui.add_sized(
@@ -1185,7 +1325,7 @@ impl eframe::App for PathmanApp {
 
                                         let te_resp = ui.add_sized(
                                             egui::vec2(text_column_w, btn_h),
-                                            TextEdit::singleline(e)
+                                            TextEdit::singleline(&mut self.entries[i])
                                                 .desired_width(text_column_w)
                                                 .clip_text(true)
                                                 .font(egui::TextStyle::Monospace)
@@ -1195,23 +1335,31 @@ impl eframe::App for PathmanApp {
                                             self.dirty = true;
                                         }
 
-                                        if path_row_icon_button(
-                                            ui,
-                                            [ICON_BTN, ICON_BTN],
-                                            PathRowIcon::MoveUp,
-                                            "Move up",
-                                        )
-                                        .clicked()
+                                        if ui
+                                            .add_enabled_ui(can_up, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveUp,
+                                                    "Move up",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
                                         {
                                             move_up = Some(i);
                                         }
-                                        if path_row_icon_button(
-                                            ui,
-                                            [ICON_BTN, ICON_BTN],
-                                            PathRowIcon::MoveDown,
-                                            "Move down",
-                                        )
-                                        .clicked()
+                                        if ui
+                                            .add_enabled_ui(can_dn, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveDown,
+                                                    "Move down",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
                                         {
                                             move_dn = Some(i);
                                         }
@@ -1227,7 +1375,7 @@ impl eframe::App for PathmanApp {
                                         }
                                     });
 
-                                    if expanded != *e {
+                                    if expanded != self.entries[i] {
                                         ui.horizontal(|ui| {
                                             ui.add_space(MARK_W + gap + ORIGIN_W + gap);
                                             ui.label(
@@ -1245,29 +1393,57 @@ impl eframe::App for PathmanApp {
 
                 if let Some(i) = move_up {
                     if self.scope == Scope::Effective {
-                        if i > 0
-                            && i < self.effective_segments.len()
-                            && self.effective_segments[i].0 == self.effective_segments[i - 1].0
-                        {
-                            self.effective_segments.swap(i, i - 1);
+                        let n = self.effective_segments.len();
+                        if i < n {
+                            let prev = (0..i).rev().find(|&j| {
+                                self.row_passes_duplicate_filter(
+                                    self.effective_segments[j].1.as_str(),
+                                )
+                            });
+                            if let Some(p) = prev {
+                                if self.effective_segments[i].0 == self.effective_segments[p].0 {
+                                    self.effective_segments.swap(i, p);
+                                    self.dirty = true;
+                                }
+                            }
+                        }
+                    } else if i < self.entries.len() {
+                        let prev = (0..i).rev().find(|&j| {
+                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                        });
+                        if let Some(p) = prev {
+                            self.entries.swap(i, p);
                             self.dirty = true;
                         }
-                    } else if i > 0 && i < self.entries.len() {
-                        self.entries.swap(i, i - 1);
-                        self.dirty = true;
                     }
                 }
                 if let Some(i) = move_dn {
                     if self.scope == Scope::Effective {
-                        if i + 1 < self.effective_segments.len()
-                            && self.effective_segments[i].0 == self.effective_segments[i + 1].0
-                        {
-                            self.effective_segments.swap(i, i + 1);
-                            self.dirty = true;
+                        let n = self.effective_segments.len();
+                        if i < n {
+                            let next = (i + 1..n).find(|&j| {
+                                self.row_passes_duplicate_filter(
+                                    self.effective_segments[j].1.as_str(),
+                                )
+                            });
+                            if let Some(ni) = next {
+                                if self.effective_segments[i].0 == self.effective_segments[ni].0 {
+                                    self.effective_segments.swap(i, ni);
+                                    self.dirty = true;
+                                }
+                            }
                         }
-                    } else if i + 1 < self.entries.len() {
-                        self.entries.swap(i, i + 1);
-                        self.dirty = true;
+                    } else {
+                        let n = self.entries.len();
+                        if i < n {
+                            let next = (i + 1..n).find(|&j| {
+                                self.row_passes_duplicate_filter(self.entries[j].as_str())
+                            });
+                            if let Some(ni) = next {
+                                self.entries.swap(i, ni);
+                                self.dirty = true;
+                            }
+                        }
                     }
                 }
             });
