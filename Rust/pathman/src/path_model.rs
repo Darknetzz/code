@@ -167,6 +167,42 @@ pub fn cross_origin_duplicate_paths(machine: &[String], user: &[String]) -> Vec<
     v
 }
 
+/// Keys (`path_duplicate_key`) present in both entry lists (system ∩ user).
+pub fn cross_origin_key_set(machine: &[String], user: &[String]) -> HashSet<String> {
+    let km = path_key_set(machine);
+    path_key_set(user)
+        .intersection(&km)
+        .cloned()
+        .collect()
+}
+
+fn path_key_set(entries: &[String]) -> HashSet<String> {
+    entries
+        .iter()
+        .filter_map(|s| {
+            let k = path_duplicate_key(s);
+            if k.is_empty() {
+                None
+            } else {
+                Some(k)
+            }
+        })
+        .collect()
+}
+
+/// Count of each duplicate key within one flat list (trimmed, keyed like [`path_duplicate_key`]).
+pub fn duplicate_key_counts(entries: &[String]) -> HashMap<String, usize> {
+    let mut m = HashMap::new();
+    for s in entries {
+        let k = path_duplicate_key(s);
+        if k.is_empty() {
+            continue;
+        }
+        *m.entry(k).or_insert(0) += 1;
+    }
+    m
+}
+
 /// Paths that occur more than once in a single store `(representative, occurrence_count)`, sorted.
 pub fn repeated_within_scope(entries: &[String]) -> Vec<(String, usize)> {
     let mut count: HashMap<String, usize> = HashMap::new();
@@ -313,8 +349,11 @@ mod tests {
         let m = vec!["/sys/a".into(), "/shared".into()];
         let u = vec!["/shared".into(), "/u/b".into()];
         assert_eq!(cross_origin_duplicate_paths(&m, &u), vec!["/shared"]);
+        let keys = cross_origin_key_set(&m, &u);
+        assert!(keys.contains(&path_duplicate_key("/shared")));
 
         let dup = vec!["/a".into(), "/b".into(), "/a".into()];
         assert_eq!(repeated_within_scope(&dup), vec![("/a".into(), 2)]);
+        assert_eq!(duplicate_key_counts(&dup).get(&path_duplicate_key("/a")), Some(&2));
     }
 }

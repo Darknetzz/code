@@ -80,6 +80,86 @@ fn truncate_path_confirm(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// Row mark column: `[!]` missing, `[+]` also in the other store, `[n]` repeated in this section.
+#[derive(Clone, Copy)]
+enum PathMarkContext {
+    SingleUser,
+    SingleSystem,
+    Effective(PathOrigin),
+}
+
+fn path_row_mark(
+    warn: bool,
+    cross_origin: bool,
+    within_n: usize,
+    ctx: PathMarkContext,
+) -> (String, egui::Color32, Option<String>) {
+    const WARN_C: egui::Color32 = egui::Color32::from_rgb(220, 180, 60);
+    const CROSS_C: egui::Color32 = egui::Color32::from_rgb(190, 150, 255);
+    const WITHIN_C: egui::Color32 = egui::Color32::from_rgb(130, 200, 255);
+
+    if warn {
+        return (
+            "[!]".into(),
+            WARN_C,
+            Some("Path not found or not a directory (after expanding env vars)".into()),
+        );
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    if cross_origin {
+        let line = match ctx {
+            PathMarkContext::SingleUser => {
+                "Also in system (machine) PATH — same path in both stores.".to_string()
+            }
+            PathMarkContext::SingleSystem => {
+                "Also in user PATH — same path in both stores.".to_string()
+            }
+            PathMarkContext::Effective(PathOrigin::Machine) => {
+                "Also in the user section — same path in both stores.".to_string()
+            }
+            PathMarkContext::Effective(PathOrigin::User) => {
+                "Also in the machine (system) section — same path in both stores.".to_string()
+            }
+        };
+        lines.push(line);
+    }
+    if within_n > 1 {
+        let line = match ctx {
+            PathMarkContext::SingleUser | PathMarkContext::SingleSystem => {
+                format!("Same path appears {within_n} times in this list.")
+            }
+            PathMarkContext::Effective(PathOrigin::Machine) => {
+                format!("Same path appears {within_n} times in machine (system) rows.")
+            }
+            PathMarkContext::Effective(PathOrigin::User) => {
+                format!("Same path appears {within_n} times in user rows.")
+            }
+        };
+        lines.push(line);
+    }
+
+    let tip = if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    };
+
+    if cross_origin {
+        return ("[+]".into(), CROSS_C, tip);
+    }
+    if within_n > 1 {
+        let label = if within_n <= 9 {
+            format!("[{within_n}]")
+        } else {
+            "[9+]".into()
+        };
+        return (label, WITHIN_C, tip);
+    }
+
+    ("   ".into(), egui::Color32::TRANSPARENT, None)
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -143,6 +223,30 @@ impl PathmanApp {
                 crate::persist::read_system_entries()?,
                 crate::persist::read_user_entries(&self.config)?,
             ))
+        }
+    }
+
+    fn read_machine_slice_for_marks(&self) -> Vec<String> {
+        #[cfg(windows)]
+        {
+            path_model::split(
+                &crate::persist::read_machine_path().unwrap_or_default(),
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            crate::persist::read_system_entries().unwrap_or_default()
+        }
+    }
+
+    fn read_user_slice_for_marks(&self) -> Vec<String> {
+        #[cfg(windows)]
+        {
+            path_model::split(&crate::persist::read_user_path().unwrap_or_default())
+        }
+        #[cfg(not(windows))]
+        {
+            crate::persist::read_user_entries(&self.config).unwrap_or_default()
         }
     }
 
@@ -861,7 +965,7 @@ impl eframe::App for PathmanApp {
                 let mut move_dn: Option<usize> = None;
                 // Row action icons: square hit targets (avoid wide short rects).
                 const ICON_BTN: f32 = 26.0;
-                const MARK_W: f32 = 28.0;
+                const MARK_W: f32 = 34.0;
                 const ORIGIN_W: f32 = 56.0;
                 let btn_h = ui.spacing().interact_size.y.max(ICON_BTN);
                 let gap = ui.spacing().item_spacing.x;
@@ -870,6 +974,11 @@ impl eframe::App for PathmanApp {
                     // [mark][origin][text][^][v][X] → 6 widgets, 5 gaps.
                     let row_reserve = MARK_W + ORIGIN_W + 3.0 * ICON_BTN + 5.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
+
+                    let (m_segs, u_segs) = path_model::split_origins(&self.effective_segments);
+                    let cross_keys_eff = path_model::cross_origin_key_set(&m_segs, &u_segs);
+                    let cnt_m = path_model::duplicate_key_counts(&m_segs);
+                    let cnt_u = path_model::duplicate_key_counts(&u_segs);
 
                     let n_seg = self.effective_segments.len();
                     for i in 0..n_seg {
@@ -881,12 +990,20 @@ impl eframe::App for PathmanApp {
                         let expanded = path_model::expanded_path(self.effective_segments[i].1.as_str());
                         let warn = self.warn_missing
                             && !path_model::entry_exists(self.effective_segments[i].1.as_str());
-                        let mark = if warn { "[!]" } else { "   " };
-                        let mark_color = if warn {
-                            egui::Color32::from_rgb(220, 180, 60)
-                        } else {
-                            egui::Color32::TRANSPARENT
+                        let key =
+                            path_model::path_duplicate_key(self.effective_segments[i].1.as_str());
+                        let cross =
+                            !key.is_empty() && cross_keys_eff.contains(&key);
+                        let within_n = match origin {
+                            PathOrigin::Machine => *cnt_m.get(&key).unwrap_or(&1),
+                            PathOrigin::User => *cnt_u.get(&key).unwrap_or(&1),
                         };
+                        let (mark, mark_color, mark_tip) = path_row_mark(
+                            warn,
+                            cross,
+                            within_n,
+                            PathMarkContext::Effective(origin),
+                        );
 
                         let (strip_fill, origin_color) = effective_origin_style(origin);
 
@@ -906,10 +1023,8 @@ impl eframe::App for PathmanApp {
                                                     .color(mark_color),
                                             ),
                                         );
-                                        if warn {
-                                            mark_resp.on_hover_text(
-                                                "Path not found or not a directory (after expanding env vars)",
-                                            );
+                                        if let Some(t) = mark_tip {
+                                            mark_resp.on_hover_text(t);
                                         }
 
                                         ui.add_sized(
@@ -1011,15 +1126,32 @@ impl eframe::App for PathmanApp {
                     };
                     let (strip_fill, origin_color) = effective_origin_style(row_origin);
 
+                    let machine_for_cross = self.read_machine_slice_for_marks();
+                    let user_for_cross = self.read_user_slice_for_marks();
+                    let cross_keys_tab = match self.scope {
+                        Scope::User => {
+                            path_model::cross_origin_key_set(&machine_for_cross, &self.entries)
+                        }
+                        Scope::System => {
+                            path_model::cross_origin_key_set(&self.entries, &user_for_cross)
+                        }
+                        Scope::Effective => unreachable!(),
+                    };
+                    let within_counts_tab = path_model::duplicate_key_counts(&self.entries);
+                    let mark_ctx_tab = match self.scope {
+                        Scope::User => PathMarkContext::SingleUser,
+                        Scope::System => PathMarkContext::SingleSystem,
+                        Scope::Effective => unreachable!(),
+                    };
+
                     for (i, e) in self.entries.iter_mut().enumerate() {
                         let expanded = path_model::expanded_path(e.as_str());
                         let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
-                        let mark = if warn { "[!]" } else { "   " };
-                        let mark_color = if warn {
-                            egui::Color32::from_rgb(220, 180, 60)
-                        } else {
-                            egui::Color32::TRANSPARENT
-                        };
+                        let key = path_model::path_duplicate_key(e.as_str());
+                        let cross = !key.is_empty() && cross_keys_tab.contains(&key);
+                        let within_n = *within_counts_tab.get(&key).unwrap_or(&1);
+                        let (mark, mark_color, mark_tip) =
+                            path_row_mark(warn, cross, within_n, mark_ctx_tab);
 
                         egui::Frame::none()
                             .fill(strip_fill)
@@ -1037,10 +1169,8 @@ impl eframe::App for PathmanApp {
                                                     .color(mark_color),
                                             ),
                                         );
-                                        if warn {
-                                            mark_resp.on_hover_text(
-                                                "Path not found or not a directory (after expanding env vars)",
-                                            );
+                                        if let Some(t) = mark_tip {
+                                            mark_resp.on_hover_text(t);
                                         }
 
                                         ui.add_sized(
