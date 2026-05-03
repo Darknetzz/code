@@ -656,7 +656,11 @@ impl eframe::App for PathmanApp {
                     self.save();
                 }
                 if self.dirty {
-                    ui.label(egui::RichText::new("Unsaved changes").italics());
+                    ui.label(
+                        egui::RichText::new("Unsaved changes")
+                            .italics()
+                            .color(egui::Color32::from_rgb(255, 165, 70)),
+                    );
                 }
                 if ui.button("Dedupe").clicked() {
                     let n_drop = match self.scope {
