@@ -43,6 +43,8 @@ pub struct PathmanApp {
     show_duplicate_tool: bool,
     /// List shows only rows matching the clicked mark (duplicate group or missing paths).
     duplicate_view_filter: Option<DuplicateViewFilter>,
+    /// Substring filter for the PATH entry list (case-insensitive; matches raw or expanded path).
+    list_search: String,
     /// Summary of edits vs on-disk PATH (`Changes…`).
     show_change_summary: bool,
     change_summary_text: String,
@@ -331,6 +333,7 @@ impl PathmanApp {
             show_shell_settings: false,
             show_duplicate_tool: false,
             duplicate_view_filter: None,
+            list_search: String::new(),
             show_change_summary: false,
             change_summary_text: String::new(),
             pending_saved_feedback: false,
@@ -345,6 +348,7 @@ impl PathmanApp {
         self.show_confirm_dedupe = false;
         self.show_duplicate_tool = false;
         self.duplicate_view_filter = None;
+        self.list_search.clear();
         self.show_change_summary = false;
         self.status_clear();
         let r = match self.scope {
@@ -409,6 +413,26 @@ impl PathmanApp {
             }
             Some(DuplicateViewFilter::MissingPaths) => !path_model::entry_exists(path_str),
         }
+    }
+
+    fn entry_matches_list_search(&self, raw_path: &str) -> bool {
+        let q = self.list_search.trim();
+        if q.is_empty() {
+            return true;
+        }
+        let ql = q.to_lowercase();
+        if raw_path.to_lowercase().contains(&ql) {
+            return true;
+        }
+        path_model::expanded_path(raw_path)
+            .to_lowercase()
+            .contains(&ql)
+    }
+
+    /// Row is shown in the list: duplicate/missing filters and search box.
+    fn row_visible_in_path_list(&self, path_str: &str, is_marked_duplicate: bool) -> bool {
+        self.row_passes_duplicate_filter(path_str, is_marked_duplicate)
+            && self.entry_matches_list_search(path_str)
     }
 
     fn toggle_path_duplicate_filter(&mut self, key: String, banner: String) {
@@ -1361,6 +1385,22 @@ impl eframe::App for PathmanApp {
                 });
             }
 
+            ui.horizontal(|ui| {
+                ui.label("Search:");
+                ui.add(
+                    TextEdit::singleline(&mut self.list_search)
+                        .desired_width(280.0)
+                        .hint_text("Filter entries…"),
+                )
+                .on_hover_text(
+                    "Case-insensitive substring; matches the row text or expanded path (%VAR%, ~, …).",
+                );
+                if !self.list_search.is_empty() && ui.small_button("Clear").clicked() {
+                    self.list_search.clear();
+                }
+            });
+            ui.add_space(4.0);
+
             if self.duplicate_view_filter.is_some() {
                 ui.horizontal(|ui| {
                     match &self.duplicate_view_filter {
@@ -1394,6 +1434,7 @@ impl eframe::App for PathmanApp {
                     }
                     if ui.small_button("Show all rows").clicked() {
                         self.duplicate_view_filter = None;
+                        self.list_search.clear();
                     }
                 });
                 ui.add_space(4.0);
@@ -1443,7 +1484,7 @@ impl eframe::App for PathmanApp {
                             &cnt_u,
                         );
                         if !self
-                            .row_passes_duplicate_filter(row_path_clone.as_str(), is_dup)
+                            .row_visible_in_path_list(row_path_clone.as_str(), is_dup)
                         {
                             continue;
                         }
@@ -1458,7 +1499,7 @@ impl eframe::App for PathmanApp {
                                 &cnt_m,
                                 &cnt_u,
                             );
-                            self.row_passes_duplicate_filter(
+                            self.row_visible_in_path_list(
                                 self.effective_segments[j].1.as_str(),
                                 d,
                             )
@@ -1474,7 +1515,7 @@ impl eframe::App for PathmanApp {
                                 &cnt_m,
                                 &cnt_u,
                             );
-                            self.row_passes_duplicate_filter(
+                            self.row_visible_in_path_list(
                                 self.effective_segments[j].1.as_str(),
                                 d,
                             )
@@ -1678,7 +1719,7 @@ impl eframe::App for PathmanApp {
                             &cross_keys_tab,
                             &within_counts_tab,
                         );
-                        if !self.row_passes_duplicate_filter(self.entries[i].as_str(), is_dup) {
+                        if !self.row_visible_in_path_list(self.entries[i].as_str(), is_dup) {
                             continue;
                         }
 
@@ -1689,7 +1730,7 @@ impl eframe::App for PathmanApp {
                                 &cross_keys_tab,
                                 &within_counts_tab,
                             );
-                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
+                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
                         });
                         let can_up = prev_vis.is_some();
                         let next_vis = (i + 1..n_entries).find(|&j| {
@@ -1699,7 +1740,7 @@ impl eframe::App for PathmanApp {
                                 &cross_keys_tab,
                                 &within_counts_tab,
                             );
-                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
+                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
                         });
                         let can_dn = next_vis.is_some();
 
@@ -1861,7 +1902,7 @@ impl eframe::App for PathmanApp {
                                     &cnt_m,
                                     &cnt_u,
                                 );
-                                self.row_passes_duplicate_filter(
+                                self.row_visible_in_path_list(
                                     self.effective_segments[j].1.as_str(),
                                     d,
                                 )
@@ -1889,7 +1930,7 @@ impl eframe::App for PathmanApp {
                                 &cross_keys_tab,
                                 &within_counts_tab,
                             );
-                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
+                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
                         });
                         if let Some(p) = prev {
                             self.entries.swap(i, p);
@@ -1911,7 +1952,7 @@ impl eframe::App for PathmanApp {
                                     &cnt_m,
                                     &cnt_u,
                                 );
-                                self.row_passes_duplicate_filter(
+                                self.row_visible_in_path_list(
                                     self.effective_segments[j].1.as_str(),
                                     d,
                                 )
@@ -1941,7 +1982,7 @@ impl eframe::App for PathmanApp {
                                     &cross_keys_tab,
                                     &within_counts_tab,
                                 );
-                                self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
+                                self.row_visible_in_path_list(self.entries[j].as_str(), d)
                             });
                             if let Some(ni) = next {
                                 self.entries.swap(i, ni);
