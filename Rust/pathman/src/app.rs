@@ -301,6 +301,25 @@ impl PathmanApp {
         }
     }
 
+    /// After filtering by duplicate PATH key from User or System tab, show the merged list.
+    fn switch_to_effective_for_path_dup_filter(&mut self) {
+        if !matches!(
+            &self.duplicate_view_filter,
+            Some(DuplicateViewFilter::PathDuplicate { .. })
+        ) {
+            return;
+        }
+        if !matches!(self.scope, Scope::User | Scope::System) {
+            return;
+        }
+        let prev = self.scope;
+        self.scope = Scope::Effective;
+        if let Err(e) = self.load_effective() {
+            self.set_status_err(format!("Could not load Effective view: {e:#}"));
+            self.scope = prev;
+        }
+    }
+
     fn load_user(&mut self) -> anyhow::Result<()> {
         #[cfg(windows)]
         {
@@ -1310,6 +1329,7 @@ impl eframe::App for PathmanApp {
                                                 let ban =
                                                     truncate_path_confirm(self.entries[i].as_str(), 56);
                                                 self.toggle_path_duplicate_filter(key, ban);
+                                                self.switch_to_effective_for_path_dup_filter();
                                             }
                                         }
 
