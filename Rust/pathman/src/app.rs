@@ -718,7 +718,6 @@ impl eframe::App for PathmanApp {
                 ui.set_min_width(scroll_w);
                 ui.set_max_width(scroll_w);
 
-                let mut remove_at: Option<usize> = None;
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
                 // Row action icons: square hit targets (avoid wide short rects).
@@ -841,7 +840,7 @@ impl eframe::App for PathmanApp {
                                         )
                                         .clicked()
                                         {
-                                            remove_at = Some(i);
+                                            self.confirm_remove_index = Some(i);
                                         }
                                     });
 
@@ -955,7 +954,7 @@ impl eframe::App for PathmanApp {
                                         )
                                         .clicked()
                                         {
-                                            remove_at = Some(i);
+                                            self.confirm_remove_index = Some(i);
                                         }
                                     });
 
@@ -975,17 +974,6 @@ impl eframe::App for PathmanApp {
                     }
                 }
 
-                if let Some(i) = remove_at {
-                    if self.scope == Scope::Effective {
-                        if i < self.effective_segments.len() {
-                            self.effective_segments.remove(i);
-                            self.dirty = true;
-                        }
-                    } else if i < self.entries.len() {
-                        self.entries.remove(i);
-                        self.dirty = true;
-                    }
-                }
                 if let Some(i) = move_up {
                     if self.scope == Scope::Effective {
                         if i > 0
