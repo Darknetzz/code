@@ -38,6 +38,8 @@ pub struct PathmanApp {
     /// Unix: show shell file path editor
     shell_path_edit: String,
     show_shell_settings: bool,
+    /// System + user duplicate report (read from disk).
+    show_duplicate_tool: bool,
 }
 
 fn origin_badge_label(origin: PathOrigin) -> &'static str {
@@ -105,6 +107,7 @@ impl PathmanApp {
             warn_missing: true,
             shell_path_edit,
             show_shell_settings: false,
+            show_duplicate_tool: false,
         };
         app.reload_from_store();
         app
@@ -113,6 +116,7 @@ impl PathmanApp {
     fn reload_from_store(&mut self) {
         self.confirm_remove_index = None;
         self.show_confirm_dedupe = false;
+        self.show_duplicate_tool = false;
         self.status_clear();
         let r = match self.scope {
             Scope::User => self.load_user(),
@@ -121,6 +125,24 @@ impl PathmanApp {
         };
         if let Err(e) = r {
             self.set_status_err(format!("Load failed: {e:#}"));
+        }
+    }
+
+    /// Fresh machine + user PATH entries from disk (for duplicate report).
+    fn read_stores_for_duplicate_report(&self) -> anyhow::Result<(Vec<String>, Vec<String>)> {
+        #[cfg(windows)]
+        {
+            Ok((
+                path_model::split(&crate::persist::read_machine_path()?),
+                path_model::split(&crate::persist::read_user_path()?),
+            ))
+        }
+        #[cfg(not(windows))]
+        {
+            Ok((
+                crate::persist::read_system_entries()?,
+                crate::persist::read_user_entries(&self.config)?,
+            ))
         }
     }
 
@@ -369,6 +391,9 @@ impl eframe::App for PathmanApp {
                         self.show_confirm_dedupe = true;
                     }
                 }
+                if ui.button("Duplicates…").clicked() {
+                    self.show_duplicate_tool = true;
+                }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
                 });
             });
@@ -572,6 +597,120 @@ impl eframe::App for PathmanApp {
             }
             if run_dedupe || dedupe_cancel || !window_open {
                 self.show_confirm_dedupe = false;
+            }
+        }
+
+        if self.show_duplicate_tool {
+            let mut open = true;
+            egui::Window::new("PATH duplicates")
+                .default_width(520.0)
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            "Compares system (machine) PATH vs user PATH from disk. Switch tab or save first if you expect edits here to match.",
+                        )
+                        .small()
+                        .weak(),
+                    );
+                    #[cfg(windows)]
+                    ui.label(
+                        egui::RichText::new("Path comparison ignores ASCII case on Windows.")
+                            .small()
+                            .weak(),
+                    );
+                    ui.add_space(6.0);
+                    match self.read_stores_for_duplicate_report() {
+                        Ok((m, u)) => {
+                            let cross = path_model::cross_origin_duplicate_paths(&m, &u);
+                            let rep_m = path_model::repeated_within_scope(&m);
+                            let rep_u = path_model::repeated_within_scope(&u);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "System store: {} entries · User store: {} entries",
+                                    m.len(),
+                                    u.len()
+                                ))
+                                .small(),
+                            );
+                            ui.add_space(6.0);
+                            egui::ScrollArea::vertical()
+                                .max_height(380.0)
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new("In both system and user PATH").strong(),
+                                    );
+                                    if cross.is_empty() {
+                                        ui.label(
+                                            egui::RichText::new(
+                                                "None — no entry appears in both stores.",
+                                            )
+                                            .small()
+                                            .weak(),
+                                        );
+                                    } else {
+                                        ui.label(egui::RichText::new(format!(
+                                            "{} path(s) appear in both stores (duplicate configuration; you can remove one side after editing).",
+                                            cross.len()
+                                        )).small().weak());
+                                        ui.add_space(4.0);
+                                        for p in &cross {
+                                            ui.label(egui::RichText::new(p).small().monospace());
+                                        }
+                                    }
+                                    ui.add_space(10.0);
+                                    ui.label(
+                                        egui::RichText::new("Repeated within system PATH only")
+                                            .strong(),
+                                    );
+                                    if rep_m.is_empty() {
+                                        ui.label(
+                                            egui::RichText::new("None.")
+                                                .small()
+                                                .weak(),
+                                        );
+                                    } else {
+                                        for (p, c) in &rep_m {
+                                            ui.label(
+                                                egui::RichText::new(format!("×{c}  {p}"))
+                                                    .small()
+                                                    .monospace(),
+                                            );
+                                        }
+                                    }
+                                    ui.add_space(10.0);
+                                    ui.label(
+                                        egui::RichText::new("Repeated within user PATH only")
+                                            .strong(),
+                                    );
+                                    if rep_u.is_empty() {
+                                        ui.label(
+                                            egui::RichText::new("None.")
+                                                .small()
+                                                .weak(),
+                                        );
+                                    } else {
+                                        for (p, c) in &rep_u {
+                                            ui.label(
+                                                egui::RichText::new(format!("×{c}  {p}"))
+                                                    .small()
+                                                    .monospace(),
+                                            );
+                                        }
+                                    }
+                                });
+                        }
+                        Err(e) => {
+                            ui.label(
+                                egui::RichText::new(format!("Could not read PATH stores: {e:#}"))
+                                    .color(egui::Color32::from_rgb(255, 140, 140)),
+                            );
+                        }
+                    }
+                });
+            if !open {
+                self.show_duplicate_tool = false;
             }
         }
 

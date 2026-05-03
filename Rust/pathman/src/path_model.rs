@@ -1,5 +1,7 @@
 //! Split/join PATH strings, normalize, dedupe.
 
+use std::collections::{HashMap, HashSet};
+
 #[cfg(windows)]
 const SEP: char = ';';
 #[cfg(not(windows))]
@@ -116,6 +118,80 @@ pub fn adjacent_dedupe_drop_count_tagged(v: &[(PathOrigin, String)]) -> usize {
     before.saturating_sub(t.len())
 }
 
+/// Key for duplicate detection: trimmed; on Windows, ASCII case-fold (paths are case-insensitive).
+pub fn path_duplicate_key(s: &str) -> String {
+    let t = s.trim();
+    if t.is_empty() {
+        return String::new();
+    }
+    #[cfg(windows)]
+    {
+        t.to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        t.to_string()
+    }
+}
+
+/// Sorted paths that appear in **both** machine (system) and user PATH strings (same logical path).
+pub fn cross_origin_duplicate_paths(machine: &[String], user: &[String]) -> Vec<String> {
+    let mut display_for_key: HashMap<String, String> = HashMap::new();
+    for s in machine {
+        let t = s.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let k = path_duplicate_key(t);
+        if k.is_empty() {
+            continue;
+        }
+        display_for_key.entry(k).or_insert_with(|| t.to_string());
+    }
+    let machine_keys: HashSet<String> = display_for_key.keys().cloned().collect();
+    let mut seen_out: HashSet<String> = HashSet::new();
+    for s in user {
+        let t = s.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let k = path_duplicate_key(t);
+        if machine_keys.contains(&k) {
+            if let Some(d) = display_for_key.get(&k) {
+                seen_out.insert(d.clone());
+            }
+        }
+    }
+    let mut v: Vec<String> = seen_out.into_iter().collect();
+    v.sort();
+    v
+}
+
+/// Paths that occur more than once in a single store `(representative, occurrence_count)`, sorted.
+pub fn repeated_within_scope(entries: &[String]) -> Vec<(String, usize)> {
+    let mut count: HashMap<String, usize> = HashMap::new();
+    let mut display: HashMap<String, String> = HashMap::new();
+    for s in entries {
+        let t = s.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let k = path_duplicate_key(t);
+        if k.is_empty() {
+            continue;
+        }
+        *count.entry(k.clone()).or_insert(0) += 1;
+        display.entry(k).or_insert_with(|| t.to_string());
+    }
+    let mut v: Vec<(String, usize)> = count
+        .into_iter()
+        .filter(|(_, c)| *c > 1)
+        .map(|(k, c)| (display.get(&k).cloned().unwrap_or_default(), c))
+        .collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v
+}
+
 /// Expand `%VAR%` (Windows) or shell-style segments (Unix) for checks and display.
 pub fn expanded_path(raw: &str) -> String {
     #[cfg(windows)]
@@ -230,5 +306,15 @@ mod tests {
         let (m2, u2) = split_origins(&seg);
         assert_eq!(m2, m);
         assert_eq!(u2, u);
+    }
+
+    #[test]
+    fn cross_origin_and_repeated() {
+        let m = vec!["/sys/a".into(), "/shared".into()];
+        let u = vec!["/shared".into(), "/u/b".into()];
+        assert_eq!(cross_origin_duplicate_paths(&m, &u), vec!["/shared"]);
+
+        let dup = vec!["/a".into(), "/b".into(), "/a".into()];
+        assert_eq!(repeated_within_scope(&dup), vec![("/a".into(), 2)]);
     }
 }
