@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use eframe::egui;
@@ -48,6 +49,8 @@ pub struct PathmanApp {
 enum DuplicateViewFilter {
     PathDuplicate { key: String, banner: String },
     MissingPaths,
+    /// Rows that show a duplicate mark: cross-store and/or repeated within the same store.
+    OnlyDuplicates,
 }
 
 fn origin_badge_label(origin: PathOrigin) -> &'static str {
@@ -180,6 +183,41 @@ fn mark_tooltip_with_filter_hint(base: Option<String>, interactive: bool) -> Opt
     })
 }
 
+fn effective_row_is_duplicate(
+    segments: &[(PathOrigin, String)],
+    i: usize,
+    cross_keys: &HashSet<String>,
+    cnt_m: &HashMap<String, usize>,
+    cnt_u: &HashMap<String, usize>,
+) -> bool {
+    let path_str = &segments[i].1;
+    let key = path_model::path_duplicate_key(path_str);
+    if key.is_empty() {
+        return false;
+    }
+    let cross = cross_keys.contains(&key);
+    let within_n = match segments[i].0 {
+        PathOrigin::Machine => *cnt_m.get(&key).unwrap_or(&1),
+        PathOrigin::User => *cnt_u.get(&key).unwrap_or(&1),
+    };
+    cross || within_n > 1
+}
+
+fn tab_row_is_duplicate(
+    entries: &[String],
+    i: usize,
+    cross_keys_tab: &HashSet<String>,
+    within_counts_tab: &HashMap<String, usize>,
+) -> bool {
+    let key = path_model::path_duplicate_key(&entries[i]);
+    if key.is_empty() {
+        return false;
+    }
+    let cross = cross_keys_tab.contains(&key);
+    let within_n = *within_counts_tab.get(&key).unwrap_or(&1);
+    cross || within_n > 1
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -272,9 +310,10 @@ impl PathmanApp {
         }
     }
 
-    fn row_passes_duplicate_filter(&self, path_str: &str) -> bool {
+    fn row_passes_duplicate_filter(&self, path_str: &str, is_marked_duplicate: bool) -> bool {
         match &self.duplicate_view_filter {
             None => true,
+            Some(DuplicateViewFilter::OnlyDuplicates) => is_marked_duplicate,
             Some(DuplicateViewFilter::PathDuplicate { key, .. }) => {
                 let k = path_model::path_duplicate_key(path_str);
                 !k.is_empty() && k == *key
@@ -298,6 +337,13 @@ impl PathmanApp {
         match self.duplicate_view_filter {
             Some(DuplicateViewFilter::MissingPaths) => self.duplicate_view_filter = None,
             _ => self.duplicate_view_filter = Some(DuplicateViewFilter::MissingPaths),
+        }
+    }
+
+    fn toggle_only_duplicates_filter(&mut self) {
+        match self.duplicate_view_filter {
+            Some(DuplicateViewFilter::OnlyDuplicates) => self.duplicate_view_filter = None,
+            _ => self.duplicate_view_filter = Some(DuplicateViewFilter::OnlyDuplicates),
         }
     }
 
@@ -567,6 +613,31 @@ impl eframe::App for PathmanApp {
                 }
                 if ui.button("Duplicates…").clicked() {
                     self.show_duplicate_tool = true;
+                }
+                ui.separator();
+                if ui
+                    .selectable_label(
+                        matches!(
+                            self.duplicate_view_filter,
+                            Some(DuplicateViewFilter::OnlyDuplicates)
+                        ),
+                        "Only duplicates",
+                    )
+                    .clicked()
+                {
+                    self.toggle_only_duplicates_filter();
+                }
+                if ui
+                    .selectable_label(
+                        matches!(
+                            self.duplicate_view_filter,
+                            Some(DuplicateViewFilter::MissingPaths)
+                        ),
+                        "Only missing",
+                    )
+                    .clicked()
+                {
+                    self.toggle_missing_path_filter();
                 }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
                 });
@@ -1035,6 +1106,15 @@ impl eframe::App for PathmanApp {
                                     .strong(),
                             );
                         }
+                        Some(DuplicateViewFilter::OnlyDuplicates) => {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Filtered — duplicate entries (same path in both stores and/or repeated in one store)",
+                                )
+                                .small()
+                                .strong(),
+                            );
+                        }
                         None => {}
                     }
                     if ui.small_button("Show all rows").clicked() {
@@ -1082,20 +1162,49 @@ impl eframe::App for PathmanApp {
                     let n_seg = self.effective_segments.len();
                     for i in 0..n_seg {
                         let row_path_clone = self.effective_segments[i].1.clone();
-                        let warn =
-                            self.warn_missing && !path_model::entry_exists(row_path_clone.as_str());
-                        if !self.row_passes_duplicate_filter(row_path_clone.as_str()) {
+                        let is_dup = effective_row_is_duplicate(
+                            &self.effective_segments,
+                            i,
+                            &cross_keys_eff,
+                            &cnt_m,
+                            &cnt_u,
+                        );
+                        if !self
+                            .row_passes_duplicate_filter(row_path_clone.as_str(), is_dup)
+                        {
                             continue;
                         }
 
+                        let warn =
+                            self.warn_missing && !path_model::entry_exists(row_path_clone.as_str());
                         let prev_vis = (0..i).rev().find(|&j| {
-                            self.row_passes_duplicate_filter(self.effective_segments[j].1.as_str())
+                            let d = effective_row_is_duplicate(
+                                &self.effective_segments,
+                                j,
+                                &cross_keys_eff,
+                                &cnt_m,
+                                &cnt_u,
+                            );
+                            self.row_passes_duplicate_filter(
+                                self.effective_segments[j].1.as_str(),
+                                d,
+                            )
                         });
                         let can_up = prev_vis.map_or(false, |p| {
                             self.effective_segments[i].0 == self.effective_segments[p].0
                         });
                         let next_vis = (i + 1..n_seg).find(|&j| {
-                            self.row_passes_duplicate_filter(self.effective_segments[j].1.as_str())
+                            let d = effective_row_is_duplicate(
+                                &self.effective_segments,
+                                j,
+                                &cross_keys_eff,
+                                &cnt_m,
+                                &cnt_u,
+                            );
+                            self.row_passes_duplicate_filter(
+                                self.effective_segments[j].1.as_str(),
+                                d,
+                            )
                         });
                         let can_dn = next_vis.map_or(false, |n| {
                             self.effective_segments[i].0 == self.effective_segments[n].0
@@ -1273,16 +1382,34 @@ impl eframe::App for PathmanApp {
 
                     let n_entries = self.entries.len();
                     for i in 0..n_entries {
-                        if !self.row_passes_duplicate_filter(self.entries[i].as_str()) {
+                        let is_dup = tab_row_is_duplicate(
+                            &self.entries,
+                            i,
+                            &cross_keys_tab,
+                            &within_counts_tab,
+                        );
+                        if !self.row_passes_duplicate_filter(self.entries[i].as_str(), is_dup) {
                             continue;
                         }
 
                         let prev_vis = (0..i).rev().find(|&j| {
-                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                            let d = tab_row_is_duplicate(
+                                &self.entries,
+                                j,
+                                &cross_keys_tab,
+                                &within_counts_tab,
+                            );
+                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
                         });
                         let can_up = prev_vis.is_some();
                         let next_vis = (i + 1..n_entries).find(|&j| {
-                            self.row_passes_duplicate_filter(self.entries[j].as_str())
+                            let d = tab_row_is_duplicate(
+                                &self.entries,
+                                j,
+                                &cross_keys_tab,
+                                &within_counts_tab,
+                            );
+                            self.row_passes_duplicate_filter(self.entries[j].as_str(), d)
                         });
                         let can_dn = next_vis.is_some();
 
@@ -1415,9 +1542,23 @@ impl eframe::App for PathmanApp {
                     if self.scope == Scope::Effective {
                         let n = self.effective_segments.len();
                         if i < n {
+                            let (m_segs, u_segs) =
+                                path_model::split_origins(&self.effective_segments);
+                            let cross_keys_eff =
+                                path_model::cross_origin_key_set(&m_segs, &u_segs);
+                            let cnt_m = path_model::duplicate_key_counts(&m_segs);
+                            let cnt_u = path_model::duplicate_key_counts(&u_segs);
                             let prev = (0..i).rev().find(|&j| {
+                                let d = effective_row_is_duplicate(
+                                    &self.effective_segments,
+                                    j,
+                                    &cross_keys_eff,
+                                    &cnt_m,
+                                    &cnt_u,
+                                );
                                 self.row_passes_duplicate_filter(
                                     self.effective_segments[j].1.as_str(),
+                                    d,
                                 )
                             });
                             if let Some(p) = prev {
