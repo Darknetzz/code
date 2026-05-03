@@ -30,6 +30,10 @@ pub struct PathmanApp {
     status_err: bool,
     config: AppConfig,
     show_confirm_system: bool,
+    /// Row index pending removal confirmation (`X` clicked).
+    confirm_remove_index: Option<usize>,
+    /// Confirm before running adjacent dedupe from the toolbar.
+    show_confirm_dedupe: bool,
     warn_missing: bool,
     /// Unix: show shell file path editor
     shell_path_edit: String,
@@ -65,6 +69,15 @@ fn origin_add_button_theme(origin: PathOrigin) -> (egui::Color32, egui::Color32,
     (fill, accent, text)
 }
 
+fn truncate_path_confirm(s: &str, max_chars: usize) -> String {
+    let n = s.chars().count();
+    if n <= max_chars {
+        s.to_string()
+    } else {
+        s.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
+    }
+}
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let config = AppConfig::load();
@@ -87,6 +100,8 @@ impl PathmanApp {
             status_err: false,
             config,
             show_confirm_system: false,
+            confirm_remove_index: None,
+            show_confirm_dedupe: false,
             warn_missing: true,
             shell_path_edit,
             show_shell_settings: false,
@@ -96,6 +111,8 @@ impl PathmanApp {
     }
 
     fn reload_from_store(&mut self) {
+        self.confirm_remove_index = None;
+        self.show_confirm_dedupe = false;
         self.status_clear();
         let r = match self.scope {
             Scope::User => self.load_user(),
@@ -340,12 +357,17 @@ impl eframe::App for PathmanApp {
                     self.reload_from_store();
                 }
                 if ui.button("Dedupe").clicked() {
-                    if self.scope == Scope::Effective {
-                        path_model::dedupe_adjacent_tagged(&mut self.effective_segments);
+                    let n_drop = match self.scope {
+                        Scope::Effective => {
+                            path_model::adjacent_dedupe_drop_count_tagged(&self.effective_segments)
+                        }
+                        _ => path_model::adjacent_dedupe_drop_count(&self.entries),
+                    };
+                    if n_drop == 0 {
+                        self.set_status_ok("No adjacent duplicate entries to remove.".into());
                     } else {
-                        self.entries = path_model::dedupe_adjacent(&self.entries);
+                        self.show_confirm_dedupe = true;
                     }
-                    self.dirty = true;
                 }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
                 });
@@ -429,6 +451,128 @@ impl eframe::App for PathmanApp {
         if confirm_save {
             self.show_confirm_system = false;
             self.save();
+        }
+
+        // Remove row (after X): confirm
+        if let Some(i) = self.confirm_remove_index {
+            let in_range = match self.scope {
+                Scope::Effective => i < self.effective_segments.len(),
+                Scope::User | Scope::System => i < self.entries.len(),
+            };
+            if !in_range {
+                self.confirm_remove_index = None;
+            } else {
+                let preview_raw = match self.scope {
+                    Scope::Effective => self.effective_segments[i].1.as_str(),
+                    Scope::User | Scope::System => self.entries[i].as_str(),
+                };
+                let preview = truncate_path_confirm(preview_raw, 96);
+                let mut window_open = true;
+                let mut remove_confirmed = false;
+                egui::Window::new("Remove PATH entry")
+                    .collapsible(false)
+                    .resizable(false)
+                    .open(&mut window_open)
+                    .show(ctx, |ui| {
+                        ui.label(
+                            "Remove this entry from the list? Nothing is written to disk until you click Save.",
+                        );
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(preview)
+                                .small()
+                                .monospace()
+                                .color(egui::Color32::LIGHT_GRAY),
+                        );
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Cancel").clicked() {
+                                window_open = false;
+                            }
+                            if ui
+                                .add(egui::Button::new("Remove").fill(egui::Color32::from_rgb(
+                                    120, 42, 42,
+                                )))
+                                .clicked()
+                            {
+                                remove_confirmed = true;
+                                window_open = false;
+                            }
+                        });
+                    });
+                if !window_open {
+                    if remove_confirmed {
+                        match self.scope {
+                            Scope::Effective => {
+                                if i < self.effective_segments.len() {
+                                    self.effective_segments.remove(i);
+                                    self.dirty = true;
+                                }
+                            }
+                            Scope::User | Scope::System => {
+                                if i < self.entries.len() {
+                                    self.entries.remove(i);
+                                    self.dirty = true;
+                                }
+                            }
+                        }
+                    }
+                    self.confirm_remove_index = None;
+                }
+            }
+        }
+
+        // Dedupe: confirm
+        if self.show_confirm_dedupe {
+            let n_drop = match self.scope {
+                Scope::Effective => {
+                    path_model::adjacent_dedupe_drop_count_tagged(&self.effective_segments)
+                }
+                _ => path_model::adjacent_dedupe_drop_count(&self.entries),
+            };
+            let mut window_open = true;
+            let mut run_dedupe = false;
+            egui::Window::new("Dedupe PATH entries")
+                .collapsible(false)
+                .resizable(false)
+                .open(&mut window_open)
+                .show(ctx, |ui| {
+                    if n_drop == 0 {
+                        ui.label("No adjacent duplicate entries remain.");
+                    } else {
+                        ui.label(format!(
+                            "Remove {n_drop} adjacent duplicate row{}? Consecutive entries with the same path will be collapsed to one row.",
+                            if n_drop == 1 { "" } else { "s" }
+                        ));
+                        ui.label(
+                            egui::RichText::new("Unsaved until you save.").small().weak(),
+                        );
+                    }
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            window_open = false;
+                        }
+                        if ui
+                            .add_enabled(n_drop > 0, egui::Button::new("Dedupe"))
+                            .clicked()
+                        {
+                            run_dedupe = true;
+                            window_open = false;
+                        }
+                    });
+                });
+            if !window_open {
+                if run_dedupe && n_drop > 0 {
+                    if self.scope == Scope::Effective {
+                        path_model::dedupe_adjacent_tagged(&mut self.effective_segments);
+                    } else {
+                        self.entries = path_model::dedupe_adjacent(&self.entries);
+                    }
+                    self.dirty = true;
+                }
+                self.show_confirm_dedupe = false;
+            }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {

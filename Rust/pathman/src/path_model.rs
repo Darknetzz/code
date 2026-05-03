@@ -103,6 +103,19 @@ pub fn dedupe_adjacent(entries: &[String]) -> Vec<String> {
     out
 }
 
+/// How many rows adjacent dedupe would remove (`entries.len()` minus deduped length).
+pub fn adjacent_dedupe_drop_count(entries: &[String]) -> usize {
+    entries.len().saturating_sub(dedupe_adjacent(entries).len())
+}
+
+/// How many rows adjacent dedupe would remove in the Effective merged list.
+pub fn adjacent_dedupe_drop_count_tagged(v: &[(PathOrigin, String)]) -> usize {
+    let mut t = v.to_vec();
+    let before = t.len();
+    dedupe_adjacent_tagged(&mut t);
+    before.saturating_sub(t.len())
+}
+
 /// Expand `%VAR%` (Windows) or shell-style segments (Unix) for checks and display.
 pub fn expanded_path(raw: &str) -> String {
     #[cfg(windows)]
