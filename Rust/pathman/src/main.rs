@@ -7,7 +7,8 @@ mod persist;
 mod row_icons;
 
 fn print_version() {
-    println!("pathman {}", env!("CARGO_PKG_VERSION"));
+    let built = env!("PATHMAN_BUILD_TIME");
+    println!("pathman {} (built {})", env!("CARGO_PKG_VERSION"), built);
 }
 
 fn print_help() {
@@ -30,8 +31,8 @@ fn print_help() {
     println!("OPTIONS:");
     println!("    -h, --help");
     println!("        Print this help message.");
-    println!("    --version");
-    println!("        Print version information.");
+    println!("    -v, --version");
+    println!("        Print version and compile timestamp.");
 }
 
 fn main() -> eframe::Result<()> {
@@ -42,7 +43,10 @@ fn main() -> eframe::Result<()> {
         print_help();
         return Ok(());
     }
-    if rest.iter().any(|a| a.as_str() == "--version") {
+    if rest
+        .iter()
+        .any(|a| matches!(a.as_str(), "-v" | "--version"))
+    {
         print_version();
         return Ok(());
     }
