@@ -393,7 +393,12 @@ impl eframe::App for PathmanApp {
                 .max_width(list_viewport_w)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
-                ui.set_max_width(list_viewport_w);
+                // Without this, scroll content width can shrink to the widest *intrinsic* child.
+                // Long PATH strings would widen each row and push ^/v/X off-screen (stair-step layout).
+                let scroll_w = ui.available_width();
+                ui.set_min_width(scroll_w);
+                ui.set_max_width(scroll_w);
+
                 let mut remove_at: Option<usize> = None;
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
@@ -401,7 +406,10 @@ impl eframe::App for PathmanApp {
                 const MARK_W: f32 = 28.0;
                 let btn_h = ui.spacing().interact_size.y;
                 let gap = ui.spacing().item_spacing.x;
-                let btn_row_w = BTN_W * 3.0 + gap * 2.0;
+                // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps between them.
+                let row_reserve = MARK_W + 3.0 * BTN_W + 4.0 * gap;
+                let text_column_w = (scroll_w - row_reserve).max(48.0);
+
                 for (i, e) in self.entries.iter_mut().enumerate() {
                     let expanded = path_model::expanded_path(e.as_str());
                     let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
@@ -429,10 +437,11 @@ impl eframe::App for PathmanApp {
                                 );
                             }
 
-                            let text_w = (ui.available_width() - btn_row_w).max(48.0);
-                            let te_resp = ui.add(
+                            let te_resp = ui.add_sized(
+                                egui::vec2(text_column_w, btn_h),
                                 TextEdit::singleline(e)
-                                    .desired_width(text_w)
+                                    .desired_width(text_column_w)
+                                    .clip_text(true)
                                     .font(egui::TextStyle::Monospace)
                                     .id_salt(i),
                             );
