@@ -539,6 +539,20 @@ impl PathmanApp {
         self.status_err = true;
     }
 
+    /// Open the expanded path in the system file manager (Explorer, Finder, xdg-open, …).
+    fn open_entry_directory(&mut self, raw_path: &str) {
+        let expanded = path_model::expanded_path(raw_path);
+        let t = expanded.trim();
+        if t.is_empty() {
+            self.set_status_err("Cannot open: path is empty.".into());
+            return;
+        }
+        match open::that(t) {
+            Ok(()) => self.status_clear(),
+            Err(e) => self.set_status_err(format!("Could not open location: {e}")),
+        }
+    }
+
     fn apply_config_shell_path(&mut self) {
         let p = self.shell_path_edit.trim();
         if p.is_empty() {
@@ -1175,8 +1189,8 @@ impl eframe::App for PathmanApp {
                 let gap = ui.spacing().item_spacing.x;
 
                 if self.scope == Scope::Effective {
-                    // [mark][origin][text][^][v][X] → 6 widgets, 5 gaps.
-                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * ICON_BTN + 5.0 * gap;
+                    // [mark][origin][text][open][^][v][X] → 7 widgets, 6 gaps.
+                    let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let (cross_keys_eff, cnt_m, cnt_u) =
@@ -1309,6 +1323,27 @@ impl eframe::App for PathmanApp {
                                             self.dirty = true;
                                         }
 
+                                        let can_open = !path_model::expanded_path(
+                                            self.effective_segments[i].1.as_str(),
+                                        )
+                                        .trim()
+                                        .is_empty();
+                                        if ui
+                                            .add_enabled_ui(can_open, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::OpenDirectory,
+                                                    "Open in file manager",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            let p = self.effective_segments[i].1.clone();
+                                            self.open_entry_directory(&p);
+                                        }
+
                                         if ui
                                             .add_enabled_ui(can_up, |ui| {
                                                 path_row_icon_button(
@@ -1373,9 +1408,9 @@ impl eframe::App for PathmanApp {
                             });
                     }
                 } else {
-                    // [mark][Machine|User][text][^][v][X] — align with Effective scope layout.
+                    // [mark][Machine|User][text][open][^][v][X] — align with Effective scope layout.
                     const ORIGIN_W: f32 = 56.0;
-                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * ICON_BTN + 5.0 * gap;
+                    let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let row_origin = match self.scope {
@@ -1499,6 +1534,25 @@ impl eframe::App for PathmanApp {
                                         );
                                         if te_resp.changed() {
                                             self.dirty = true;
+                                        }
+
+                                        let can_open = !path_model::expanded_path(self.entries[i].as_str())
+                                            .trim()
+                                            .is_empty();
+                                        if ui
+                                            .add_enabled_ui(can_open, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::OpenDirectory,
+                                                    "Open in file manager",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            let p = self.entries[i].clone();
+                                            self.open_entry_directory(&p);
                                         }
 
                                         if ui

@@ -135,6 +135,7 @@ pub fn path_add_toolbar_button(
 pub enum PathRowIcon {
     MoveUp,
     MoveDown,
+    OpenDirectory,
     Remove,
 }
 
@@ -181,6 +182,41 @@ pub fn path_row_icon_button(
                 let tr = egui::pos2(inner.right(), inner.top());
                 let bottom = egui::pos2(inner.center().x, inner.bottom());
                 painter.add(egui::Shape::closed_line(vec![tl, tr, bottom], stroke));
+            }
+            PathRowIcon::OpenDirectory => {
+                // Small folder (tab + body) with a “launch” arrow, same style as add-toolbar folder.
+                let tab_w = inner.width() * 0.5;
+                let tab_h = inner.height() * 0.28;
+                let tab = egui::Rect::from_min_size(
+                    inner.left_top() + egui::vec2(0.0, 0.0),
+                    egui::vec2(tab_w, tab_h),
+                );
+                let r = 1.0_f32;
+                painter.rect_stroke(tab, r, stroke);
+                let body = egui::Rect::from_min_max(
+                    egui::pos2(inner.left(), tab.bottom() - 0.5),
+                    inner.right_bottom() - egui::vec2(inner.width() * 0.22, 0.0),
+                );
+                painter.rect_stroke(body, r, stroke);
+                // Arrow: out from folder (bottom-right of icon).
+                let a0 = body.right_bottom() - egui::vec2(body.width() * 0.45, body.height() * 0.55);
+                let a1 = inner.right_top() - egui::vec2(inner.width() * 0.12, inner.height() * 0.15);
+                painter.line_segment([a0, a1], stroke);
+                let head = 2.5_f32;
+                painter.line_segment(
+                    [
+                        a1,
+                        a1 - egui::vec2(head, head * 0.45),
+                    ],
+                    stroke,
+                );
+                painter.line_segment(
+                    [
+                        a1,
+                        a1 - egui::vec2(head * 0.45, head),
+                    ],
+                    stroke,
+                );
             }
             PathRowIcon::Remove => {
                 let inset = inner.width().min(inner.height()) * 0.22;
