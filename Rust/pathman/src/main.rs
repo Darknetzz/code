@@ -4,6 +4,7 @@ mod app;
 mod config;
 mod path_model;
 mod persist;
+mod row_icons;
 
 fn print_version() {
     println!("pathman {}", env!("CARGO_PKG_VERSION"));

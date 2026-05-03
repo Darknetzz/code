@@ -5,26 +5,7 @@ use eframe::egui::{ScrollArea, TextEdit};
 
 use crate::config::AppConfig;
 use crate::path_model;
-
-/// Small icons for PATH row actions (default egui font covers these glyphs).
-const ICON_ROW_UP: &str = "▲";
-const ICON_ROW_DOWN: &str = "▼";
-const ICON_ROW_REMOVE: &str = "✕";
-
-fn path_row_icon_button(
-    ui: &mut egui::Ui,
-    size: [f32; 2],
-    icon: &'static str,
-    tooltip: &str,
-) -> egui::Response {
-    ui.add_sized(
-        size,
-        egui::Button::new(
-            egui::RichText::new(icon).text_style(egui::TextStyle::Button),
-        ),
-    )
-    .on_hover_text(tooltip)
-}
+use crate::row_icons::{path_row_icon_button, PathRowIcon};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scope {
@@ -469,17 +450,28 @@ impl eframe::App for PathmanApp {
                                 self.dirty = true;
                             }
 
-                            if path_row_icon_button(ui, [BTN_W, btn_h], ICON_ROW_UP, "Move up").clicked()
+                            if path_row_icon_button(ui, [BTN_W, btn_h], PathRowIcon::MoveUp, "Move up")
+                                .clicked()
                             {
                                 move_up = Some(i);
                             }
-                            if path_row_icon_button(ui, [BTN_W, btn_h], ICON_ROW_DOWN, "Move down")
-                                .clicked()
+                            if path_row_icon_button(
+                                ui,
+                                [BTN_W, btn_h],
+                                PathRowIcon::MoveDown,
+                                "Move down",
+                            )
+                            .clicked()
                             {
                                 move_dn = Some(i);
                             }
-                            if path_row_icon_button(ui, [BTN_W, btn_h], ICON_ROW_REMOVE, "Remove row")
-                                .clicked()
+                            if path_row_icon_button(
+                                ui,
+                                [BTN_W, btn_h],
+                                PathRowIcon::Remove,
+                                "Remove row",
+                            )
+                            .clicked()
                             {
                                 remove_at = Some(i);
                             }
