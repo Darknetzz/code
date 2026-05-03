@@ -5,8 +5,46 @@ mod config;
 mod path_model;
 mod persist;
 
+fn print_version() {
+    println!("pathman {}", env!("CARGO_PKG_VERSION"));
+}
+
+fn print_help() {
+    println!("pathman — cross-platform GUI for editing user and system PATH.");
+    println!();
+    println!("USAGE:");
+    println!("    pathman");
+    println!("        Open the graphical PATH editor.");
+    #[cfg(windows)]
+    {
+        println!("    pathman --apply-machine <file>");
+        println!("        Apply machine PATH from a file (internal elevated helper).");
+    }
+    #[cfg(unix)]
+    {
+        println!("    pathman --apply-system-unix <file>");
+        println!("        Apply system PATH from a file (internal elevated helper).");
+    }
+    println!();
+    println!("OPTIONS:");
+    println!("    -h, --help");
+    println!("        Print this help message.");
+    println!("    --version");
+    println!("        Print version information.");
+}
+
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+
+    let rest: Vec<&String> = args.iter().skip(1).collect();
+    if rest.iter().any(|a| matches!(a.as_str(), "-h" | "--help")) {
+        print_help();
+        return Ok(());
+    }
+    if rest.iter().any(|a| a.as_str() == "--version") {
+        print_version();
+        return Ok(());
+    }
 
     #[cfg(windows)]
     if args.len() == 3 && args[1] == "--apply-machine" {
