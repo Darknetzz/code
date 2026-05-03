@@ -276,6 +276,7 @@ impl eframe::App for PathmanApp {
                             .show(ui, |ui| {
                                 ui.spacing_mut().item_spacing.y = 2.0;
                                 for (i, line) in preview_entries.iter().enumerate() {
+                                    let expanded = path_model::expanded_path(line);
                                     ui.horizontal(|ui| {
                                         ui.label(
                                             egui::RichText::new(format!("{}.", i + 1))
@@ -283,11 +284,21 @@ impl eframe::App for PathmanApp {
                                                 .weak()
                                                 .monospace(),
                                         );
-                                        ui.label(
-                                            egui::RichText::new(line.as_str())
-                                                .small()
-                                                .monospace(),
-                                        );
+                                        ui.vertical(|ui| {
+                                            ui.label(
+                                                egui::RichText::new(line.as_str())
+                                                    .small()
+                                                    .monospace(),
+                                            );
+                                            if expanded != *line {
+                                                ui.label(
+                                                    egui::RichText::new(format!("→ {expanded}"))
+                                                        .small()
+                                                        .weak()
+                                                        .monospace(),
+                                                );
+                                            }
+                                        });
                                     });
                                 }
                             });
@@ -387,69 +398,83 @@ impl eframe::App for PathmanApp {
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
                 const BTN_W: f32 = 30.0;
+                const MARK_W: f32 = 28.0;
                 let btn_h = ui.spacing().interact_size.y;
+                let gap = ui.spacing().item_spacing.x;
+                let btn_row_w = BTN_W * 3.0 + gap * 2.0;
                 for (i, e) in self.entries.iter_mut().enumerate() {
-                    // Right-to-left: first allocated sits on the right, so buttons stay aligned
-                    // with the viewport; TextEdit + INFINITY fills remaining space to the left.
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center)
-                            .with_main_justify(true),
-                        |ui| {
+                    let expanded = path_model::expanded_path(e.as_str());
+                    let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
+                    let mark = if warn { "[!]" } else { "   " };
+                    let mark_color = if warn {
+                        egui::Color32::from_rgb(220, 180, 60)
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            let mark_resp = ui.add_sized(
+                                [MARK_W, btn_h],
+                                egui::Label::new(
+                                    egui::RichText::new(mark)
+                                        .small()
+                                        .monospace()
+                                        .color(mark_color),
+                                ),
+                            );
+                            if warn {
+                                mark_resp.on_hover_text(
+                                    "Path not found or not a directory (after expanding env vars)",
+                                );
+                            }
+
+                            let text_w = (ui.available_width() - btn_row_w).max(48.0);
+                            let te_resp = ui.add(
+                                TextEdit::singleline(e)
+                                    .desired_width(text_w)
+                                    .font(egui::TextStyle::Monospace)
+                                    .id_salt(i),
+                            );
+                            if te_resp.changed() {
+                                self.dirty = true;
+                            }
+
                             if ui
-                                .add_sized(
-                                    [BTN_W, btn_h],
-                                    egui::Button::new("X"),
-                                )
-                                .on_hover_text("Remove row")
+                                .add_sized([BTN_W, btn_h], egui::Button::new("^"))
+                                .on_hover_text("Move up")
                                 .clicked()
                             {
-                                remove_at = Some(i);
+                                move_up = Some(i);
                             }
                             if ui
-                                .add_sized(
-                                    [BTN_W, btn_h],
-                                    egui::Button::new("v"),
-                                )
+                                .add_sized([BTN_W, btn_h], egui::Button::new("v"))
                                 .on_hover_text("Move down")
                                 .clicked()
                             {
                                 move_dn = Some(i);
                             }
                             if ui
-                                .add_sized(
-                                    [BTN_W, btn_h],
-                                    egui::Button::new("^"),
-                                )
-                                .on_hover_text("Move up")
+                                .add_sized([BTN_W, btn_h], egui::Button::new("X"))
+                                .on_hover_text("Remove row")
                                 .clicked()
                             {
-                                move_up = Some(i);
+                                remove_at = Some(i);
                             }
-                            let te_resp = ui.add(
-                                TextEdit::singleline(e)
-                                    .desired_width(f32::INFINITY)
-                                    .font(egui::TextStyle::Monospace),
-                            );
-                            if te_resp.changed() {
-                                self.dirty = true;
-                            }
-                            let warn = self.warn_missing && !path_model::entry_exists(e);
-                            let mark = if warn { "[!]" } else { "   " };
-                            let mark_resp = ui.label(
-                                egui::RichText::new(mark)
-                                    .small()
-                                    .monospace()
-                                    .color(if warn {
-                                        egui::Color32::from_rgb(220, 180, 60)
-                                    } else {
-                                        egui::Color32::TRANSPARENT
-                                    }),
-                            );
-                            if warn {
-                                mark_resp.on_hover_text("Path not found or not a directory");
-                            }
-                        },
-                    );
+                        });
+
+                        if expanded != *e {
+                            ui.horizontal(|ui| {
+                                ui.add_space(MARK_W + gap);
+                                ui.label(
+                                    egui::RichText::new(format!("→ {expanded}"))
+                                        .small()
+                                        .weak()
+                                        .monospace(),
+                                );
+                            });
+                        }
+                    });
                 }
                 if let Some(i) = remove_at {
                     if i < self.entries.len() {

@@ -39,9 +39,49 @@ pub fn dedupe_adjacent(entries: &[String]) -> Vec<String> {
     out
 }
 
+/// Expand `%VAR%` (Windows) or shell-style segments (Unix) for checks and display.
+pub fn expanded_path(raw: &str) -> String {
+    #[cfg(windows)]
+    {
+        expand_windows(raw)
+    }
+    #[cfg(not(windows))]
+    {
+        shellexpand::full(raw)
+            .map(|c| c.into_owned())
+            .unwrap_or_else(|_| raw.to_string())
+    }
+}
+
+#[cfg(windows)]
+fn expand_windows(raw: &str) -> String {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::Environment::ExpandEnvironmentStringsW;
+
+    let mut wide: Vec<u16> = raw.encode_utf16().collect();
+    wide.push(0);
+
+    let needed = unsafe { ExpandEnvironmentStringsW(wide.as_ptr(), std::ptr::null_mut(), 0) };
+    if needed == 0 {
+        return raw.to_string();
+    }
+    let mut out = vec![0u16; needed as usize];
+    let n = unsafe { ExpandEnvironmentStringsW(wide.as_ptr(), out.as_mut_ptr(), needed) };
+    if n == 0 {
+        return raw.to_string();
+    }
+    while out.last().copied() == Some(0) {
+        out.pop();
+    }
+    OsString::from_wide(&out).to_string_lossy().into_owned()
+}
+
 /// True if the path exists and is a directory (or on Windows, exists as file — drive roots).
-pub fn entry_exists(path: &str) -> bool {
-    let p = std::path::Path::new(path);
+/// Uses [`expanded_path`] so `%ProgramFiles%\Foo` resolves before checking.
+pub fn entry_exists(raw: &str) -> bool {
+    let path = expanded_path(raw);
+    let p = std::path::Path::new(path.as_str());
     if p.is_dir() {
         return true;
     }
