@@ -28,15 +28,6 @@ pub fn read_machine_path() -> Result<String> {
     Ok(path)
 }
 
-/// Machine first, then user — typical effective PATH for new processes.
-pub fn merged_preview() -> Result<String> {
-    let m = read_machine_path().unwrap_or_default();
-    let u = read_user_path().unwrap_or_default();
-    let machine = crate::path_model::split(&m);
-    let user = crate::path_model::split(&u);
-    Ok(crate::path_model::join_merged_preview_style(&machine, &user))
-}
-
 pub fn write_user_path(new_path: &str) -> Result<()> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let (env, _) = hkcu.create_subkey(HKCU_ENV).context("create HKCU Environment")?;

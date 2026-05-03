@@ -12,7 +12,7 @@ pub enum Scope {
     #[default]
     User,
     System,
-    /// Merged machine + user view (same ordering as “effective PATH” preview).
+    /// Merged machine + user view (editable).
     Effective,
 }
 
@@ -28,8 +28,6 @@ pub struct PathmanApp {
     status_err: bool,
     config: AppConfig,
     show_confirm_system: bool,
-    #[cfg(windows)]
-    preview_merged: String,
     warn_missing: bool,
     /// Unix: show shell file path editor
     shell_path_edit: String,
@@ -79,8 +77,6 @@ impl PathmanApp {
             status_err: false,
             config,
             show_confirm_system: false,
-            #[cfg(windows)]
-            preview_merged: String::new(),
             warn_missing: true,
             shell_path_edit,
             show_shell_settings: false,
@@ -99,8 +95,6 @@ impl PathmanApp {
         if let Err(e) = r {
             self.set_status_err(format!("Load failed: {e:#}"));
         }
-        #[cfg(windows)]
-        self.refresh_preview();
     }
 
     fn load_user(&mut self) -> anyhow::Result<()> {
@@ -152,11 +146,6 @@ impl PathmanApp {
         Ok(())
     }
 
-    #[cfg(windows)]
-    fn refresh_preview(&mut self) {
-        self.preview_merged = crate::persist::merged_preview().unwrap_or_default();
-    }
-
     fn save(&mut self) {
         self.status_clear();
         let res = match self.scope {
@@ -182,8 +171,6 @@ impl PathmanApp {
             Ok(()) => {
                 self.dirty = false;
                 self.set_status_ok("Saved. Open a new terminal for changes to apply.".into());
-                #[cfg(windows)]
-                self.refresh_preview();
                 if self.scope == Scope::Effective {
                     let _ = self.load_effective();
                 }
@@ -310,7 +297,13 @@ impl eframe::App for PathmanApp {
                 ui.heading("pathman");
                 ui.label(egui::RichText::new("PATH editor").weak());
             });
-            ui.horizontal(|ui| {
+            ui.scope(|ui| {
+                let s = &mut ui.style_mut().spacing;
+                // Slightly taller controls so scope tabs / buttons are not flat strips.
+                let min_h = 26.0_f32;
+                s.interact_size.y = s.interact_size.y.max(min_h);
+                s.button_padding = egui::vec2(10.0, 6.0);
+                ui.horizontal(|ui| {
                 if ui
                     .selectable_label(self.scope == Scope::User, "User")
                     .clicked()
@@ -345,57 +338,8 @@ impl eframe::App for PathmanApp {
                     self.dirty = true;
                 }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
+                });
             });
-            #[cfg(windows)]
-            if self.scope == Scope::User {
-                let preview_entries = path_model::split(&self.preview_merged);
-                let n = preview_entries.len();
-                let header = format!("Effective PATH (machine + user), {n} entries — read-only");
-                egui::CollapsingHeader::new(header)
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(
-                                "Order for new processes: system entries first, then user.",
-                            )
-                            .small()
-                            .weak(),
-                        );
-                        ui.add_space(4.0);
-                        egui::ScrollArea::vertical()
-                            .max_height(160.0)
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                ui.spacing_mut().item_spacing.y = 2.0;
-                                for (i, line) in preview_entries.iter().enumerate() {
-                                    let expanded = path_model::expanded_path(line);
-                                    ui.horizontal(|ui| {
-                                        ui.label(
-                                            egui::RichText::new(format!("{}.", i + 1))
-                                                .small()
-                                                .weak()
-                                                .monospace(),
-                                        );
-                                        ui.vertical(|ui| {
-                                            ui.label(
-                                                egui::RichText::new(line.as_str())
-                                                    .small()
-                                                    .monospace(),
-                                            );
-                                            if expanded != *line {
-                                                ui.label(
-                                                    egui::RichText::new(format!("→ {expanded}"))
-                                                        .small()
-                                                        .weak()
-                                                        .monospace(),
-                                                );
-                                            }
-                                        });
-                                    });
-                                }
-                            });
-                    });
-            }
             #[cfg(not(windows))]
             if self.scope == Scope::User {
                 ui.horizontal(|ui| {
@@ -479,7 +423,9 @@ impl eframe::App for PathmanApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.scope == Scope::Effective {
-                ui.horizontal(|ui| {
+                ui.scope(|ui| {
+                    ui.style_mut().spacing.button_padding = egui::vec2(12.0, 6.0);
+                    ui.horizontal(|ui| {
                     if ui.button("Add folder… (user)").clicked() {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             self.effective_segments.push((
@@ -518,9 +464,12 @@ impl eframe::App for PathmanApp {
                             .insert(pos, (PathOrigin::Machine, String::new()));
                         self.dirty = true;
                     }
+                    });
                 });
             } else {
-                ui.horizontal(|ui| {
+                ui.scope(|ui| {
+                    ui.style_mut().spacing.button_padding = egui::vec2(12.0, 6.0);
+                    ui.horizontal(|ui| {
                     if ui.button("Add folder…").clicked() {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             self.entries.push(p.to_string_lossy().to_string());
@@ -531,6 +480,7 @@ impl eframe::App for PathmanApp {
                         self.entries.push(String::new());
                         self.dirty = true;
                     }
+                    });
                 });
             }
 
@@ -553,15 +503,16 @@ impl eframe::App for PathmanApp {
                 let mut remove_at: Option<usize> = None;
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
-                const BTN_W: f32 = 30.0;
+                // Row action icons: square hit targets (avoid wide short rects).
+                const ICON_BTN: f32 = 26.0;
                 const MARK_W: f32 = 28.0;
                 const ORIGIN_W: f32 = 56.0;
-                let btn_h = ui.spacing().interact_size.y;
+                let btn_h = ui.spacing().interact_size.y.max(ICON_BTN);
                 let gap = ui.spacing().item_spacing.x;
 
                 if self.scope == Scope::Effective {
                     // [mark][origin][text][^][v][X] → 6 widgets, 5 gaps.
-                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * BTN_W + 5.0 * gap;
+                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * ICON_BTN + 5.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let n_seg = self.effective_segments.len();
@@ -632,7 +583,7 @@ impl eframe::App for PathmanApp {
                                             .add_enabled_ui(can_up, |ui| {
                                                 path_row_icon_button(
                                                     ui,
-                                                    [BTN_W, btn_h],
+                                                    [ICON_BTN, ICON_BTN],
                                                     PathRowIcon::MoveUp,
                                                     if can_up {
                                                         "Move up"
@@ -650,7 +601,7 @@ impl eframe::App for PathmanApp {
                                             .add_enabled_ui(can_dn, |ui| {
                                                 path_row_icon_button(
                                                     ui,
-                                                    [BTN_W, btn_h],
+                                                    [ICON_BTN, ICON_BTN],
                                                     PathRowIcon::MoveDown,
                                                     if can_dn {
                                                         "Move down"
@@ -666,7 +617,7 @@ impl eframe::App for PathmanApp {
                                         }
                                         if path_row_icon_button(
                                             ui,
-                                            [BTN_W, btn_h],
+                                            [ICON_BTN, ICON_BTN],
                                             PathRowIcon::Remove,
                                             "Remove row",
                                         )
@@ -694,7 +645,7 @@ impl eframe::App for PathmanApp {
                 } else {
                     // [mark][Machine|User][text][^][v][X] — align with Effective scope layout.
                     const ORIGIN_W: f32 = 56.0;
-                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * BTN_W + 5.0 * gap;
+                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * ICON_BTN + 5.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let row_origin = match self.scope {
@@ -760,7 +711,7 @@ impl eframe::App for PathmanApp {
 
                                         if path_row_icon_button(
                                             ui,
-                                            [BTN_W, btn_h],
+                                            [ICON_BTN, ICON_BTN],
                                             PathRowIcon::MoveUp,
                                             "Move up",
                                         )
@@ -770,7 +721,7 @@ impl eframe::App for PathmanApp {
                                         }
                                         if path_row_icon_button(
                                             ui,
-                                            [BTN_W, btn_h],
+                                            [ICON_BTN, ICON_BTN],
                                             PathRowIcon::MoveDown,
                                             "Move down",
                                         )
@@ -780,7 +731,7 @@ impl eframe::App for PathmanApp {
                                         }
                                         if path_row_icon_button(
                                             ui,
-                                            [BTN_W, btn_h],
+                                            [ICON_BTN, ICON_BTN],
                                             PathRowIcon::Remove,
                                             "Remove row",
                                         )
@@ -849,7 +800,10 @@ impl eframe::App for PathmanApp {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let save_clicked = ui
-                    .add_enabled(self.dirty, egui::Button::new("Save"))
+                    .add_enabled(
+                        self.dirty,
+                        egui::Button::new("Save").min_size(egui::vec2(72.0, 28.0)),
+                    )
                     .clicked();
                 let needs_confirm = matches!(self.scope, Scope::System)
                     || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());

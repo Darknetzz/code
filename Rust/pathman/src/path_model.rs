@@ -12,7 +12,7 @@ pub enum PathOrigin {
     User,
 }
 
-/// Same rule as Windows `merged_preview`: machine entries, then user, then adjacent dedupe of strings.
+/// Machine entries, then user, then adjacent dedupe of strings (same ordering as the Effective tab).
 pub fn merge_machine_user_preview_style(
     machine: &[String],
     user: &[String],
@@ -61,7 +61,8 @@ pub fn split_origins(segments: &[(PathOrigin, String)]) -> (Vec<String>, Vec<Str
     (m, u)
 }
 
-/// Build the same joined string as `split(machine).chain(split(user)).dedupe.join` (e.g. `merged_preview` on Windows).
+/// Build the merged PATH string from machine + user lists (used in tests; mirrors Effective-tab join).
+#[cfg(test)]
 pub fn join_merged_preview_style(machine: &[String], user: &[String]) -> String {
     let v = merge_machine_user_preview_style(machine, user);
     let flat: Vec<String> = v.iter().map(|(_, s)| s.clone()).collect();
