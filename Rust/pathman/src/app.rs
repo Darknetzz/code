@@ -469,6 +469,7 @@ impl eframe::App for PathmanApp {
                 let preview = truncate_path_confirm(preview_raw, 96);
                 let mut window_open = true;
                 let mut remove_confirmed = false;
+                let mut remove_cancel = false;
                 egui::Window::new("Remove PATH entry")
                     .collapsible(false)
                     .resizable(false)
@@ -487,7 +488,7 @@ impl eframe::App for PathmanApp {
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
                             if ui.button("Cancel").clicked() {
-                                window_open = false;
+                                remove_cancel = true;
                             }
                             if ui
                                 .add(egui::Button::new("Remove").fill(egui::Color32::from_rgb(
@@ -496,27 +497,26 @@ impl eframe::App for PathmanApp {
                                 .clicked()
                             {
                                 remove_confirmed = true;
-                                window_open = false;
                             }
                         });
                     });
-                if !window_open {
-                    if remove_confirmed {
-                        match self.scope {
-                            Scope::Effective => {
-                                if i < self.effective_segments.len() {
-                                    self.effective_segments.remove(i);
-                                    self.dirty = true;
-                                }
+                if remove_confirmed {
+                    match self.scope {
+                        Scope::Effective => {
+                            if i < self.effective_segments.len() {
+                                self.effective_segments.remove(i);
+                                self.dirty = true;
                             }
-                            Scope::User | Scope::System => {
-                                if i < self.entries.len() {
-                                    self.entries.remove(i);
-                                    self.dirty = true;
-                                }
+                        }
+                        Scope::User | Scope::System => {
+                            if i < self.entries.len() {
+                                self.entries.remove(i);
+                                self.dirty = true;
                             }
                         }
                     }
+                }
+                if remove_confirmed || remove_cancel || !window_open {
                     self.confirm_remove_index = None;
                 }
             }
@@ -532,6 +532,7 @@ impl eframe::App for PathmanApp {
             };
             let mut window_open = true;
             let mut run_dedupe = false;
+            let mut dedupe_cancel = false;
             egui::Window::new("Dedupe PATH entries")
                 .collapsible(false)
                 .resizable(false)
@@ -551,26 +552,25 @@ impl eframe::App for PathmanApp {
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
-                            window_open = false;
+                            dedupe_cancel = true;
                         }
                         if ui
                             .add_enabled(n_drop > 0, egui::Button::new("Dedupe"))
                             .clicked()
                         {
                             run_dedupe = true;
-                            window_open = false;
                         }
                     });
                 });
-            if !window_open {
-                if run_dedupe && n_drop > 0 {
-                    if self.scope == Scope::Effective {
-                        path_model::dedupe_adjacent_tagged(&mut self.effective_segments);
-                    } else {
-                        self.entries = path_model::dedupe_adjacent(&self.entries);
-                    }
-                    self.dirty = true;
+            if run_dedupe && n_drop > 0 {
+                if self.scope == Scope::Effective {
+                    path_model::dedupe_adjacent_tagged(&mut self.effective_segments);
+                } else {
+                    self.entries = path_model::dedupe_adjacent(&self.entries);
                 }
+                self.dirty = true;
+            }
+            if run_dedupe || dedupe_cancel || !window_open {
                 self.show_confirm_dedupe = false;
             }
         }
