@@ -637,6 +637,27 @@ impl eframe::App for PathmanApp {
                 if ui.button("Reload").clicked() {
                     self.reload_from_store();
                 }
+                let save_clicked = ui
+                    .add_enabled(
+                        self.dirty,
+                        egui::Button::new("Save").min_size(egui::vec2(72.0, 28.0)),
+                    )
+                    .clicked();
+                let needs_confirm = matches!(self.scope, Scope::System)
+                    || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());
+                let do_save = save_clicked
+                    && if needs_confirm {
+                        self.show_confirm_system = true;
+                        false
+                    } else {
+                        true
+                    };
+                if do_save {
+                    self.save();
+                }
+                if self.dirty {
+                    ui.label(egui::RichText::new("Unsaved changes").italics());
+                }
                 if ui.button("Dedupe").clicked() {
                     let n_drop = match self.scope {
                         Scope::Effective => {
@@ -1717,30 +1738,6 @@ impl eframe::App for PathmanApp {
             });
 
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                let save_clicked = ui
-                    .add_enabled(
-                        self.dirty,
-                        egui::Button::new("Save").min_size(egui::vec2(72.0, 28.0)),
-                    )
-                    .clicked();
-                let needs_confirm = matches!(self.scope, Scope::System)
-                    || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());
-                let do_save = save_clicked
-                    && if needs_confirm {
-                        self.show_confirm_system = true;
-                        false
-                    } else {
-                        true
-                    };
-                if do_save {
-                    self.save();
-                }
-                if self.dirty {
-                    ui.label(egui::RichText::new("Unsaved changes").italics());
-                }
-            });
-
             if !self.status.is_empty() {
                 ui.add_space(6.0);
                 let color = if self.status_err {
