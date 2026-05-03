@@ -692,8 +692,9 @@ impl eframe::App for PathmanApp {
                             });
                     }
                 } else {
-                    // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps. Same row tints as Effective (user vs machine).
-                    let row_reserve = MARK_W + 3.0 * BTN_W + 4.0 * gap;
+                    // [mark][Machine|User][text][^][v][X] — align with Effective scope layout.
+                    const ORIGIN_W: f32 = 56.0;
+                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * BTN_W + 5.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let row_origin = match self.scope {
@@ -734,6 +735,16 @@ impl eframe::App for PathmanApp {
                                                 "Path not found or not a directory (after expanding env vars)",
                                             );
                                         }
+
+                                        ui.add_sized(
+                                            [ORIGIN_W, btn_h],
+                                            egui::Label::new(
+                                                egui::RichText::new(origin_badge_label(row_origin))
+                                                    .small()
+                                                    .strong()
+                                                    .color(origin_color),
+                                            ),
+                                        );
 
                                         let te_resp = ui.add_sized(
                                             egui::vec2(text_column_w, btn_h),
@@ -781,7 +792,7 @@ impl eframe::App for PathmanApp {
 
                                     if expanded != *e {
                                         ui.horizontal(|ui| {
-                                            ui.add_space(MARK_W + gap);
+                                            ui.add_space(MARK_W + gap + ORIGIN_W + gap);
                                             ui.label(
                                                 egui::RichText::new(format!("→ {expanded}"))
                                                     .small()
