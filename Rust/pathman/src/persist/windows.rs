@@ -32,10 +32,9 @@ pub fn read_machine_path() -> Result<String> {
 pub fn merged_preview() -> Result<String> {
     let m = read_machine_path().unwrap_or_default();
     let u = read_user_path().unwrap_or_default();
-    let mut parts = crate::path_model::split(&m);
-    parts.extend(crate::path_model::split(&u));
-    parts = crate::path_model::dedupe_adjacent(&parts);
-    Ok(crate::path_model::join(&parts))
+    let machine = crate::path_model::split(&m);
+    let user = crate::path_model::split(&u);
+    Ok(crate::path_model::join_merged_preview_style(&machine, &user))
 }
 
 pub fn write_user_path(new_path: &str) -> Result<()> {

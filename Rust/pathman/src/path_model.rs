@@ -5,6 +5,69 @@ const SEP: char = ';';
 #[cfg(not(windows))]
 const SEP: char = ':';
 
+/// Whether a merged PATH segment came from the machine (system) store or the user store.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PathOrigin {
+    Machine,
+    User,
+}
+
+/// Same rule as Windows `merged_preview`: machine entries, then user, then adjacent dedupe of strings.
+pub fn merge_machine_user_preview_style(
+    machine: &[String],
+    user: &[String],
+) -> Vec<(PathOrigin, String)> {
+    let mut v: Vec<(PathOrigin, String)> = machine
+        .iter()
+        .map(|s| (PathOrigin::Machine, s.trim().to_string()))
+        .filter(|(_, s)| !s.is_empty())
+        .chain(
+            user
+                .iter()
+                .map(|s| (PathOrigin::User, s.trim().to_string()))
+                .filter(|(_, s)| !s.is_empty()),
+        )
+        .collect();
+    dedupe_adjacent_tagged(&mut v);
+    v
+}
+
+/// Remove adjacent duplicate *paths* (string equality), keeping the first segment’s origin.
+pub fn dedupe_adjacent_tagged(v: &mut Vec<(PathOrigin, String)>) {
+    let mut i = 1;
+    while i < v.len() {
+        if v[i].1 == v[i - 1].1 {
+            v.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/// Split back into machine and user entry lists (order preserved within each).
+pub fn split_origins(segments: &[(PathOrigin, String)]) -> (Vec<String>, Vec<String>) {
+    let mut m = Vec::new();
+    let mut u = Vec::new();
+    for (o, s) in segments {
+        let t = s.trim();
+        if t.is_empty() {
+            continue;
+        }
+        match o {
+            PathOrigin::Machine => m.push(t.to_string()),
+            PathOrigin::User => u.push(t.to_string()),
+        }
+    }
+    (m, u)
+}
+
+/// Build the same joined string as `split(machine).chain(split(user)).dedupe.join` (e.g. `merged_preview` on Windows).
+pub fn join_merged_preview_style(machine: &[String], user: &[String]) -> String {
+    let v = merge_machine_user_preview_style(machine, user);
+    let flat: Vec<String> = v.iter().map(|(_, s)| s.clone()).collect();
+    join(&flat)
+}
+
 /// Split a PATH string into non-empty entries (trimmed).
 pub fn split(raw: &str) -> Vec<String> {
     raw.split(SEP)
@@ -120,5 +183,38 @@ mod tests {
             "/b".into(),
         ];
         assert_eq!(dedupe_adjacent(&v), vec!["/a", "/b"]);
+    }
+
+    #[test]
+    fn merge_preview_matches_flat_dedupe() {
+        let machine = vec!["a".into(), "b".into()];
+        let user = vec!["b".into(), "c".into()];
+        let merged_tagged = merge_machine_user_preview_style(&machine, &user);
+        assert_eq!(
+            merged_tagged,
+            vec![
+                (PathOrigin::Machine, "a".into()),
+                (PathOrigin::Machine, "b".into()),
+                (PathOrigin::User, "c".into()),
+            ]
+        );
+        let flat: Vec<String> = merged_tagged.iter().map(|(_, s)| s.clone()).collect();
+        let mut naive = machine.clone();
+        naive.extend(user.clone());
+        assert_eq!(flat, dedupe_adjacent(&naive));
+
+        let (m2, u2) = split_origins(&merged_tagged);
+        let again = join_merged_preview_style(&m2, &u2);
+        assert_eq!(again, join(&flat));
+    }
+
+    #[test]
+    fn split_roundtrip_tagged() {
+        let m = vec!["C:\\M1".into()];
+        let u = vec!["C:\\U1".into(), "C:\\U2".into()];
+        let seg = merge_machine_user_preview_style(&m, &u);
+        let (m2, u2) = split_origins(&seg);
+        assert_eq!(m2, m);
+        assert_eq!(u2, u);
     }
 }

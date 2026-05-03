@@ -4,7 +4,7 @@ use eframe::egui;
 use eframe::egui::{ScrollArea, TextEdit};
 
 use crate::config::AppConfig;
-use crate::path_model;
+use crate::path_model::{self, PathOrigin};
 use crate::row_icons::{path_row_icon_button, PathRowIcon};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -12,11 +12,17 @@ pub enum Scope {
     #[default]
     User,
     System,
+    /// Merged machine + user view (same ordering as “effective PATH” preview).
+    Effective,
 }
 
 pub struct PathmanApp {
     scope: Scope,
     entries: Vec<String>,
+    /// Editable merged PATH when [`Scope::Effective`] is active.
+    effective_segments: Vec<(PathOrigin, String)>,
+    /// Machine PATH join at last effective load; used to detect machine-store edits for confirm/UAC.
+    baseline_machine_join: String,
     dirty: bool,
     status: String,
     status_err: bool,
@@ -28,6 +34,13 @@ pub struct PathmanApp {
     /// Unix: show shell file path editor
     shell_path_edit: String,
     show_shell_settings: bool,
+}
+
+fn origin_badge_label(origin: PathOrigin) -> &'static str {
+    match origin {
+        PathOrigin::Machine => "Machine",
+        PathOrigin::User => "User",
+    }
 }
 
 impl PathmanApp {
@@ -45,6 +58,8 @@ impl PathmanApp {
         let mut app = Self {
             scope: Scope::default(),
             entries: Vec::new(),
+            effective_segments: Vec::new(),
+            baseline_machine_join: String::new(),
             dirty: false,
             status: String::new(),
             status_err: false,
@@ -65,6 +80,7 @@ impl PathmanApp {
         let r = match self.scope {
             Scope::User => self.load_user(),
             Scope::System => self.load_system(),
+            Scope::Effective => self.load_effective(),
         };
         if let Err(e) = r {
             self.set_status_err(format!("Load failed: {e:#}"));
@@ -101,6 +117,27 @@ impl PathmanApp {
         Ok(())
     }
 
+    fn load_effective(&mut self) -> anyhow::Result<()> {
+        #[cfg(windows)]
+        {
+            let m = path_model::split(&crate::persist::read_machine_path()?);
+            let u = path_model::split(&crate::persist::read_user_path()?);
+            self.baseline_machine_join = path_model::join(&m);
+            self.effective_segments = path_model::merge_machine_user_preview_style(&m, &u);
+        }
+        #[cfg(not(windows))]
+        {
+            // Same ordering as Windows HKLM then HKCU: pathman system store, then user shell block.
+            // A login shell’s real PATH can include extra sources; this view edits only those two stores.
+            let m = crate::persist::read_system_entries(&self.config)?;
+            let u = crate::persist::read_user_entries(&self.config)?;
+            self.baseline_machine_join = path_model::join(&m);
+            self.effective_segments = path_model::merge_machine_user_preview_style(&m, &u);
+        }
+        self.dirty = false;
+        Ok(())
+    }
+
     #[cfg(windows)]
     fn refresh_preview(&mut self) {
         self.preview_merged = crate::persist::merged_preview().unwrap_or_default();
@@ -108,12 +145,24 @@ impl PathmanApp {
 
     fn save(&mut self) {
         self.status_clear();
-        let entries = path_model::dedupe_adjacent(&self.entries);
-        self.entries = entries.clone();
-
         let res = match self.scope {
-            Scope::User => self.save_user(&entries),
-            Scope::System => self.save_system(&entries),
+            Scope::User => {
+                let entries = path_model::dedupe_adjacent(&self.entries);
+                self.entries = entries.clone();
+                self.save_user(&entries)
+            }
+            Scope::System => {
+                let entries = path_model::dedupe_adjacent(&self.entries);
+                self.entries = entries.clone();
+                self.save_system(&entries)
+            }
+            Scope::Effective => {
+                let mut segs = self.effective_segments.clone();
+                path_model::dedupe_adjacent_tagged(&mut segs);
+                self.effective_segments = segs.clone();
+                let (machine, user) = path_model::split_origins(&segs);
+                self.save_user(&user).and_then(|_| self.save_system(&machine))
+            }
         };
         match res {
             Ok(()) => {
@@ -121,9 +170,20 @@ impl PathmanApp {
                 self.set_status_ok("Saved. Open a new terminal for changes to apply.".into());
                 #[cfg(windows)]
                 self.refresh_preview();
+                if self.scope == Scope::Effective {
+                    let _ = self.load_effective();
+                }
             }
             Err(e) => self.set_status_err(format!("Save failed: {e:#}")),
         }
+    }
+
+    /// True if saving would change the machine/system PATH string (needs confirm / elevation on Windows).
+    fn effective_machine_save_pending_confirm(&self) -> bool {
+        let mut segs = self.effective_segments.clone();
+        path_model::dedupe_adjacent_tagged(&mut segs);
+        let (m, _) = path_model::split_origins(&segs);
+        path_model::join(&m) != self.baseline_machine_join
     }
 
     fn save_user(&mut self, entries: &[String]) -> anyhow::Result<()> {
@@ -196,8 +256,14 @@ impl PathmanApp {
             return;
         }
         self.set_status_ok("Shell file path saved to pathman.toml.".into());
-        if self.scope == Scope::User {
-            let _ = self.load_user();
+        match self.scope {
+            Scope::User => {
+                let _ = self.load_user();
+            }
+            Scope::Effective => {
+                let _ = self.load_effective();
+            }
+            Scope::System => {}
         }
     }
 }
@@ -245,12 +311,23 @@ impl eframe::App for PathmanApp {
                     self.scope = Scope::System;
                     self.reload_from_store();
                 }
+                if ui
+                    .selectable_label(self.scope == Scope::Effective, "Effective")
+                    .clicked()
+                {
+                    self.scope = Scope::Effective;
+                    self.reload_from_store();
+                }
                 ui.separator();
                 if ui.button("Reload").clicked() {
                     self.reload_from_store();
                 }
                 if ui.button("Dedupe").clicked() {
-                    self.entries = path_model::dedupe_adjacent(&self.entries);
+                    if self.scope == Scope::Effective {
+                        path_model::dedupe_adjacent_tagged(&mut self.effective_segments);
+                    } else {
+                        self.entries = path_model::dedupe_adjacent(&self.entries);
+                    }
                     self.dirty = true;
                 }
                 ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
@@ -317,10 +394,10 @@ impl eframe::App for PathmanApp {
                     );
                 });
             }
-            if self.scope == Scope::System {
+            if matches!(self.scope, Scope::System | Scope::Effective) {
                 ui.label(
                     egui::RichText::new(
-                        "System scope may trigger UAC (Windows) or an admin password (macOS/Linux).",
+                        "Changing machine (system) PATH may trigger UAC (Windows) or an admin password (macOS/Linux).",
                     )
                     .small()
                     .color(egui::Color32::from_rgb(200, 160, 80)),
@@ -350,17 +427,29 @@ impl eframe::App for PathmanApp {
         let mut confirm_cancel = false;
         let mut confirm_save = false;
         if self.show_confirm_system {
-            egui::Window::new("Confirm system PATH change")
+            egui::Window::new(if self.scope == Scope::Effective {
+                "Confirm PATH save"
+            } else {
+                "Confirm system PATH change"
+            })
                 .collapsible(false)
                 .resizable(false)
                 .open(&mut self.show_confirm_system)
                 .show(ctx, |ui| {
-                    ui.label("This overwrites the system PATH store for this scope. A backup is written before apply. Continue?");
+                    ui.label(match self.scope {
+                        Scope::Effective => "This updates user PATH and may elevate to update machine (system) PATH. A backup is written before apply. Continue?",
+                        _ => "This overwrites the system PATH store for this scope. A backup is written before apply. Continue?",
+                    });
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
                             confirm_cancel = true;
                         }
-                        if ui.button("Save system PATH").clicked() {
+                        let confirm_label = if self.scope == Scope::Effective {
+                            "Save PATH"
+                        } else {
+                            "Save system PATH"
+                        };
+                        if ui.button(confirm_label).clicked() {
                             confirm_save = true;
                         }
                     });
@@ -375,22 +464,69 @@ impl eframe::App for PathmanApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("Add folder…").clicked() {
-                    if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                        self.entries.push(p.to_string_lossy().to_string());
+            if self.scope == Scope::Effective {
+                ui.horizontal(|ui| {
+                    if ui.button("Add folder… (user)").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.effective_segments.push((
+                                PathOrigin::User,
+                                p.to_string_lossy().to_string(),
+                            ));
+                            self.dirty = true;
+                        }
+                    }
+                    if ui.button("Add folder… (machine)").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            let pos = self
+                                .effective_segments
+                                .iter()
+                                .position(|(o, _)| *o == PathOrigin::User)
+                                .unwrap_or(self.effective_segments.len());
+                            self.effective_segments.insert(
+                                pos,
+                                (PathOrigin::Machine, p.to_string_lossy().to_string()),
+                            );
+                            self.dirty = true;
+                        }
+                    }
+                    if ui.button("Add text row (user)").clicked() {
+                        self.effective_segments
+                            .push((PathOrigin::User, String::new()));
                         self.dirty = true;
                     }
-                }
-                if ui.button("Add text row").clicked() {
-                    self.entries.push(String::new());
-                    self.dirty = true;
-                }
-            });
+                    if ui.button("Add text row (machine)").clicked() {
+                        let pos = self
+                            .effective_segments
+                            .iter()
+                            .position(|(o, _)| *o == PathOrigin::User)
+                            .unwrap_or(self.effective_segments.len());
+                        self.effective_segments
+                            .insert(pos, (PathOrigin::Machine, String::new()));
+                        self.dirty = true;
+                    }
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    if ui.button("Add folder…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.entries.push(p.to_string_lossy().to_string());
+                            self.dirty = true;
+                        }
+                    }
+                    if ui.button("Add text row").clicked() {
+                        self.entries.push(String::new());
+                        self.dirty = true;
+                    }
+                });
+            }
 
             let list_viewport_w = ui.available_width();
             ScrollArea::vertical()
-                .id_salt("path_entries")
+                .id_salt(if self.scope == Scope::Effective {
+                    "path_entries_effective"
+                } else {
+                    "path_entries"
+                })
                 .max_width(list_viewport_w)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
@@ -405,105 +541,253 @@ impl eframe::App for PathmanApp {
                 let mut move_dn: Option<usize> = None;
                 const BTN_W: f32 = 30.0;
                 const MARK_W: f32 = 28.0;
+                const ORIGIN_W: f32 = 56.0;
                 let btn_h = ui.spacing().interact_size.y;
                 let gap = ui.spacing().item_spacing.x;
-                // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps between them.
-                let row_reserve = MARK_W + 3.0 * BTN_W + 4.0 * gap;
-                let text_column_w = (scroll_w - row_reserve).max(48.0);
 
-                for (i, e) in self.entries.iter_mut().enumerate() {
-                    let expanded = path_model::expanded_path(e.as_str());
-                    let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
-                    let mark = if warn { "[!]" } else { "   " };
-                    let mark_color = if warn {
-                        egui::Color32::from_rgb(220, 180, 60)
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    };
+                if self.scope == Scope::Effective {
+                    // [mark][origin][text][^][v][X] → 6 widgets, 5 gaps.
+                    let row_reserve = MARK_W + ORIGIN_W + 3.0 * BTN_W + 5.0 * gap;
+                    let text_column_w = (scroll_w - row_reserve).max(48.0);
 
-                    ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            let mark_resp = ui.add_sized(
-                                [MARK_W, btn_h],
-                                egui::Label::new(
-                                    egui::RichText::new(mark)
-                                        .small()
-                                        .monospace()
-                                        .color(mark_color),
-                                ),
-                            );
-                            if warn {
-                                mark_resp.on_hover_text(
-                                    "Path not found or not a directory (after expanding env vars)",
+                    let n_seg = self.effective_segments.len();
+                    for i in 0..n_seg {
+                        let can_up = i > 0
+                            && self.effective_segments[i].0 == self.effective_segments[i - 1].0;
+                        let can_dn = i + 1 < n_seg
+                            && self.effective_segments[i].0 == self.effective_segments[i + 1].0;
+                        let origin = self.effective_segments[i].0;
+                        let expanded = path_model::expanded_path(self.effective_segments[i].1.as_str());
+                        let warn = self.warn_missing
+                            && !path_model::entry_exists(self.effective_segments[i].1.as_str());
+                        let mark = if warn { "[!]" } else { "   " };
+                        let mark_color = if warn {
+                            egui::Color32::from_rgb(220, 180, 60)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                let mark_resp = ui.add_sized(
+                                    [MARK_W, btn_h],
+                                    egui::Label::new(
+                                        egui::RichText::new(mark)
+                                            .small()
+                                            .monospace()
+                                            .color(mark_color),
+                                    ),
                                 );
-                            }
+                                if warn {
+                                    mark_resp.on_hover_text(
+                                        "Path not found or not a directory (after expanding env vars)",
+                                    );
+                                }
 
-                            let te_resp = ui.add_sized(
-                                egui::vec2(text_column_w, btn_h),
-                                TextEdit::singleline(e)
-                                    .desired_width(text_column_w)
-                                    .clip_text(true)
-                                    .font(egui::TextStyle::Monospace)
-                                    .id_salt(i),
-                            );
-                            if te_resp.changed() {
-                                self.dirty = true;
-                            }
+                                ui.add_sized(
+                                    [ORIGIN_W, btn_h],
+                                    egui::Label::new(
+                                        egui::RichText::new(origin_badge_label(origin))
+                                            .small()
+                                            .weak(),
+                                    ),
+                                );
 
-                            if path_row_icon_button(ui, [BTN_W, btn_h], PathRowIcon::MoveUp, "Move up")
+                                let e = &mut self.effective_segments[i].1;
+                                let te_resp = ui.add_sized(
+                                    egui::vec2(text_column_w, btn_h),
+                                    TextEdit::singleline(e)
+                                        .desired_width(text_column_w)
+                                        .clip_text(true)
+                                        .font(egui::TextStyle::Monospace)
+                                        .id_salt(("eff", i)),
+                                );
+                                if te_resp.changed() {
+                                    self.dirty = true;
+                                }
+
+                                if ui
+                                    .add_enabled_ui(can_up, |ui| {
+                                        path_row_icon_button(
+                                            ui,
+                                            [BTN_W, btn_h],
+                                            PathRowIcon::MoveUp,
+                                            if can_up {
+                                                "Move up"
+                                            } else {
+                                                "Cannot cross machine / user boundary"
+                                            },
+                                        )
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
+                                    move_up = Some(i);
+                                }
+                                if ui
+                                    .add_enabled_ui(can_dn, |ui| {
+                                        path_row_icon_button(
+                                            ui,
+                                            [BTN_W, btn_h],
+                                            PathRowIcon::MoveDown,
+                                            if can_dn {
+                                                "Move down"
+                                            } else {
+                                                "Cannot cross machine / user boundary"
+                                            },
+                                        )
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
+                                    move_dn = Some(i);
+                                }
+                                if path_row_icon_button(
+                                    ui,
+                                    [BTN_W, btn_h],
+                                    PathRowIcon::Remove,
+                                    "Remove row",
+                                )
                                 .clicked()
-                            {
-                                move_up = Some(i);
-                            }
-                            if path_row_icon_button(
-                                ui,
-                                [BTN_W, btn_h],
-                                PathRowIcon::MoveDown,
-                                "Move down",
-                            )
-                            .clicked()
-                            {
-                                move_dn = Some(i);
-                            }
-                            if path_row_icon_button(
-                                ui,
-                                [BTN_W, btn_h],
-                                PathRowIcon::Remove,
-                                "Remove row",
-                            )
-                            .clicked()
-                            {
-                                remove_at = Some(i);
+                                {
+                                    remove_at = Some(i);
+                                }
+                            });
+
+                            let row_text = self.effective_segments[i].1.clone();
+                            if expanded != row_text {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(MARK_W + gap + ORIGIN_W + gap);
+                                    ui.label(
+                                        egui::RichText::new(format!("→ {expanded}"))
+                                            .small()
+                                            .weak()
+                                            .monospace(),
+                                    );
+                                });
                             }
                         });
+                    }
+                } else {
+                    // One row: [mark][text][^][v][X] → 5 widgets, 4 gaps.
+                    let row_reserve = MARK_W + 3.0 * BTN_W + 4.0 * gap;
+                    let text_column_w = (scroll_w - row_reserve).max(48.0);
 
-                        if expanded != *e {
+                    for (i, e) in self.entries.iter_mut().enumerate() {
+                        let expanded = path_model::expanded_path(e.as_str());
+                        let warn = self.warn_missing && !path_model::entry_exists(e.as_str());
+                        let mark = if warn { "[!]" } else { "   " };
+                        let mark_color = if warn {
+                            egui::Color32::from_rgb(220, 180, 60)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+
+                        ui.vertical(|ui| {
                             ui.horizontal(|ui| {
-                                ui.add_space(MARK_W + gap);
-                                ui.label(
-                                    egui::RichText::new(format!("→ {expanded}"))
-                                        .small()
-                                        .weak()
-                                        .monospace(),
+                                let mark_resp = ui.add_sized(
+                                    [MARK_W, btn_h],
+                                    egui::Label::new(
+                                        egui::RichText::new(mark)
+                                            .small()
+                                            .monospace()
+                                            .color(mark_color),
+                                    ),
                                 );
+                                if warn {
+                                    mark_resp.on_hover_text(
+                                        "Path not found or not a directory (after expanding env vars)",
+                                    );
+                                }
+
+                                let te_resp = ui.add_sized(
+                                    egui::vec2(text_column_w, btn_h),
+                                    TextEdit::singleline(e)
+                                        .desired_width(text_column_w)
+                                        .clip_text(true)
+                                        .font(egui::TextStyle::Monospace)
+                                        .id_salt(i),
+                                );
+                                if te_resp.changed() {
+                                    self.dirty = true;
+                                }
+
+                                if path_row_icon_button(ui, [BTN_W, btn_h], PathRowIcon::MoveUp, "Move up")
+                                    .clicked()
+                                {
+                                    move_up = Some(i);
+                                }
+                                if path_row_icon_button(
+                                    ui,
+                                    [BTN_W, btn_h],
+                                    PathRowIcon::MoveDown,
+                                    "Move down",
+                                )
+                                .clicked()
+                                {
+                                    move_dn = Some(i);
+                                }
+                                if path_row_icon_button(
+                                    ui,
+                                    [BTN_W, btn_h],
+                                    PathRowIcon::Remove,
+                                    "Remove row",
+                                )
+                                .clicked()
+                                {
+                                    remove_at = Some(i);
+                                }
                             });
-                        }
-                    });
+
+                            if expanded != *e {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(MARK_W + gap);
+                                    ui.label(
+                                        egui::RichText::new(format!("→ {expanded}"))
+                                            .small()
+                                            .weak()
+                                            .monospace(),
+                                    );
+                                });
+                            }
+                        });
+                    }
                 }
+
                 if let Some(i) = remove_at {
-                    if i < self.entries.len() {
+                    if self.scope == Scope::Effective {
+                        if i < self.effective_segments.len() {
+                            self.effective_segments.remove(i);
+                            self.dirty = true;
+                        }
+                    } else if i < self.entries.len() {
                         self.entries.remove(i);
                         self.dirty = true;
                     }
                 }
                 if let Some(i) = move_up {
-                    if i > 0 && i < self.entries.len() {
+                    if self.scope == Scope::Effective {
+                        if i > 0
+                            && i < self.effective_segments.len()
+                            && self.effective_segments[i].0 == self.effective_segments[i - 1].0
+                        {
+                            self.effective_segments.swap(i, i - 1);
+                            self.dirty = true;
+                        }
+                    } else if i > 0 && i < self.entries.len() {
                         self.entries.swap(i, i - 1);
                         self.dirty = true;
                     }
                 }
                 if let Some(i) = move_dn {
-                    if i + 1 < self.entries.len() {
+                    if self.scope == Scope::Effective {
+                        if i + 1 < self.effective_segments.len()
+                            && self.effective_segments[i].0 == self.effective_segments[i + 1].0
+                        {
+                            self.effective_segments.swap(i, i + 1);
+                            self.dirty = true;
+                        }
+                    } else if i + 1 < self.entries.len() {
                         self.entries.swap(i, i + 1);
                         self.dirty = true;
                     }
@@ -515,8 +799,10 @@ impl eframe::App for PathmanApp {
                 let save_clicked = ui
                     .add_enabled(self.dirty, egui::Button::new("Save"))
                     .clicked();
+                let needs_confirm = matches!(self.scope, Scope::System)
+                    || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());
                 let do_save = save_clicked
-                    && if self.scope == Scope::System {
+                    && if needs_confirm {
                         self.show_confirm_system = true;
                         false
                     } else {
