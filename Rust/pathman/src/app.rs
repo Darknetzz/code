@@ -1269,11 +1269,11 @@ impl eframe::App for PathmanApp {
                 ui.horizontal(|ui| {
                     path_add_origin_menu(
                         ui,
-                        "User",
+                        "Add user…",
                         fill_u,
                         acc_u,
                         txt_u,
-                        "Add to user PATH: Text row or Folder",
+                        "Add to user PATH: choose Text row or Folder",
                         |ui| {
                             if ui.button("Text row").clicked() {
                                 self.effective_segments
@@ -1295,11 +1295,11 @@ impl eframe::App for PathmanApp {
                     );
                     path_add_origin_menu(
                         ui,
-                        "Machine",
+                        "Add machine…",
                         fill_m,
                         acc_m,
                         txt_m,
-                        "Add to machine PATH (before user entries): Text row or Folder",
+                        "Add to machine PATH (before user entries): choose Text row or Folder",
                         |ui| {
                             if ui.button("Text row").clicked() {
                                 let pos = self

@@ -148,7 +148,23 @@ fn paint_dropdown_chevron(painter: &egui::Painter, rect: egui::Rect, fill: egui:
     ));
 }
 
-/// Origin-colored menu button (“User” / “Machine”) with a dropdown for add actions.
+/// Ascii “+” not used — small drawn plus, same idea as other toolbar icons.
+fn paint_add_plus(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32, line_w: f32) {
+    let stroke = Stroke::new(line_w, color);
+    let inner = rect.shrink(rect.width().min(rect.height()) * 0.2);
+    let cy = inner.center().y;
+    let cx = inner.center().x;
+    painter.line_segment(
+        [egui::pos2(inner.left(), cy), egui::pos2(inner.right(), cy)],
+        stroke,
+    );
+    painter.line_segment(
+        [egui::pos2(cx, inner.top()), egui::pos2(cx, inner.bottom())],
+        stroke,
+    );
+}
+
+/// Origin-colored menu button (e.g. “Add user…”) with a dropdown for add actions.
 pub fn path_add_origin_menu<R>(
     ui: &mut egui::Ui,
     origin_label: &str,
@@ -159,10 +175,13 @@ pub fn path_add_origin_menu<R>(
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
     let min_h = ui.spacing().interact_size.y;
+    // Leading spaces clear room for a drawn “+”. `shortcut_text` reserves the right for the chevron.
+    let label = format!("   {origin_label}");
+    let line_w = (ui.style().visuals.widgets.inactive.fg_stroke.width * 1.4).max(1.2);
     // `shortcut_text` reserves the right strip so the label stays left-aligned; we paint the chevron
     // there (spaces are nearly invisible at weak_text_color).
     let btn = egui::Button::new(
-        egui::RichText::new(origin_label)
+        egui::RichText::new(label)
             .color(text_color)
             .text_style(TextStyle::Button),
     )
@@ -180,7 +199,13 @@ pub fn path_add_origin_menu<R>(
         egui::vec2(10.0, 7.0),
     );
     if ui.is_rect_visible(r) {
-        paint_dropdown_chevron(&ui.painter_at(r), chev, text_color);
+        let painter = ui.painter_at(r);
+        let plus_r = egui::Rect::from_center_size(
+            egui::pos2(r.left() + pad + 7.0, r.center().y),
+            egui::vec2(12.0, 12.0),
+        );
+        paint_add_plus(&painter, plus_r, text_color, line_w);
+        paint_dropdown_chevron(&painter, chev, text_color);
     }
 
     ir.response = ir.response.on_hover_text(tooltip);
