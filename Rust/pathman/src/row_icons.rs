@@ -131,7 +131,24 @@ pub fn path_add_toolbar_button(
     response.on_hover_text(tooltip)
 }
 
-/// Origin-colored menu button (e.g. “User ▾” / “Machine ▾”) with a dropdown for add actions.
+/// Small filled ▼ drawn with epaint (no font glyphs — Unicode arrows often missing in egui fonts).
+fn paint_dropdown_chevron(painter: &egui::Painter, rect: egui::Rect, fill: egui::Color32) {
+    let tri = egui::Rect::from_center_size(
+        rect.center(),
+        egui::vec2(rect.width() * 0.95, rect.height() * 0.85),
+    );
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            tri.left_top(),
+            tri.right_top(),
+            tri.center_bottom(),
+        ],
+        fill,
+        Stroke::NONE,
+    ));
+}
+
+/// Origin-colored menu button (“User” / “Machine”) with a dropdown for add actions.
 pub fn path_add_origin_menu<R>(
     ui: &mut egui::Ui,
     origin_label: &str,
@@ -142,16 +159,30 @@ pub fn path_add_origin_menu<R>(
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
     let min_h = ui.spacing().interact_size.y;
+    // `shortcut_text` reserves the right strip so the label stays left-aligned; we paint the chevron
+    // there (spaces are nearly invisible at weak_text_color).
     let btn = egui::Button::new(
-        egui::RichText::new(format!("{origin_label} ▾"))
+        egui::RichText::new(origin_label)
             .color(text_color)
             .text_style(TextStyle::Button),
     )
     .fill(fill)
     .stroke(Stroke::new(1.0, accent))
-    .min_size(egui::vec2(0.0, min_h));
+    .min_size(egui::vec2(0.0, min_h))
+    .shortcut_text("    ");
 
     let mut ir = menu::menu_custom_button(ui, btn, add_contents);
+
+    let r = ir.response.rect;
+    let pad = ui.spacing().button_padding.x;
+    let chev = egui::Rect::from_center_size(
+        egui::pos2(r.right() - pad - 9.0, r.center().y),
+        egui::vec2(10.0, 7.0),
+    );
+    if ui.is_rect_visible(r) {
+        paint_dropdown_chevron(&ui.painter_at(r), chev, text_color);
+    }
+
     ir.response = ir.response.on_hover_text(tooltip);
     ir
 }
