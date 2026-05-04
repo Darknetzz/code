@@ -3,6 +3,11 @@
 
 use eframe::egui::{self, menu, Sense, Stroke, TextStyle, TextWrapMode, WidgetText};
 
+/// Pixel gap between drawn icons and their labels (toolbar add buttons and origin menus).
+const ICON_TEXT_GAP: f32 = 8.0;
+/// Right edge of the drawn “+” in `path_add_origin_menu` from the button rect’s left (center `pad + 7`, size 12).
+const ORIGIN_MENU_PLUS_RIGHT: f32 = 7.0 + 6.0;
+
 pub(crate) fn mix_srgb(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     let t = t.clamp(0.0, 1.0);
     egui::Color32::from_rgb(
@@ -76,7 +81,7 @@ pub fn path_add_toolbar_button(
 ) -> egui::Response {
     let pad_x = 10.0_f32;
     let pad_y = 6.0_f32;
-    let gap = 8.0_f32;
+    let gap = ICON_TEXT_GAP;
     let icon_side = 17.0_f32;
     let min_h = ui.spacing().interact_size.y;
 
@@ -175,8 +180,20 @@ pub fn path_add_origin_menu<R>(
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
     let min_h = ui.spacing().interact_size.y;
-    // Leading spaces clear room for a drawn “+”. `shortcut_text` reserves the right for the chevron.
-    let label = format!("   {origin_label}");
+    // Leading spaces clear room for the drawn “+” and `ICON_TEXT_GAP` after it (same as toolbar).
+    let space_w = WidgetText::from(egui::RichText::new(" ").text_style(TextStyle::Button))
+        .into_galley(
+            ui,
+            Some(TextWrapMode::Extend),
+            f32::INFINITY,
+            TextStyle::Button,
+        )
+        .size()
+        .x
+        .max(1.0);
+    let min_leading_px = ORIGIN_MENU_PLUS_RIGHT + ICON_TEXT_GAP;
+    let n_spaces = ((min_leading_px / space_w).ceil() as usize).max(1);
+    let label = format!("{}{}", " ".repeat(n_spaces), origin_label);
     let line_w = (ui.style().visuals.widgets.inactive.fg_stroke.width * 1.4).max(1.2);
     // `shortcut_text` reserves the right strip so the label stays left-aligned; we paint the chevron
     // there (spaces are nearly invisible at weak_text_color).
@@ -312,4 +329,319 @@ pub fn path_row_icon_button(
     }
 
     response.on_hover_text(tooltip)
+}
+
+// --- Top panel (icon + label, default widget chrome; drawn icons only) ---
+
+const TOP_BAR_PAD_X: f32 = 8.0;
+const TOP_BAR_ICON: f32 = 15.0;
+
+#[derive(Clone, Copy)]
+pub enum TopBarIcon {
+    Reload,
+    Save,
+    Changes,
+    Dedupe,
+    Duplicates,
+    FilterDuplicates,
+    FilterMissing,
+    ScopeEffective,
+    ScopeUser,
+    ScopeSystem,
+}
+
+fn paint_top_bar_icon(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    icon: TopBarIcon,
+    color: egui::Color32,
+    line_w: f32,
+) {
+    let stroke = Stroke::new(line_w, color);
+    let inner = rect.shrink(rect.width().min(rect.height()) * 0.12);
+    match icon {
+        TopBarIcon::Reload => {
+            let c = inner.center();
+            let r = inner.width().min(inner.height()) * 0.38;
+            let steps = 18;
+            let start = -0.35 * std::f32::consts::PI;
+            let sweep = 1.55 * std::f32::consts::TAU;
+            let mut pts = Vec::with_capacity(steps + 1);
+            for i in 0..=steps {
+                let t = start + sweep * (i as f32 / steps as f32);
+                pts.push(c + r * egui::vec2(t.cos(), t.sin()));
+            }
+            let tail = (pts.len() >= 2).then(|| {
+                (pts[pts.len() - 2], *pts.last().expect("len >= 2"))
+            });
+            painter.add(egui::Shape::line(pts, stroke));
+            if let Some((p1, p2)) = tail {
+                let dir = (p2 - p1).normalized();
+                let ah = r * 0.42;
+                let orth = egui::vec2(-dir.y, dir.x);
+                painter.line_segment([p2, p2 - dir * ah + orth * ah * 0.45], stroke);
+                painter.line_segment([p2, p2 - dir * ah - orth * ah * 0.45], stroke);
+            }
+        }
+        TopBarIcon::Save => {
+            let body = egui::Rect::from_min_max(
+                inner.left_bottom() + egui::vec2(inner.width() * 0.08, -inner.height() * 0.62),
+                inner.right_bottom() - egui::vec2(inner.width() * 0.08, inner.height() * 0.08),
+            );
+            let tab = egui::Rect::from_min_max(
+                egui::pos2(body.left(), body.top() - inner.height() * 0.28),
+                egui::pos2(body.right(), body.top()),
+            );
+            painter.rect_stroke(tab, 1.0, stroke);
+            painter.rect_stroke(body, 1.2, stroke);
+            let slit_w = body.width() * 0.35;
+            painter.line_segment(
+                [
+                    egui::pos2(body.center().x - slit_w * 0.5, body.center().y),
+                    egui::pos2(body.center().x + slit_w * 0.5, body.center().y),
+                ],
+                stroke,
+            );
+        }
+        TopBarIcon::Changes => {
+            let y0 = inner.top() + inner.height() * 0.22;
+            let y1 = inner.center().y;
+            let y2 = inner.bottom() - inner.height() * 0.22;
+            let w_full = inner.width() * 0.88;
+            let w_mid = inner.width() * 0.72;
+            let w_short = inner.width() * 0.52;
+            for (y, w) in [(y0, w_full), (y1, w_mid), (y2, w_short)] {
+                let left = inner.center().x - w * 0.5;
+                painter.line_segment(
+                    [egui::pos2(left, y), egui::pos2(left + w, y)],
+                    stroke,
+                );
+            }
+        }
+        TopBarIcon::Dedupe => {
+            let y1 = inner.top() + inner.height() * 0.28;
+            let y2 = inner.bottom() - inner.height() * 0.28;
+            let xl = inner.left() + inner.width() * 0.18;
+            let xr = inner.right() - inner.width() * 0.18;
+            let xm = inner.center().x;
+            painter.line_segment([egui::pos2(xl, y1), egui::pos2(xm, y2)], stroke);
+            painter.line_segment([egui::pos2(xr, y1), egui::pos2(xm, y2)], stroke);
+            painter.line_segment(
+                [
+                    egui::pos2(xm - inner.width() * 0.22, y2),
+                    egui::pos2(xm + inner.width() * 0.22, y2),
+                ],
+                stroke,
+            );
+        }
+        TopBarIcon::Duplicates => {
+            let a = inner.shrink2(egui::vec2(inner.width() * 0.12, inner.height() * 0.18));
+            let shift = inner.width().min(inner.height()) * 0.14;
+            let r1 = a.translate(egui::vec2(-shift * 0.35, shift * 0.35));
+            let r2 = a.translate(egui::vec2(shift * 0.35, -shift * 0.35));
+            painter.rect_stroke(r1, 1.0, stroke);
+            painter.rect_stroke(r2, 1.0, stroke);
+        }
+        TopBarIcon::ScopeEffective => {
+            let gap = inner.height() * 0.22;
+            let h = (inner.height() - gap * 2.0) / 3.0;
+            let w_top = inner.width() * 0.88;
+            let w_mid = inner.width() * 0.68;
+            let w_bot = inner.width() * 0.48;
+            for (i, w) in [w_top, w_mid, w_bot].into_iter().enumerate() {
+                let y = inner.top() + i as f32 * (h + gap) + h * 0.5;
+                let left = inner.center().x - w * 0.5;
+                painter.line_segment(
+                    [egui::pos2(left, y), egui::pos2(left + w, y)],
+                    stroke,
+                );
+            }
+        }
+        TopBarIcon::ScopeUser => {
+            let head_r = inner.width().min(inner.height()) * 0.22;
+            let hc = egui::pos2(inner.center().x, inner.top() + head_r + inner.height() * 0.06);
+            painter.circle_stroke(hc, head_r, stroke);
+            let shoulders = egui::Rect::from_min_max(
+                egui::pos2(inner.center().x - head_r * 1.1, hc.y + head_r * 0.65),
+                egui::pos2(inner.center().x + head_r * 1.1, inner.bottom() - inner.height() * 0.06),
+            );
+            painter.add(egui::Shape::line_segment(
+                [
+                    shoulders.left_bottom(),
+                    shoulders.right_bottom(),
+                ],
+                stroke,
+            ));
+        }
+        TopBarIcon::ScopeSystem => {
+            let bezel = 1.0_f32;
+            let scr = inner.shrink(inner.width().min(inner.height()) * 0.12);
+            painter.rect_stroke(scr, bezel, stroke);
+            let inner_scr = scr.shrink2(egui::vec2(scr.width() * 0.12, scr.height() * 0.18));
+            painter.rect_stroke(inner_scr, 0.8, stroke);
+            let foot_w = scr.width() * 0.28;
+            let foot = egui::Rect::from_center_size(
+                egui::pos2(scr.center().x, inner.bottom() - inner.height() * 0.06),
+                egui::vec2(foot_w, inner.height() * 0.08),
+            );
+            painter.rect_stroke(foot, 0.5, stroke);
+        }
+        TopBarIcon::FilterDuplicates => {
+            let top_w = inner.width() * 0.72;
+            let bot_w = inner.width() * 0.38;
+            let tl = inner.center().x - top_w * 0.5;
+            let tr = tl + top_w;
+            let y_top = inner.top() + inner.height() * 0.18;
+            let y_bot = inner.bottom() - inner.height() * 0.18;
+            let bl = inner.center().x - bot_w * 0.5;
+            let br = bl + bot_w;
+            painter.add(egui::Shape::closed_line(
+                vec![
+                    egui::pos2(tl, y_top),
+                    egui::pos2(tr, y_top),
+                    egui::pos2(br, y_bot),
+                    egui::pos2(bl, y_bot),
+                ],
+                stroke,
+            ));
+        }
+        TopBarIcon::FilterMissing => {
+            let tab_w = inner.width() * 0.52;
+            let tab_h = inner.height() * 0.22;
+            let tab = egui::Rect::from_min_size(inner.left_top(), egui::vec2(tab_w, tab_h));
+            painter.rect_stroke(tab, 1.0, stroke);
+            let body = egui::Rect::from_min_max(
+                egui::pos2(inner.left(), tab.bottom()),
+                inner.right_bottom(),
+            );
+            painter.rect_stroke(body, 1.0, stroke);
+            let q = body.center();
+            let dot_r = (inner.width().min(inner.height()) * 0.08).max(1.0);
+            painter.circle_filled(q, dot_r, color);
+            painter.circle_stroke(q, dot_r * 2.2, stroke);
+        }
+    }
+}
+
+/// Icon + text button using normal widget interaction (disabled state uses [`Ui::add_enabled_ui`]).
+pub fn path_top_bar_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    icon: TopBarIcon,
+    enabled: bool,
+    min_width: f32,
+    tooltip: impl Into<egui::WidgetText>,
+) -> egui::Response {
+    let tooltip = tooltip.into();
+    let ir = ui.add_enabled_ui(enabled, |ui| {
+        let min_h = ui.spacing().interact_size.y;
+        let gap = ICON_TEXT_GAP;
+        let icon_side = TOP_BAR_ICON;
+        let pad_x = TOP_BAR_PAD_X;
+
+        let galley = WidgetText::from(egui::RichText::new(label).text_style(TextStyle::Button))
+            .into_galley(
+                ui,
+                Some(TextWrapMode::Extend),
+                f32::INFINITY,
+                TextStyle::Button,
+            );
+
+        let w = (pad_x + icon_side + gap + galley.size().x + pad_x).max(min_width);
+        let h = (ui.spacing().button_padding.y * 2.0 + galley.size().y)
+            .max(ui.spacing().button_padding.y * 2.0 + icon_side)
+            .max(min_h);
+
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
+        if ui.is_rect_visible(rect) {
+            let visuals = ui.style().interact(&response);
+            let text_color = visuals.fg_stroke.color;
+            let line_w = (visuals.fg_stroke.width * 1.35).max(1.2);
+            let painter = ui.painter_at(rect);
+            painter.rect_filled(rect, visuals.rounding, visuals.weak_bg_fill);
+            if response.hovered() || response.highlighted() || response.has_focus() {
+                painter.rect_filled(rect, visuals.rounding, visuals.bg_fill);
+            }
+            painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
+            let icon_rect = egui::Rect::from_center_size(
+                egui::pos2(rect.left() + pad_x + icon_side * 0.5, rect.center().y),
+                egui::vec2(icon_side, icon_side),
+            );
+            paint_top_bar_icon(&painter, icon_rect, icon, text_color, line_w);
+            let text_pos = egui::pos2(
+                rect.left() + pad_x + icon_side + gap,
+                rect.center().y - 0.5 * galley.size().y,
+            );
+            painter.galley(text_pos, galley, text_color);
+        }
+        response.on_hover_text(tooltip)
+    });
+    ir.inner
+}
+
+/// Icon + text selectable (scope tabs, filters).
+pub fn path_top_bar_selectable(
+    ui: &mut egui::Ui,
+    selected: bool,
+    label: &str,
+    icon: TopBarIcon,
+) -> egui::Response {
+    let gap = ICON_TEXT_GAP;
+    let icon_side = TOP_BAR_ICON;
+    let pad_x = TOP_BAR_PAD_X;
+    let min_h = ui.spacing().interact_size.y;
+
+    let galley = WidgetText::from(egui::RichText::new(label).text_style(TextStyle::Button))
+        .into_galley(
+            ui,
+            Some(TextWrapMode::Extend),
+            f32::INFINITY,
+            TextStyle::Button,
+        );
+
+    let w = pad_x + icon_side + gap + galley.size().x + pad_x;
+    let h = (ui.spacing().button_padding.y * 2.0 + galley.size().y)
+        .max(ui.spacing().button_padding.y * 2.0 + icon_side)
+        .max(min_h);
+
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let rounding = ui.visuals().widgets.inactive.rounding;
+        let painter = ui.painter_at(rect);
+        let bg = if selected {
+            ui.visuals().selection.bg_fill
+        } else if response.hovered() {
+            ui.visuals().widgets.hovered.weak_bg_fill
+        } else {
+            egui::Color32::TRANSPARENT
+        };
+        if bg != egui::Color32::TRANSPARENT {
+            painter.rect_filled(rect, rounding, bg);
+        }
+        let stroke = if selected {
+            ui.visuals().selection.stroke
+        } else {
+            ui.visuals().widgets.inactive.bg_stroke
+        };
+        if selected {
+            painter.rect_stroke(rect, rounding, stroke);
+        }
+        let text_color = if selected {
+            ui.visuals().selection.stroke.color
+        } else {
+            ui.style().interact(&response).fg_stroke.color
+        };
+        let line_w = (ui.style().visuals.widgets.inactive.fg_stroke.width * 1.35).max(1.2);
+        let icon_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.left() + pad_x + icon_side * 0.5, rect.center().y),
+            egui::vec2(icon_side, icon_side),
+        );
+        paint_top_bar_icon(&painter, icon_rect, icon, text_color, line_w);
+        let text_pos = egui::pos2(
+            rect.left() + pad_x + icon_side + gap,
+            rect.center().y - 0.5 * galley.size().y,
+        );
+        painter.galley(text_pos, galley, text_color);
+    }
+    response
 }
