@@ -72,7 +72,7 @@ fn main() -> eframe::Result<()> {
     }
 
     let app_icon = Arc::new(
-        eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))
+        eframe::icon_data::from_png_bytes(include_bytes!("../assets/pathman.png"))
             .expect("embedded app icon is a valid PNG"),
     );
 
