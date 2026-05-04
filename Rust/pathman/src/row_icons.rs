@@ -1,7 +1,7 @@
 //! Vector-drawn row action icons. Unicode glyphs are not reliable with egui's bundled fonts
 //! (missing glyph → “tofu” boxes), so we paint triangles and an × with epaint.
 
-use eframe::egui::{self, Sense, Stroke, TextStyle, TextWrapMode, WidgetText};
+use eframe::egui::{self, menu, Sense, Stroke, TextStyle, TextWrapMode, WidgetText};
 
 pub(crate) fn mix_srgb(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     let t = t.clamp(0.0, 1.0);
@@ -129,6 +129,31 @@ pub fn path_add_toolbar_button(
     painter.galley(text_pos, galley, text_color);
 
     response.on_hover_text(tooltip)
+}
+
+/// Origin-colored menu button (e.g. “User ▾” / “Machine ▾”) with a dropdown for add actions.
+pub fn path_add_origin_menu<R>(
+    ui: &mut egui::Ui,
+    origin_label: &str,
+    fill: egui::Color32,
+    accent: egui::Color32,
+    text_color: egui::Color32,
+    tooltip: &str,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<Option<R>> {
+    let min_h = ui.spacing().interact_size.y;
+    let btn = egui::Button::new(
+        egui::RichText::new(format!("{origin_label} ▾"))
+            .color(text_color)
+            .text_style(TextStyle::Button),
+    )
+    .fill(fill)
+    .stroke(Stroke::new(1.0, accent))
+    .min_size(egui::vec2(0.0, min_h));
+
+    let mut ir = menu::menu_custom_button(ui, btn, add_contents);
+    ir.response = ir.response.on_hover_text(tooltip);
+    ir
 }
 
 #[derive(Clone, Copy)]

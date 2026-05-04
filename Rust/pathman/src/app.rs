@@ -8,7 +8,8 @@ use eframe::egui::{ScrollArea, Sense, TextEdit};
 use crate::config::AppConfig;
 use crate::path_model::{self, PathOrigin};
 use crate::row_icons::{
-    mix_srgb, path_add_toolbar_button, path_row_icon_button, AddToolbarIcon, PathRowIcon,
+    mix_srgb, path_add_origin_menu, path_add_toolbar_button, path_row_icon_button, AddToolbarIcon,
+    PathRowIcon,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -1266,84 +1267,68 @@ impl eframe::App for PathmanApp {
                 let (fill_u, acc_u, txt_u) = origin_add_button_theme(PathOrigin::User);
                 let (fill_m, acc_m, txt_m) = origin_add_button_theme(PathOrigin::Machine);
                 ui.horizontal(|ui| {
-                    if path_add_toolbar_button(
+                    path_add_origin_menu(
                         ui,
-                        "Add folder… (user)",
-                        AddToolbarIcon::Folder,
+                        "User",
                         fill_u,
                         acc_u,
                         txt_u,
-                        "Pick a folder to append to user PATH",
-                    )
-                    .clicked()
-                    {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            self.effective_segments.push((
-                                PathOrigin::User,
-                                p.to_string_lossy().to_string(),
-                            ));
-                            self.dirty = true;
-                        }
-                    }
-                    if path_add_toolbar_button(
+                        "Add to user PATH: Text row or Folder",
+                        |ui| {
+                            if ui.button("Text row").clicked() {
+                                self.effective_segments
+                                    .push((PathOrigin::User, String::new()));
+                                self.dirty = true;
+                                ui.close_menu();
+                            }
+                            if ui.button("Folder").clicked() {
+                                ui.close_menu();
+                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                    self.effective_segments.push((
+                                        PathOrigin::User,
+                                        p.to_string_lossy().to_string(),
+                                    ));
+                                    self.dirty = true;
+                                }
+                            }
+                        },
+                    );
+                    path_add_origin_menu(
                         ui,
-                        "Add folder… (machine)",
-                        AddToolbarIcon::Folder,
+                        "Machine",
                         fill_m,
                         acc_m,
                         txt_m,
-                        "Pick a folder to insert into machine PATH (before user entries)",
-                    )
-                    .clicked()
-                    {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            let pos = self
-                                .effective_segments
-                                .iter()
-                                .position(|(o, _)| *o == PathOrigin::User)
-                                .unwrap_or(self.effective_segments.len());
-                            self.effective_segments.insert(
-                                pos,
-                                (PathOrigin::Machine, p.to_string_lossy().to_string()),
-                            );
-                            self.dirty = true;
-                        }
-                    }
-                    if path_add_toolbar_button(
-                        ui,
-                        "Add text row (user)",
-                        AddToolbarIcon::TextRow,
-                        fill_u,
-                        acc_u,
-                        txt_u,
-                        "Append an empty row to user PATH",
-                    )
-                    .clicked()
-                    {
-                        self.effective_segments
-                            .push((PathOrigin::User, String::new()));
-                        self.dirty = true;
-                    }
-                    if path_add_toolbar_button(
-                        ui,
-                        "Add text row (machine)",
-                        AddToolbarIcon::TextRow,
-                        fill_m,
-                        acc_m,
-                        txt_m,
-                        "Insert an empty machine PATH row (before user entries)",
-                    )
-                    .clicked()
-                    {
-                        let pos = self
-                            .effective_segments
-                            .iter()
-                            .position(|(o, _)| *o == PathOrigin::User)
-                            .unwrap_or(self.effective_segments.len());
-                        self.effective_segments
-                            .insert(pos, (PathOrigin::Machine, String::new()));
-                        self.dirty = true;
-                    }
+                        "Add to machine PATH (before user entries): Text row or Folder",
+                        |ui| {
+                            if ui.button("Text row").clicked() {
+                                let pos = self
+                                    .effective_segments
+                                    .iter()
+                                    .position(|(o, _)| *o == PathOrigin::User)
+                                    .unwrap_or(self.effective_segments.len());
+                                self.effective_segments
+                                    .insert(pos, (PathOrigin::Machine, String::new()));
+                                self.dirty = true;
+                                ui.close_menu();
+                            }
+                            if ui.button("Folder").clicked() {
+                                ui.close_menu();
+                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                    let pos = self
+                                        .effective_segments
+                                        .iter()
+                                        .position(|(o, _)| *o == PathOrigin::User)
+                                        .unwrap_or(self.effective_segments.len());
+                                    self.effective_segments.insert(
+                                        pos,
+                                        (PathOrigin::Machine, p.to_string_lossy().to_string()),
+                                    );
+                                    self.dirty = true;
+                                }
+                            }
+                        },
+                    );
                 });
             } else {
                 let (row_origin, hint_scope) = match self.scope {
