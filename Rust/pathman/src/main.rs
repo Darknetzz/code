@@ -1,5 +1,7 @@
 //! pathman — cross-platform GUI for editing user and system PATH.
 
+use std::sync::Arc;
+
 mod app;
 mod config;
 mod path_model;
@@ -69,9 +71,15 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    let app_icon = Arc::new(
+        eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))
+            .expect("embedded app icon is a valid PNG"),
+    );
+
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("pathman")
+            .with_icon(app_icon)
             .with_inner_size([960.0, 680.0])
             .with_min_inner_size([640.0, 420.0]),
         ..Default::default()
