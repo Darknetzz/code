@@ -8,8 +8,8 @@ use eframe::egui::{ScrollArea, Sense, TextEdit};
 use crate::config::AppConfig;
 use crate::path_model::{self, PathOrigin};
 use crate::row_icons::{
-    mix_srgb, path_add_origin_menu, path_add_toolbar_button, path_row_icon_button, AddToolbarIcon,
-    PathRowIcon,
+    mix_srgb, path_add_origin_menu, path_add_toolbar_button, path_row_icon_button,
+    path_top_bar_button, path_top_bar_selectable, AddToolbarIcon, PathRowIcon, TopBarIcon,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -808,37 +808,52 @@ impl eframe::App for PathmanApp {
                 s.interact_size.y = s.interact_size.y.max(min_h);
                 s.button_padding = egui::vec2(10.0, 6.0);
                 ui.horizontal(|ui| {
-                if ui
-                    .selectable_label(self.scope == Scope::Effective, "Effective")
-                    .clicked()
+                if path_top_bar_selectable(
+                    ui,
+                    self.scope == Scope::Effective,
+                    "Effective",
+                    TopBarIcon::ScopeEffective,
+                )
+                .clicked()
                 {
                     self.scope = Scope::Effective;
                     self.reload_from_store();
                 }
-                if ui
-                    .selectable_label(self.scope == Scope::User, "User")
-                    .clicked()
+                if path_top_bar_selectable(
+                    ui,
+                    self.scope == Scope::User,
+                    "User",
+                    TopBarIcon::ScopeUser,
+                )
+                .clicked()
                 {
                     self.scope = Scope::User;
                     self.reload_from_store();
                 }
-                if ui
-                    .selectable_label(self.scope == Scope::System, "System")
-                    .clicked()
+                if path_top_bar_selectable(
+                    ui,
+                    self.scope == Scope::System,
+                    "System",
+                    TopBarIcon::ScopeSystem,
+                )
+                .clicked()
                 {
                     self.scope = Scope::System;
                     self.reload_from_store();
                 }
                 ui.separator();
-                if ui.button("Reload").clicked() {
+                if path_top_bar_button(ui, "Reload", TopBarIcon::Reload, true, 0.0, None).clicked() {
                     self.reload_from_store();
                 }
-                let save_clicked = ui
-                    .add_enabled(
-                        self.dirty,
-                        egui::Button::new("Save").min_size(egui::vec2(72.0, 28.0)),
-                    )
-                    .clicked();
+                let save_clicked = path_top_bar_button(
+                    ui,
+                    "Save",
+                    TopBarIcon::Save,
+                    self.dirty,
+                    72.0,
+                    None,
+                )
+                .clicked();
                 let needs_confirm = matches!(self.scope, Scope::System)
                     || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());
                 let do_save = save_clicked
@@ -869,11 +884,20 @@ impl eframe::App for PathmanApp {
                             .color(egui::Color32::from_rgb(255, 165, 70)),
                     );
                 }
-                if ui.button("Changes…").clicked() {
+                if path_top_bar_button(
+                    ui,
+                    "Changes…",
+                    TopBarIcon::Changes,
+                    true,
+                    0.0,
+                    None,
+                )
+                .clicked()
+                {
                     self.change_summary_text = self.compute_change_summary();
                     self.show_change_summary = true;
                 }
-                if ui.button("Dedupe").clicked() {
+                if path_top_bar_button(ui, "Dedupe", TopBarIcon::Dedupe, true, 0.0, None).clicked() {
                     let n_drop = match self.scope {
                         Scope::Effective => {
                             path_model::adjacent_dedupe_drop_count_tagged(&self.effective_segments)
@@ -886,31 +910,42 @@ impl eframe::App for PathmanApp {
                         self.show_confirm_dedupe = true;
                     }
                 }
-                if ui.button("Duplicates…").clicked() {
+                if path_top_bar_button(
+                    ui,
+                    "Duplicates…",
+                    TopBarIcon::Duplicates,
+                    true,
+                    0.0,
+                    None,
+                )
+                .clicked()
+                {
                     self.show_duplicate_tool = true;
                 }
                 ui.separator();
-                if ui
-                    .selectable_label(
-                        matches!(
-                            self.duplicate_view_filter,
-                            Some(DuplicateViewFilter::OnlyDuplicates)
-                        ),
-                        "Only duplicates",
-                    )
-                    .clicked()
+                if path_top_bar_selectable(
+                    ui,
+                    matches!(
+                        self.duplicate_view_filter,
+                        Some(DuplicateViewFilter::OnlyDuplicates)
+                    ),
+                    "Only duplicates",
+                    TopBarIcon::FilterDuplicates,
+                )
+                .clicked()
                 {
                     self.toggle_only_duplicates_filter();
                 }
-                if ui
-                    .selectable_label(
-                        matches!(
-                            self.duplicate_view_filter,
-                            Some(DuplicateViewFilter::MissingPaths)
-                        ),
-                        "Only missing",
-                    )
-                    .clicked()
+                if path_top_bar_selectable(
+                    ui,
+                    matches!(
+                        self.duplicate_view_filter,
+                        Some(DuplicateViewFilter::MissingPaths)
+                    ),
+                    "Only missing",
+                    TopBarIcon::FilterMissing,
+                )
+                .clicked()
                 {
                     self.toggle_missing_path_filter();
                 }
@@ -933,7 +968,16 @@ impl eframe::App for PathmanApp {
             #[cfg(not(windows))]
             if self.scope == Scope::User {
                 ui.horizontal(|ui| {
-                    if ui.button("Shell file…").clicked() {
+                    if path_top_bar_button(
+                        ui,
+                        "Shell file…",
+                        TopBarIcon::ShellFile,
+                        true,
+                        0.0,
+                        None,
+                    )
+                    .clicked()
+                    {
                         self.show_shell_settings = !self.show_shell_settings;
                     }
                     ui.label(

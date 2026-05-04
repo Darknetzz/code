@@ -348,7 +348,8 @@ pub enum TopBarIcon {
     ScopeEffective,
     ScopeUser,
     ScopeSystem,
-    /// Shell rc snippet file (Unix).
+    /// Shell rc snippet file (Unix `Shell file…` top bar control).
+    #[cfg(not(windows))]
     ShellFile,
 }
 
@@ -522,6 +523,7 @@ fn paint_top_bar_icon(
             painter.circle_filled(q, dot_r, color);
             painter.circle_stroke(q, dot_r * 2.2, stroke);
         }
+        #[cfg(not(windows))]
         TopBarIcon::ShellFile => {
             let doc = inner.shrink(inner.width().min(inner.height()) * 0.1);
             painter.rect_stroke(doc, 1.0, stroke);
@@ -561,7 +563,7 @@ pub fn path_top_bar_button(
     icon: TopBarIcon,
     enabled: bool,
     min_width: f32,
-    tooltip: Option<impl Into<egui::WidgetText>>,
+    tooltip: Option<&str>,
 ) -> egui::Response {
     let ir = ui.add_enabled_ui(enabled, |ui| {
         let min_h = ui.spacing().interact_size.y;
@@ -604,10 +606,9 @@ pub fn path_top_bar_button(
             );
             painter.galley(text_pos, galley, text_color);
         }
-        if let Some(t) = tooltip {
-            response.on_hover_text(t)
-        } else {
-            response
+        match tooltip {
+            Some(text) => response.on_hover_text(text),
+            None => response,
         }
     });
     ir.inner
