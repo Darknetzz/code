@@ -348,6 +348,8 @@ pub enum TopBarIcon {
     ScopeEffective,
     ScopeUser,
     ScopeSystem,
+    /// Shell rc snippet file (Unix).
+    ShellFile,
 }
 
 fn paint_top_bar_icon(
@@ -520,6 +522,35 @@ fn paint_top_bar_icon(
             painter.circle_filled(q, dot_r, color);
             painter.circle_stroke(q, dot_r * 2.2, stroke);
         }
+        TopBarIcon::ShellFile => {
+            let doc = inner.shrink(inner.width().min(inner.height()) * 0.1);
+            painter.rect_stroke(doc, 1.0, stroke);
+            let y0 = doc.top() + doc.height() * 0.32;
+            let y1 = y0 + doc.height() * 0.16;
+            let y2 = y1 + doc.height() * 0.14;
+            let inset = doc.width() * 0.14;
+            painter.line_segment(
+                [
+                    egui::pos2(doc.left() + inset, y0),
+                    egui::pos2(doc.right() - inset, y0),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(doc.left() + inset, y1),
+                    egui::pos2(doc.right() - inset * 2.2, y1),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(doc.left() + inset, y2),
+                    egui::pos2(doc.right() - inset * 1.8, y2),
+                ],
+                stroke,
+            );
+        }
     }
 }
 
@@ -530,9 +561,8 @@ pub fn path_top_bar_button(
     icon: TopBarIcon,
     enabled: bool,
     min_width: f32,
-    tooltip: impl Into<egui::WidgetText>,
+    tooltip: Option<impl Into<egui::WidgetText>>,
 ) -> egui::Response {
-    let tooltip = tooltip.into();
     let ir = ui.add_enabled_ui(enabled, |ui| {
         let min_h = ui.spacing().interact_size.y;
         let gap = ICON_TEXT_GAP;
@@ -574,7 +604,11 @@ pub fn path_top_bar_button(
             );
             painter.galley(text_pos, galley, text_color);
         }
-        response.on_hover_text(tooltip)
+        if let Some(t) = tooltip {
+            response.on_hover_text(t)
+        } else {
+            response
+        }
     });
     ir.inner
 }
