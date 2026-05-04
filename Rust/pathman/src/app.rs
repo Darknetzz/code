@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use eframe::egui;
+use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::{ScrollArea, Sense, TextEdit};
 
 use crate::config::AppConfig;
@@ -1023,6 +1024,7 @@ impl eframe::App for PathmanApp {
                     );
                     ui.add_space(6.0);
                     ScrollArea::vertical()
+                        .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                         .max_height(ui.available_height().max(120.0))
                         .show(ui, |ui| {
                             ui.add(
@@ -1178,7 +1180,8 @@ impl eframe::App for PathmanApp {
                                 .small(),
                             );
                             ui.add_space(6.0);
-                            egui::ScrollArea::vertical()
+                            ScrollArea::vertical()
+                                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                                 .max_height(380.0)
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
@@ -1447,6 +1450,7 @@ impl eframe::App for PathmanApp {
                 } else {
                     "path_entries"
                 })
+                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                 .max_width(list_viewport_w)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
