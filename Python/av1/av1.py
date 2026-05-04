@@ -1567,7 +1567,10 @@ def check_encoder_support(encoder_name: str) -> bool:
                     # Check if user wants automatic fallback (default: auto-detect for hardware encoding)
                     fallback_env = os.getenv("AV1_FFMPEG_FALLBACK", "auto")
                     allow_fallback = _env_bool(fallback_env) if fallback_env != "auto" else None
-                    ignore_warning = _env_bool(os.getenv("AV1_IGNORE_LIBVA_WARNING", "true"))  # Default: try anyway
+                    # Default false: a failed VAAPI probe should not select hardware encoding (avoids
+                    # a guaranteed failure + libva error noise; CPU/NVENC order applies instead).
+                    # Set AV1_IGNORE_LIBVA_WARNING=true to force VAAPI despite probe failure.
+                    ignore_warning = _env_bool(os.getenv("AV1_IGNORE_LIBVA_WARNING", "false"))
                     
                     # Auto-fallback: try system ffmpeg for hardware encoding if PATH ffmpeg has libva issues
                     should_try_fallback = (allow_fallback is True) or (fallback_env == "auto" and encoder_name.endswith("_vaapi"))
@@ -1600,7 +1603,7 @@ def check_encoder_support(encoder_name: str) -> bool:
                     # If ignoring warning, try using the encoder anyway (user wants PATH ffmpeg)
                     if ignore_warning:
                         cprint("Detected libva ABI mismatch warning, but attempting to use hardware encoder with PATH ffmpeg.", "warning")
-                        cprint("If encoding fails, set AV1_FFMPEG_FALLBACK=auto to automatically use system ffmpeg for hardware encoding.", "info")
+                        cprint("If encoding fails, use system ffmpeg (AV1_FFMPEG_FALLBACK=auto) or upgrade libva to match your ffmpeg build.", "info")
                         return True  # Try it anyway - might work despite the warning
                     else:
                         cprint("Detected libva ABI mismatch in ffmpeg. Hardware encoding may not work.", "warning")

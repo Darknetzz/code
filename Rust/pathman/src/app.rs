@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+#[cfg(windows)]
 use std::path::PathBuf;
 
 use eframe::egui;
@@ -521,7 +522,7 @@ impl PathmanApp {
         {
             // Same ordering as Windows HKLM then HKCU: pathman system store, then user shell block.
             // A login shell’s real PATH can include extra sources; this view edits only those two stores.
-            let m = crate::persist::read_system_entries(&self.config)?;
+            let m = crate::persist::read_system_entries()?;
             let u = crate::persist::read_user_entries(&self.config)?;
             self.baseline_machine_join = path_model::join(&m);
             self.effective_segments = path_model::merge_machine_user_preview_style(&m, &u);
@@ -582,9 +583,9 @@ impl PathmanApp {
     }
 
     fn save_user(&mut self, entries: &[String]) -> anyhow::Result<()> {
-        let joined = path_model::join(entries);
         #[cfg(windows)]
         {
+            let joined = path_model::join(entries);
             let prev = crate::persist::read_user_path().unwrap_or_default();
             let _ = crate::persist::backup_path(
                 "windows-user",
@@ -604,9 +605,9 @@ impl PathmanApp {
     }
 
     fn save_system(&mut self, entries: &[String]) -> anyhow::Result<()> {
-        let joined = path_model::join(entries);
         #[cfg(windows)]
         {
+            let joined = path_model::join(entries);
             let prev = crate::persist::read_machine_path().unwrap_or_default();
             let _ = crate::persist::backup_path(
                 "windows-machine",
