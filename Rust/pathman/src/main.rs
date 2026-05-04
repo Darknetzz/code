@@ -8,6 +8,9 @@ mod path_model;
 mod persist;
 mod row_icons;
 
+/// Minimum inner size so the top toolbar (scopes, save row, filters, checkboxes) stays on one line.
+const VIEWPORT_MIN_INNER: [f32; 2] = [1380.0, 480.0];
+
 fn print_version() {
     let built = env!("PATHMAN_BUILD_TIME");
     println!("pathman {} (built {})", env!("CARGO_PKG_VERSION"), built);
@@ -80,8 +83,8 @@ fn main() -> eframe::Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("pathman")
             .with_icon(app_icon)
-            .with_inner_size([960.0, 680.0])
-            .with_min_inner_size([640.0, 420.0]),
+            .with_inner_size([VIEWPORT_MIN_INNER[0], 680.0])
+            .with_min_inner_size(VIEWPORT_MIN_INNER),
         ..Default::default()
     };
 
