@@ -1492,6 +1492,7 @@ impl eframe::App for PathmanApp {
 
                 let mut move_up: Option<usize> = None;
                 let mut move_dn: Option<usize> = None;
+                let mut drag_reorder: Option<(usize, usize)> = None;
                 // Row action icons: square hit targets (avoid wide short rects).
                 const ICON_BTN: f32 = 26.0;
                 const MARK_W: f32 = 34.0;
@@ -1500,7 +1501,7 @@ impl eframe::App for PathmanApp {
                 let gap = ui.spacing().item_spacing.x;
 
                 if self.scope == Scope::Effective {
-                    // [mark][origin][text][open][^][v][X] → 7 widgets, 6 gaps.
+                    // [^][v][mark][origin][text][open][X] → 7 widgets, 6 gaps.
                     let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
@@ -1577,13 +1578,53 @@ impl eframe::App for PathmanApp {
 
                         let (strip_fill, origin_color) = effective_origin_style(origin);
 
-                        egui::Frame::none()
+                        let row_frame = egui::Frame::none()
                             .fill(strip_fill)
                             .inner_margin(egui::Margin::symmetric(6.0, 3.0))
-                            .rounding(4.0)
-                            .show(ui, |ui| {
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
+                            .rounding(4.0);
+                        let row_id = ui.id().with(("eff_row_drag", i));
+                        let (_row_ir, dropped_payload) =
+                            ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
+                                ui.dnd_drag_source(row_id, i, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.horizontal(|ui| {
+                                            if ui
+                                                .add_enabled_ui(can_up, |ui| {
+                                                    path_row_icon_button(
+                                                        ui,
+                                                        [ICON_BTN, ICON_BTN],
+                                                        PathRowIcon::MoveUp,
+                                                        if can_up {
+                                                            "Move up"
+                                                        } else {
+                                                            "Cannot cross machine / user boundary"
+                                                        },
+                                                    )
+                                                })
+                                                .inner
+                                                .clicked()
+                                            {
+                                                move_up = Some(i);
+                                            }
+                                            if ui
+                                                .add_enabled_ui(can_dn, |ui| {
+                                                    path_row_icon_button(
+                                                        ui,
+                                                        [ICON_BTN, ICON_BTN],
+                                                        PathRowIcon::MoveDown,
+                                                        if can_dn {
+                                                            "Move down"
+                                                        } else {
+                                                            "Cannot cross machine / user boundary"
+                                                        },
+                                                    )
+                                                })
+                                                .inner
+                                                .clicked()
+                                            {
+                                                move_dn = Some(i);
+                                            }
+
                                         let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
                                             egui::Label::new(
@@ -1654,43 +1695,6 @@ impl eframe::App for PathmanApp {
                                             let p = self.effective_segments[i].1.clone();
                                             self.open_entry_directory(&p);
                                         }
-
-                                        if ui
-                                            .add_enabled_ui(can_up, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveUp,
-                                                    if can_up {
-                                                        "Move up"
-                                                    } else {
-                                                        "Cannot cross machine / user boundary"
-                                                    },
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_up = Some(i);
-                                        }
-                                        if ui
-                                            .add_enabled_ui(can_dn, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveDown,
-                                                    if can_dn {
-                                                        "Move down"
-                                                    } else {
-                                                        "Cannot cross machine / user boundary"
-                                                    },
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_dn = Some(i);
-                                        }
                                         if path_row_icon_button(
                                             ui,
                                             [ICON_BTN, ICON_BTN],
@@ -1701,25 +1705,34 @@ impl eframe::App for PathmanApp {
                                         {
                                             self.request_remove_row(i);
                                         }
-                                    });
-
-                                    let row_text = self.effective_segments[i].1.clone();
-                                    if expanded != row_text {
-                                        ui.horizontal(|ui| {
-                                            ui.add_space(MARK_W + gap + ORIGIN_W + gap);
-                                            ui.label(
-                                                egui::RichText::new(format!("→ {expanded}"))
-                                                    .small()
-                                                    .color(origin_color.gamma_multiply(0.75))
-                                                    .monospace(),
-                                            );
                                         });
-                                    }
-                                });
+
+                                        let row_text = self.effective_segments[i].1.clone();
+                                        if expanded != row_text {
+                                            ui.horizontal(|ui| {
+                                                ui.add_space(
+                                                    2.0 * ICON_BTN + 2.0 * gap + MARK_W + gap + ORIGIN_W + gap,
+                                                );
+                                                ui.label(
+                                                    egui::RichText::new(format!("→ {expanded}"))
+                                                        .small()
+                                                        .color(origin_color.gamma_multiply(0.75))
+                                                        .monospace(),
+                                                );
+                                            });
+                                        }
+                                    });
+                                })
                             });
+                        if let Some(from) = dropped_payload {
+                            let from = *from;
+                            if from != i {
+                                drag_reorder = Some((from, i));
+                            }
+                        }
                     }
                 } else {
-                    // [mark][Machine|User][text][open][^][v][X] — align with Effective scope layout.
+                    // [^][v][mark][Machine|User][text][open][X] — align with Effective scope layout.
                     const ORIGIN_W: f32 = 56.0;
                     let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
@@ -1790,13 +1803,45 @@ impl eframe::App for PathmanApp {
                         let mark_tip =
                             mark_tooltip_with_filter_hint(mark_tip, mark_interactive);
 
-                        egui::Frame::none()
+                        let row_frame = egui::Frame::none()
                             .fill(strip_fill)
                             .inner_margin(egui::Margin::symmetric(6.0, 3.0))
-                            .rounding(4.0)
-                            .show(ui, |ui| {
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
+                            .rounding(4.0);
+                        let row_id = ui.id().with(("scope_row_drag", i));
+                        let (_row_ir, dropped_payload) =
+                            ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
+                                ui.dnd_drag_source(row_id, i, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.horizontal(|ui| {
+                                            if ui
+                                                .add_enabled_ui(can_up, |ui| {
+                                                    path_row_icon_button(
+                                                        ui,
+                                                        [ICON_BTN, ICON_BTN],
+                                                        PathRowIcon::MoveUp,
+                                                        "Move up",
+                                                    )
+                                                })
+                                                .inner
+                                                .clicked()
+                                            {
+                                                move_up = Some(i);
+                                            }
+                                            if ui
+                                                .add_enabled_ui(can_dn, |ui| {
+                                                    path_row_icon_button(
+                                                        ui,
+                                                        [ICON_BTN, ICON_BTN],
+                                                        PathRowIcon::MoveDown,
+                                                        "Move down",
+                                                    )
+                                                })
+                                                .inner
+                                                .clicked()
+                                            {
+                                                move_dn = Some(i);
+                                            }
+
                                         let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
                                             egui::Label::new(
@@ -1865,35 +1910,6 @@ impl eframe::App for PathmanApp {
                                             let p = self.entries[i].clone();
                                             self.open_entry_directory(&p);
                                         }
-
-                                        if ui
-                                            .add_enabled_ui(can_up, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveUp,
-                                                    "Move up",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_up = Some(i);
-                                        }
-                                        if ui
-                                            .add_enabled_ui(can_dn, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveDown,
-                                                    "Move down",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_dn = Some(i);
-                                        }
                                         if path_row_icon_button(
                                             ui,
                                             [ICON_BTN, ICON_BTN],
@@ -1904,21 +1920,51 @@ impl eframe::App for PathmanApp {
                                         {
                                             self.request_remove_row(i);
                                         }
-                                    });
-
-                                    if expanded != self.entries[i] {
-                                        ui.horizontal(|ui| {
-                                            ui.add_space(MARK_W + gap + ORIGIN_W + gap);
-                                            ui.label(
-                                                egui::RichText::new(format!("→ {expanded}"))
-                                                    .small()
-                                                    .color(origin_color.gamma_multiply(0.75))
-                                                    .monospace(),
-                                            );
                                         });
-                                    }
-                                });
+
+                                        if expanded != self.entries[i] {
+                                            ui.horizontal(|ui| {
+                                                ui.add_space(
+                                                    2.0 * ICON_BTN + 2.0 * gap + MARK_W + gap + ORIGIN_W + gap,
+                                                );
+                                                ui.label(
+                                                    egui::RichText::new(format!("→ {expanded}"))
+                                                        .small()
+                                                        .color(origin_color.gamma_multiply(0.75))
+                                                        .monospace(),
+                                                );
+                                            });
+                                        }
+                                    });
+                                })
                             });
+                        if let Some(from) = dropped_payload {
+                            let from = *from;
+                            if from != i {
+                                drag_reorder = Some((from, i));
+                            }
+                        }
+                    }
+                }
+
+                if let Some((from, to)) = drag_reorder {
+                    if self.scope == Scope::Effective {
+                        let n = self.effective_segments.len();
+                        if from < n && to < n && self.effective_segments[from].0 == self.effective_segments[to].0
+                        {
+                            let row = self.effective_segments.remove(from);
+                            let insert_at = if from < to { to - 1 } else { to };
+                            self.effective_segments.insert(insert_at, row);
+                            self.dirty = true;
+                        }
+                    } else {
+                        let n = self.entries.len();
+                        if from < n && to < n {
+                            let row = self.entries.remove(from);
+                            let insert_at = if from < to { to - 1 } else { to };
+                            self.entries.insert(insert_at, row);
+                            self.dirty = true;
+                        }
                     }
                 }
 
