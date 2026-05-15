@@ -53,7 +53,7 @@ On many **Linux** systems, a **different** program also called `dsh` exists (**D
 
 | Area | What works |
 |------|------------|
-| **Invocation** | REPL, `dsh -c '…'`, script file + args, stdin as a script |
+| **Invocation** | REPL (no args), `dsh -c '…'`, script file + args (first arg must be an existing file) |
 | **Line editing** | [rustyline](https://github.com/kkawakam/rustyline)-based interactive prompt (TTY-aware styling on supported terminals) |
 | **Commands** | External programs via `std::process::Command`, builtins, user-defined functions |
 | **Composition** | `;`, `&&`, `||`, `|` pipelines (with restrictions, see below) |
@@ -102,16 +102,14 @@ installs `dsh` from the crate manifest into Cargo’s bin directory (if you use 
 
 | Mode | Example |
 |------|---------|
-| **Interactive REPL** | `dsh` (when stdin is a TTY), or `dsh -i` to force REPL |
+| **Interactive REPL** | `dsh` with no script path (always starts the REPL; does not read stdin as a script) |
 | **One command** | `dsh -c "echo hello"` |
-| **Script file** | `dsh script.dsh arg1 arg2` — `$0` is the script path, `$1`… are args |
-| **Stdin script** | `dsh < script.dsh` or `cat script.dsh \| dsh` (non-TTY stdin) |
+| **Script file** | `dsh script.dsh arg1 arg2` — first arg must exist as a regular file; `$0` is the script path, `$1`… are args |
 
 CLI flags (from `dsh --help`):
 
 - **`-c COMMAND` / `--command COMMAND`** — run `COMMAND` and exit (after `exit` handling).
-- **`-i` / `--interactive`** — force the REPL even if stdin is not a TTY.
-- **Positional args** — first arg is a script path; remaining args become `$1`, `$2`, …
+- **Positional args** — first arg is a script path; remaining args become `$1`, `$2`, … If the path is missing or not a regular file, `dsh` prints an error and exits.
 
 ---
 
@@ -242,7 +240,7 @@ Run **`help`** or **`help cd`** inside `dsh` for the full builtin text.
 
 | Path | Role |
 |------|------|
-| `src/main.rs` | CLI entry (`clap`), mode selection (REPL / `-c` / file / stdin) |
+| `src/main.rs` | CLI entry (`clap`), mode selection (REPL / `-c` / script file) |
 | `src/lexer.rs`, `parser.rs`, `ast.rs` | Front-end |
 | `src/expand.rs` | Word / parameter expansion |
 | `src/interp.rs` | Evaluation: pipelines, builtins, functions, redirects |

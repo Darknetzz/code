@@ -46,3 +46,12 @@ fn conditional_and_chain() {
         .success()
         .stdout(contains("ok"));
 }
+
+#[test]
+fn missing_script_file_errors() {
+    dsh()
+        .arg("__dsh_no_such_script__.dsh")
+        .assert()
+        .failure()
+        .stderr(contains("script file"));
+}

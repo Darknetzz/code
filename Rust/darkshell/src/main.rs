@@ -10,12 +10,11 @@ mod signals;
 mod style;
 
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use is_terminal::IsTerminal;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -27,7 +26,8 @@ struct Cli {
     #[arg(short = 'c', long, value_name = "COMMAND")]
     command: Option<String>,
 
-    #[arg(short = 'i', long, help = "Force REPL even when stdin is not a TTY")]
+    /// Accepted for compatibility; without a script path the REPL always starts.
+    #[arg(short = 'i', long, hide = true)]
     interactive: bool,
 
     #[arg(value_name = "SCRIPT_OR_ARGS")]
@@ -36,15 +36,13 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let _ = cli.interactive;
     let mut st = shell::ShellState::inherit_from_os();
 
     signals::install_sigint_handler();
 
-    let stdin = std::io::stdin();
-    let stdin_tty = stdin.is_terminal();
-
     // If argv is only the program name, `dsh .\script.dsh` never reached us (common: a
-    // PowerShell `function dsh { ... }` that omits `@args`). Help before we REPL or read stdin.
+    // PowerShell `function dsh { ... }` that omits `@args`).
     if cli.command.is_none() && cli.script_and_args.is_empty() {
         let argc = std::env::args().count();
         if argc <= 1 {
@@ -59,8 +57,14 @@ fn main() -> Result<()> {
         st.argv0 = "dsh".into();
         st.positional.clear();
         interp::eval_source(&mut st, &code)?;
-    } else if let Some(path) = cli.script_and_args.first() {
-        let path = PathBuf::from(path);
+    } else if let Some(path_str) = cli.script_and_args.first() {
+        let path = PathBuf::from(path_str);
+        if !path.is_file() {
+            anyhow::bail!(
+                "dsh: script file does not exist or is not a regular file: {}",
+                path.display()
+            );
+        }
         st.argv0 = path.display().to_string();
         st.positional = cli.script_and_args.iter().skip(1).cloned().collect();
         let contents = fs::read_to_string(&path)
@@ -71,36 +75,8 @@ fn main() -> Result<()> {
             &mut std::io::stdout(),
             &mut std::io::stderr(),
         )?;
-    } else if cli.interactive || stdin_tty {
-        repl::repl_loop(&mut st)?;
     } else {
-        const STDIN_SCRIPT_MAX: u64 = 4 * 1024 * 1024;
-        eprintln!(
-            "dsh: no script path on the command line; reading a script from standard input (max {} MiB).",
-            STDIN_SCRIPT_MAX / 1024 / 1024
-        );
-        eprintln!(
-            "dsh: send EOF when done (Ctrl+Z then Enter in classic CMD), or run e.g.  dsh .\\script.dsh"
-        );
-        let _ = io::stderr().flush();
-        let mut raw = Vec::new();
-        stdin
-            .lock()
-            .take(STDIN_SCRIPT_MAX.saturating_add(1))
-            .read_to_end(&mut raw)?;
-        if raw.len() as u64 > STDIN_SCRIPT_MAX {
-            anyhow::bail!(
-                "dsh: standard input exceeds {} MiB; pass a file path instead",
-                STDIN_SCRIPT_MAX / 1024 / 1024
-            );
-        }
-        let buf = String::from_utf8(raw).context("dsh: standard input is not valid UTF-8")?;
-        interp::eval_source_streams(
-            &mut st,
-            &buf,
-            &mut std::io::stdout(),
-            &mut std::io::stderr(),
-        )?;
+        repl::repl_loop(&mut st)?;
     }
 
     if let Some(code) = st.pending_exit.take() {
