@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header>
-    <h1>Webbot</h1>
-    <p id="health" class="muted">Loading…</p>
+  <header class="app-header">
+    <div class="app-header-main">
+      <h1>Webbot</h1>
+      <p id="health" class="muted">Loading…</p>
+    </div>
+    <button type="button" id="btn-help" class="help-header-btn">Help</button>
   </header>
 
   <nav class="tabs">
@@ -20,18 +23,18 @@
   <main>
     <section id="panel-run" class="panel active">
       <div class="card">
-        <label for="run-scenario">Scenario</label>
+        <label for="run-scenario" data-help-id="run.scenario">Scenario</label>
         <select id="run-scenario"></select>
 
         <div class="row">
-          <label for="run-loops">Loops</label>
+          <label for="run-loops" data-help-id="run.loops">Loops</label>
           <input type="number" id="run-loops" min="1" value="1" />
         </div>
         <div class="row">
-          <label for="run-pause">Pause between loops (sec)</label>
+          <label for="run-pause" data-help-id="run.pause">Pause between loops (sec)</label>
           <input type="number" id="run-pause" min="0" step="1" value="0" />
         </div>
-        <label class="checkbox">
+        <label class="checkbox" data-help-id="run.headless">
           <input type="checkbox" id="run-headless" />
           Headless
         </label>
@@ -51,18 +54,18 @@
 
     <section id="panel-builder" class="panel">
       <div class="card">
-        <label for="build-name">Scenario name</label>
+        <label for="build-name" data-help-id="builder.name">Scenario name</label>
         <input type="text" id="build-name" placeholder="my_flow" />
 
-        <label for="build-desc">Description</label>
+        <label for="build-desc" data-help-id="builder.description">Description</label>
         <input type="text" id="build-desc" placeholder="Optional" />
 
-        <label for="build-url">Start URL</label>
+        <label for="build-url" data-help-id="builder.start_url">Start URL</label>
         <input type="url" id="build-url" placeholder="https://example.com" />
 
         <div class="scenario-options-card">
-          <h2 class="section-heading">Scenario options</h2>
-          <label class="checkbox">
+          <h2 class="section-heading" data-help-id="scenario.options">Scenario options</h2>
+          <label class="checkbox" data-help-id="scenario.random_delay">
             <input type="checkbox" id="build-random-between-steps" />
             Random delay between each step
           </label>
@@ -70,21 +73,42 @@
         </div>
 
         <div class="steps-header">
-          <h2>Steps</h2>
+          <h2 data-help-id="builder.steps">Steps</h2>
           <button type="button" id="btn-add-step">Add step</button>
         </div>
         <div id="steps-list"></div>
 
         <div class="actions">
-          <button type="button" id="btn-save" class="primary">Save scenario</button>
-          <button type="button" id="btn-load">Load from Run dropdown</button>
-          <button type="button" id="btn-test-run">Test run</button>
+          <button type="button" id="btn-save" class="primary" data-help-id="builder.save">Save scenario</button>
+          <button type="button" id="btn-load" data-help-id="builder.load">Load from Run dropdown</button>
+          <button type="button" id="btn-test-run" data-help-id="builder.test_run">Test run</button>
         </div>
         <p id="build-msg" class="muted"></p>
       </div>
     </section>
   </main>
 
+  <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
+    <div class="help-dialog-inner">
+      <aside class="help-sidebar">
+        <nav id="help-nav" class="help-nav" aria-label="Help topics"></nav>
+      </aside>
+      <div class="help-main">
+        <header class="help-content-header">
+          <h2 id="help-title"></h2>
+        </header>
+        <div id="help-body" class="help-body"></div>
+        <footer class="help-footer">
+          <button type="button" id="help-prev">Previous</button>
+          <button type="button" id="help-next">Next</button>
+          <button type="button" id="help-close" class="primary">Close</button>
+        </footer>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/help-topics.js"></script>
+  <script src="/help.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
