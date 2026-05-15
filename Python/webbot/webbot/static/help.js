@@ -38,6 +38,12 @@ function _renderSidebar() {
   const nav = document.getElementById("help-nav");
   if (!nav) return;
   nav.innerHTML = "";
+
+  const hint = document.createElement("p");
+  hint.className = "help-nav-hint";
+  hint.textContent = "Click a section to expand or collapse";
+  nav.appendChild(hint);
+
   for (const group of HELP_NAV) {
     const details = document.createElement("details");
     details.className = "help-nav-group";
@@ -45,7 +51,24 @@ function _renderSidebar() {
     if (containsActive) details.open = true;
 
     const summary = document.createElement("summary");
-    summary.textContent = group.label;
+    summary.setAttribute("aria-label", `${group.label}, ${details.open ? "expanded" : "collapsed"}`);
+
+    const title = document.createElement("span");
+    title.className = "help-nav-group-title";
+    title.textContent = group.label;
+
+    const chevron = document.createElement("span");
+    chevron.className = "help-nav-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+
+    summary.appendChild(title);
+    summary.appendChild(chevron);
+    details.addEventListener("toggle", () => {
+      summary.setAttribute(
+        "aria-label",
+        `${group.label}, ${details.open ? "expanded" : "collapsed"}`
+      );
+    });
     details.appendChild(summary);
 
     const ul = document.createElement("ul");

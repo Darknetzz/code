@@ -552,29 +552,101 @@ button:disabled {
   flex: 1;
 }
 
+.help-nav-hint {
+  margin: 0 0 0.65rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border: 1px dashed var(--border);
+}
+
 .help-nav-group {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.help-nav-group[open] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 
 .help-nav-group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   cursor: pointer;
+  user-select: none;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--muted);
-  padding: 0.35rem 0.5rem;
+  color: var(--text);
+  padding: 0.5rem 0.55rem;
   list-style: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.help-nav-group summary::-webkit-details-marker {
+.help-nav-group summary:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+}
+
+.help-nav-group summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.help-nav-group summary::-webkit-details-marker,
+.help-nav-group summary::marker {
   display: none;
+  content: "";
+}
+
+.help-nav-group-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.help-nav-chevron {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.help-nav-chevron::before {
+  content: "▸";
+  display: block;
+}
+
+.help-nav-group[open] .help-nav-chevron {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.help-nav-group[open] .help-nav-chevron::before {
+  content: "▾";
 }
 
 .help-nav-group ul {
   list-style: none;
   margin: 0;
-  padding: 0 0 0.25rem;
+  padding: 0.2rem 0.35rem 0.4rem;
+  border-top: 1px solid var(--border);
 }
 
 .help-nav-item {
