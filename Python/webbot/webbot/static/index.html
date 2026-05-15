@@ -142,9 +142,10 @@
 
             <div class="scenario-options-card">
               <h2 class="section-heading">Scenario options</h2>
-              <label class="checkbox">
+              <label class="toggle toggle-scenario" for="build-random-between-steps">
                 <input type="checkbox" id="build-random-between-steps" />
-                Random delay between each step
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-text">Random delay between each step</span>
               </label>
               <div id="between-steps-fields" class="step-fields scenario-options-fields hidden"></div>
             </div>
@@ -156,8 +157,17 @@
             <div id="steps-list"></div>
 
             <div class="actions editor-flow-actions">
-              <div class="button-group" role="group" aria-label="Save, test, duplicate, export, import, and delete flow">
+              <div class="button-group" role="group" aria-label="Save, discard changes, test, duplicate, export, import, and delete flow">
                 <button type="button" id="btn-save" class="primary outline">Save</button>
+                <button
+                  type="button"
+                  id="btn-discard-flow"
+                  class="btn-discard-flow-changes outline"
+                  disabled
+                  aria-label="Discard edits; restore flow to last opened or saved state"
+                >
+                  Discard changes
+                </button>
                 <button type="button" id="btn-test-run">Test run</button>
                 <button type="button" id="btn-dup-json" class="outline">Duplicate</button>
                 <button type="button" id="btn-export-json" class="outline">Export</button>
@@ -183,8 +193,17 @@
               aria-label="Python scenario source"
             ></textarea>
             <div class="actions editor-flow-actions">
-              <div class="button-group" role="group" aria-label="Save, test, duplicate, export, import, and delete flow">
+              <div class="button-group" role="group" aria-label="Save, discard changes, test, duplicate, export, import, and delete flow">
                 <button type="button" id="btn-save-python" class="primary">Save Python flow</button>
+                <button
+                  type="button"
+                  id="btn-discard-flow-python"
+                  class="btn-discard-flow-changes outline"
+                  disabled
+                  aria-label="Discard edits; restore flow to last opened or saved state"
+                >
+                  Discard changes
+                </button>
                 <button type="button" id="btn-test-run-python">Test run</button>
                 <button type="button" id="btn-dup-python" class="outline">Duplicate</button>
                 <button type="button" id="btn-export-python" class="outline">Export</button>
@@ -230,17 +249,20 @@
               <p id="run-slow-mo-hint" class="muted hint-below-field run-slowmo-hint">
                 Extra delay between Playwright actions (debugging).
               </p>
-              <label class="checkbox">
+              <label class="toggle toggle-run" for="run-headless">
                 <input type="checkbox" id="run-headless" />
-                Headless
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-text">Headless</span>
               </label>
-              <label class="checkbox">
+              <label class="toggle toggle-run" for="run-ignore-https-errors">
                 <input type="checkbox" id="run-ignore-https-errors" />
-                Ignore HTTPS errors
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-text">Ignore HTTPS errors</span>
               </label>
-              <label class="checkbox">
+              <label class="toggle toggle-run" for="run-keep-session-open">
                 <input type="checkbox" id="run-keep-session-open" />
-                Keep session open when done
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-text">Keep session open when done</span>
               </label>
               <p id="run-keep-session-hint" class="muted hint-below-field">
                 After the flow or group finishes successfully, leave the browser open until you press Stop.

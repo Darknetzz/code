@@ -196,11 +196,7 @@ function wireRunOptionsPersistence() {
 }
 
 async function maybeConfirmDiscardForImport() {
-  const dirty =
-    selectedScenario &&
-    savedFlowBaseline !== null &&
-    captureCurrentFlowSnapshot() !== savedFlowBaseline;
-  if (!dirty) return true;
+  if (!isFlowEditorDirty()) return true;
   return showConfirmAsync("Discard unsaved changes and import a file?", { title: "Import flow" });
 }
 
@@ -216,6 +212,58 @@ function captureCurrentFlowSnapshot() {
   return `json:${JSON.stringify(collectDocument())}`;
 }
 
+function isFlowEditorDirty() {
+  return (
+    Boolean(selectedScenario) &&
+    savedFlowBaseline !== null &&
+    captureCurrentFlowSnapshot() !== savedFlowBaseline
+  );
+}
+
+function applySavedFlowBaselineToEditor() {
+  const baseline = savedFlowBaseline;
+  if (!baseline) return false;
+  try {
+    if (baseline.startsWith("py:")) {
+      setPythonSource(baseline.slice(3));
+      refreshPythonEditorLayout();
+      return true;
+    }
+    if (baseline.startsWith("json:")) {
+      const doc = JSON.parse(baseline.slice(5));
+      populateFlowEditor(doc);
+      return true;
+    }
+  } catch (e) {
+    showError(e?.message || String(e));
+    return false;
+  }
+  showError("Could not restore flow state.");
+  return false;
+}
+
+async function discardFlowChanges() {
+  if (!isFlowEditorDirty()) return;
+  if (
+    !(await showConfirmAsync(
+      "Discard all edits and restore this flow to when it was opened or last saved?",
+      { title: "Discard changes" }
+    ))
+  )
+    return;
+  if (!applySavedFlowBaselineToEditor()) return;
+  syncDraftListLabel();
+  if (isDraftSelected()) {
+    if (isPythonUi()) $("build-msg-python").textContent = "Draft — enter a name and save.";
+    else $("build-msg").textContent = "Draft — enter a name and save.";
+  } else {
+    const name = selectedScenario;
+    if (isPythonUi()) $("build-msg-python").textContent = `Editing "${name}"`;
+    else $("build-msg").textContent = `Editing "${name}"`;
+  }
+  syncUnsavedIndicators();
+}
+
 function commitSavedBaseline() {
   if (!selectedScenario) {
     savedFlowBaseline = null;
@@ -227,14 +275,12 @@ function commitSavedBaseline() {
 }
 
 function syncUnsavedIndicators() {
-  const dirty =
-    selectedScenario &&
-    savedFlowBaseline !== null &&
-    captureCurrentFlowSnapshot() !== savedFlowBaseline;
+  const dirty = isFlowEditorDirty();
   document.querySelectorAll(".scenario-item").forEach((btn) => {
     const on = selectedScenario && btn.dataset.name === selectedScenario;
     btn.classList.toggle("scenario-item-unsaved", on && dirty);
   });
+  updateDiscardFlowButton();
 }
 
 /** Client-only id for an unsaved flow row in the list. */
@@ -245,13 +291,13 @@ let scenarios = [];
 let groupsData = { groups: [], ungrouped: [] };
 let selectedScenario = null;
 let builderSteps = [];
-/** Opt-in UI: show the workflow label field while the label text is still empty (WeakMap — never serialized). */
-const workflowLabelUiExpandedByStepRef = new WeakMap();
+/** Client-only: show the step-label field while it is still empty (Symbol — omitted from JSON, preserved in normalizeStep). */
+const WORKFLOW_LABEL_UI_EXPANDED = Symbol.for("webbot.workflowLabelUiExpanded");
 
 function transferWorkflowLabelUiExpanded(fromStep, toStep) {
   if (!fromStep || !toStep || fromStep === toStep) return;
-  if (workflowLabelUiExpandedByStepRef.get(fromStep) === true) {
-    workflowLabelUiExpandedByStepRef.set(toStep, true);
+  if (fromStep[WORKFLOW_LABEL_UI_EXPANDED] === true) {
+    toStep[WORKFLOW_LABEL_UI_EXPANDED] = true;
   }
 }
 
@@ -1527,7 +1573,9 @@ function replaceBranchStepAtSegments(segments, normalizedStep) {
 function changeNestedBranchStepType(segments, newAction) {
   const cur = getBranchStepBySegments(segments);
   if (!cur || cur.action === newAction) return;
-  replaceBranchStepAtSegments(segments, normalizeStep(defaultStep(newAction)));
+  const next = normalizeStep(defaultStep(newAction));
+  transferWorkflowLabelUiExpanded(cur, next);
+  replaceBranchStepAtSegments(segments, next);
   renderSteps();
 }
 
@@ -1670,15 +1718,23 @@ function trimmedWorkflowLabel(step) {
   return typeof step.workflow_label === "string" ? step.workflow_label.trim() : "";
 }
 
-/** Icon-only control beside delete when step label is hidden (empty + not expanded). */
-function appendCollapsedWorkflowLabelTrigger(container, step) {
-  if (!step) return;
+/**
+ * Icon-only control beside delete when step label is hidden (empty + not expanded).
+ * @param {{ type: "main", index: number } | { type: "branch", segments: (string|number)[] }} placement
+ */
+function appendCollapsedWorkflowLabelTrigger(container, step, placement) {
+  if (!step || !placement) return;
   const wl = trimmedWorkflowLabel(step);
-  if (wl !== "" || workflowLabelUiExpandedByStepRef.get(step) === true) return;
+  if (wl !== "" || step[WORKFLOW_LABEL_UI_EXPANDED] === true) return;
 
   const reveal = (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    workflowLabelUiExpandedByStepRef.set(step, true);
+    const cur =
+      placement.type === "main"
+        ? builderSteps[placement.index]
+        : getBranchStepBySegments(placement.segments);
+    if (cur) cur[WORKFLOW_LABEL_UI_EXPANDED] = true;
     renderSteps();
   };
 
@@ -1702,7 +1758,7 @@ function appendCollapsedWorkflowLabelTrigger(container, step) {
 /** Optional workflow label: field appears once expanded or when a label exists (collapse trigger lives in row toolbar). */
 function appendWorkflowLabelField(fields, step) {
   const wl = trimmedWorkflowLabel(step);
-  const expandedEmptySession = workflowLabelUiExpandedByStepRef.get(step) === true;
+  const expandedEmptySession = step[WORKFLOW_LABEL_UI_EXPANDED] === true;
   const showField = wl !== "" || expandedEmptySession;
 
   if (!showField) return;
@@ -1732,7 +1788,7 @@ function appendWorkflowLabelField(fields, step) {
     cancel.title = "Hide step label field";
     cancel.addEventListener("click", (e) => {
       e.stopPropagation();
-      workflowLabelUiExpandedByStepRef.delete(step);
+      delete step[WORKFLOW_LABEL_UI_EXPANDED];
       renderSteps();
     });
     row.appendChild(cancel);
@@ -1746,7 +1802,7 @@ function appendWorkflowLabelField(fields, step) {
       e.stopPropagation();
       flushBuilderFromDom();
       step.workflow_label = "";
-      workflowLabelUiExpandedByStepRef.delete(step);
+      delete step[WORKFLOW_LABEL_UI_EXPANDED];
       renderSteps();
     });
     row.appendChild(remove);
@@ -2170,7 +2226,7 @@ function renderNestedBranchStepRow(segments, ifNestingDepth) {
 
   const toolbarActions = document.createElement("div");
   toolbarActions.className = "nested-branch-toolbar-actions";
-  appendCollapsedWorkflowLabelTrigger(toolbarActions, step);
+  appendCollapsedWorkflowLabelTrigger(toolbarActions, step, { type: "branch", segments });
 
   if (typeof makeIconButton === "function") {
     toolbarActions.appendChild(
@@ -2246,7 +2302,10 @@ function removeNestedBranchLeafStep(segments) {
 
 function changeStepType(index, newAction) {
   if (builderSteps[index].action === newAction) return;
-  builderSteps[index] = defaultStep(newAction);
+  const prev = builderSteps[index];
+  const next = defaultStep(newAction);
+  transferWorkflowLabelUiExpanded(prev, next);
+  builderSteps[index] = next;
   renderSteps();
 }
 
@@ -2367,6 +2426,9 @@ function normalizeStep(step) {
     if (!Array.isArray(s.else_steps)) s.else_steps = [];
   }
   if (s.action === "exit" && typeof s.message !== "string") s.message = "";
+  if (step[WORKFLOW_LABEL_UI_EXPANDED] === true) {
+    s[WORKFLOW_LABEL_UI_EXPANDED] = true;
+  }
   return s;
 }
 
@@ -2751,16 +2813,23 @@ function labeledSelect(name, labelText, value, options, hint = "", helpId = null
 
 function fieldCheckbox(name, labelText, checked, hint = "", helpId = null) {
   const label = document.createElement("label");
-  label.className = "checkbox inline field-labeled";
+  label.className = "toggle inline field-labeled";
   const inp = document.createElement("input");
   inp.type = "checkbox";
   inp.dataset.field = name;
   inp.checked = !!checked;
   if (hint) inp.title = hint;
-  label.appendChild(inp);
+  const track = document.createElement("span");
+  track.className = "toggle-track";
+  track.setAttribute("aria-hidden", "true");
+  const thumb = document.createElement("span");
+  thumb.className = "toggle-thumb";
+  track.appendChild(thumb);
   const span = document.createElement("span");
-  span.className = "field-label";
+  span.className = "field-label toggle-text";
   span.textContent = labelText;
+  label.appendChild(inp);
+  label.appendChild(track);
   label.appendChild(span);
   return label;
 }
