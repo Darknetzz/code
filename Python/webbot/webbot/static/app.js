@@ -749,13 +749,28 @@ function setFlowEditorMode(jsonEditable) {
   const disable = jsonEditable === false;
   wrap?.querySelectorAll("input, select, button").forEach((el) => {
     if (el.classList.contains("btn-delete-flow")) return;
-    if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
+    if (
+      el.id === "btn-save" ||
+      el.id === "btn-test-run" ||
+      el.id === "btn-add-step" ||
+      el.id === "btn-discard-flow"
+    ) {
       el.disabled = disable;
     } else if (!el.closest(".step-actions")) {
       el.disabled = disable;
     }
   });
   updateDeleteFlowButton();
+  updateDiscardFlowButton();
+}
+
+function updateDiscardFlowButton() {
+  const jsonPanelLocked = $("flow-editor-wrap")?.classList.contains("flow-editor-readonly") ?? false;
+  const baseDisabled = !isFlowEditorDirty();
+  document.querySelectorAll(".btn-discard-flow-changes").forEach((btn) => {
+    const inJson = Boolean(btn.closest("#flow-editor-wrap"));
+    btn.disabled = (inJson && jsonPanelLocked) || baseDisabled;
+  });
 }
 
 function updateDeleteFlowButton() {
@@ -3527,6 +3542,10 @@ $("btn-save-python")?.addEventListener("click", () =>
     showError(e.message);
   })
 );
+const discardFlowEditsHandler = () =>
+  discardFlowChanges().catch((e) => showError(e.message));
+$("btn-discard-flow")?.addEventListener("click", discardFlowEditsHandler);
+$("btn-discard-flow-python")?.addEventListener("click", discardFlowEditsHandler);
 document.querySelectorAll(".btn-delete-flow").forEach((btn) => {
   btn.addEventListener("click", () =>
     deleteSelectedFlow().catch((e) => {
@@ -3706,11 +3725,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     });
 
     window.addEventListener("beforeunload", (e) => {
-      const dirty =
-        selectedScenario &&
-        savedFlowBaseline !== null &&
-        captureCurrentFlowSnapshot() !== savedFlowBaseline;
-      if (!dirty) return;
+      if (!isFlowEditorDirty()) return;
       e.preventDefault();
       e.returnValue = "";
     });
