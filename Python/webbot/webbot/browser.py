@@ -17,6 +17,7 @@ class BrowserConfig:
     headless: bool = False
     channel: str | None = "chrome"
     slow_mo: int = 0
+    ignore_https_errors: bool = False
     viewport_width: int = 1280
     viewport_height: int = 720
     user_data_dir: Path | None = None
@@ -58,6 +59,8 @@ def _launch_kwargs(config: BrowserConfig, profile: Path) -> dict:
         kwargs["channel"] = config.channel
     if config.slow_mo:
         kwargs["slow_mo"] = config.slow_mo
+    if config.ignore_https_errors:
+        kwargs["ignore_https_errors"] = True
     return kwargs
 
 

@@ -215,6 +215,7 @@ class RunRequest(BaseModel):
     headless: bool = False
     channel: str | None = "chrome"
     slow_mo: int = 0
+    ignore_https_errors: bool = False
 
 
 class FlowGroup(BaseModel):

@@ -39,6 +39,8 @@ let scenarios = [];
 let groupsData = { groups: [], ungrouped: [] };
 let selectedScenario = null;
 let builderSteps = [];
+/** Opt-in UI: show the workflow label field while the label text is still empty (WeakMap — never serialized). */
+const workflowLabelUiExpandedByStepRef = new WeakMap();
 let ws = null;
 let runStepProgress = null;
 let runShowStepProgress = false;
@@ -1369,16 +1371,42 @@ function forwardWorkflowLabelTargets(placement, siblingIndex) {
   return [...new Set(out)].sort();
 }
 
-/**
- * All step field UIs except if_present branch arms (handled separately).
- * @param {{ type: "main", index: number } | { type: "branch", segments: (string|number)[] }} placement
- */
-function appendStepFieldsNotIfPresent(fields, step, placement) {
-  const locCtx = placement.type === "main" ? placement.index : placement.segments;
-  const curName = $("build-name").value.trim();
-  const sibIx = siblingIndexFromPlacement(placement);
+function trimmedWorkflowLabel(step) {
+  return typeof step.workflow_label === "string" ? step.workflow_label.trim() : "";
+}
 
-  fields.appendChild(
+/** Optional workflow label: collapsed behind "Add step label" unless already set or expanded in-session. */
+function appendWorkflowLabelField(fields, step) {
+  const wl = trimmedWorkflowLabel(step);
+  const expandedEmptySession = workflowLabelUiExpandedByStepRef.get(step) === true;
+  const showField = wl !== "" || expandedEmptySession;
+
+  if (!showField) {
+    const wrap = document.createElement("div");
+    wrap.className = "workflow-label-add-wrap";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-add-workflow-label outline";
+    btn.textContent = "Add step label";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      workflowLabelUiExpandedByStepRef.set(step, true);
+      renderSteps();
+    });
+    if (typeof enhanceButton === "function") {
+      enhanceButton(btn, "plus", { label: "Add step label" });
+    }
+    wrap.appendChild(btn);
+    fields.appendChild(wrap);
+    return;
+  }
+
+  const row = document.createElement("div");
+  row.className = "workflow-label-row";
+
+  const fieldCol = document.createElement("div");
+  fieldCol.className = "workflow-label-field-col";
+  fieldCol.appendChild(
     labeledField(
       "workflow_label",
       "Step label",
@@ -1388,6 +1416,49 @@ function appendStepFieldsNotIfPresent(fields, step, placement) {
       "scenario.workflow_label"
     )
   );
+  row.appendChild(fieldCol);
+
+  if (expandedEmptySession && !wl) {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "workflow-label-secondary-btn outline";
+    cancel.textContent = "Cancel";
+    cancel.title = "Hide step label field";
+    cancel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      workflowLabelUiExpandedByStepRef.delete(step);
+      renderSteps();
+    });
+    row.appendChild(cancel);
+  } else if (wl) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "workflow-label-secondary-btn outline danger";
+    remove.textContent = "Remove";
+    remove.title = "Clear step label";
+    remove.addEventListener("click", (e) => {
+      e.stopPropagation();
+      flushBuilderFromDom();
+      step.workflow_label = "";
+      workflowLabelUiExpandedByStepRef.delete(step);
+      renderSteps();
+    });
+    row.appendChild(remove);
+  }
+
+  fields.appendChild(row);
+}
+
+/**
+ * All step field UIs except if_present branch arms (handled separately).
+ * @param {{ type: "main", index: number } | { type: "branch", segments: (string|number)[] }} placement
+ */
+function appendStepFieldsNotIfPresent(fields, step, placement) {
+  const locCtx = placement.type === "main" ? placement.index : placement.segments;
+  const curName = $("build-name").value.trim();
+  const sibIx = siblingIndexFromPlacement(placement);
+
+  appendWorkflowLabelField(fields, step);
 
   if (step.action === "open_url") {
     fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.open_url.url"));
@@ -2415,6 +2486,14 @@ function syncStepFromDom(index, row) {
   syncUnsavedIndicators();
 }
 
+function flushBuilderFromDom() {
+  flushAllIfPresentDomState();
+  builderSteps.forEach((_, i) => {
+    const row = document.querySelector(`[data-step-index="${i}"]`);
+    if (row) applyStepFromDom(i, row);
+  });
+}
+
 function renderSteps() {
   const list = $("steps-list");
   list.innerHTML = "";
@@ -2519,11 +2598,7 @@ function renderScenarioOptions(doc = {}) {
 }
 
 function collectDocument() {
-  flushAllIfPresentDomState();
-  builderSteps.forEach((_, i) => {
-    const row = document.querySelector(`[data-step-index="${i}"]`);
-    if (row) applyStepFromDom(i, row);
-  });
+  flushBuilderFromDom();
   return {
     name: $("build-name").value.trim(),
     description: $("build-desc").value.trim(),

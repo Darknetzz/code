@@ -33,6 +33,7 @@ class RunConfig:
     headless: bool = False
     channel: str | None = "chrome"
     slow_mo: int = 0
+    ignore_https_errors: bool = False
 
     def __post_init__(self) -> None:
         sc = (self.scenario or "").strip()
@@ -112,6 +113,7 @@ class Runner:
             headless=config.headless,
             channel=config.channel or "chrome",
             slow_mo=config.slow_mo,
+            ignore_https_errors=config.ignore_https_errors,
         )
 
     async def run_once(self, config: RunConfig) -> None:

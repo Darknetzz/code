@@ -1649,6 +1649,29 @@ button:disabled {
   max-width: 100%;
 }
 
+.workflow-label-add-wrap {
+  grid-column: 1 / -1;
+}
+
+.workflow-label-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.workflow-label-field-col {
+  flex: 1 1 min(18rem, 100%);
+  min-width: 0;
+}
+
+.workflow-label-secondary-btn {
+  flex-shrink: 0;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.78rem;
+}
+
 .step-fields input,
 .step-fields select {
   width: 100%;
