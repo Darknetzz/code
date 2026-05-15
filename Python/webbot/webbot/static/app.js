@@ -40,12 +40,6 @@ function getScenarioInfo(name) {
   return scenarios.find((s) => s.name === name) || null;
 }
 
-function listScenariosForUi() {
-  const items = [...scenarios];
-  if (isDraftSelected()) items.unshift(getDraftListEntry());
-  return items;
-}
-
 function syncDraftListLabel() {
   if (!isDraftSelected()) return;
   const entry = getDraftListEntry();
@@ -646,7 +640,7 @@ function renderScenarioList(containerId, onSelect) {
     ul.className = "scenario-group-flows";
     for (const nm of ungrouped) {
       const flow = jsonFlows.find((x) => x.name === nm);
-      if (!flow || assigned.has(nm)) continue;
+      if (!flow) continue;
       ul.appendChild(buildScenarioListItem(flow, onSelect));
     }
     ugWrap.appendChild(ul);
@@ -718,6 +712,7 @@ async function loadHealth() {
 
 async function loadScenarios() {
   scenarios = await api("/api/scenarios");
+  await loadGroups();
 
   if (scenarios.length === 0 && !isDraftSelected()) {
     selectedScenario = null;
@@ -756,7 +751,7 @@ function connectWebSocket() {
   ws.onclose = () => setTimeout(connectWebSocket, 2000);
 }
 
-const STEP_TYPES = ["goto", "click", "fill", "submit_form", "delay", "scroll"];
+const STEP_TYPES = ["goto", "click", "fill", "submit_form", "delay", "scroll", "run_scenario"];
 
 function changeStepType(index, newAction) {
   if (builderSteps[index].action === newAction) return;
@@ -808,6 +803,13 @@ function defaultStep(action) {
         submit_name: "Submit",
         wait_for_navigation: true,
       };
+    case "run_scenario":
+      return {
+        action: "run_scenario",
+        scenario: "",
+        inherit_delays: false,
+        skip_start_url: true,
+      };
     default:
       return { action };
   }
@@ -831,6 +833,11 @@ function normalizeStep(step) {
   const s = normalizeLocatorFields({ ...step });
   if (s.action === "submit_form" && Array.isArray(s.fields)) {
     s.fields = s.fields.map((f) => normalizeLocatorFields({ ...f }));
+  }
+  if (s.action === "run_scenario") {
+    s.inherit_delays = !!s.inherit_delays;
+    s.skip_start_url = s.skip_start_url !== false;
+    if (typeof s.scenario !== "string") s.scenario = "";
   }
   return s;
 }
@@ -1269,6 +1276,37 @@ function renderStepRow(step, index) {
   } else if (step.action === "fill") {
     if (!step.by) step.by = "css";
     appendLocatorFields(fields, step, true, index);
+  } else if (step.action === "run_scenario") {
+    const cur = $("build-name").value.trim();
+    const opts = scenarios.filter((s) => s.type === "json" && s.name !== cur).map((s) => s.name);
+    fields.appendChild(
+      labeledSelect(
+        "scenario",
+        "Flow to run",
+        step.scenario || "",
+        opts,
+        "Runs another saved JSON flow inline",
+        null
+      )
+    );
+    fields.appendChild(
+      fieldCheckbox(
+        "inherit_delays",
+        "Use parent random-between-step delays",
+        !!step.inherit_delays,
+        "Otherwise use the nested flow’s delay settings",
+        null
+      )
+    );
+    fields.appendChild(
+      fieldCheckbox(
+        "skip_start_url",
+        "Skip nested start URL goto",
+        step.skip_start_url !== false,
+        "Avoid duplicate navigation when composing flows",
+        null
+      )
+    );
   } else if (step.action === "submit_form") {
     fields.appendChild(
       labeledSelect(
