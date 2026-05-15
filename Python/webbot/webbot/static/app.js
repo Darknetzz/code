@@ -493,6 +493,7 @@ function newFlow() {
     clearFlowEditor();
     $("build-msg").textContent = "Draft — enter a name and save.";
     syncDraftListLabel();
+    syncFlowKindSelectFromDraftOrScenario();
     return;
   }
   setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
@@ -519,6 +520,7 @@ function newPythonFlow() {
     syncScenarioListSelection();
     updateDeleteFlowButton();
     clearRunStepProgress();
+    syncFlowKindSelectFromDraftOrScenario();
     return;
   }
   draftIsPython = true;
@@ -644,12 +646,34 @@ function syncScenarioListSelection() {
   });
 }
 
+function syncFlowKindSelectFromDraftOrScenario() {
+  const sel = $("build-flow-kind");
+  if (!sel) return;
+  if (selectedScenario === DRAFT_SCENARIO_ID) {
+    sel.value = draftIsPython ? "python" : "json";
+    return;
+  }
+  if (selectedScenario) {
+    const info = getScenarioInfo(selectedScenario);
+    sel.value = info?.type === "python" ? "python" : "json";
+    return;
+  }
+  sel.value = draftIsPython ? "python" : "json";
+}
+
 function setSelectedScenario(name, options = {}) {
   const prev = selectedScenario;
   selectedScenario = name || null;
   syncScenarioListSelection();
   updateDeleteFlowButton();
+  syncFlowKindSelectFromDraftOrScenario();
   if (!options.skipPreview && prev !== selectedScenario) clearRunStepProgress();
+}
+
+function createNewFlowFromToolbar() {
+  const kind = $("build-flow-kind")?.value === "python" ? "python" : "json";
+  if (kind === "python") newPythonFlow();
+  else newFlow();
 }
 
 function buildScenarioListItem(s, onSelect) {
@@ -1970,11 +1994,6 @@ function setMainTab(which) {
   $("panel-groups")?.setAttribute("aria-hidden", isWorkspace ? "true" : "false");
 }
 
-function closeNewFlowDropdown() {
-  const drop = $("new-flow-dropdown");
-  if (drop) drop.open = false;
-}
-
 function closeGroupsAddDropdowns() {
   document.querySelectorAll("#panel-groups .groups-add-dropdown[open]").forEach((d) => {
     d.open = false;
@@ -2227,14 +2246,7 @@ $("btn-add-step").onclick = () => {
   renderSteps();
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
-$("btn-new-flow")?.addEventListener("click", () => {
-  closeNewFlowDropdown();
-  newFlow();
-});
-$("btn-new-python-flow")?.addEventListener("click", () => {
-  closeNewFlowDropdown();
-  newPythonFlow();
-});
+$("btn-new-flow")?.addEventListener("click", () => createNewFlowFromToolbar());
 $("btn-save-python")?.addEventListener("click", () =>
   savePythonScenario().catch((e) => ($("build-msg-python").textContent = e.message))
 );
@@ -2286,16 +2298,44 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     $("build-name")?.addEventListener("input", syncDraftListLabel);
     $("build-desc")?.addEventListener("input", syncDraftListLabel);
 
+    $("build-flow-kind")?.addEventListener("change", () => {
+      const sel = $("build-flow-kind");
+      if (!sel) return;
+      const wantPython = sel.value === "python";
+      if (!isDraftSelected()) return;
+      if (wantPython === draftIsPython) return;
+      const msg = wantPython
+        ? "Switch this draft to a Python flow? The JSON step builder will be replaced by the Python template."
+        : "Switch this draft to JSON? The Python editor will reset to the JSON step builder with a goto step.";
+      if (!confirm(msg)) {
+        sel.value = draftIsPython ? "python" : "json";
+        return;
+      }
+      if (wantPython) {
+        draftIsPython = true;
+        setPythonSource(PYTHON_FLOW_TEMPLATE);
+        showPythonFlowEditor();
+        $("build-msg").textContent = "";
+        $("build-msg-python").textContent = "Draft — enter a name and save.";
+      } else {
+        draftIsPython = false;
+        clearFlowEditor();
+        showJsonFlowEditor();
+        $("build-msg-python").textContent = "";
+        $("build-msg").textContent = "Draft — enter a name and save.";
+      }
+      syncDraftListLabel();
+      renderScenarioList("scenario-list", scenarioListOnSelect);
+      syncScenarioListSelection();
+    });
+
     document.addEventListener("click", (e) => {
-      const nf = $("new-flow-dropdown");
-      if (nf?.open && !nf.contains(e.target)) nf.open = false;
       if (!e.target.closest("#panel-groups .groups-add-dropdown")) {
         closeGroupsAddDropdowns();
       }
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      closeNewFlowDropdown();
       closeGroupsAddDropdowns();
     });
   } catch (e) {
