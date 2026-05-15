@@ -390,6 +390,27 @@ main {
   overflow-y: auto;
 }
 
+/* Flows header: toolbar grows; help stays flush right */
+.workspace-flows-card > .panel-help-row {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.workspace-flows-card > .panel-help-row > .workspace-sidebar-toolbar {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-flow-danger-row {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.editor-flow-danger-row .btn-with-icon {
+  justify-content: center;
+}
+
 .workspace-run-card {
   margin-bottom: 0;
 }
@@ -428,10 +449,10 @@ main {
 }
 
 .workspace-sidebar-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
   align-items: stretch;
+  gap: 0.35rem;
   width: 100%;
 }
 
@@ -473,6 +494,7 @@ main {
 
 .workspace-sidebar-actions > button {
   box-sizing: border-box;
+  width: 100%;
   min-height: 2.375rem;
   padding: 0.45rem 0.65rem;
   font-size: 0.85rem;

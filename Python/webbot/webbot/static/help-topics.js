@@ -29,7 +29,7 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flows", "Grouped sections and ungrouped; pick one to edit. <strong>New flow</strong> picks the editor from <strong>Flow type</strong> in the workspace form — <strong>Delete</strong> removes or discards; organize sections under the <strong>Flow groups</strong> tab."],
+          ["Flows", "Grouped sections and ungrouped; pick one to edit. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (under Flow name in the editor) removes the selected flow or discards a draft; organize sections under the <strong>Flow groups</strong> tab."],
           ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved."],
           ["Run", "Loops, pauses, headless, Start/Stop, and run status."],
           ["Save / Test run", "Save JSON or Python to disk, or save and run immediately."],

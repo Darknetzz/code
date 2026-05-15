@@ -61,7 +61,6 @@
                 <button type="button" id="btn-new-flow" class="success outline">
                   New flow
                 </button>
-                <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
               </div>
             </div>
             <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
@@ -87,7 +86,9 @@
           <label for="build-name">Flow name</label>
           <input type="text" id="build-name" placeholder="my_flow" autocomplete="off" />
 
-          <div id="flow-editor-wrap">
+          <div class="editor-flow-danger-row">
+            <button type="button" id="btn-delete-flow" class="danger outline" disabled>Delete</button>
+          </div>
             <label for="build-desc">Description</label>
             <input type="text" id="build-desc" placeholder="Optional" />
 
