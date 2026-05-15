@@ -9,7 +9,9 @@ from enum import Enum
 from typing import Any
 
 from webbot.browser import BrowserConfig, persistent_browser, save_failure_screenshot
+from webbot.json_scenario import run_json_scenario_group
 from webbot.run_context import RunContext, reset_run_context, set_run_context
+from webbot.scenario_store import get_group_by_id, list_json_scenario_names
 from webbot.scenarios import get_scenario
 
 
@@ -23,12 +25,22 @@ class RunState(str, Enum):
 
 @dataclass
 class RunConfig:
-    scenario: str
+    scenario: str | None = None
+    group_id: str | None = None
     loops: int = 1
     pause_between_loops_sec: float = 0.0
+    pause_between_flows_sec: float = 0.0
     headless: bool = False
     channel: str | None = "chrome"
     slow_mo: int = 0
+
+    def __post_init__(self) -> None:
+        sc = (self.scenario or "").strip()
+        gid = (self.group_id or "").strip()
+        if bool(sc) == bool(gid):
+            raise ValueError("Exactly one of scenario or group_id must be set")
+        self.scenario = sc or None
+        self.group_id = gid or None
 
 
 @dataclass
@@ -131,20 +143,44 @@ class Runner:
         self._notify_status()
 
     async def _execute(self, config: RunConfig) -> None:
+        if config.group_id:
+            group = get_group_by_id(config.group_id)
+            names = [n.strip() for n in group.scenario_names if n.strip()]
+            if not names:
+                raise ValueError(f"Group '{config.group_id}' has no flows")
+            available = set(list_json_scenario_names())
+            for sn in names:
+                if sn not in available:
+                    raise ValueError(f"Group references unknown scenario '{sn}'")
+
+            async def scenario_fn(page):
+                await run_json_scenario_group(
+                    page,
+                    group_label=group.label,
+                    scenario_names=names,
+                    pause_between_flows_sec=config.pause_between_flows_sec,
+                )
+
+            label = f"group:{config.group_id}"
+            log_start = f"Starting group '{label}' ({config.loops} loop(s))"
+        else:
+            scenario_fn = get_scenario(config.scenario or "")
+            label = config.scenario or ""
+            log_start = f"Starting scenario '{label}' ({config.loops} loop(s))"
+
         self._status = RunStatus(
             state=RunState.running,
-            scenario=config.scenario,
+            scenario=label,
             loop=0,
             loops=config.loops,
         )
         self._notify_status()
-        self._log(f"Starting scenario '{config.scenario}' ({config.loops} loop(s))")
+        self._log(log_start)
 
         self._run_context = RunContext(log=self._log, notify_status=self._notify_status)
         token = set_run_context(self._run_context)
 
         browser_cfg = self._browser_config(config)
-        scenario_fn = get_scenario(config.scenario)
 
         try:
             async with persistent_browser(browser_cfg) as (_context, page):
@@ -162,7 +198,7 @@ class Runner:
                     try:
                         await scenario_fn(page)
                     except Exception:
-                        shot = await save_failure_screenshot(page, config.scenario)
+                        shot = await save_failure_screenshot(page, label)
                         if shot:
                             self._log(f"Screenshot saved: {shot}")
                         raise
@@ -188,7 +224,7 @@ class Runner:
                             pass
 
             self._status.state = RunState.completed
-            self._log(f"Scenario '{config.scenario}' completed")
+            self._log(f"Run '{label}' completed")
             self._notify_status()
 
         except asyncio.CancelledError:

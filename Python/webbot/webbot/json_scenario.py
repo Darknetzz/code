@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
 
 from playwright.async_api import Locator, Page
 
@@ -14,6 +15,7 @@ from webbot.models import (
     FillStep,
     FormField,
     GotoStep,
+    RunScenarioStep,
     ScenarioDocument,
     ScrollStep,
     Step,
@@ -21,6 +23,8 @@ from webbot.models import (
 )
 from webbot.run_context import get_run_context, run_verified_step
 from webbot.scenario_store import load_json_scenario
+
+MAX_SCENARIO_NEST_DEPTH = 16
 
 
 def _loc_kwargs_field(field: FormField) -> dict:
@@ -77,7 +81,77 @@ def step_label(step: Step) -> str:
     if isinstance(step, SubmitFormStep):
         n = len(step.fields)
         return f"submit_form ({step.method.upper()}) {n} field(s)"
+    if isinstance(step, RunScenarioStep):
+        return f"run scenario: {step.scenario}"
     return step.action  # type: ignore[union-attr]
+
+
+def _needs_implicit_goto(doc: ScenarioDocument, skip_implicit_start_url: bool) -> bool:
+    return (
+        bool(doc.start_url)
+        and not any(isinstance(s, GotoStep) for s in doc.steps)
+        and not skip_implicit_start_url
+    )
+
+
+def collect_expanded_plan_labels(
+    doc: ScenarioDocument,
+    *,
+    scenario_name: str,
+    stack: frozenset[str],
+    skip_implicit_start_url: bool,
+    label_prefix: str,
+    depth: int,
+) -> list[str]:
+    """Flatten nested ``run_scenario`` steps into ordered preview/run labels."""
+    if depth > MAX_SCENARIO_NEST_DEPTH:
+        raise ValueError(f"Scenario nesting exceeds maximum depth ({MAX_SCENARIO_NEST_DEPTH})")
+
+    labels: list[str] = []
+    if _needs_implicit_goto(doc, skip_implicit_start_url):
+        labels.append(label_prefix + f"goto {doc.start_url}")
+
+    for step in doc.steps:
+        if isinstance(step, RunScenarioStep):
+            sub = step.scenario.strip()
+            if not sub:
+                raise ValueError("run_scenario step has an empty scenario name")
+            if sub == scenario_name or sub in stack:
+                raise ValueError(f"Scenario cycle detected involving '{scenario_name}' -> '{sub}'")
+            nested = load_json_scenario(sub)
+            nest_prefix = label_prefix + f"[{sub}] "
+            labels.extend(
+                collect_expanded_plan_labels(
+                    nested,
+                    scenario_name=sub,
+                    stack=stack | {scenario_name},
+                    skip_implicit_start_url=step.skip_start_url,
+                    label_prefix=nest_prefix,
+                    depth=depth + 1,
+                )
+            )
+        else:
+            labels.append(label_prefix + step_label(step))
+    return labels
+
+
+class JsonRunTracker:
+    """Assigns flattened plan indices to each verified browser step."""
+
+    __slots__ = ("_plan", "_i")
+
+    def __init__(self, plan: list[str]) -> None:
+        self._plan = plan
+        self._i = 0
+
+    def total(self) -> int:
+        return len(self._plan)
+
+    async def verified_step(self, fn: Callable[[], Awaitable[None]]) -> None:
+        self._i += 1
+        idx = self._i
+        label = self._plan[idx - 1]
+        await run_verified_step(idx, self.total(), label, fn)
 
 
 async def _fill_field(page: Page, field: FormField) -> None:
@@ -193,6 +267,10 @@ async def execute_step(page: Page, step: Step) -> None:
         await human_click(page, loc)
     elif isinstance(step, SubmitFormStep):
         await execute_submit_form(page, step)
+    elif isinstance(step, RunScenarioStep):
+        raise ValueError(
+            "run_scenario steps must be executed via run_json_scenario (nested expansion)"
+        )
     else:
         raise ValueError(f"Unknown step: {step}")
 
@@ -213,15 +291,67 @@ async def _between_steps_pause(doc: ScenarioDocument) -> None:
         ctx._log(f"[OK] {label}")
 
 
-def build_step_plan(doc: ScenarioDocument) -> list[tuple[int, str]]:
-    items: list[tuple[int, str]] = []
-    offset = 0
-    if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
-        items.append((1, f"goto {doc.start_url}"))
-        offset = 1
-    for i, step in enumerate(doc.steps, start=1):
-        items.append((i + offset, step_label(step)))
-    return items
+def build_step_plan(doc: ScenarioDocument, *, root_name: str | None = None) -> list[tuple[int, str]]:
+    name = root_name if root_name is not None else doc.name
+    labels = collect_expanded_plan_labels(
+        doc,
+        scenario_name=name,
+        stack=frozenset(),
+        skip_implicit_start_url=False,
+        label_prefix="",
+        depth=0,
+    )
+    return [(i + 1, lab) for i, lab in enumerate(labels)]
+
+
+async def execute_json_document(
+    page: Page,
+    doc: ScenarioDocument,
+    *,
+    scenario_name: str,
+    stack: frozenset[str],
+    skip_implicit_start_url: bool,
+    delay_doc: ScenarioDocument,
+    label_prefix: str,
+    depth: int,
+    tracker: JsonRunTracker,
+) -> None:
+    if depth > MAX_SCENARIO_NEST_DEPTH:
+        raise ValueError(f"Scenario nesting exceeds maximum depth ({MAX_SCENARIO_NEST_DEPTH})")
+
+    executed = False
+    if _needs_implicit_goto(doc, skip_implicit_start_url):
+        url = doc.start_url
+        await tracker.verified_step(lambda: _goto_start(page, url))
+        executed = True
+
+    for step in doc.steps:
+        if executed:
+            await _between_steps_pause(delay_doc)
+        executed = True
+
+        if isinstance(step, RunScenarioStep):
+            sub = step.scenario.strip()
+            if not sub:
+                raise ValueError("run_scenario step has an empty scenario name")
+            if sub == scenario_name or sub in stack:
+                raise ValueError(f"Scenario cycle detected involving '{scenario_name}' -> '{sub}'")
+            nested = load_json_scenario(sub)
+            nest_delay = delay_doc if step.inherit_delays else nested
+            nest_prefix = label_prefix + f"[{sub}] "
+            await execute_json_document(
+                page,
+                nested,
+                scenario_name=sub,
+                stack=stack | {scenario_name},
+                skip_implicit_start_url=step.skip_start_url,
+                delay_doc=nest_delay,
+                label_prefix=nest_prefix,
+                depth=depth + 1,
+                tracker=tracker,
+            )
+        else:
+            await tracker.verified_step(lambda s=step: execute_step(page, s))
 
 
 async def run_json_scenario(
@@ -229,30 +359,81 @@ async def run_json_scenario(
     doc: ScenarioDocument,
     *,
     log: Callable[[str], None] | None = None,
+    root_name: str | None = None,
 ) -> None:
+    del log  # retained for backward-compatible call sites
+    name = root_name if root_name is not None else doc.name
+    labels = collect_expanded_plan_labels(
+        doc,
+        scenario_name=name,
+        stack=frozenset(),
+        skip_implicit_start_url=False,
+        label_prefix="",
+        depth=0,
+    )
     ctx = get_run_context()
     if ctx:
-        ctx.plan_steps(build_step_plan(doc))
+        ctx.plan_steps([(i + 1, lab) for i, lab in enumerate(labels)])
 
-    if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
-        total = len(doc.steps) + 1
-        await run_verified_step(
-            1,
-            total,
-            f"goto {doc.start_url}",
-            lambda: _goto_start(page, doc.start_url),
+    tracker = JsonRunTracker(labels)
+    await execute_json_document(
+        page,
+        doc,
+        scenario_name=name,
+        stack=frozenset(),
+        skip_implicit_start_url=False,
+        delay_doc=doc,
+        label_prefix="",
+        depth=0,
+        tracker=tracker,
+    )
+
+
+async def run_json_scenario_group(
+    page: Page,
+    *,
+    group_label: str,
+    scenario_names: list[str],
+    pause_between_flows_sec: float,
+) -> None:
+    labels: list[str] = []
+    for sn in scenario_names:
+        doc = load_json_scenario(sn)
+        prefix = f"[{group_label} › {sn}] "
+        labels.extend(
+            collect_expanded_plan_labels(
+                doc,
+                scenario_name=sn,
+                stack=frozenset(),
+                skip_implicit_start_url=False,
+                label_prefix=prefix,
+                depth=0,
+            )
         )
-        step_offset = 1
-    else:
-        total = len(doc.steps)
-        step_offset = 0
 
-    for i, step in enumerate(doc.steps, start=1):
-        idx = i + step_offset
-        if idx > 1:
-            await _between_steps_pause(doc)
-        label = step_label(step)
-        await run_verified_step(idx, total, label, lambda s=step: execute_step(page, s))
+    ctx = get_run_context()
+    if ctx:
+        ctx.plan_steps([(i + 1, lab) for i, lab in enumerate(labels)])
+
+    tracker = JsonRunTracker(labels)
+    first_flow = True
+    for sn in scenario_names:
+        if not first_flow and pause_between_flows_sec > 0:
+            await asyncio.sleep(pause_between_flows_sec)
+        first_flow = False
+        doc = load_json_scenario(sn)
+        prefix = f"[{group_label} › {sn}] "
+        await execute_json_document(
+            page,
+            doc,
+            scenario_name=sn,
+            stack=frozenset(),
+            skip_implicit_start_url=False,
+            delay_doc=doc,
+            label_prefix=prefix,
+            depth=0,
+            tracker=tracker,
+        )
 
 
 async def _goto_start(page: Page, url: str) -> None:
@@ -263,6 +444,6 @@ async def _goto_start(page: Page, url: str) -> None:
 def make_json_runner(name: str):
     async def _run(page: Page) -> None:
         doc = load_json_scenario(name)
-        await run_json_scenario(page, doc)
+        await run_json_scenario(page, doc, root_name=name)
 
     return _run

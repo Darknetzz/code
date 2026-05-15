@@ -81,6 +81,15 @@ class FormField(BaseModel):
     value: str
 
 
+class RunScenarioStep(BaseModel):
+    """Run another JSON scenario inline (same browser session)."""
+
+    action: Literal["run_scenario"] = "run_scenario"
+    scenario: str
+    inherit_delays: bool = False
+    skip_start_url: bool = True
+
+
 class SubmitFormStep(BaseModel):
     """Fill fields and submit a form (GET or POST per the form's method attribute)."""
 
@@ -100,7 +109,7 @@ class SubmitFormStep(BaseModel):
 
 
 Step = Annotated[
-    Union[GotoStep, DelayStep, ScrollStep, ClickStep, FillStep, SubmitFormStep],
+    Union[GotoStep, DelayStep, ScrollStep, ClickStep, FillStep, SubmitFormStep, RunScenarioStep],
     Field(discriminator="action"),
 ]
 
@@ -118,7 +127,7 @@ class ScenarioDocument(BaseModel):
 
 class ScenarioInfo(BaseModel):
     name: str
-    type: Literal["python", "json"]
+    type: Literal["json"]
     description: str = ""
 
 
@@ -129,7 +138,7 @@ class ScenarioPreviewStep(BaseModel):
 
 class ScenarioPreview(BaseModel):
     name: str
-    type: Literal["python", "json"]
+    type: Literal["json"]
     description: str = ""
     steps: list[ScenarioPreviewStep] = Field(default_factory=list)
     source: str | None = None
@@ -147,6 +156,41 @@ class RunRequest(BaseModel):
     headless: bool = False
     channel: str | None = "chrome"
     slow_mo: int = 0
+
+
+class FlowGroup(BaseModel):
+    id: str
+    label: str
+    scenario_names: list[str] = Field(default_factory=list)
+
+
+class GroupsDocument(BaseModel):
+    groups: list[FlowGroup] = Field(default_factory=list)
+
+
+class GroupsResponse(BaseModel):
+    groups: list[FlowGroup]
+    ungrouped: list[str]
+
+
+class RunGroupRequest(BaseModel):
+    group_id: str
+    loops: int = 1
+    pause_between_loops_sec: float = 0.0
+    pause_between_flows_sec: float = 0.0
+    headless: bool = False
+    channel: str | None = "chrome"
+    slow_mo: int = 0
+
+
+class ScenarioStepPlanItem(BaseModel):
+    index: int
+    label: str
+
+
+class ScenarioStepPlan(BaseModel):
+    name: str
+    steps: list[ScenarioStepPlanItem]
 
 
 class StepProgressItem(BaseModel):

@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 from webbot.browser import get_app_config_dir
-from webbot.models import ScenarioDocument
+from webbot.models import FlowGroup, GroupsDocument, GroupsResponse, ScenarioDocument
 
 _BUILTIN_DIR = Path(__file__).parent / "builtin_scenarios"
 
@@ -61,3 +61,43 @@ def delete_json_scenario(name: str) -> None:
     if not path.exists():
         raise FileNotFoundError(f"JSON scenario not found: {name}")
     path.unlink()
+
+
+def groups_json_path() -> Path:
+    return get_user_scenarios_dir() / "groups.json"
+
+
+def load_groups_document() -> GroupsDocument:
+    path = groups_json_path()
+    if not path.exists():
+        return GroupsDocument(groups=[])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return GroupsDocument.model_validate(data)
+
+
+def save_groups_document(doc: GroupsDocument) -> Path:
+    path = groups_json_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(doc.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def build_groups_response() -> GroupsResponse:
+    """Resolve groups plus scenarios not assigned to any group."""
+    seen: set[str] = set()
+    doc = load_groups_document()
+    groups: list[FlowGroup] = []
+    for g in doc.groups:
+        names = [n for n in g.scenario_names if n.strip()]
+        groups.append(FlowGroup(id=g.id, label=g.label, scenario_names=names))
+        seen.update(names)
+    ungrouped = sorted(n for n in list_json_scenario_names() if n not in seen)
+    return GroupsResponse(groups=groups, ungrouped=ungrouped)
+
+
+def get_group_by_id(group_id: str) -> FlowGroup:
+    doc = load_groups_document()
+    for g in doc.groups:
+        if g.id == group_id:
+            return FlowGroup(id=g.id, label=g.label, scenario_names=list(g.scenario_names))
+    raise KeyError(f"Unknown group: {group_id}")
