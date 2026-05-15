@@ -6,7 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
@@ -39,6 +39,7 @@ from webbot.scenario_store import (
     build_groups_response,
     delete_json_scenario,
     delete_python_scenario,
+    finalize_scenario_rename,
     get_group_by_id,
     list_all_scenario_names,
     load_json_scenario,
@@ -255,7 +256,11 @@ def api_get_python_source(name: str) -> PythonScenarioSource:
 
 
 @app.put("/api/scenarios/{name}/python-source", response_model=PythonScenarioSource)
-def api_put_python_source(name: str, body: PythonScenarioSave) -> PythonScenarioSource:
+def api_put_python_source(
+    name: str,
+    body: PythonScenarioSave,
+    x_rename_from: str | None = Header(default=None, alias="X-Rename-From"),
+) -> PythonScenarioSource:
     stem = name.strip()
     if not stem:
         raise HTTPException(status_code=400, detail="Scenario name is required")
@@ -265,6 +270,7 @@ def api_put_python_source(name: str, body: PythonScenarioSave) -> PythonScenario
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SyntaxError as exc:
         raise HTTPException(status_code=400, detail=f"Syntax error: {exc}") from exc
+    finalize_scenario_rename(x_rename_from, stem, "python")
     preview = get_scenario_preview(stem)
     desc = preview.description if preview.type == "python" else ""
     return PythonScenarioSource(name=stem, source=load_python_source(stem), description=desc)
@@ -279,13 +285,17 @@ def api_get_scenario(name: str) -> ScenarioDocument:
 
 
 @app.post("/api/scenarios", response_model=ScenarioDocument)
-def api_save_scenario(doc: ScenarioDocument) -> ScenarioDocument:
+def api_save_scenario(
+    doc: ScenarioDocument,
+    x_rename_from: str | None = Header(default=None, alias="X-Rename-From"),
+) -> ScenarioDocument:
     if not doc.name.strip():
         raise HTTPException(status_code=400, detail="Scenario name is required")
     try:
         save_json_scenario(doc)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finalize_scenario_rename(x_rename_from, doc.name, "json")
     return doc
 
 

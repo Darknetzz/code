@@ -1,5 +1,36 @@
 const $ = (id) => document.getElementById(id);
 
+/** Last-synced editor payload for the active flow (save/load); used to detect unsaved edits. */
+let savedFlowBaseline = null;
+
+function captureCurrentFlowSnapshot() {
+  if (isPythonUi()) {
+    return `py:${getPythonSource()}`;
+  }
+  return `json:${JSON.stringify(collectDocument())}`;
+}
+
+function commitSavedBaseline() {
+  if (!selectedScenario) {
+    savedFlowBaseline = null;
+    syncUnsavedIndicators();
+    return;
+  }
+  savedFlowBaseline = captureCurrentFlowSnapshot();
+  syncUnsavedIndicators();
+}
+
+function syncUnsavedIndicators() {
+  const dirty =
+    selectedScenario &&
+    savedFlowBaseline !== null &&
+    captureCurrentFlowSnapshot() !== savedFlowBaseline;
+  document.querySelectorAll(".scenario-item").forEach((btn) => {
+    const on = selectedScenario && btn.dataset.name === selectedScenario;
+    btn.classList.toggle("scenario-item-unsaved", on && dirty);
+  });
+}
+
 /** Client-only id for an unsaved flow row in the list. */
 const DRAFT_SCENARIO_ID = "__draft__";
 
@@ -75,6 +106,7 @@ function initPythonCodeMirror() {
       "Shift-Tab": "indentLess",
     },
   });
+  pythonCodeMirror.on("change", () => syncUnsavedIndicators());
 }
 
 function isDraftSelected() {
@@ -118,6 +150,11 @@ function syncDraftListLabel() {
     span.textContent = entry.description;
     btn.appendChild(span);
   }
+}
+
+function onBuildNameDescInput() {
+  syncDraftListLabel();
+  syncUnsavedIndicators();
 }
 
 function scenarioListOnSelect(name) {
@@ -498,6 +535,7 @@ function newFlow() {
     $("build-msg").textContent = "Draft — enter a name and save.";
     syncDraftListLabel();
     syncFlowKindSelectFromDraftOrScenario();
+    commitSavedBaseline();
     return;
   }
   setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
@@ -508,6 +546,7 @@ function newFlow() {
   $("build-msg").textContent = "Draft — enter a name and save.";
   updateDeleteFlowButton();
   clearRunStepProgress();
+  commitSavedBaseline();
 }
 
 function newPythonFlow() {
@@ -525,6 +564,7 @@ function newPythonFlow() {
     updateDeleteFlowButton();
     clearRunStepProgress();
     syncFlowKindSelectFromDraftOrScenario();
+    commitSavedBaseline();
     return;
   }
   draftIsPython = true;
@@ -538,6 +578,7 @@ function newPythonFlow() {
   $("build-msg-python").textContent = "Draft — enter a name and save.";
   updateDeleteFlowButton();
   clearRunStepProgress();
+  commitSavedBaseline();
 }
 
 async function discardDraft() {
@@ -553,6 +594,7 @@ async function discardDraft() {
     $("build-msg").textContent = "";
     $("build-msg-python").textContent = "";
     updateDeleteFlowButton();
+    commitSavedBaseline();
   }
 }
 
@@ -572,6 +614,8 @@ async function selectScenario(name) {
 async function loadFlowIntoEditor(name) {
   $("build-msg").textContent = "";
   $("build-msg-python").textContent = "";
+  savedFlowBaseline = null;
+  syncUnsavedIndicators();
   if (!name) return;
 
   if (name === DRAFT_SCENARIO_ID) {
@@ -583,6 +627,7 @@ async function loadFlowIntoEditor(name) {
       $("build-msg").textContent = "Draft — enter a name and save.";
     }
     updateDeleteFlowButton();
+    commitSavedBaseline();
     return;
   }
 
@@ -605,6 +650,7 @@ async function loadFlowIntoEditor(name) {
       $("build-msg-python").textContent = `Editing "${name}"`;
       updateDeleteFlowButton();
       updateFlowNameReadonly();
+      commitSavedBaseline();
     } catch (e) {
       $("build-msg-python").textContent = e.message;
     }
@@ -618,6 +664,7 @@ async function loadFlowIntoEditor(name) {
     $("build-msg").textContent = `Editing "${name}"`;
     updateDeleteFlowButton();
     updateFlowNameReadonly();
+    commitSavedBaseline();
   } catch (e) {
     $("build-msg").textContent = e.message;
   }
@@ -648,6 +695,7 @@ function syncScenarioListSelection() {
     btn.classList.toggle("selected", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
   });
+  syncUnsavedIndicators();
 }
 
 function syncFlowKindSelectFromDraftOrScenario() {
@@ -671,6 +719,7 @@ function syncFlowKindSelectFromDraftOrScenario() {
 function setSelectedScenario(name, options = {}) {
   const prev = selectedScenario;
   selectedScenario = name || null;
+  if (!selectedScenario) savedFlowBaseline = null;
   syncScenarioListSelection();
   updateDeleteFlowButton();
   syncFlowKindSelectFromDraftOrScenario();
@@ -696,9 +745,14 @@ function buildScenarioListItem(s, onSelect) {
   const nameEl = document.createElement("span");
   nameEl.className = "scenario-item-name";
   if (typeof icon === "function") nameEl.appendChild(icon("list", "icon icon-scenario"));
+  const unsavedDot = document.createElement("span");
+  unsavedDot.className = "scenario-unsaved-dot";
+  unsavedDot.title = "Unsaved changes";
+
   const nameText = document.createElement("span");
   nameText.className = "scenario-item-name-text";
   nameText.textContent = s.displayName ?? s.name;
+  nameEl.appendChild(unsavedDot);
   nameEl.appendChild(nameText);
 
   const typeEl = document.createElement("span");
@@ -893,9 +947,13 @@ function updateRunButtons(state) {
 }
 
 async function api(path, options = {}) {
+  const { headers: optHeaders, ...rest } = options;
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      ...optHeaders,
+    },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -1103,7 +1161,10 @@ function changeNestedBranchStepType(segments, newAction) {
 }
 
 function attachBranchStepScopedListeners(rowEl, segments) {
-  const syncThis = () => syncBranchStepRowIntoModel(segments, rowEl);
+  const syncThis = () => {
+    syncBranchStepRowIntoModel(segments, rowEl);
+    syncUnsavedIndicators();
+  };
   rowEl.querySelectorAll("input, select, textarea").forEach((inp) => {
     inp.addEventListener("change", syncThis);
     inp.addEventListener("input", syncThis);
@@ -1141,6 +1202,7 @@ function renderFormFieldBranchRow(segments, fieldIndex, field) {
     bySel.addEventListener("change", () => {
       field.by = bySel.value;
       renderFieldInputs();
+      syncUnsavedIndicators();
     });
     addCol("Find by", bySel, locGrid, "locator.by");
 
@@ -1148,6 +1210,7 @@ function renderFormFieldBranchRow(segments, fieldIndex, field) {
       const inp = fieldInput(key, field[key] || "", type);
       inp.addEventListener("input", () => {
         field[key] = inp.value;
+        syncUnsavedIndicators();
       });
       addCol(label, inp, locGrid, helpId);
     }
@@ -1155,6 +1218,7 @@ function renderFormFieldBranchRow(segments, fieldIndex, field) {
     const valueInp = fieldInput("value", field.value || "");
     valueInp.addEventListener("input", () => {
       field.value = valueInp.value;
+      syncUnsavedIndicators();
     });
     addCol("Value", valueInp, locGrid, "locator.value");
   };
@@ -1957,6 +2021,7 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
     bySel.addEventListener("change", () => {
       field.by = bySel.value;
       renderFieldInputs();
+      syncUnsavedIndicators();
     });
     addCol("Find by", bySel, locGrid, "locator.by");
 
@@ -1964,6 +2029,7 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
       const inp = fieldInput(key, field[key] || "", type);
       inp.addEventListener("input", () => {
         field[key] = inp.value;
+        syncUnsavedIndicators();
       });
       addCol(label, inp, locGrid, helpId);
     }
@@ -1971,6 +2037,7 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
     const valueInp = fieldInput("value", field.value || "");
     valueInp.addEventListener("input", () => {
       field.value = valueInp.value;
+      syncUnsavedIndicators();
     });
     addCol("Value", valueInp, locGrid, "locator.value");
   };
@@ -2266,6 +2333,7 @@ function syncStepFromDom(index, row) {
     step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
   }
   builderSteps[index] = normalizeStep(step);
+  syncUnsavedIndicators();
 }
 
 function renderSteps() {
@@ -2273,6 +2341,7 @@ function renderSteps() {
   list.innerHTML = "";
   builderSteps.forEach((step, i) => list.appendChild(renderStepRow(step, i)));
   initStepDragDrop(list);
+  syncUnsavedIndicators();
 }
 
 function removeStep(index) {
@@ -2364,6 +2433,10 @@ function renderScenarioOptions(doc = {}) {
       "How pauses are picked between min and max"
     )
   );
+  container.querySelectorAll("[data-scenario-field]").forEach((el) => {
+    el.addEventListener("input", syncUnsavedIndicators);
+    el.addEventListener("change", syncUnsavedIndicators);
+  });
 }
 
 function collectDocument() {
@@ -2392,8 +2465,18 @@ async function savePythonScenario() {
     $("build-msg-python").textContent = "Choose a different flow name";
     return;
   }
+  const previousStem =
+    !isDraftSelected() && selectedScenario && selectedScenario !== DRAFT_SCENARIO_ID
+      ? selectedScenario
+      : null;
+  /** @type {Record<string, string>} */
+  const headers = {};
+  if (previousStem && previousStem !== name) {
+    headers["X-Rename-From"] = previousStem;
+  }
   await api(`/api/scenarios/${encodeURIComponent(name)}/python-source`, {
     method: "PUT",
+    headers,
     body: JSON.stringify({ source }),
   });
   const wasDraft = isDraftSelected();
@@ -2418,7 +2501,16 @@ async function saveScenario() {
     $("build-msg").textContent = "Choose a different scenario name";
     return;
   }
-  await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
+  const previousStem =
+    !isDraftSelected() && selectedScenario && selectedScenario !== DRAFT_SCENARIO_ID
+      ? selectedScenario
+      : null;
+  /** @type {Record<string, string>} */
+  const headers = {};
+  if (previousStem && previousStem !== doc.name.trim()) {
+    headers["X-Rename-From"] = previousStem;
+  }
+  await api("/api/scenarios", { method: "POST", headers, body: JSON.stringify(doc) });
   const wasDraft = isDraftSelected();
   $("build-msg").textContent = `Saved "${doc.name}"`;
   selectedScenario = doc.name;
@@ -2778,9 +2870,14 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     } else {
       newFlow();
     }
-    $("build-random-between-steps").addEventListener("change", () => renderScenarioOptions(readScenarioOptions()));
-    $("build-name")?.addEventListener("input", syncDraftListLabel);
-    $("build-desc")?.addEventListener("input", syncDraftListLabel);
+    $("build-random-between-steps").addEventListener("change", () => {
+      renderScenarioOptions(readScenarioOptions());
+      syncUnsavedIndicators();
+    });
+    $("build-name")?.addEventListener("input", onBuildNameDescInput);
+    $("build-desc")?.addEventListener("input", onBuildNameDescInput);
+    $("build-url")?.addEventListener("input", syncUnsavedIndicators);
+    $("python-source-editor")?.addEventListener("input", syncUnsavedIndicators);
 
     $("build-flow-kind")?.addEventListener("change", () => {
       const sel = $("build-flow-kind");
@@ -2811,6 +2908,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
       syncDraftListLabel();
       renderScenarioList("scenario-list", scenarioListOnSelect);
       syncScenarioListSelection();
+      commitSavedBaseline();
     });
 
     document.addEventListener("click", (e) => {

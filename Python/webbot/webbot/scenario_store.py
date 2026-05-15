@@ -124,6 +124,8 @@ def load_json_scenario(name: str) -> ScenarioDocument:
     if not path.exists():
         raise FileNotFoundError(f"JSON scenario not found: {name}")
     data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "name" not in data:
+        data = {**data, "name": name}
     doc = ScenarioDocument.model_validate(data)
     if doc.name != name:
         doc = doc.model_copy(update={"name": name})
@@ -146,6 +148,48 @@ def delete_json_scenario(name: str) -> None:
     if not path.exists():
         raise FileNotFoundError(f"JSON scenario not found: {name}")
     path.unlink()
+
+
+def rename_scenario_in_groups(old_name: str, new_name: str) -> None:
+    """Replace ``old_name`` with ``new_name`` in every group's ``scenario_names``."""
+    o = old_name.strip()
+    n = new_name.strip()
+    if not o or not n or o == n:
+        return
+    doc = load_groups_document()
+    groups: list[FlowGroup] = []
+    for g in doc.groups:
+        names = [n if x == o else x for x in g.scenario_names]
+        groups.append(FlowGroup(id=g.id, label=g.label, scenario_names=names))
+    save_groups_document(GroupsDocument(groups=groups))
+
+
+def finalize_scenario_rename(
+    rename_from: str | None,
+    new_stem: str,
+    expected_kind: Literal["json", "python"],
+) -> None:
+    """After saving ``new_stem``, remove the old file if the flow was renamed; update group lists."""
+    n = new_stem.strip()
+    if not rename_from or not rename_from.strip() or not n:
+        return
+    old = rename_from.strip()
+    if old == n:
+        return
+    try:
+        k = scenario_kind(old)
+    except ValueError:
+        rename_scenario_in_groups(old, n)
+        return
+    if k == expected_kind:
+        try:
+            if k == "json":
+                delete_json_scenario(old)
+            else:
+                delete_python_scenario(old)
+        except FileNotFoundError:
+            pass
+    rename_scenario_in_groups(old, n)
 
 
 def groups_json_path() -> Path:

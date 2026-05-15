@@ -1144,6 +1144,20 @@ summary.groups-add-summary.success.outline:hover {
   white-space: nowrap;
 }
 
+.scenario-unsaved-dot {
+  display: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #d29922;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #d29922 40%, transparent);
+}
+
+.scenario-item-unsaved .scenario-unsaved-dot {
+  display: block;
+}
+
 .scenario-item-type {
   display: inline-flex;
   align-items: center;
