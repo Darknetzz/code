@@ -60,6 +60,15 @@
         <label for="build-url">Start URL</label>
         <input type="url" id="build-url" placeholder="https://example.com" />
 
+        <div class="scenario-options-card">
+          <h2 class="section-heading">Scenario options</h2>
+          <label class="checkbox">
+            <input type="checkbox" id="build-random-between-steps" />
+            Random delay between each step
+          </label>
+          <div id="between-steps-fields" class="step-fields scenario-options-fields hidden"></div>
+        </div>
+
         <div class="steps-header">
           <h2>Steps</h2>
           <button type="button" id="btn-add-step">Add step</button>

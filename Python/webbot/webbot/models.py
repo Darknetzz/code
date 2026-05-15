@@ -102,6 +102,10 @@ class ScenarioDocument(BaseModel):
     description: str = ""
     start_url: str = ""
     steps: list[Step] = Field(default_factory=list)
+    random_delay_between_steps: bool = False
+    between_steps_min: float = 0.3
+    between_steps_max: float = 1.2
+    between_steps_distribution: Literal["uniform", "triangular", "log_normal"] = "triangular"
 
 
 class ScenarioInfo(BaseModel):

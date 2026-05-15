@@ -82,6 +82,18 @@ Use **`fill`** for a single field, or **`submit_form`** to fill multiple fields 
 
 Set `"submit_by": "form"` and provide `form_selector` to call `form.submit()` instead of clicking a button (less human-like, but reliable).
 
+## Scenario-level options
+
+JSON scenarios can add a random pause **between** each step (not after the last one):
+
+| Field | Purpose |
+|-------|---------|
+| `random_delay_between_steps` | When `true`, wait before each step after the first |
+| `between_steps_min` / `between_steps_max` | Pause range in seconds (default 0.3–1.2) |
+| `between_steps_distribution` | `uniform`, `triangular` (default), or `log_normal` |
+
+Configure these in the Builder tab under **Scenario options**, or in the JSON file directly.
+
 ## Human-like timing and scrolling
 
 **Delay / wait** steps support a randomized duration between `min` and `max`:

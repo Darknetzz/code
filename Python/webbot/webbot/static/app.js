@@ -147,48 +147,61 @@ function defaultStep(action) {
   }
 }
 
-function appendLocatorFields(container, step, includeValue) {
-  container.appendChild(
-    labeledSelect("by", "Find by", step.by || "css", ["role", "text", "css", "test_id", "label"])
-  );
-  container.appendChild(labeledField("role", "Role", step.role || "", "text"));
-  container.appendChild(labeledField("name", "Name", step.name || "", "text"));
-  container.appendChild(labeledField("label", "Label text", step.label || "", "text"));
-  container.appendChild(labeledField("text", "Text", step.text || "", "text"));
-  container.appendChild(labeledField("selector", "CSS selector", step.selector || "", "text"));
-  container.appendChild(labeledField("test_id", "Test ID", step.test_id || "", "text"));
-  if (includeValue) {
-    container.appendChild(labeledField("value", "Value to type", step.value || "", "text"));
+const LOCATOR_BY_OPTIONS = ["role", "text", "css", "test_id", "label"];
+
+/** [fieldKey, label, inputType, hint] for each Find-by mode */
+function locatorFieldDefs(by) {
+  switch (by) {
+    case "role":
+      return [
+        ["role", "Role", "text", "e.g. button, link, textbox"],
+        ["name", "Accessible name", "text", "Visible or aria-label text"],
+      ];
+    case "text":
+      return [["text", "Visible text", "text", "Text shown on the page"]];
+    case "css":
+      return [["selector", "CSS selector", "text", "e.g. #id, .class, button.submit"]];
+    case "test_id":
+      return [["test_id", "Test ID", "text", "data-testid attribute value"]];
+    case "label":
+      return [["label", "Label text", "text", "Text on the associated <label>"]];
+    default:
+      return [];
   }
+}
+
+function renderLocatorInputs(container, step, includeValue) {
+  const by = step.by || "css";
+  for (const [field, label, type, hint] of locatorFieldDefs(by)) {
+    container.appendChild(labeledField(field, label, step[field] || "", type, hint));
+  }
+  if (includeValue) {
+    container.appendChild(
+      labeledField("value", "Value to type", step.value || "", "text", "Text entered into the field")
+    );
+  }
+}
+
+function appendLocatorFields(container, step, includeValue, stepIndex) {
+  const byWrap = labeledSelect("by", "Find by", step.by || "css", LOCATOR_BY_OPTIONS);
+  byWrap.querySelector("select").addEventListener("change", (e) => {
+    const row = document.querySelector(`[data-step-index="${stepIndex}"]`);
+    if (row) syncStepFromDom(stepIndex, row);
+    builderSteps[stepIndex].by = e.target.value;
+    renderSteps();
+  });
+  container.appendChild(byWrap);
+  renderLocatorInputs(container, step, includeValue);
 }
 
 function renderFormFieldRow(stepIndex, fieldIndex, field) {
   const wrap = document.createElement("div");
   wrap.className = "form-field-row";
-  const by = document.createElement("select");
-  ["role", "text", "css", "test_id", "label"].forEach((v) => {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    if (field.by === v) o.selected = true;
-    by.appendChild(o);
-  });
-  by.onchange = () => {
-    field.by = by.value;
-  };
-  const selector = fieldInput("selector", field.selector || "");
-  selector.oninput = () => {
-    field.selector = selector.value;
-  };
-  const labelInp = fieldInput("label", field.label || "");
-  labelInp.oninput = () => {
-    field.label = labelInp.value;
-  };
-  const value = fieldInput("value", field.value || "");
-  value.oninput = () => {
-    field.value = value.value;
-  };
-  const addCol = (labelText, el) => {
+
+  const locGrid = document.createElement("div");
+  locGrid.className = "form-field-row-inputs";
+
+  const addCol = (labelText, el, parent) => {
     const col = document.createElement("div");
     col.className = "field-labeled";
     const lab = document.createElement("span");
@@ -196,13 +209,37 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
     lab.textContent = labelText;
     col.appendChild(lab);
     col.appendChild(el);
-    wrap.appendChild(col);
+    parent.appendChild(col);
   };
 
-  addCol("Find by", by);
-  addCol("Selector", selector);
-  addCol("Label", labelInp);
-  addCol("Value", value);
+  const renderFieldInputs = () => {
+    locGrid.innerHTML = "";
+    const by = field.by || "css";
+
+    const bySel = fieldSelect("by", by, LOCATOR_BY_OPTIONS);
+    bySel.addEventListener("change", () => {
+      field.by = bySel.value;
+      renderFieldInputs();
+    });
+    addCol("Find by", bySel, locGrid);
+
+    for (const [key, label, type] of locatorFieldDefs(by)) {
+      const inp = fieldInput(key, field[key] || "", type);
+      inp.addEventListener("input", () => {
+        field[key] = inp.value;
+      });
+      addCol(label, inp, locGrid);
+    }
+
+    const valueInp = fieldInput("value", field.value || "");
+    valueInp.addEventListener("input", () => {
+      field.value = valueInp.value;
+    });
+    addCol("Value", valueInp, locGrid);
+  };
+
+  renderFieldInputs();
+  wrap.appendChild(locGrid);
 
   const del = document.createElement("button");
   del.type = "button";
@@ -220,7 +257,7 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
 function renderStepRow(step, index) {
   const row = document.createElement("div");
   row.className = "step-row";
-  row.dataset.index = index;
+  row.dataset.stepIndex = String(index);
 
   const typeSelect = document.createElement("select");
   typeSelect.className = "step-type-select";
@@ -233,7 +270,14 @@ function renderStepRow(step, index) {
     typeSelect.appendChild(o);
   });
   typeSelect.addEventListener("change", () => changeStepType(index, typeSelect.value));
-  row.appendChild(typeSelect);
+  const typeWrap = document.createElement("div");
+  typeWrap.className = "field-labeled step-type-col";
+  const typeLab = document.createElement("span");
+  typeLab.className = "field-label";
+  typeLab.textContent = "Step type";
+  typeWrap.appendChild(typeLab);
+  typeWrap.appendChild(typeSelect);
+  row.appendChild(typeWrap);
 
   const fields = document.createElement("div");
   fields.className = "step-fields";
@@ -351,16 +395,11 @@ function renderStepRow(step, index) {
       )
     );
   } else if (step.action === "click") {
-    fields.appendChild(
-      labeledSelect("by", "Find by", step.by || "role", ["role", "text", "css", "test_id"])
-    );
-    fields.appendChild(labeledField("role", "Role", step.role || "", "text"));
-    fields.appendChild(labeledField("name", "Accessible name", step.name || "", "text"));
-    fields.appendChild(labeledField("text", "Visible text", step.text || "", "text"));
-    fields.appendChild(labeledField("selector", "CSS selector", step.selector || "", "text"));
-    fields.appendChild(labeledField("test_id", "Test ID", step.test_id || "", "text"));
+    if (!step.by) step.by = "role";
+    appendLocatorFields(fields, step, false, index);
   } else if (step.action === "fill") {
-    appendLocatorFields(fields, step, true);
+    if (!step.by) step.by = "css";
+    appendLocatorFields(fields, step, true, index);
   } else if (step.action === "submit_form") {
     fields.appendChild(
       labeledSelect("method", "Form method", step.method || "post", ["get", "post"])
@@ -530,12 +569,98 @@ function removeStep(index) {
   renderSteps();
 }
 
+function scenarioFieldInput(name, value, type = "text") {
+  const inp = fieldInput(name, value, type);
+  delete inp.dataset.field;
+  inp.dataset.scenarioField = name;
+  return inp;
+}
+
+function labeledScenarioField(name, labelText, value, type = "text", hint = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "field-labeled";
+  const lab = document.createElement("span");
+  lab.className = "field-label";
+  lab.textContent = labelText;
+  if (hint) lab.title = hint;
+  wrap.appendChild(lab);
+  wrap.appendChild(scenarioFieldInput(name, value, type));
+  return wrap;
+}
+
+function labeledScenarioSelect(name, labelText, value, options, hint = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "field-labeled";
+  const lab = document.createElement("span");
+  lab.className = "field-label";
+  lab.textContent = labelText;
+  if (hint) lab.title = hint;
+  wrap.appendChild(lab);
+  const sel = fieldSelect(name, value, options);
+  delete sel.dataset.field;
+  sel.dataset.scenarioField = name;
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+function readScenarioOptions() {
+  const opts = {
+    random_delay_between_steps: $("build-random-between-steps").checked,
+  };
+  if (!opts.random_delay_between_steps) return opts;
+  $("between-steps-fields").querySelectorAll("[data-scenario-field]").forEach((el) => {
+    const key = el.dataset.scenarioField;
+    let val = el.value;
+    if (el.type === "number") val = parseFloat(val);
+    if (val !== "" && val !== null && !Number.isNaN(val)) opts[key] = val;
+  });
+  return opts;
+}
+
+function renderScenarioOptions(doc = {}) {
+  const enabled = !!doc.random_delay_between_steps;
+  $("build-random-between-steps").checked = enabled;
+  const container = $("between-steps-fields");
+  container.innerHTML = "";
+  container.classList.toggle("hidden", !enabled);
+  if (!enabled) return;
+  container.appendChild(fieldSection("Between-step wait"));
+  container.appendChild(
+    labeledScenarioField(
+      "between_steps_min",
+      "Min (seconds)",
+      doc.between_steps_min ?? 0.3,
+      "number",
+      "Shortest pause before the next step"
+    )
+  );
+  container.appendChild(
+    labeledScenarioField(
+      "between_steps_max",
+      "Max (seconds)",
+      doc.between_steps_max ?? 1.2,
+      "number",
+      "Longest pause before the next step"
+    )
+  );
+  container.appendChild(
+    labeledScenarioSelect(
+      "between_steps_distribution",
+      "Random style",
+      doc.between_steps_distribution || "triangular",
+      ["uniform", "triangular", "log_normal"],
+      "How pauses are picked between min and max"
+    )
+  );
+}
+
 function collectDocument() {
   return {
     name: $("build-name").value.trim(),
     description: $("build-desc").value.trim(),
     start_url: $("build-url").value.trim(),
     steps: builderSteps.map((s) => ({ ...s })),
+    ...readScenarioOptions(),
   };
 }
 
@@ -562,6 +687,7 @@ async function loadScenarioForEdit() {
   $("build-name").value = doc.name;
   $("build-desc").value = doc.description || "";
   $("build-url").value = doc.start_url || "";
+  renderScenarioOptions(doc);
   builderSteps = doc.steps || [];
   renderSteps();
   $("build-msg").textContent = `Loaded "${name}"`;
@@ -618,6 +744,8 @@ $("btn-test-run").onclick = async () => {
     updateRunButtons(st.state);
     connectWebSocket();
     builderSteps = [defaultStep("goto")];
+    renderScenarioOptions();
+    $("build-random-between-steps").addEventListener("change", () => renderScenarioOptions(readScenarioOptions()));
     renderSteps();
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;

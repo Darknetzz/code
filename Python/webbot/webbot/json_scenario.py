@@ -19,7 +19,7 @@ from webbot.models import (
     Step,
     SubmitFormStep,
 )
-from webbot.run_context import run_verified_step
+from webbot.run_context import get_run_context, run_verified_step
 from webbot.scenario_store import load_json_scenario
 
 
@@ -184,6 +184,22 @@ async def execute_step(page: Page, step: Step) -> None:
         raise ValueError(f"Unknown step: {step}")
 
 
+async def _between_steps_pause(doc: ScenarioDocument) -> None:
+    if not doc.random_delay_between_steps:
+        return
+    ctx = get_run_context()
+    label = f"between steps ({doc.between_steps_min}-{doc.between_steps_max}s)"
+    if ctx:
+        ctx._log(f"[..] {label}")
+    await human_delay(
+        doc.between_steps_min,
+        doc.between_steps_max,
+        distribution=doc.between_steps_distribution,
+    )
+    if ctx:
+        ctx._log(f"[OK] {label}")
+
+
 async def run_json_scenario(
     page: Page,
     doc: ScenarioDocument,
@@ -205,6 +221,8 @@ async def run_json_scenario(
 
     for i, step in enumerate(doc.steps, start=1):
         idx = i + step_offset
+        if idx > 1:
+            await _between_steps_pause(doc)
         label = step_label(step)
         await run_verified_step(idx, total, label, lambda s=step: execute_step(page, s))
 
