@@ -308,13 +308,97 @@ main {
   color: #c94a4a;
 }
 
-.flows-layout {
+.flows-layout,
+.workspace-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 1.25rem;
   align-items: start;
   width: 100%;
   min-width: 0;
+}
+
+.workspace-layout {
+  margin-bottom: 1rem;
+}
+
+.workspace-sidebar {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(85vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-sidebar .scenario-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 220px;
+  margin-bottom: 0.75rem;
+  overflow-y: auto;
+}
+
+.workspace-sidebar-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.workspace-sidebar-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.workspace-sidebar-actions .btn-with-icon {
+  justify-content: center;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.workspace-run-options {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.workspace-run-options .row {
+  margin-bottom: 0.5rem;
+}
+
+.workspace-run-actions {
+  margin-top: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.workspace-editor {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-log {
+  margin-bottom: 0;
+}
+
+.run-progress-wrap {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.run-progress-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.run-progress-body {
+  font-size: 0.88rem;
 }
 
 .flows-picker {
@@ -420,16 +504,19 @@ main {
 }
 
 @media (max-width: 1100px) {
-  .flows-layout {
+  .flows-layout,
+  .workspace-layout {
     grid-template-columns: 1fr;
   }
 
-  .flows-picker {
+  .flows-picker,
+  .workspace-sidebar {
     position: static;
     max-height: none;
   }
 
-  .flows-picker .scenario-list {
+  .flows-picker .scenario-list,
+  .workspace-sidebar .scenario-list {
     max-height: 180px;
   }
 }

@@ -161,9 +161,7 @@ function closeHelp() {
 }
 
 function getActivePanelHelpTopic() {
-  const flows = document.getElementById("panel-flows");
-  if (flows?.classList.contains("active")) return "help.flows";
-  return "help.run";
+  return "help.home";
 }
 
 function _attachPageHelpButton(el, topicId) {
@@ -204,15 +202,8 @@ function initHelp() {
   }
 
   if (headerBtn) {
+    headerBtn.setAttribute("aria-label", "Help for workspace");
     headerBtn.addEventListener("click", () => openHelp(getActivePanelHelpTopic(), headerBtn));
-    document.querySelectorAll(".tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        headerBtn.setAttribute(
-          "aria-label",
-          `Help for ${tab.dataset.tab === "flows" ? "Flows" : "Run"} tab`
-        );
-      });
-    });
   }
 
   bindPageHelpButtons();

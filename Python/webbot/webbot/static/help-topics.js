@@ -18,9 +18,27 @@ const HELP_TOPICS = {
     title: "Webbot overview",
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
-      "<p><strong>Run</strong> — pick a flow, preview its steps, set loops, and watch the live log.</p>",
-      "<p><strong>Flows</strong> — view and edit JSON flows step by step; Python flows are read-only in the UI.</p>",
+      "<p>Pick a flow in the sidebar, edit it on the right, and press <strong>Start</strong>. JSON flows are editable in the UI; Python flows are read-only (edit source code).</p>",
       "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Python scenarios live in the package and are registered separately.</p>",
+    ],
+  },
+  "help.home": {
+    title: "Workspace",
+    body: [
+      "<p>One screen: flow list and run controls on the left, editor on the right, log at the bottom.</p>",
+      helpTable(
+        ["Area", "What it does"],
+        [
+          ["Flow list", "Select a flow. JSON flows open in the editor; Python flows show read-only steps."],
+          ["New / Delete", "Create JSON flows or remove saved JSON flows."],
+          ["Loops / Pause / Headless", "Run options below the list."],
+          ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
+          ["Editor", "Name, URL, scenario options, and steps (drag to reorder)."],
+          ["Save / Test run", "Save JSON, or save and run immediately."],
+          ["Log", "Live output from the runner."],
+        ]
+      ),
+      "<p>Use the sidebar in this dialog for step types, locators, and detailed field help.</p>",
     ],
   },
   "help.run": {
@@ -30,7 +48,7 @@ const HELP_TOPICS = {
       helpTable(
         ["Control", "What it does"],
         [
-          ["Scenarios", "Select a JSON or Python flow. Python flows run from code; JSON flows can be edited on the Flows tab."],
+          ["Scenarios", "Select a JSON or Python flow. Python flows run from code; JSON flows open in the editor."],
           ["Loops", "How many full passes through the flow."],
           ["Pause between loops", "Wait time after each pass (except the last)."],
           ["Headless", "Hide the browser window (faster; harder to debug)."],
@@ -48,11 +66,11 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flow list", "Select, create, or delete JSON flows. Pencil opens the editor."],
+          ["Flow list", "Select, create, or delete JSON flows."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
           ["Scenario options", "Optional random delay between every step."],
           ["Steps", "Drag by the grip or use ↑↓. Types: goto, click, fill, delay, scroll, submit_form."],
-          ["Save / Test run", "Write JSON to disk, or save then switch to Run and start."],
+          ["Save / Test run", "Write JSON to disk, or save and start immediately."],
         ]
       ),
       "<p>Use the sidebar for step types, locators, and scenario options.</p>",
@@ -62,7 +80,7 @@ const HELP_TOPICS = {
     title: "Scenarios",
     body: [
       "<p>Click a scenario in the list to select it, then press <strong>Start</strong>. The list shows both Python scenarios (from the package) and JSON scenarios (from your scenarios folder or the Builder).</p>",
-      "<p>Type badges (<code>python</code> / <code>json</code>) and descriptions help tell flows apart. Use the Builder tab to edit JSON scenarios.</p>",
+      "<p>Type badges (<code>python</code> / <code>json</code>) and descriptions help tell flows apart.</p>",
     ],
   },
   "run.loops": {
@@ -88,7 +106,7 @@ const HELP_TOPICS = {
   "builder.name": {
     title: "Scenario name",
     body: [
-      "<p>Unique identifier used on the Run tab and as the JSON filename (<code>name.json</code>).</p>",
+      "<p>Unique identifier shown in the flow list and used as the JSON filename (<code>name.json</code>).</p>",
       "<p>Use letters, numbers, and underscores; avoid spaces.</p>",
     ],
   },
@@ -121,7 +139,7 @@ const HELP_TOPICS = {
   "builder.test_run": {
     title: "Test run",
     body: [
-      "<p>Saves the scenario, switches to the Run tab, and starts it immediately. Handy to verify changes without picking the scenario again.</p>",
+      "<p>Saves the scenario and starts it immediately. Handy to verify changes without pressing Start again.</p>",
     ],
   },
   "scenario.options": {
@@ -373,13 +391,16 @@ const HELP_TOPICS = {
 const HELP_NAV = [
   { label: "Overview", topics: ["overview"] },
   {
+    label: "Workspace",
+    topics: ["help.home", "help.run", "help.flows"],
+  },
+  {
     label: "Run",
-    topics: ["help.run", "run.scenario", "run.loops", "run.pause", "run.headless"],
+    topics: ["run.scenario", "run.loops", "run.pause", "run.headless"],
   },
   {
     label: "Builder",
     topics: [
-      "help.flows",
       "builder.name",
       "builder.description",
       "builder.start_url",

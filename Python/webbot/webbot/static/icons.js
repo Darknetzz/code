@@ -72,7 +72,6 @@ function initStaticIcons() {
     ["btn-test-run", "test", { label: "Test run" }],
     ["btn-new-flow", "plus", { label: "New" }],
     ["btn-delete-flow", "trash", { label: "Delete" }],
-    ["btn-edit-flow", "edit", { label: "Edit flow" }],
     ["help-prev", "chevronLeft", { label: "Previous" }],
     ["help-next", "chevronRight", { label: "Next" }],
     ["help-close", "close", { label: "Close" }],
@@ -81,11 +80,6 @@ function initStaticIcons() {
     const el = document.getElementById(id);
     if (el) enhanceButton(el, name, opts || {});
   }
-
-  document.querySelectorAll(".tab").forEach((tab) => {
-    const name = tab.dataset.tab === "run" ? "run" : "flows";
-    enhanceButton(tab, name);
-  });
 
   const logTitle = document.querySelector(".log-card h2");
   if (logTitle && !logTitle.querySelector(".icon")) {
@@ -99,10 +93,6 @@ function initStaticIcons() {
     stepsHeader.prepend(icon("list", "icon icon-heading"));
   }
 
-  const previewTitle = document.querySelector(".flow-preview-card .flow-preview-title");
-  if (previewTitle && !previewTitle.querySelector(".icon")) {
-    previewTitle.prepend(icon("flows", "icon icon-heading"));
-  }
 }
 
 function makeIconButton(iconName, label, onClick, options = {}) {
