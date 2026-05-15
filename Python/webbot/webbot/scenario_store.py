@@ -13,6 +13,24 @@ from webbot.models import FlowGroup, GroupsDocument, GroupsResponse, ScenarioDoc
 _BUILTIN_DIR = Path(__file__).parent / "builtin_scenarios"
 
 
+def _legacy_groups_json_path() -> Path:
+    """Old location: same folder as ``*.json`` flows, which made ``groups`` a false scenario."""
+    return get_user_scenarios_dir() / "groups.json"
+
+
+def _migrate_groups_file_if_needed() -> None:
+    """Move ``scenarios/groups.json`` → ``<config>/groups.json`` once if needed."""
+    new_path = get_app_config_dir() / "groups.json"
+    old_path = _legacy_groups_json_path()
+    if not old_path.exists():
+        return
+    if new_path.exists():
+        old_path.unlink()
+        return
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(old_path), str(new_path))
+
+
 class ScenarioStoreConflict(ValueError):
     """Both ``name.json`` and ``name.py`` exist."""
 
@@ -24,6 +42,7 @@ def get_user_scenarios_dir() -> Path:
 
 
 def _seed_builtin_scenarios() -> None:
+    _migrate_groups_file_if_needed()
     user_dir = get_user_scenarios_dir()
     if not _BUILTIN_DIR.exists():
         return
@@ -130,10 +149,11 @@ def delete_json_scenario(name: str) -> None:
 
 
 def groups_json_path() -> Path:
-    return get_user_scenarios_dir() / "groups.json"
+    return get_app_config_dir() / "groups.json"
 
 
 def load_groups_document() -> GroupsDocument:
+    _migrate_groups_file_if_needed()
     path = groups_json_path()
     if not path.exists():
         return GroupsDocument(groups=[])
@@ -142,6 +162,7 @@ def load_groups_document() -> GroupsDocument:
 
 
 def save_groups_document(doc: GroupsDocument) -> Path:
+    _migrate_groups_file_if_needed()
     path = groups_json_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc.model_dump_json(indent=2), encoding="utf-8")

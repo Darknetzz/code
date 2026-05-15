@@ -19,7 +19,7 @@ const HELP_TOPICS = {
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
       "<p>Use the top tabs to switch between <strong>Workspace</strong> (editor and log) and <strong>Flow groups</strong> (sidebar sections). Pick a flow in the sidebar, edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows can be JSON (step builder) or Python (editable source panel). Use <strong>run_scenario</strong> steps in JSON flows to compose subflows of either kind.</p>",
-      "<p>Scenarios live under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere): <code>.json</code> for JSON flows and <code>.py</code> for Python flows (only one extension per flow name). Group membership is saved in <code>groups.json</code> in that folder.</p>",
+      "<p>Scenarios live under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere): <code>.json</code> for JSON flows and <code>.py</code> for Python flows (only one extension per flow name). Group membership is stored in <code>%APPDATA%/webbot/groups.json</code> (or <code>~/.config/webbot/groups.json</code> elsewhere), beside the scenarios folder.</p>",
     ],
   },
   "help.home": {

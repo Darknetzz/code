@@ -20,7 +20,7 @@ Opens `http://127.0.0.1:8765/` in your browser.
 
 - **Run** — pick a flow or **Run group**, set loops and pauses, Start / Stop, live log
 - **Builder** — define steps (including **run_scenario** subflows), save as JSON, test run
-- **Groups** — organize flows under collapsible sections (`groups.json` next to your scenarios)
+- **Groups** — organize flows under collapsible sections (membership in `%APPDATA%/webbot/groups.json` / `~/.config/webbot/groups.json`)
 
 JSON scenarios are stored in `%APPDATA%/webbot/scenarios/` (Windows) or `~/.config/webbot/scenarios/`.
 
@@ -40,7 +40,7 @@ python webbot.py codegen https://yoursite.com
 
 All flows are JSON. An **`example_flow`** sample is copied into your scenarios folder on first run.
 
-Use **`run_scenario`** steps to compose reusable subflows (same browser session). Configure groups in the dashboard (**Manage groups**) or edit `groups.json` beside your scenario files.
+Use **`run_scenario`** steps to compose reusable subflows (same browser session). Configure groups in the dashboard (**Flow groups** tab) or edit `groups.json` in your Webbot config directory (same parent folder as `scenarios/`).
 
 ## Groups and subflows
 
