@@ -1,5 +1,8 @@
 const $ = (id) => document.getElementById(id);
 
+/** Client-only id for an unsaved flow row in the list. */
+const DRAFT_SCENARIO_ID = "__draft__";
+
 let scenarios = [];
 let selectedScenario = null;
 let builderSteps = [];
@@ -10,12 +13,56 @@ let cachedPreviewDoc = null;
 let cachedScenarioPreview = null;
 let runStatusPollTimer = null;
 
+function isDraftSelected() {
+  return selectedScenario === DRAFT_SCENARIO_ID;
+}
+
 function getSelectedScenario() {
+  if (isDraftSelected()) return null;
   return selectedScenario || scenarios[0]?.name || null;
 }
 
+function getDraftListEntry() {
+  const name = $("build-name")?.value.trim();
+  const desc = $("build-desc")?.value.trim();
+  return {
+    name: DRAFT_SCENARIO_ID,
+    type: "draft",
+    displayName: name || "Untitled draft",
+    description: desc || "Unsaved flow",
+  };
+}
+
 function getScenarioInfo(name) {
+  if (name === DRAFT_SCENARIO_ID) return isDraftSelected() ? getDraftListEntry() : null;
   return scenarios.find((s) => s.name === name) || null;
+}
+
+function listScenariosForUi() {
+  const items = [...scenarios];
+  if (isDraftSelected()) items.unshift(getDraftListEntry());
+  return items;
+}
+
+function syncDraftListLabel() {
+  if (!isDraftSelected()) return;
+  const entry = getDraftListEntry();
+  const btn = document.querySelector(`.scenario-item[data-name="${DRAFT_SCENARIO_ID}"]`);
+  if (!btn) return;
+  const nameText = btn.querySelector(".scenario-item-name-text");
+  const descEl = btn.querySelector(".scenario-item-desc");
+  if (nameText) nameText.textContent = entry.displayName;
+  if (descEl) descEl.textContent = entry.description;
+  else if (entry.description) {
+    const span = document.createElement("span");
+    span.className = "scenario-item-desc";
+    span.textContent = entry.description;
+    btn.appendChild(span);
+  }
+}
+
+function scenarioListOnSelect(name) {
+  selectScenario(name);
 }
 
 function escapeHtml(text) {
@@ -355,6 +402,15 @@ function showJsonFlowEditor() {
 function updateDeleteFlowButton() {
   const btn = $("btn-delete-flow");
   if (!btn) return;
+  const label = btn.querySelector(".btn-label");
+  if (isDraftSelected()) {
+    btn.disabled = false;
+    if (label) label.textContent = "Discard";
+    btn.setAttribute("aria-label", "Discard draft");
+    return;
+  }
+  if (label) label.textContent = "Delete";
+  btn.setAttribute("aria-label", "Delete");
   const info = selectedScenario ? getScenarioInfo(selectedScenario) : null;
   btn.disabled = !info || info.type !== "json";
 }
@@ -408,25 +464,58 @@ function clearFlowEditor() {
 }
 
 function newFlow() {
-  selectedScenario = null;
-  syncScenarioListSelection();
+  if (isDraftSelected()) {
+    if (!confirm("Discard current draft and start a new one?")) return;
+    clearFlowEditor();
+    $("build-msg").textContent = "Draft — enter a name and save.";
+    syncDraftListLabel();
+    return;
+  }
+  setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
   clearFlowEditor();
   showJsonFlowEditor();
-  $("build-msg").textContent = "New flow — enter a name and save.";
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  syncScenarioListSelection();
+  $("build-msg").textContent = "Draft — enter a name and save.";
   updateDeleteFlowButton();
   clearRunStepProgress();
 }
 
+async function discardDraft() {
+  if (!isDraftSelected()) return;
+  setSelectedScenario(null, { skipPreview: true });
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  if (scenarios.length) {
+    await selectScenario(scenarios[0].name);
+  } else {
+    clearFlowEditor();
+    showJsonFlowEditor();
+    $("build-msg").textContent = "";
+    updateDeleteFlowButton();
+  }
+}
+
 async function selectScenario(name) {
+  if (name === selectedScenario) return;
+  const leavingDraft = isDraftSelected() && name !== DRAFT_SCENARIO_ID;
+  if (leavingDraft && !confirm("Discard unsaved draft?")) return;
   if (selectedScenario !== name) clearRunStepProgress();
   setSelectedScenario(name, { skipPreview: true });
+  if (leavingDraft) {
+    renderScenarioList("scenario-list", scenarioListOnSelect);
+    syncScenarioListSelection();
+  }
   await loadFlowIntoEditor(name);
 }
 
 async function loadFlowIntoEditor(name) {
   $("build-msg").textContent = "";
-  if (!name) {
-    newFlow();
+  if (!name) return;
+
+  if (name === DRAFT_SCENARIO_ID) {
+    showJsonFlowEditor();
+    $("build-msg").textContent = "Draft — enter a name and save.";
+    updateDeleteFlowButton();
     return;
   }
 
@@ -463,13 +552,20 @@ async function loadFlowIntoEditor(name) {
 }
 
 async function deleteSelectedFlow() {
+  if (isDraftSelected()) {
+    if (!confirm("Discard unsaved draft?")) return;
+    await discardDraft();
+    $("build-msg").textContent = "Draft discarded";
+    return;
+  }
   const name = selectedScenario;
   const info = name ? getScenarioInfo(name) : null;
   if (!info || info.type !== "json") return;
   if (!confirm(`Delete flow "${name}"? This cannot be undone.`)) return;
   await api(`/api/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" });
   await loadScenarios();
-  newFlow();
+  if (scenarios.length) await selectScenario(scenarios[0].name);
+  else newFlow();
   $("build-msg").textContent = `Deleted "${name}"`;
 }
 
@@ -504,17 +600,21 @@ function buildScenarioListItem(s, onSelect) {
     if (typeof icon === "function") nameEl.appendChild(icon("list", "icon icon-scenario"));
     const nameText = document.createElement("span");
     nameText.className = "scenario-item-name-text";
-    nameText.textContent = s.name;
+    nameText.textContent = s.displayName ?? s.name;
     nameEl.appendChild(nameText);
 
   const typeEl = document.createElement("span");
   typeEl.className = `scenario-item-type type-${s.type}`;
-  if (typeof icon === "function") {
+  if (typeof icon === "function" && s.type !== "draft") {
     typeEl.appendChild(icon(s.type === "python" ? "python" : "json", "icon icon-badge"));
   }
   const typeLabel = document.createElement("span");
   typeLabel.textContent = s.type;
   typeEl.appendChild(typeLabel);
+
+  if (s.type === "draft") {
+    btn.classList.add("scenario-item-draft");
+  }
 
   btn.appendChild(nameEl);
   btn.appendChild(typeEl);
@@ -537,7 +637,8 @@ function renderScenarioList(containerId, onSelect) {
   if (!list) return;
   list.innerHTML = "";
 
-  if (scenarios.length === 0) {
+  const items = listScenariosForUi();
+  if (items.length === 0) {
     const empty = document.createElement("li");
     empty.className = "scenario-list-empty";
     empty.textContent = "No flows found";
@@ -545,9 +646,10 @@ function renderScenarioList(containerId, onSelect) {
     return;
   }
 
-  for (const s of scenarios) {
+  for (const s of items) {
     list.appendChild(buildScenarioListItem(s, onSelect));
   }
+  syncScenarioListSelection();
 }
 
 function appendLog(line) {
@@ -613,20 +715,21 @@ async function loadHealth() {
 async function loadScenarios() {
   scenarios = await api("/api/scenarios");
 
-  if (scenarios.length === 0) {
+  if (scenarios.length === 0 && !isDraftSelected()) {
     selectedScenario = null;
-    renderScenarioList("scenario-list", (name) => selectScenario(name));
+    renderScenarioList("scenario-list", scenarioListOnSelect);
     clearRunStepProgress();
     updateDeleteFlowButton();
     return;
   }
 
   const stillValid =
-    selectedScenario && scenarios.some((s) => s.name === selectedScenario);
-  if (!stillValid) selectedScenario = scenarios[0].name;
+    isDraftSelected() ||
+    (selectedScenario && scenarios.some((s) => s.name === selectedScenario));
+  if (!stillValid) selectedScenario = scenarios[0]?.name ?? null;
 
-  renderScenarioList("scenario-list", (name) => selectScenario(name));
-  await selectScenario(selectedScenario);
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  if (selectedScenario) await selectScenario(selectedScenario);
 }
 
 function connectWebSocket() {
@@ -1485,13 +1588,22 @@ async function saveScenario() {
     $("build-msg").textContent = "Name is required";
     return;
   }
+  if (doc.name === DRAFT_SCENARIO_ID) {
+    $("build-msg").textContent = "Choose a different scenario name";
+    return;
+  }
   if (getScenarioInfo(doc.name)?.type === "python") {
     $("build-msg").textContent = "Cannot save over a built-in Python flow";
     return;
   }
   await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
+  const wasDraft = isDraftSelected();
   $("build-msg").textContent = `Saved "${doc.name}"`;
+  selectedScenario = doc.name;
   await loadScenarios();
+  if (wasDraft) {
+    renderScenarioList("scenario-list", scenarioListOnSelect);
+  }
   setSelectedScenario(doc.name);
 }
 
@@ -1563,6 +1675,8 @@ $("btn-test-run").onclick = async () => {
       newFlow();
     }
     $("build-random-between-steps").addEventListener("change", () => renderScenarioOptions(readScenarioOptions()));
+    $("build-name")?.addEventListener("input", syncDraftListLabel);
+    $("build-desc")?.addEventListener("input", syncDraftListLabel);
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
   }
