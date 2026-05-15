@@ -119,9 +119,10 @@ def run_scenario(
                 "Use --driver playwright (default) or Python 3.10–3.12 with nodriver installed.[/bold red]"
             )
             raise typer.Exit(1)
-        console.print("[yellow]Nodriver: use playwright driver for JSON scenarios. Running example only.[/yellow]")
-        _run_nodriver_legacy(scenario, headless, loops, pause_between_loops)
-        return
+        console.print(
+            "[bold red]Nodriver does not support JSON scenarios. Use --driver playwright.[/bold red]"
+        )
+        raise typer.Exit(1)
 
     runner = get_runner()
     runner.add_log_handler(lambda msg: console.print(msg))
@@ -140,28 +141,7 @@ def run_scenario(
         raise typer.Exit(1) from None
 
 
-def _run_nodriver_legacy(scenario: str, headless: bool, loops: int, pause: float) -> None:
-    from webbot.browser import BrowserConfig
-    from webbot.scenarios.example_site import run as example_run
-
-    if scenario != "example":
-        console.print("[yellow]Nodriver only supports 'example' for now.[/yellow]")
-
-    async def _go() -> None:
-        config = BrowserConfig(headless=headless)
-        async with nodriver_browser(config) as page:
-            for i in range(loops):
-                if loops > 1:
-                    console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
-                await example_run(page)  # type: ignore[arg-type]
-                if i < loops - 1 and pause > 0:
-                    await asyncio.sleep(pause)
-
-    asyncio.run(_go())
-
-
-@app.command()
-def ui(
+def main() -> None:
     host: str = typer.Option("127.0.0.1", help="Bind address (local only recommended)"),
     port: int = typer.Option(8765, help="HTTP port"),
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open dashboard in browser"),

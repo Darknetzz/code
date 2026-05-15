@@ -18,8 +18,9 @@ python webbot.py ui
 
 Opens `http://127.0.0.1:8765/` in your browser.
 
-- **Run** — pick a scenario, set loops and pause between loops, Start / Stop, live log
-- **Builder** — define steps (goto, click, fill, submit_form, delay, scroll), save as JSON, test run
+- **Run** — pick a flow or **Run group**, set loops and pauses, Start / Stop, live log
+- **Builder** — define steps (including **run_scenario** subflows), save as JSON, test run
+- **Groups** — organize flows under collapsible sections (`groups.json` next to your scenarios)
 
 JSON scenarios are stored in `%APPDATA%/webbot/scenarios/` (Windows) or `~/.config/webbot/scenarios/`.
 
@@ -28,7 +29,7 @@ JSON scenarios are stored in `%APPDATA%/webbot/scenarios/` (Windows) or `~/.conf
 ## CLI
 
 ```bash
-python webbot.py run example
+python webbot.py run example_flow
 python webbot.py run example_flow -n 5 --pause-between-loops 60
 python webbot.py open https://example.com
 python webbot.py scenarios
@@ -37,12 +38,18 @@ python webbot.py codegen https://yoursite.com
 
 ## Scenarios
 
-| Name | Type | Description |
-|------|------|-------------|
-| `example` | Python | Demo on example.com |
-| `example_flow` | JSON | Same flow via the step builder (seeded on first run) |
+All flows are JSON. An **`example_flow`** sample is copied into your scenarios folder on first run.
 
-Add Python scenarios under `webbot/scenarios/` and register in `scenarios/__init__.py`, or create flows in the Builder UI.
+Use **`run_scenario`** steps to compose reusable subflows (same browser session). Configure groups in the dashboard (**Manage groups**) or edit `groups.json` beside your scenario files.
+
+## Groups and subflows
+
+| Mechanism | Purpose |
+|-----------|---------|
+| **Groups** | Ordered lists of flows; **Run group** runs them sequentially with optional pause between flows |
+| **`run_scenario` step** | Inline another JSON flow; optional `skip_start_url` and `inherit_delays` |
+
+Cycles (A calls B calls A) are rejected when saving or running expanded plans.
 
 ## Form submission (GET and POST)
 

@@ -10,8 +10,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
-from webbot.json_scenario import build_step_plan
+from webbot.json_scenario import build_step_plan, collect_expanded_plan_labels, step_label
 from webbot.models import (
+    GotoStep,
     FlowGroup,
     GroupsDocument,
     GroupsResponse,
@@ -31,6 +32,7 @@ from webbot.runner import RunConfig, RunState, get_runner
 from webbot.scenario_store import (
     build_groups_response,
     delete_json_scenario,
+    get_group_by_id,
     list_json_scenario_names,
     load_json_scenario,
     save_groups_document,
@@ -165,6 +167,35 @@ def api_put_groups(doc: GroupsDocument) -> GroupsResponse:
     return build_groups_response()
 
 
+@app.get("/api/groups/{group_id}/plan", response_model=ScenarioStepPlan)
+def api_group_plan(group_id: str) -> ScenarioStepPlan:
+    try:
+        group = get_group_by_id(group_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    names = [n.strip() for n in group.scenario_names if n.strip()]
+    if not names:
+        raise HTTPException(status_code=400, detail="Group has no flows")
+    labels: list[str] = []
+    for sn in names:
+        doc = load_json_scenario(sn)
+        prefix = f"[{group.label} › {sn}] "
+        labels.extend(
+            collect_expanded_plan_labels(
+                doc,
+                scenario_name=sn,
+                stack=frozenset(),
+                skip_implicit_start_url=False,
+                label_prefix=prefix,
+                depth=0,
+            )
+        )
+    return ScenarioStepPlan(
+        name=f"group:{group_id}",
+        steps=[ScenarioStepPlanItem(index=i + 1, label=lab) for i, lab in enumerate(labels)],
+    )
+
+
 @app.get("/api/scenarios/{name}/preview", response_model=ScenarioPreview)
 def api_scenario_preview(name: str) -> ScenarioPreview:
     try:
@@ -182,14 +213,11 @@ def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
     if expand:
         pairs = build_step_plan(doc, root_name=name)
     else:
-        from webbot.models import GotoStep
-
         items_flat: list[tuple[int, str]] = []
         offset = 0
         if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
             items_flat.append((1, f"goto {doc.start_url}"))
             offset = 1
-        from webbot.json_scenario import step_label
 
         for i, step in enumerate(doc.steps, start=1):
             items_flat.append((i + offset, step_label(step)))
@@ -320,10 +348,7 @@ async def api_start_run_group(req: RunGroupRequest) -> dict:
             pass
         await _broadcast(_status_payload())
 
-    try:
-        await runner.start(config)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await runner.start(config)
 
     asyncio.create_task(_watch_run())
 

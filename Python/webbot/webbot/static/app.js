@@ -4,6 +4,8 @@ const $ = (id) => document.getElementById(id);
 const DRAFT_SCENARIO_ID = "__draft__";
 
 let scenarios = [];
+/** @type {{ groups: Array<{id:string,label:string,scenario_names:string[]}>, ungrouped: string[] }} */
+let groupsData = { groups: [], ungrouped: [] };
 let selectedScenario = null;
 let builderSteps = [];
 let ws = null;
@@ -156,36 +158,34 @@ function setRunProgressVisible(show) {
   $("run-progress-wrap")?.classList.toggle("hidden", !show);
   if (show) {
     $("flow-editor-wrap")?.classList.add("hidden");
-    $("flow-python-banner")?.classList.add("hidden");
-    $("flow-python-view")?.classList.add("hidden");
   }
 }
 
 function restoreEditorViewAfterRun() {
   if (runShowStepProgress) return;
-  const info = selectedScenario ? getScenarioInfo(selectedScenario) : null;
-  if (!info) {
-    showJsonFlowEditor();
-    return;
-  }
-  if (info.type === "python") {
-    $("flow-editor-wrap")?.classList.add("hidden");
-    $("flow-python-banner")?.classList.remove("hidden");
-    $("flow-python-view")?.classList.remove("hidden");
-  } else {
-    showJsonFlowEditor();
-  }
+  showJsonFlowEditor();
 }
 
-async function initRunStepProgress(scenario) {
+async function initRunStepProgress(runTarget) {
   runStepProgress = [];
   try {
-    const preview = await fetchScenarioPreview(scenario);
-    cachedScenarioPreview = preview;
-    runStepProgress = stepPlanFromPreview(preview);
-    if (preview.type === "json") {
+    if (typeof runTarget === "string" && runTarget.startsWith("group:")) {
+      const gid = runTarget.slice("group:".length);
+      const plan = await api(`/api/groups/${encodeURIComponent(gid)}/plan`);
+      cachedScenarioPreview = null;
+      cachedPreviewDoc = null;
+      runStepProgress = (plan.steps || []).map((s) => ({
+        index: s.index,
+        label: s.label,
+        status: "pending",
+        error: null,
+      }));
+    } else {
+      const preview = await fetchScenarioPreview(runTarget);
+      cachedScenarioPreview = preview;
+      runStepProgress = stepPlanFromPreview(preview);
       try {
-        cachedPreviewDoc = await api(`/api/scenarios/${encodeURIComponent(scenario)}`);
+        cachedPreviewDoc = await api(`/api/scenarios/${encodeURIComponent(runTarget)}`);
       } catch {
         cachedPreviewDoc = null;
       }
@@ -354,47 +354,8 @@ function stepPlanFromPreview(preview) {
   }));
 }
 
-function renderFlowPreviewHtml(doc) {
-  return renderScenarioPreviewHtml({
-    description: doc.description,
-    start_url: doc.start_url,
-    random_delay_between_steps: doc.random_delay_between_steps,
-    between_steps_min: doc.between_steps_min,
-    between_steps_max: doc.between_steps_max,
-    between_steps_distribution: doc.between_steps_distribution,
-    steps: buildStepPlanFromDoc(doc).map((s) => ({ index: s.index, label: s.label })),
-  });
-}
-
-function renderPythonFlowView(preview) {
-  if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
-  updatePythonBanner({ name: preview.name, description: preview.description });
-  $("flow-python-banner")?.classList.remove("hidden");
-  $("flow-python-view")?.classList.remove("hidden");
-  $("flow-editor-wrap")?.classList.add("hidden");
-  const list = $("flow-python-steps");
-  if (list) {
-    const steps = preview.steps || [];
-    list.innerHTML = steps.length
-      ? steps.map((s) => `<li>${escapeHtml(s.label)}</li>`).join("")
-      : '<li class="muted">No steps listed — add STEP_LABELS in the scenario module.</li>';
-  }
-  const src = $("flow-python-source");
-  if (src) {
-    if (preview.source) {
-      src.innerHTML = `<strong>Source:</strong> <code>${escapeHtml(preview.source)}</code>`;
-      src.classList.remove("hidden");
-    } else {
-      src.textContent = "";
-      src.classList.add("hidden");
-    }
-  }
-}
-
 function showJsonFlowEditor() {
   if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
-  $("flow-python-banner")?.classList.add("hidden");
-  $("flow-python-view")?.classList.add("hidden");
   $("flow-editor-wrap")?.classList.remove("hidden");
   setFlowEditorMode(true);
 }
@@ -411,37 +372,7 @@ function updateDeleteFlowButton() {
   }
   if (label) label.textContent = "Delete";
   btn.setAttribute("aria-label", "Delete");
-  const info = selectedScenario ? getScenarioInfo(selectedScenario) : null;
-  btn.disabled = !info || info.type !== "json";
-}
-
-function updatePythonBanner(info) {
-  const titleEl = $("flow-python-title");
-  const descEl = $("flow-python-desc");
-  if (titleEl) titleEl.textContent = info?.name || "Python flow";
-  if (descEl) {
-    const desc = info?.description?.trim();
-    descEl.textContent = desc || "";
-    descEl.classList.toggle("hidden", !desc);
-  }
-}
-
-function setFlowEditorMode(jsonEditable) {
-  const wrap = $("flow-editor-wrap");
-  const banner = $("flow-python-banner");
-  if (banner) banner.classList.toggle("hidden", jsonEditable !== false);
-  if (wrap) {
-    wrap.classList.remove("hidden");
-    wrap.classList.toggle("flow-editor-readonly", jsonEditable === false);
-  }
-  const disable = jsonEditable === false;
-  wrap?.querySelectorAll("input, select, button").forEach((el) => {
-    if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
-      el.disabled = disable;
-    } else if (!el.closest(".step-actions")) {
-      el.disabled = disable;
-    }
-  });
+  btn.disabled = !selectedScenario;
 }
 
 function populateFlowEditor(doc) {
