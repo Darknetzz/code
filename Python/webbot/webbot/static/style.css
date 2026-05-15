@@ -751,6 +751,20 @@ summary.workspace-dropdown-summary.success.outline:hover {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+:root[data-theme="light"] #flow-python-editor-wrap .CodeMirror.cm-s-default {
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme="light"] #flow-python-editor-wrap .cm-s-default .CodeMirror-gutters {
+  background: color-mix(in srgb, var(--surface) 92%, var(--border));
+  border-right-color: var(--border);
+}
+
+:root[data-theme="light"] #flow-python-editor-wrap .cm-s-default .CodeMirror-linenumber {
+  color: var(--muted);
+}
+
 .workspace-log {
   margin-bottom: 0;
 }

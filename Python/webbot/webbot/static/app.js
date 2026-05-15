@@ -881,6 +881,7 @@ async function loadFlowIntoEditor(name) {
     $("build-msg").textContent = e.message;
     showError(e.message);
   }
+}
 
 async function deleteSelectedFlow() {
   if (isDraftSelected()) {
