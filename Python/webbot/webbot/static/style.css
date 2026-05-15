@@ -359,7 +359,7 @@ main {
 
 .workspace-sidebar-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.35rem;
   width: 100%;
 }
@@ -386,6 +386,25 @@ main {
 .workspace-editor {
   min-width: 0;
   overflow: hidden;
+}
+
+.python-flow-intro code {
+  font-size: 0.85em;
+}
+
+.python-source-editor {
+  width: 100%;
+  min-height: 280px;
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
 }
 
 .workspace-log {
@@ -687,6 +706,11 @@ main {
 .scenario-item.selected .scenario-item-type {
   border-color: var(--accent);
   color: var(--text);
+}
+
+.scenario-item-type.type-python {
+  border-color: rgba(63, 185, 80, 0.45);
+  color: var(--success);
 }
 
 .scenario-item-type.type-draft {

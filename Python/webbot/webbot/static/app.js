@@ -15,6 +15,21 @@ let cachedPreviewDoc = null;
 let cachedScenarioPreview = null;
 let runStatusPollTimer = null;
 
+/** True while editing an unsaved Python draft from "New Python". */
+let draftIsPython = false;
+
+const PYTHON_FLOW_TEMPLATE = `"""Edit this Python flow — saved as {name}.py alongside JSON scenarios."""
+
+from playwright.async_api import Page
+
+DESCRIPTION = "My Python flow"
+STEP_LABELS = ("Open example.com",)
+
+
+async def run(page: Page) -> None:
+    await page.goto("https://example.com", wait_until="domcontentloaded")
+`;
+
 function isDraftSelected() {
   return selectedScenario === DRAFT_SCENARIO_ID;
 }
@@ -30,8 +45,9 @@ function getDraftListEntry() {
   return {
     name: DRAFT_SCENARIO_ID,
     type: "draft",
-    displayName: name || "Untitled draft",
-    description: desc || "Unsaved flow",
+    isPython: draftIsPython,
+    displayName: name || (draftIsPython ? "Untitled Python draft" : "Untitled draft"),
+    description: draftIsPython ? "Unsaved Python flow" : desc || "Unsaved JSON flow",
   };
 }
 
@@ -134,12 +150,38 @@ function setRunProgressVisible(show) {
   $("run-progress-wrap")?.classList.toggle("hidden", !show);
   if (show) {
     $("flow-editor-wrap")?.classList.add("hidden");
+    $("flow-python-editor-wrap")?.classList.add("hidden");
   }
 }
 
 function restoreEditorViewAfterRun() {
   if (runShowStepProgress) return;
-  showJsonFlowEditor();
+  if (isPythonUi()) showPythonFlowEditor();
+  else showJsonFlowEditor();
+}
+
+function isPythonUi() {
+  if (draftIsPython && isDraftSelected()) return true;
+  if (!isDraftSelected() && getScenarioInfo(selectedScenario)?.type === "python") return true;
+  return false;
+}
+
+function updateFlowNameReadonly() {
+  const inp = $("build-name");
+  if (!inp) return;
+  const locked =
+    Boolean(selectedScenario) &&
+    selectedScenario !== DRAFT_SCENARIO_ID &&
+    getScenarioInfo(selectedScenario)?.type === "python";
+  inp.readOnly = locked;
+}
+
+function showPythonFlowEditor() {
+  if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
+  $("flow-editor-wrap")?.classList.add("hidden");
+  $("flow-python-editor-wrap")?.classList.remove("hidden");
+  $("build-msg").textContent = "";
+  updateFlowNameReadonly();
 }
 
 async function initRunStepProgress(runTarget) {
@@ -332,8 +374,11 @@ function stepPlanFromPreview(preview) {
 
 function showJsonFlowEditor() {
   if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
+  $("flow-python-editor-wrap")?.classList.add("hidden");
   $("flow-editor-wrap")?.classList.remove("hidden");
   setFlowEditorMode(true);
+  $("build-msg-python").textContent = "";
+  updateFlowNameReadonly();
 }
 
 function setFlowEditorMode(jsonEditable) {
@@ -387,6 +432,7 @@ function clearFlowEditor() {
 }
 
 function newFlow() {
+  draftIsPython = false;
   if (isDraftSelected()) {
     if (!confirm("Discard current draft and start a new one?")) return;
     clearFlowEditor();
@@ -404,8 +450,38 @@ function newFlow() {
   clearRunStepProgress();
 }
 
+function newPythonFlow() {
+  if (isDraftSelected()) {
+    if (!confirm("Discard current draft and start a new Python draft?")) return;
+    draftIsPython = true;
+    clearFlowEditor();
+    $("build-name").value = "";
+    $("python-source-editor").value = PYTHON_FLOW_TEMPLATE;
+    $("build-msg-python").textContent = "Draft — enter a name and save.";
+    syncDraftListLabel();
+    showPythonFlowEditor();
+    renderScenarioList("scenario-list", scenarioListOnSelect);
+    syncScenarioListSelection();
+    updateDeleteFlowButton();
+    clearRunStepProgress();
+    return;
+  }
+  draftIsPython = true;
+  setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
+  clearFlowEditor();
+  $("build-name").value = "";
+  $("python-source-editor").value = PYTHON_FLOW_TEMPLATE;
+  showPythonFlowEditor();
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  syncScenarioListSelection();
+  $("build-msg-python").textContent = "Draft — enter a name and save.";
+  updateDeleteFlowButton();
+  clearRunStepProgress();
+}
+
 async function discardDraft() {
   if (!isDraftSelected()) return;
+  draftIsPython = false;
   setSelectedScenario(null, { skipPreview: true });
   renderScenarioList("scenario-list", scenarioListOnSelect);
   if (scenarios.length) {
@@ -414,6 +490,7 @@ async function discardDraft() {
     clearFlowEditor();
     showJsonFlowEditor();
     $("build-msg").textContent = "";
+    $("build-msg-python").textContent = "";
     updateDeleteFlowButton();
   }
 }
@@ -433,11 +510,17 @@ async function selectScenario(name) {
 
 async function loadFlowIntoEditor(name) {
   $("build-msg").textContent = "";
+  $("build-msg-python").textContent = "";
   if (!name) return;
 
   if (name === DRAFT_SCENARIO_ID) {
-    showJsonFlowEditor();
-    $("build-msg").textContent = "Draft — enter a name and save.";
+    if (draftIsPython) {
+      showPythonFlowEditor();
+      $("build-msg-python").textContent = "Draft — enter a name and save.";
+    } else {
+      showJsonFlowEditor();
+      $("build-msg").textContent = "Draft — enter a name and save.";
+    }
     updateDeleteFlowButton();
     return;
   }
@@ -448,7 +531,23 @@ async function loadFlowIntoEditor(name) {
     return;
   }
 
+  draftIsPython = false;
   setSelectedScenario(name, { skipPreview: true });
+
+  if (info.type === "python") {
+    showPythonFlowEditor();
+    $("build-name").value = name;
+    try {
+      const payload = await api(`/api/scenarios/${encodeURIComponent(name)}/python-source`);
+      $("python-source-editor").value = payload.source;
+      $("build-msg-python").textContent = `Editing "${name}"`;
+      updateDeleteFlowButton();
+      updateFlowNameReadonly();
+    } catch (e) {
+      $("build-msg-python").textContent = e.message;
+    }
+    return;
+  }
 
   showJsonFlowEditor();
   try {
@@ -456,6 +555,7 @@ async function loadFlowIntoEditor(name) {
     populateFlowEditor(doc);
     $("build-msg").textContent = `Editing "${name}"`;
     updateDeleteFlowButton();
+    updateFlowNameReadonly();
   } catch (e) {
     $("build-msg").textContent = e.message;
   }
@@ -513,18 +613,29 @@ function buildScenarioListItem(s, onSelect) {
   nameEl.appendChild(nameText);
 
   const typeEl = document.createElement("span");
-  typeEl.className =
-    s.type === "draft" ? "scenario-item-type type-draft" : "scenario-item-type type-json";
-  if (typeof icon === "function" && s.type !== "draft") {
-    typeEl.appendChild(icon("json", "icon icon-badge"));
-  }
-  const typeLabel = document.createElement("span");
-  typeLabel.textContent = s.type === "draft" ? "draft" : "json";
-  typeEl.appendChild(typeLabel);
+  let typeClass = "scenario-item-type type-json";
+  /** @type {"json"|"python"|null} */
+  let badgeKind = "json";
+  let typeShortLabel = "json";
 
   if (s.type === "draft") {
+    typeClass = "scenario-item-type type-draft";
+    badgeKind = s.isPython ? "python" : null;
+    typeShortLabel = "draft";
     btn.classList.add("scenario-item-draft");
+  } else if (s.type === "python") {
+    typeClass = "scenario-item-type type-python";
+    badgeKind = "python";
+    typeShortLabel = "python";
   }
+
+  typeEl.className = typeClass;
+  if (typeof icon === "function" && badgeKind) {
+    typeEl.appendChild(icon(badgeKind, "icon icon-badge"));
+  }
+  const typeLabel = document.createElement("span");
+  typeLabel.textContent = typeShortLabel;
+  typeEl.appendChild(typeLabel);
 
   btn.appendChild(nameEl);
   btn.appendChild(typeEl);
@@ -552,11 +663,11 @@ function renderScenarioList(containerId, onSelect) {
   list.innerHTML = "";
 
   const draftRows = isDraftSelected() ? [getDraftListEntry()] : [];
-  const jsonFlows = scenarios.filter((s) => s.type === "json");
+  const editableFlows = scenarios.filter((s) => s.type === "json" || s.type === "python");
 
   const showEmpty =
     draftRows.length === 0 &&
-    jsonFlows.length === 0 &&
+    editableFlows.length === 0 &&
     !(groupsData.groups && groupsData.groups.length);
 
   if (showEmpty) {
@@ -607,7 +718,7 @@ function renderScenarioList(containerId, onSelect) {
     sub.className = "scenario-group-flows";
     let anyMember = false;
     for (const nm of g.scenario_names || []) {
-      const flow = jsonFlows.find((x) => x.name === nm);
+      const flow = editableFlows.find((x) => x.name === nm);
       if (!flow) continue;
       anyMember = true;
       assigned.add(nm);
@@ -626,7 +737,7 @@ function renderScenarioList(containerId, onSelect) {
   }
 
   const ungrouped = (groupsData.ungrouped || []).filter((nm) =>
-    jsonFlows.some((x) => x.name === nm)
+    editableFlows.some((x) => x.name === nm)
   );
 
   if (ungrouped.length) {
@@ -639,7 +750,7 @@ function renderScenarioList(containerId, onSelect) {
     const ul = document.createElement("ul");
     ul.className = "scenario-group-flows";
     for (const nm of ungrouped) {
-      const flow = jsonFlows.find((x) => x.name === nm);
+      const flow = editableFlows.find((x) => x.name === nm);
       if (!flow) continue;
       ul.appendChild(buildScenarioListItem(flow, onSelect));
     }
@@ -1278,14 +1389,16 @@ function renderStepRow(step, index) {
     appendLocatorFields(fields, step, true, index);
   } else if (step.action === "run_scenario") {
     const cur = $("build-name").value.trim();
-    const opts = scenarios.filter((s) => s.type === "json" && s.name !== cur).map((s) => s.name);
+    const opts = scenarios
+      .filter((s) => (s.type === "json" || s.type === "python") && s.name !== cur)
+      .map((s) => s.name);
     fields.appendChild(
       labeledSelect(
         "scenario",
         "Flow to run",
         step.scenario || "",
         opts,
-        "Runs another saved JSON flow inline",
+        "Runs another saved JSON or Python flow inline",
         "step.run_scenario"
       )
     );
@@ -1624,6 +1737,32 @@ function collectDocument() {
   };
 }
 
+async function savePythonScenario() {
+  const name = $("build-name").value.trim();
+  const source = $("python-source-editor")?.value ?? "";
+  if (!name) {
+    $("build-msg-python").textContent = "Name is required";
+    return;
+  }
+  if (name === DRAFT_SCENARIO_ID) {
+    $("build-msg-python").textContent = "Choose a different flow name";
+    return;
+  }
+  await api(`/api/scenarios/${encodeURIComponent(name)}/python-source`, {
+    method: "PUT",
+    body: JSON.stringify({ source }),
+  });
+  const wasDraft = isDraftSelected();
+  draftIsPython = false;
+  $("build-msg-python").textContent = `Saved "${name}"`;
+  selectedScenario = name;
+  await loadScenarios();
+  if (wasDraft) {
+    renderScenarioList("scenario-list", scenarioListOnSelect);
+  }
+  setSelectedScenario(name);
+}
+
 async function saveScenario() {
   const doc = collectDocument();
   if (!doc.name) {
@@ -1705,7 +1844,7 @@ function renderGroupsModalEditor() {
     selLab.textContent = "Flows in group (multi-select)";
     const sel = document.createElement("select");
     sel.multiple = true;
-    const names = scenarios.filter((s) => s.type === "json").map((s) => s.name);
+    const names = scenarios.filter((s) => s.type === "json" || s.type === "python").map((s) => s.name);
     sel.size = Math.min(12, Math.max(4, names.length || 4));
     names.forEach((nm) => {
       const o = document.createElement("option");

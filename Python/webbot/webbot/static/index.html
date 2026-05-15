@@ -23,7 +23,8 @@
             <div class="workspace-sidebar-toolbar" data-page-help="help.home">
               <span class="field-label">Flows</span>
               <div class="workspace-sidebar-actions">
-                <button type="button" id="btn-new-flow" class="success outline">New</button>
+                <button type="button" id="btn-new-flow" class="success outline">New JSON</button>
+                <button type="button" id="btn-new-python-flow" class="success outline">New Python</button>
                 <button type="button" id="btn-manage-groups" class="outline">Groups</button>
                 <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
               </div>
@@ -66,10 +67,10 @@
             <div id="run-progress-body" class="run-progress-body"></div>
           </div>
 
-          <div id="flow-editor-wrap">
-            <label for="build-name">Scenario name</label>
-            <input type="text" id="build-name" placeholder="my_flow" />
+          <label for="build-name">Flow name</label>
+          <input type="text" id="build-name" placeholder="my_flow" autocomplete="off" />
 
+          <div id="flow-editor-wrap">
             <label for="build-desc">Description</label>
             <input type="text" id="build-desc" placeholder="Optional" />
 
@@ -96,6 +97,27 @@
               <button type="button" id="btn-test-run">Test run</button>
             </div>
             <p id="build-msg" class="muted"></p>
+          </div>
+
+          <div id="flow-python-editor-wrap" class="hidden">
+            <p class="muted python-flow-intro">
+              Saved as <code>{name}.py</code> next to JSON flows. Define <code>async def run(page):</code>.
+              Optional module-level <code>DESCRIPTION</code> and <code>STEP_LABELS</code> improve the preview.
+            </p>
+            <label for="python-source-editor">Python source</label>
+            <textarea
+              id="python-source-editor"
+              class="python-source-editor"
+              rows="22"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Python scenario source"
+            ></textarea>
+            <div class="actions">
+              <button type="button" id="btn-save-python" class="primary">Save Python flow</button>
+              <button type="button" id="btn-test-run-python">Test run</button>
+            </div>
+            <p id="build-msg-python" class="muted"></p>
           </div>
         </div>
       </div>
