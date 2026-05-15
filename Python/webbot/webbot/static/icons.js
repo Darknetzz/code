@@ -24,6 +24,7 @@ const ICONS = {
   grip: `<svg ${_SVG}><circle cx="9" cy="5" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="19" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="5" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="19" r="1.25" fill="currentColor" stroke="none"/></svg>`,
   close: `<svg ${_SVG}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   trash: `<svg ${_SVG}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  discard: `<svg ${_SVG}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
   log: `<svg ${_SVG}><polyline points="4 17 10 11 14 15 20 9"/><line x1="4" y1="21" x2="20" y2="21"/></svg>`,
   python: `<svg ${_SVG}><path d="M12 2c-3 0-5 1.5-5 4v2h5v1H6c-2.5 0-4 1.8-4 4.5S3.5 18 6 18h2v-3c0-2.2 1.8-4 4-4h4c2.5 0 4-1.5 4-4s-1.5-4-5-4z"/><path d="M18 8h2c2.5 0 4 1.8 4 4.5S22.5 17 20 17h-2v-3c0-2.2-1.8-4-4-4"/></svg>`,
   json: `<svg ${_SVG}><path d="M8 3H7a2 2 0 0 0-2 2v2"/><path d="M8 21H7a2 2 0 0 1-2-2v-2"/><path d="M16 3h1a2 2 0 0 1 2 2v2"/><path d="M16 21h1a2 2 0 0 0 2-2v-2"/><path d="M9 9h1"/><path d="M9 15h1"/><path d="M14 9h1"/><path d="M14 15h1"/></svg>`,
@@ -97,6 +98,11 @@ function initStaticIcons() {
   document.querySelectorAll(".btn-delete-flow").forEach((el) => {
     const label = el.textContent.trim() || "Delete";
     enhanceButton(el, "trash", { label });
+  });
+
+  document.querySelectorAll(".btn-discard-flow-changes").forEach((el) => {
+    const label = el.textContent.trim() || "Discard changes";
+    enhanceButton(el, "discard", { label });
   });
 
   const logTitle = document.querySelector(".log-card h2");
