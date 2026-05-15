@@ -22,7 +22,7 @@ from webbot.models import (
     SubmitFormStep,
 )
 from webbot.run_context import get_run_context, run_verified_step
-from webbot.scenario_store import load_json_scenario
+from webbot.scenario_store import load_json_scenario, scenario_kind
 
 MAX_SCENARIO_NEST_DEPTH = 16
 
@@ -118,18 +118,24 @@ def collect_expanded_plan_labels(
                 raise ValueError("run_scenario step has an empty scenario name")
             if sub == scenario_name or sub in stack:
                 raise ValueError(f"Scenario cycle detected involving '{scenario_name}' -> '{sub}'")
-            nested = load_json_scenario(sub)
             nest_prefix = label_prefix + f"[{sub}] "
-            labels.extend(
-                collect_expanded_plan_labels(
-                    nested,
-                    scenario_name=sub,
-                    stack=stack | {scenario_name},
-                    skip_implicit_start_url=step.skip_start_url,
-                    label_prefix=nest_prefix,
-                    depth=depth + 1,
+            sk = scenario_kind(sub)
+            if sk == "python":
+                labels.append(nest_prefix + f"run python scenario: {sub}")
+            elif sk == "json":
+                nested = load_json_scenario(sub)
+                labels.extend(
+                    collect_expanded_plan_labels(
+                        nested,
+                        scenario_name=sub,
+                        stack=stack | {scenario_name},
+                        skip_implicit_start_url=step.skip_start_url,
+                        label_prefix=nest_prefix,
+                        depth=depth + 1,
+                    )
                 )
-            )
+            else:
+                raise ValueError(f"Unknown scenario: {sub}")
         else:
             labels.append(label_prefix + step_label(step))
     return labels
@@ -336,20 +342,29 @@ async def execute_json_document(
                 raise ValueError("run_scenario step has an empty scenario name")
             if sub == scenario_name or sub in stack:
                 raise ValueError(f"Scenario cycle detected involving '{scenario_name}' -> '{sub}'")
-            nested = load_json_scenario(sub)
-            nest_delay = delay_doc if step.inherit_delays else nested
+            sk = scenario_kind(sub)
             nest_prefix = label_prefix + f"[{sub}] "
-            await execute_json_document(
-                page,
-                nested,
-                scenario_name=sub,
-                stack=stack | {scenario_name},
-                skip_implicit_start_url=step.skip_start_url,
-                delay_doc=nest_delay,
-                label_prefix=nest_prefix,
-                depth=depth + 1,
-                tracker=tracker,
-            )
+            if sk == "python":
+                from webbot.scenarios import get_scenario
+
+                fn = get_scenario(sub)
+                await tracker.verified_step(lambda: fn(page))
+            elif sk == "json":
+                nested = load_json_scenario(sub)
+                nest_delay = delay_doc if step.inherit_delays else nested
+                await execute_json_document(
+                    page,
+                    nested,
+                    scenario_name=sub,
+                    stack=stack | {scenario_name},
+                    skip_implicit_start_url=step.skip_start_url,
+                    delay_doc=nest_delay,
+                    label_prefix=nest_prefix,
+                    depth=depth + 1,
+                    tracker=tracker,
+                )
+            else:
+                raise ValueError(f"Unknown scenario: {sub}")
         else:
             await tracker.verified_step(lambda s=step: execute_step(page, s))
 
@@ -389,27 +404,16 @@ async def run_json_scenario(
     )
 
 
-async def run_json_scenario_group(
+async def run_mixed_scenario_group(
     page: Page,
     *,
     group_label: str,
     scenario_names: list[str],
     pause_between_flows_sec: float,
 ) -> None:
-    labels: list[str] = []
-    for sn in scenario_names:
-        doc = load_json_scenario(sn)
-        prefix = f"[{group_label} › {sn}] "
-        labels.extend(
-            collect_expanded_plan_labels(
-                doc,
-                scenario_name=sn,
-                stack=frozenset(),
-                skip_implicit_start_url=False,
-                label_prefix=prefix,
-                depth=0,
-            )
-        )
+    from webbot.scenarios import get_scenario
+
+    labels = collect_group_plan_labels(group_label, scenario_names)
 
     ctx = get_run_context()
     if ctx:
@@ -421,19 +425,50 @@ async def run_json_scenario_group(
         if not first_flow and pause_between_flows_sec > 0:
             await asyncio.sleep(pause_between_flows_sec)
         first_flow = False
-        doc = load_json_scenario(sn)
         prefix = f"[{group_label} › {sn}] "
-        await execute_json_document(
-            page,
-            doc,
-            scenario_name=sn,
-            stack=frozenset(),
-            skip_implicit_start_url=False,
-            delay_doc=doc,
-            label_prefix=prefix,
-            depth=0,
-            tracker=tracker,
-        )
+        sk = scenario_kind(sn)
+        if sk == "json":
+            doc = load_json_scenario(sn)
+            await execute_json_document(
+                page,
+                doc,
+                scenario_name=sn,
+                stack=frozenset(),
+                skip_implicit_start_url=False,
+                delay_doc=doc,
+                label_prefix=prefix,
+                depth=0,
+                tracker=tracker,
+            )
+        elif sk == "python":
+            fn = get_scenario(sn)
+            await tracker.verified_step(lambda: fn(page))
+        else:
+            raise ValueError(f"Unknown scenario: {sn}")
+
+
+def collect_group_plan_labels(group_label: str, scenario_names: list[str]) -> list[str]:
+    labels: list[str] = []
+    for sn in scenario_names:
+        prefix = f"[{group_label} › {sn}] "
+        sk = scenario_kind(sn)
+        if sk == "json":
+            doc = load_json_scenario(sn)
+            labels.extend(
+                collect_expanded_plan_labels(
+                    doc,
+                    scenario_name=sn,
+                    stack=frozenset(),
+                    skip_implicit_start_url=False,
+                    label_prefix=prefix,
+                    depth=0,
+                )
+            )
+        elif sk == "python":
+            labels.append(prefix + f"python scenario: {sn}")
+        else:
+            raise ValueError(f"Unknown scenario: {sn}")
+    return labels
 
 
 async def _goto_start(page: Page, url: str) -> None:

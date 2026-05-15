@@ -10,12 +10,14 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
-from webbot.json_scenario import build_step_plan, collect_expanded_plan_labels, step_label
+from webbot.json_scenario import build_step_plan, collect_group_plan_labels, step_label
 from webbot.models import (
-    GotoStep,
     FlowGroup,
+    GotoStep,
     GroupsDocument,
     GroupsResponse,
+    PythonScenarioSave,
+    PythonScenarioSource,
     RunGroupRequest,
     RunRequest,
     RunStatusResponse,
@@ -32,11 +34,15 @@ from webbot.runner import RunConfig, RunState, get_runner
 from webbot.scenario_store import (
     build_groups_response,
     delete_json_scenario,
+    delete_python_scenario,
     get_group_by_id,
-    list_json_scenario_names,
+    list_all_scenario_names,
     load_json_scenario,
+    load_python_source,
     save_groups_document,
     save_json_scenario,
+    save_python_source,
+    scenario_kind,
 )
 from webbot.scenarios import get_scenario, list_scenario_info
 
@@ -110,7 +116,7 @@ def _startup() -> None:
 
 
 def _validate_groups_document(doc: GroupsDocument) -> GroupsDocument:
-    known = set(list_json_scenario_names())
+    known = set(list_all_scenario_names())
     seen_ids: set[str] = set()
     groups: list[FlowGroup] = []
     for g in doc.groups:
@@ -176,20 +182,7 @@ def api_group_plan(group_id: str) -> ScenarioStepPlan:
     names = [n.strip() for n in group.scenario_names if n.strip()]
     if not names:
         raise HTTPException(status_code=400, detail="Group has no flows")
-    labels: list[str] = []
-    for sn in names:
-        doc = load_json_scenario(sn)
-        prefix = f"[{group.label} › {sn}] "
-        labels.extend(
-            collect_expanded_plan_labels(
-                doc,
-                scenario_name=sn,
-                stack=frozenset(),
-                skip_implicit_start_url=False,
-                label_prefix=prefix,
-                depth=0,
-            )
-        )
+    labels = collect_group_plan_labels(group.label, names)
     return ScenarioStepPlan(
         name=f"group:{group_id}",
         steps=[ScenarioStepPlanItem(index=i + 1, label=lab) for i, lab in enumerate(labels)],
@@ -207,9 +200,21 @@ def api_scenario_preview(name: str) -> ScenarioPreview:
 @app.get("/api/scenarios/{name}/plan", response_model=ScenarioStepPlan)
 def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
     try:
-        doc = load_json_scenario(name)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        kind = scenario_kind(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if kind is None:
+        raise HTTPException(status_code=404, detail=f"Unknown scenario: {name}")
+
+    if kind == "python":
+        preview = get_scenario_preview(name)
+        pairs = [(s.index, s.label) for s in preview.steps]
+        return ScenarioStepPlan(
+            name=name,
+            steps=[ScenarioStepPlanItem(index=i, label=lab) for i, lab in pairs],
+        )
+
+    doc = load_json_scenario(name)
     if expand:
         pairs = build_step_plan(doc, root_name=name)
     else:
@@ -228,6 +233,39 @@ def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
     )
 
 
+@app.get("/api/scenarios/{name}/python-source", response_model=PythonScenarioSource)
+def api_get_python_source(name: str) -> PythonScenarioSource:
+    try:
+        kind = scenario_kind(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if kind != "python":
+        raise HTTPException(status_code=404, detail="Not a Python scenario")
+    try:
+        src = load_python_source(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    preview = get_scenario_preview(name)
+    desc = preview.description if preview.type == "python" else ""
+    return PythonScenarioSource(name=name, source=src, description=desc)
+
+
+@app.put("/api/scenarios/{name}/python-source", response_model=PythonScenarioSource)
+def api_put_python_source(name: str, body: PythonScenarioSave) -> PythonScenarioSource:
+    stem = name.strip()
+    if not stem:
+        raise HTTPException(status_code=400, detail="Scenario name is required")
+    try:
+        save_python_source(stem, body.source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SyntaxError as exc:
+        raise HTTPException(status_code=400, detail=f"Syntax error: {exc}") from exc
+    preview = get_scenario_preview(stem)
+    desc = preview.description if preview.type == "python" else ""
+    return PythonScenarioSource(name=stem, source=load_python_source(stem), description=desc)
+
+
 @app.get("/api/scenarios/{name}", response_model=ScenarioDocument)
 def api_get_scenario(name: str) -> ScenarioDocument:
     try:
@@ -240,16 +278,26 @@ def api_get_scenario(name: str) -> ScenarioDocument:
 def api_save_scenario(doc: ScenarioDocument) -> ScenarioDocument:
     if not doc.name.strip():
         raise HTTPException(status_code=400, detail="Scenario name is required")
-    save_json_scenario(doc)
+    try:
+        save_json_scenario(doc)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return doc
 
 
 @app.delete("/api/scenarios/{name}")
 def api_delete_scenario(name: str) -> dict:
-    if name not in list_json_scenario_names():
+    try:
+        kind = scenario_kind(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if kind is None:
         raise HTTPException(status_code=404, detail=f"Unknown scenario: {name}")
     try:
-        delete_json_scenario(name)
+        if kind == "json":
+            delete_json_scenario(name)
+        else:
+            delete_python_scenario(name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"ok": True}

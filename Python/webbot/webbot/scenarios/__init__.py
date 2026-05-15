@@ -8,10 +8,10 @@ from playwright.async_api import Page
 
 from webbot.json_scenario import make_json_runner
 from webbot.models import ScenarioInfo
-from webbot.python_scenario_loader import load_user_python_module, read_python_meta
+from webbot.python_scenario_loader import get_python_run_fn, load_user_python_module, read_python_meta
 from webbot.scenario_store import (
+    ScenarioStoreConflict,
     list_all_scenario_names,
-    list_json_scenario_names,
     python_scenario_path,
     scenario_kind,
 )
@@ -39,9 +39,9 @@ def list_scenario_info() -> list[ScenarioInfo]:
     for name in list_all_scenario_names():
         try:
             kind = scenario_kind(name)
-        except Exception as exc:
+        except ScenarioStoreConflict as exc:
             items.append(
-                ScenarioInfo(name=name, type="json", description=f"Invalid: {exc}")
+                ScenarioInfo(name=name, type="json", description=f"(invalid) {exc}")
             )
             continue
         if kind == "json":
@@ -65,9 +65,7 @@ def make_python_runner(name: str) -> ScenarioFn:
 
     async def _run(page: Page) -> None:
         mod = load_user_python_module(path, name)
-        run_fn = __import__(
-            "webbot.python_scenario_loader", fromlist=["get_python_run_fn"]
-        ).get_python_run_fn(mod)
+        run_fn = get_python_run_fn(mod)
         await run_fn(page)
 
     return _run

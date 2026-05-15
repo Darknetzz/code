@@ -9,9 +9,9 @@ from enum import Enum
 from typing import Any
 
 from webbot.browser import BrowserConfig, persistent_browser, save_failure_screenshot
-from webbot.json_scenario import run_json_scenario_group
+from webbot.json_scenario import run_mixed_scenario_group
 from webbot.run_context import RunContext, reset_run_context, set_run_context
-from webbot.scenario_store import get_group_by_id, list_json_scenario_names
+from webbot.scenario_store import get_group_by_id, list_all_scenario_names
 from webbot.scenarios import get_scenario
 
 
@@ -148,13 +148,13 @@ class Runner:
             names = [n.strip() for n in group.scenario_names if n.strip()]
             if not names:
                 raise ValueError(f"Group '{config.group_id}' has no flows")
-            available = set(list_json_scenario_names())
+            available = set(list_all_scenario_names())
             for sn in names:
                 if sn not in available:
                     raise ValueError(f"Group references unknown scenario '{sn}'")
 
             async def scenario_fn(page):
-                await run_json_scenario_group(
+                await run_mixed_scenario_group(
                     page,
                     group_label=group.label,
                     scenario_names=names,
