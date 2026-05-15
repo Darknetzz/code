@@ -18,6 +18,7 @@ ctrlc = "3"
 dirs = "5"
 is-terminal = "0.4"
 rustyline = "14"
+owo-colors = "4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

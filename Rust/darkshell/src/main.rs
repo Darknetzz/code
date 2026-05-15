@@ -7,6 +7,7 @@ mod parser;
 mod repl;
 mod shell;
 mod signals;
+mod style;
 
 use std::fs;
 use std::io::Read;

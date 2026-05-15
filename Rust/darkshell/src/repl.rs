@@ -7,18 +7,23 @@ use rustyline::DefaultEditor;
 use crate::interp::eval_line_streams;
 use crate::shell::ShellState;
 use crate::signals;
+use crate::style;
 
 pub fn repl_loop(st: &mut ShellState) -> Result<()> {
     signals::install_sigint_handler();
     let mut rl = DefaultEditor::new()?;
-    println!("Darkshell (dsh). Use exit to quit; Ctrl+D to exit.");
+    style::print_repl_banner()?;
 
     loop {
-        let prompt = format!("dsh:{}$ ", st.cwd.display());
+        let prompt = style::repl_prompt(st.cwd.as_path());
         match rl.readline(&prompt) {
             Ok(line) => {
                 rl.add_history_entry(line.as_str())?;
-                eval_line_streams(st, &line, &mut std::io::stdout(), &mut std::io::stderr())?;
+                if let Err(e) =
+                    eval_line_streams(st, &line, &mut std::io::stdout(), &mut std::io::stderr())
+                {
+                    style::writeln_shell_error(&mut std::io::stderr(), &e)?;
+                }
 
                 if let Some(code) = st.pending_exit.take() {
                     std::process::exit(code);

@@ -14,6 +14,7 @@ use crate::lexer::Lexer;
 use crate::parser::parse_program;
 use crate::shell::ShellState;
 use crate::signals;
+use crate::style;
 
 pub fn eval_source(st: &mut ShellState, src: &str) -> Result<()> {
     eval_source_streams(st, src, &mut stdout(), &mut stderr())
@@ -285,7 +286,7 @@ fn dispatch_simple(
                 Ok(code)
             }
             Err(e) => {
-                writeln!(err, "{e}")?;
+                style::writeln_shell_error(err, &e)?;
                 Ok(1)
             }
         }
