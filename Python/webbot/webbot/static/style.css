@@ -823,6 +823,22 @@ summary.workspace-dropdown-summary.success.outline:hover {
   margin-bottom: 0.75rem;
 }
 
+.groups-modal-card-header {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.groups-modal-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .groups-modal-row .field-label {
   display: block;
   margin-top: 0.35rem;

@@ -1920,16 +1920,16 @@ function renderGroupsModalEditor() {
     const row = document.createElement("div");
     row.className = "groups-modal-row card";
 
-    const idLab = document.createElement("label");
-    idLab.className = "field-label";
-    idLab.textContent = "Group id";
-    const idInp = document.createElement("input");
-    idInp.type = "text";
-    idInp.value = g.id || "";
-    idInp.placeholder = "my_group";
-    idInp.addEventListener("input", () => {
-      groupsModalDraft[gi].id = idInp.value.trim();
-    });
+    const header = document.createElement("div");
+    header.className = "groups-modal-card-header";
+
+    const title = document.createElement("h3");
+    title.className = "groups-modal-card-title";
+    title.textContent = (g.id || "").trim() || "Group";
+    title.setAttribute("title", `Group id: ${(g.id || "").trim() || "—"}`);
+
+    header.appendChild(title);
+    row.appendChild(header);
 
     const labLab = document.createElement("label");
     labLab.className = "field-label";
@@ -2054,8 +2054,6 @@ function renderGroupsModalEditor() {
       renderGroupsModalEditor();
     });
 
-    row.appendChild(idLab);
-    row.appendChild(idInp);
     row.appendChild(labLab);
     row.appendChild(labInp);
     row.appendChild(flowsSection);
