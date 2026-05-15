@@ -556,7 +556,21 @@ fn paint_top_bar_icon(
     }
 }
 
+/// Extra drawing for top-bar actions (e.g. **Save**).
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum TopBarButtonEmphasis {
+    #[default]
+    None,
+    /// Mild primary tint so **Save** is easy to find when there is nothing to save yet.
+    IdlePrimary,
+    /// Warmer fill + stroke aligned with “Unsaved changes” (use when edits are pending).
+    Unsaved,
+}
+
 /// Icon + text button using normal widget interaction (disabled state uses [`Ui::add_enabled_ui`]).
+///
+/// [`TopBarButtonEmphasis::IdlePrimary`] / [`TopBarButtonEmphasis::Unsaved`] adjust fill and stroke;
+/// unsaved styling only applies when `enabled` is true.
 pub fn path_top_bar_button(
     ui: &mut egui::Ui,
     label: &str,
@@ -564,6 +578,7 @@ pub fn path_top_bar_button(
     enabled: bool,
     min_width: f32,
     tooltip: Option<&str>,
+    emphasis: TopBarButtonEmphasis,
 ) -> egui::Response {
     let ir = ui.add_enabled_ui(enabled, |ui| {
         let min_h = ui.spacing().interact_size.y;
@@ -590,11 +605,35 @@ pub fn path_top_bar_button(
             let text_color = visuals.fg_stroke.color;
             let line_w = (visuals.fg_stroke.width * 1.35).max(1.2);
             let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, visuals.rounding, visuals.weak_bg_fill);
+            let unsaved_orange = egui::Color32::from_rgb(255, 165, 70);
+            let sel = ui.visuals().selection.bg_fill;
+            let (weak_fill, hover_fill, stroke) = match emphasis {
+                TopBarButtonEmphasis::Unsaved if enabled => (
+                    mix_srgb(visuals.weak_bg_fill, unsaved_orange, 0.32),
+                    mix_srgb(visuals.bg_fill, unsaved_orange, 0.24),
+                    Stroke::new(
+                        (visuals.bg_stroke.width + 1.0).min(3.0),
+                        mix_srgb(visuals.bg_stroke.color, unsaved_orange, 0.55),
+                    ),
+                ),
+                TopBarButtonEmphasis::IdlePrimary => {
+                    let t = if enabled { 0.14 } else { 0.09 };
+                    (
+                        mix_srgb(visuals.weak_bg_fill, sel, t),
+                        mix_srgb(visuals.bg_fill, sel, t * 0.85),
+                        Stroke::new(
+                            (visuals.bg_stroke.width + 0.5).min(2.2),
+                            mix_srgb(visuals.bg_stroke.color, sel, 0.35),
+                        ),
+                    )
+                }
+                _ => (visuals.weak_bg_fill, visuals.bg_fill, visuals.bg_stroke),
+            };
+            painter.rect_filled(rect, visuals.rounding, weak_fill);
             if response.hovered() || response.highlighted() || response.has_focus() {
-                painter.rect_filled(rect, visuals.rounding, visuals.bg_fill);
+                painter.rect_filled(rect, visuals.rounding, hover_fill);
             }
-            painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
+            painter.rect_stroke(rect, visuals.rounding, stroke);
             let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(rect.left() + pad_x + icon_side * 0.5, rect.center().y),
                 egui::vec2(icon_side, icon_side),

@@ -10,7 +10,8 @@ use crate::config::AppConfig;
 use crate::path_model::{self, PathOrigin};
 use crate::row_icons::{
     mix_srgb, path_add_origin_menu, path_add_toolbar_button, path_row_icon_button,
-    path_top_bar_button, path_top_bar_selectable, AddToolbarIcon, PathRowIcon, TopBarIcon,
+    path_top_bar_button, path_top_bar_selectable, AddToolbarIcon, PathRowIcon, TopBarButtonEmphasis,
+    TopBarIcon,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -854,16 +855,32 @@ impl eframe::App for PathmanApp {
                     self.reload_from_store();
                 }
                 ui.separator();
-                if path_top_bar_button(ui, "Reload", TopBarIcon::Reload, true, 0.0, None).clicked() {
+                if path_top_bar_button(
+                    ui,
+                    "Reload",
+                    TopBarIcon::Reload,
+                    true,
+                    0.0,
+                    None,
+                    TopBarButtonEmphasis::None,
+                )
+                .clicked()
+                {
                     self.reload_from_store();
                 }
+                let save_emphasis = if self.dirty {
+                    TopBarButtonEmphasis::Unsaved
+                } else {
+                    TopBarButtonEmphasis::IdlePrimary
+                };
                 let save_clicked = path_top_bar_button(
                     ui,
                     "Save",
                     TopBarIcon::Save,
                     self.dirty,
                     72.0,
-                    None,
+                    Some("Write the current list to disk (enabled when there are unsaved changes)."),
+                    save_emphasis,
                 )
                 .clicked();
                 let needs_confirm = matches!(self.scope, Scope::System)
@@ -903,13 +920,24 @@ impl eframe::App for PathmanApp {
                     true,
                     0.0,
                     None,
+                    TopBarButtonEmphasis::None,
                 )
                 .clicked()
                 {
                     self.change_summary_text = self.compute_change_summary();
                     self.show_change_summary = true;
                 }
-                if path_top_bar_button(ui, "Dedupe", TopBarIcon::Dedupe, true, 0.0, None).clicked() {
+                if path_top_bar_button(
+                    ui,
+                    "Dedupe",
+                    TopBarIcon::Dedupe,
+                    true,
+                    0.0,
+                    None,
+                    TopBarButtonEmphasis::None,
+                )
+                .clicked()
+                {
                     let n_drop = match self.scope {
                         Scope::Effective => {
                             path_model::adjacent_dedupe_drop_count_tagged(&self.effective_segments)
@@ -929,6 +957,7 @@ impl eframe::App for PathmanApp {
                     true,
                     0.0,
                     None,
+                    TopBarButtonEmphasis::None,
                 )
                 .clicked()
                 {
@@ -987,6 +1016,7 @@ impl eframe::App for PathmanApp {
                         true,
                         0.0,
                         None,
+                        TopBarButtonEmphasis::None,
                     )
                     .clicked()
                     {
