@@ -864,6 +864,7 @@ async function loadFlowIntoEditor(name) {
       commitSavedBaseline();
     } catch (e) {
       $("build-msg-python").textContent = e.message;
+      showError(e.message);
     }
     return;
   }
@@ -878,8 +879,8 @@ async function loadFlowIntoEditor(name) {
     commitSavedBaseline();
   } catch (e) {
     $("build-msg").textContent = e.message;
+    showError(e.message);
   }
-}
 
 async function deleteSelectedFlow() {
   if (isDraftSelected()) {
@@ -1331,7 +1332,12 @@ function connectWebSocket() {
       applyRunStepProgress(msg);
       if (msg.error) appendLog("Error: " + msg.error);
       updateRunButtons(msg.state);
-      if (msg.state === "completed" || msg.state === "failed" || msg.state === "stopped") {
+      if (
+        msg.state === "completed" ||
+        msg.state === "failed" ||
+        msg.state === "stopped" ||
+        msg.state === "holding_session"
+      ) {
         stopRunStatusPolling();
         refreshRunStepProgressFromServer().catch(() => {});
       }
@@ -3625,5 +3631,6 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     });
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
+    showError($("health").textContent);
   }
 })();

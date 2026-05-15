@@ -17,7 +17,7 @@ const HELP_TOPICS = {
   overview: {
     title: "Webbot overview",
     body: [
-      "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
+      "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile. The dashboard always runs flows with <strong>Playwright</strong> (JSON and Python). <strong>Nodriver</strong>, when installed, is only for the CLI <code>open</code> command with <code>--driver nodriver</code> — it does not apply to runs started from this UI.</p>",
       "<p>Use the top tabs to switch between <strong>Workspace</strong> (editor and log) and <strong>Flow groups</strong> (sidebar sections). Pick a flow in the sidebar, edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows can be JSON (step builder) or Python (editable source panel). Use <strong>run_scenario</strong> steps in JSON flows to compose subflows of either kind.</p>",
       "<p>Scenarios live under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere): <code>.json</code> for JSON flows and <code>.py</code> for Python flows (only one extension per flow name). Group membership is stored in <code>%APPDATA%/webbot/groups.json</code> (or <code>~/.config/webbot/groups.json</code> elsewhere), beside the scenarios folder.</p>",
     ],
@@ -30,9 +30,9 @@ const HELP_TOPICS = {
         ["Area", "What it does"],
         [
           ["Flows", "Grouped sections and ungrouped; pick one to edit. Use the filter box above the list to narrow by flow name or description. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (next to <strong>Save</strong> and <strong>Test run</strong>) removes the selected flow from disk <em>and</em> drops it from all groups automatically; drafts are discarded instead. Organize sections under the <strong>Flow groups</strong> tab."],
-          ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved."],
-          ["Run", "Loops, pauses between loops and group runs, headless, Playwright <strong>Browser channel</strong> and <strong>Slow motion (ms)</strong> (CLI <code>--channel</code> / <code>--slow-mo</code>), Start/Stop, status. Live logs use the websocket indicator next to version in the header."],
-          ["Save / Test run", "Save JSON or Python to disk, or save and run immediately."],
+          ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved. <strong>Ctrl/Cmd+S</strong> saves the current flow; <strong>Ctrl/Cmd+Enter</strong> saves and starts a run (same as Test run)."],
+          ["Run", "Loops, pauses between loops and group runs, headless, Playwright <strong>Browser channel</strong> and <strong>Slow motion (ms)</strong> (CLI <code>--channel</code> / <code>--slow-mo</code>), Start/Stop, status. Run options are remembered in this browser (local storage). Live logs use the websocket indicator next to version in the header (reconnects with exponential backoff when the connection drops)."],
+          ["Save / Test run", "Save JSON or Python to disk, or save and run immediately. Use <strong>Duplicate</strong> / <strong>Export</strong> / <strong>Import</strong> in the button row to copy flows or move them as files."],
           ["Log", "Live output from the runner."],
         ]
       ),
@@ -54,7 +54,7 @@ const HELP_TOPICS = {
           ["Browser channel", "Playwright channel: Chrome, Chromium, or Edge — same as CLI <code>--channel</code>."],
           ["Slow motion (ms)", "Optional delay injected between Playwright actions for debugging (<code>--slow-mo</code>)."],
           ["Headless", "Hide the browser window (faster; harder to debug)."],
-          ["Live log indicator", "Header shows websocket status for streamed log/status (Reconnecting uses a short backoff)."],
+          ["Live log indicator", "Header shows websocket status for streamed log/status. If the connection drops, the UI reconnects with increasing delay (capped) and also retries when you return to this tab."],
           ["Log panel", "<strong>Copy</strong> / <strong>Clear</strong> above the transcript; oldest lines trim after about 4000 lines to keep the page responsive."],
           ["Flow preview", "Step list with live green/red status during a run."],
         ]
@@ -73,7 +73,7 @@ const HELP_TOPICS = {
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>open_url</code> step."],
           ["Scenario options", "Optional random delay between every step."],
           ["Steps", "Drag by the grip to reorder. Types: open_url (navigate), goto (jump forward in this list via labels), click, fill, delay, scroll, submit_form, run_scenario, if_present, exit."],
-          ["Save / Test run", "Write JSON to disk, or save and start immediately."],
+          ["Save / Test run", "Write JSON to disk, or save and start immediately. Duplicate / Export / Import are in the same button row."],
         ]
       ),
       "<p>Use the sidebar for step types, locators, and scenario options.</p>",
