@@ -1,0 +1,5 @@
+playwright>=1.40.0
+typer>=0.9.0
+rich>=13.0.0
+# Optional stealth fallback (Python 3.10–3.12; not yet compatible with 3.14):
+# nodriver>=0.38
