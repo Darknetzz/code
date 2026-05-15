@@ -43,7 +43,14 @@ def _browser_config(
     )
 
 
-async def _run_with_playwright(config: BrowserConfig, url: str | None, scenario_name: str | None) -> None:
+async def _run_with_playwright(
+    config: BrowserConfig,
+    url: str | None,
+    scenario_name: str | None,
+    *,
+    loops: int = 1,
+    pause_between_loops_sec: float = 0.0,
+) -> None:
     async with persistent_browser(config) as (_context, page):
         if url:
             await page.goto(url, wait_until="domcontentloaded")
@@ -58,7 +65,15 @@ async def _run_with_playwright(config: BrowserConfig, url: str | None, scenario_
         if scenario_name:
             scenario = get_scenario(scenario_name)
             try:
-                await scenario(page)
+                for i in range(loops):
+                    if loops > 1:
+                        console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
+                    await scenario(page)
+                    if i < loops - 1 and pause_between_loops_sec > 0:
+                        console.print(
+                            f"[dim]Pausing {pause_between_loops_sec:.0f}s before next loop...[/dim]"
+                        )
+                        await asyncio.sleep(pause_between_loops_sec)
                 console.print(f"[green]Scenario '{scenario_name}' completed.[/green]")
             except Exception as exc:
                 shot = await save_failure_screenshot(page, scenario_name)
@@ -67,7 +82,14 @@ async def _run_with_playwright(config: BrowserConfig, url: str | None, scenario_
                 raise exc
 
 
-async def _run_with_nodriver(config: BrowserConfig, url: str | None, scenario_name: str | None) -> None:
+async def _run_with_nodriver(
+    config: BrowserConfig,
+    url: str | None,
+    scenario_name: str | None,
+    *,
+    loops: int = 1,
+    pause_between_loops_sec: float = 0.0,
+) -> None:
     async with nodriver_browser(config) as page:
         if url:
             await page.goto(url)
@@ -88,7 +110,15 @@ async def _run_with_nodriver(config: BrowserConfig, url: str | None, scenario_na
             from webbot.scenarios.example_site import run as example_run
 
             try:
-                await example_run(page)  # type: ignore[arg-type]
+                for i in range(loops):
+                    if loops > 1:
+                        console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
+                    await example_run(page)  # type: ignore[arg-type]
+                    if i < loops - 1 and pause_between_loops_sec > 0:
+                        console.print(
+                            f"[dim]Pausing {pause_between_loops_sec:.0f}s before next loop...[/dim]"
+                        )
+                        await asyncio.sleep(pause_between_loops_sec)
                 console.print(f"[green]Scenario '{scenario_name}' completed.[/green]")
             except Exception as exc:
                 screenshots = get_app_config_dir() / "screenshots"
@@ -133,9 +163,19 @@ def run_scenario(
     driver: Driver = typer.Option(Driver.playwright, "--driver", help="Browser backend"),
     channel: Optional[str] = typer.Option("chrome", "--channel", help="Playwright browser channel"),
     slow_mo: int = typer.Option(0, "--slow-mo", help="Playwright slow-motion delay in ms"),
+    loops: int = typer.Option(1, "--loops", "-n", help="Run the scenario this many times"),
+    pause_between_loops: float = typer.Option(
+        0.0,
+        "--pause-between-loops",
+        help="Seconds to wait after each run before the next (ignored on last loop)",
+    ),
 ):
     """Run a named click/type scenario with human-like behavior."""
     config = _browser_config(headless, channel, slow_mo)
+
+    if loops < 1:
+        console.print("[bold red]--loops must be at least 1[/bold red]")
+        raise typer.Exit(1)
 
     try:
         get_scenario(scenario)
@@ -150,9 +190,25 @@ def run_scenario(
                 "Use --driver playwright (default) or Python 3.10–3.12 with nodriver installed.[/bold red]"
             )
             raise typer.Exit(1)
-        asyncio.run(_run_with_nodriver(config, None, scenario))
+        asyncio.run(
+            _run_with_nodriver(
+                config,
+                None,
+                scenario,
+                loops=loops,
+                pause_between_loops_sec=pause_between_loops,
+            )
+        )
     else:
-        asyncio.run(_run_with_playwright(config, None, scenario))
+        asyncio.run(
+            _run_with_playwright(
+                config,
+                None,
+                scenario,
+                loops=loops,
+                pause_between_loops_sec=pause_between_loops,
+            )
+        )
 
 
 @app.command()
