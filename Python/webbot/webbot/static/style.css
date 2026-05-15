@@ -710,6 +710,38 @@ button:disabled {
   border-radius: 4px;
 }
 
+.help-body .help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.help-body .help-table th,
+.help-body .help-table td {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+.help-body .help-table thead th {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-body .help-table tbody th[scope="row"] {
+  background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.help-body .help-table tbody td code {
+  white-space: nowrap;
+}
+
 .help-footer {
   display: flex;
   gap: 0.5rem;

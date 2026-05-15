@@ -1,5 +1,18 @@
 /** Help topic registry for the Webbot dashboard (content only). */
 
+function helpTable(headers, rows) {
+  const head = headers.map((h) => `<th scope="col">${h}</th>`).join("");
+  const body = rows
+    .map((cells) => {
+      const [first, ...rest] = cells;
+      const rowHead = `<th scope="row">${first}</th>`;
+      const cols = rest.map((c) => `<td>${c}</td>`).join("");
+      return `<tr>${rowHead}${cols}</tr>`;
+    })
+    .join("");
+  return `<table class="help-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 const HELP_TOPICS = {
   overview: {
     title: "Webbot overview",
@@ -104,9 +117,12 @@ const HELP_TOPICS = {
   "scenario.between_steps_distribution": {
     title: "Between-step random style",
     body: [
-      "<p><code>uniform</code> — any value in the range is equally likely.</p>",
-      "<p><code>triangular</code> — tends toward the middle of the range (default).</p>",
-      "<p><code>log_normal</code> — occasional longer pauses.</p>",
+      "<p>How pauses are picked between min and max:</p>",
+      helpTable(["Style", "Behavior"], [
+        ["<code>uniform</code>", "Any value in the range is equally likely."],
+        ["<code>triangular</code>", "Tends toward the middle of the range (default)."],
+        ["<code>log_normal</code>", "Occasional longer pauses."],
+      ]),
     ],
   },
   "builder.steps": {
@@ -119,12 +135,15 @@ const HELP_TOPICS = {
   "step.types": {
     title: "Step types",
     body: [
-      "<p><code>goto</code> — navigate to a URL.</p>",
-      "<p><code>click</code> — human-like click on an element.</p>",
-      "<p><code>fill</code> — type into one field.</p>",
-      "<p><code>submit_form</code> — fill multiple fields and submit a form (GET or POST).</p>",
-      "<p><code>delay</code> — wait a random duration.</p>",
-      "<p><code>scroll</code> — wheel scroll with optional overshoot.</p>",
+      "<p>Each step in a scenario has one action type:</p>",
+      helpTable(["Type", "What it does"], [
+        ["<code>goto</code>", "Navigate to a URL."],
+        ["<code>click</code>", "Human-like click on an element."],
+        ["<code>fill</code>", "Type into one field."],
+        ["<code>submit_form</code>", "Fill multiple fields and submit a form (GET or POST)."],
+        ["<code>delay</code>", "Wait a random duration."],
+        ["<code>scroll</code>", "Wheel scroll with optional overshoot."],
+      ]),
     ],
   },
   "step.goto": {
@@ -168,7 +187,12 @@ const HELP_TOPICS = {
   "step.delay.distribution": {
     title: "Delay random style",
     body: [
-      "<p>How waits are sampled between min and max: <code>uniform</code>, <code>triangular</code>, or <code>log_normal</code>.</p>",
+      "<p>How waits are sampled between min and max:</p>",
+      helpTable(["Style", "Behavior"], [
+        ["<code>uniform</code>", "Any value in the range is equally likely."],
+        ["<code>triangular</code>", "Often shorter waits; good default."],
+        ["<code>log_normal</code>", "Occasional longer waits."],
+      ]),
     ],
   },
   "step.delay.long_pause": {
@@ -247,11 +271,16 @@ const HELP_TOPICS = {
     title: "Find by",
     body: [
       "<p>How Playwright locates the element:</p>",
-      "<p><code>role</code> — ARIA role + name (recommended for buttons/links).</p>",
-      "<p><code>text</code> — visible text on the page.</p>",
-      "<p><code>css</code> — CSS selector.</p>",
-      "<p><code>data</code> — any <code>data-*</code> attribute (e.g. <code>data-testid</code>, <code>data-cy</code>, <code>data-qa</code>).</p>",
-      "<p><code>label</code> — associated <code>&lt;label&gt;</code> text.</p>",
+      helpTable(["Mode", "When to use"], [
+        ["<code>role</code>", "ARIA role + accessible name (recommended for buttons and links)."],
+        ["<code>text</code>", "Visible text on the page."],
+        ["<code>css</code>", "CSS selector (<code>#id</code>, <code>.class</code>, etc.)."],
+        [
+          "<code>data</code>",
+          "Any <code>data-*</code> attribute (e.g. <code>data-testid</code>, <code>data-cy</code>, <code>data-qa</code>).",
+        ],
+        ["<code>label</code>", "Text on the associated <code>&lt;label&gt;</code> (forms)."],
+      ]),
     ],
   },
   "locator.role": {
@@ -279,8 +308,13 @@ const HELP_TOPICS = {
   "locator.data_attr": {
     title: "Data attribute",
     body: [
-      "<p>Name of the HTML attribute, usually starting with <code>data-</code>. Examples: <code>data-testid</code>, <code>data-cy</code> (Cypress), <code>data-qa</code>.</p>",
-      "<p>You can type <code>testid</code> or <code>data-testid</code> — both target the same attribute.</p>",
+      "<p>Name of the HTML attribute on the element:</p>",
+      helpTable(["You enter", "Matches"], [
+        ["<code>data-testid</code>", "Standard test hook (same as legacy <code>test_id</code>)."],
+        ["<code>data-cy</code>", "Common in Cypress-based apps."],
+        ["<code>data-qa</code>", "QA / automation hooks."],
+        ["<code>testid</code>", "Shorthand — normalized to <code>data-testid</code>."],
+      ]),
     ],
   },
   "locator.data_value": {
