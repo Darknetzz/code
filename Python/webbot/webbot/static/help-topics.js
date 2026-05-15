@@ -25,15 +25,13 @@ const HELP_TOPICS = {
   "help.home": {
     title: "Workspace",
     body: [
-      "<p>One screen: <strong>Flows</strong> and <strong>Run</strong> cards on the left, editor on the right, log at the bottom.</p>",
+      "<p>Three columns: <strong>Flows</strong> (tall list), the <strong>editor</strong> in the center, and <strong>Run</strong> on the right. The log sits below.</p>",
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flows card", "Flows grouped into collapsible sections plus ungrouped; pick one to edit."],
-          ["New flow / Delete", "Use <strong>New flow</strong> for a JSON or Python draft; delete saved flows or discard a draft. Sidebar sections are edited under the <strong>Flow groups</strong> tab."],
-          ["Run card", "Loops, pause between loops, pause between flows in a group, headless, Start/Stop."],
-          ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
-          ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: monospace source editor; flow name is read-only once saved."],
+          ["Flows", "Grouped sections and ungrouped; pick one to edit. <strong>New flow</strong> / <strong>Delete</strong>; organize sections under the <strong>Flow groups</strong> tab."],
+          ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved."],
+          ["Run", "Loops, pauses, headless, Start/Stop, and run status."],
           ["Save / Test run", "Save JSON or Python to disk, or save and run immediately."],
           ["Log", "Live output from the runner."],
         ]

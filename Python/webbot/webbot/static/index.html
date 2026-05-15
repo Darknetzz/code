@@ -80,34 +80,6 @@
             </div>
             <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
           </div>
-
-          <div class="card workspace-run-card">
-            <span class="field-label workspace-run-heading">Run</span>
-            <div class="workspace-run-options">
-              <div class="row">
-                <label for="run-loops">Loops</label>
-                <input type="number" id="run-loops" min="1" value="1" />
-              </div>
-              <div class="row">
-                <label for="run-pause">Pause between loops (sec)</label>
-                <input type="number" id="run-pause" min="0" step="1" value="0" />
-              </div>
-              <div class="row">
-                <label for="run-pause-flows">Pause between flows in group (sec)</label>
-                <input type="number" id="run-pause-flows" min="0" step="1" value="0" />
-              </div>
-              <label class="checkbox">
-                <input type="checkbox" id="run-headless" />
-                Headless
-              </label>
-            </div>
-
-            <div class="actions workspace-run-actions">
-              <button type="button" id="btn-start" class="primary">Start</button>
-              <button type="button" id="btn-stop" disabled>Stop</button>
-            </div>
-            <p id="run-status" class="status muted">Idle</p>
-          </div>
         </aside>
 
         <div class="card workspace-editor">
@@ -169,6 +141,36 @@
             <p id="build-msg-python" class="muted"></p>
           </div>
         </div>
+
+        <aside class="workspace-run-column" aria-label="Run settings">
+          <div class="card workspace-run-card">
+            <span class="field-label workspace-run-heading">Run</span>
+            <div class="workspace-run-options">
+              <div class="row">
+                <label for="run-loops">Loops</label>
+                <input type="number" id="run-loops" min="1" value="1" />
+              </div>
+              <div class="row">
+                <label for="run-pause">Pause between loops (sec)</label>
+                <input type="number" id="run-pause" min="0" step="1" value="0" />
+              </div>
+              <div class="row">
+                <label for="run-pause-flows">Pause between flows in group (sec)</label>
+                <input type="number" id="run-pause-flows" min="0" step="1" value="0" />
+              </div>
+              <label class="checkbox">
+                <input type="checkbox" id="run-headless" />
+                Headless
+              </label>
+            </div>
+
+            <div class="actions workspace-run-actions">
+              <button type="button" id="btn-start" class="primary">Start</button>
+              <button type="button" id="btn-stop" disabled>Stop</button>
+            </div>
+            <p id="run-status" class="status muted">Idle</p>
+          </div>
+        </aside>
       </div>
 
       <div class="card log-card workspace-log">
@@ -181,7 +183,7 @@
       <div class="card groups-panel-card">
         <h2 class="groups-panel-title">Flow groups</h2>
         <p class="muted groups-panel-intro">
-          Organize flows into sections. In <strong>Workspace</strong>, use <strong>Run group</strong> on each section header to run flows in order.
+          Organize flows into sidebar sections. Use <strong>Add flow</strong> to attach workflows (only flows not already in that group appear). In <strong>Workspace</strong>, use <strong>Run group</strong> on each section header to run flows in order.
         </p>
         <div id="groups-editor-body"></div>
         <p id="groups-msg" class="muted"></p>

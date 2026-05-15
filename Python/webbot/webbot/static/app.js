@@ -1876,6 +1876,39 @@ function closeNewFlowDropdown() {
   if (drop) drop.open = false;
 }
 
+function closeGroupsAddDropdowns() {
+  document.querySelectorAll("#panel-groups .groups-add-dropdown[open]").forEach((d) => {
+    d.open = false;
+  });
+}
+
+function editableScenarioNamesList() {
+  return scenarios.filter((s) => s.type === "json" || s.type === "python").map((s) => s.name);
+}
+
+/** Names not yet in this group's scenario_names (sorted). */
+function availableFlowsForGroup(groupIndex) {
+  const all = editableScenarioNamesList();
+  const have = new Set(groupsModalDraft[groupIndex]?.scenario_names || []);
+  return all.filter((n) => !have.has(n)).sort((a, b) => a.localeCompare(b));
+}
+
+function addFlowToGroup(groupIndex, flowName) {
+  const g = groupsModalDraft[groupIndex];
+  if (!g) return;
+  const arr = g.scenario_names || [];
+  if (!arr.includes(flowName)) arr.push(flowName);
+  g.scenario_names = arr;
+  renderGroupsModalEditor();
+}
+
+function removeFlowFromGroup(groupIndex, flowName) {
+  const g = groupsModalDraft[groupIndex];
+  if (!g) return;
+  g.scenario_names = (g.scenario_names || []).filter((n) => n !== flowName);
+  renderGroupsModalEditor();
+}
+
 /** @type {Array<{id:string,label:string,scenario_names:string[]}>} */
 let groupsModalDraft = [];
 
@@ -1908,23 +1941,109 @@ function renderGroupsModalEditor() {
       groupsModalDraft[gi].label = labInp.value.trim();
     });
 
-    const selLab = document.createElement("label");
-    selLab.className = "field-label";
-    selLab.textContent = "Flows in group (multi-select)";
-    const sel = document.createElement("select");
-    sel.multiple = true;
-    const names = scenarios.filter((s) => s.type === "json" || s.type === "python").map((s) => s.name);
-    sel.size = Math.min(12, Math.max(4, names.length || 4));
-    names.forEach((nm) => {
-      const o = document.createElement("option");
-      o.value = nm;
-      o.textContent = nm;
-      o.selected = (g.scenario_names || []).includes(nm);
-      sel.appendChild(o);
-    });
-    sel.addEventListener("change", () => {
-      groupsModalDraft[gi].scenario_names = Array.from(sel.selectedOptions).map((o) => o.value);
-    });
+    const flowsSection = document.createElement("div");
+    flowsSection.className = "groups-flows-section";
+
+    const flowsHeading = document.createElement("span");
+    flowsHeading.className = "field-label groups-flows-heading";
+    flowsHeading.textContent = "Flows in group";
+
+    const memberList = document.createElement("ul");
+    memberList.className = "groups-flow-members";
+    memberList.setAttribute("aria-label", "Flows in this group");
+
+    const members = g.scenario_names || [];
+    if (members.length === 0) {
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "groups-flow-members-empty muted";
+      emptyLi.textContent = "No flows in this group yet.";
+      memberList.appendChild(emptyLi);
+    } else {
+      members.forEach((nm) => {
+        const li = document.createElement("li");
+        li.className = "groups-flow-member";
+
+        const nameWrap = document.createElement("div");
+        nameWrap.className = "groups-flow-member-main";
+
+        const span = document.createElement("span");
+        span.className = "groups-flow-member-name";
+        span.textContent = nm;
+
+        const info = scenarios.find((s) => s.name === nm);
+        const typeTag = document.createElement("span");
+        typeTag.className =
+          info?.type === "python"
+            ? "groups-flow-member-badge badge-python"
+            : "groups-flow-member-badge badge-json";
+        typeTag.textContent = info?.type === "python" ? "python" : "json";
+
+        nameWrap.appendChild(span);
+        nameWrap.appendChild(typeTag);
+
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "danger outline groups-flow-remove";
+        rm.textContent = "Remove";
+        rm.addEventListener("click", () => removeFlowFromGroup(gi, nm));
+
+        li.appendChild(nameWrap);
+        li.appendChild(rm);
+        memberList.appendChild(li);
+      });
+    }
+
+    const avail = availableFlowsForGroup(gi);
+    const addWrap = document.createElement("div");
+    addWrap.className = "groups-add-flow-wrap";
+
+    const details = document.createElement("details");
+    details.className = "groups-add-dropdown";
+
+    const summary = document.createElement("summary");
+    summary.className = "groups-add-summary outline success";
+    summary.textContent = "Add flow";
+    summary.setAttribute("aria-haspopup", "menu");
+
+    const panel = document.createElement("div");
+    panel.className = "groups-add-panel";
+    panel.setAttribute("role", "menu");
+    panel.setAttribute("aria-label", "Flows not in this group");
+
+    if (avail.length === 0) {
+      const hint = document.createElement("p");
+      hint.className = "muted groups-add-empty";
+      hint.textContent =
+        editableScenarioNamesList().length === 0
+          ? "No saved flows yet. Create flows in Workspace first."
+          : "Every saved flow is already in this group.";
+      panel.appendChild(hint);
+    } else {
+      avail.forEach((nm) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "groups-add-option";
+        btn.setAttribute("role", "menuitem");
+        const info = scenarios.find((s) => s.name === nm);
+        btn.textContent =
+          nm +
+          (info?.type === "python" ? " · python" : info?.type === "json" ? " · json" : "");
+        btn.addEventListener("click", () => {
+          addFlowToGroup(gi, nm);
+          details.open = false;
+          closeGroupsAddDropdowns();
+        });
+        panel.appendChild(btn);
+      });
+    }
+
+    details.appendChild(summary);
+    details.appendChild(panel);
+    addWrap.appendChild(details);
+
+    flowsSection.appendChild(flowsHeading);
+    flowsSection.appendChild(memberList);
+    flowsSection.appendChild(addWrap);
 
     const del = document.createElement("button");
     del.type = "button";
@@ -1939,8 +2058,7 @@ function renderGroupsModalEditor() {
     row.appendChild(idInp);
     row.appendChild(labLab);
     row.appendChild(labInp);
-    row.appendChild(selLab);
-    row.appendChild(sel);
+    row.appendChild(flowsSection);
     row.appendChild(del);
     body.appendChild(row);
   });
@@ -1958,6 +2076,7 @@ function renderGroupsModalEditor() {
 
 function openGroupsPanel() {
   $("groups-msg").textContent = "";
+  closeGroupsAddDropdowns();
   groupsModalDraft = structuredClone(groupsData.groups || []);
   renderGroupsModalEditor();
   setMainTab("groups");
@@ -1965,6 +2084,7 @@ function openGroupsPanel() {
 
 async function saveGroupsModal() {
   $("groups-msg").textContent = "";
+  closeGroupsAddDropdowns();
   await api("/api/groups", {
     method: "PUT",
     body: JSON.stringify({ groups: groupsModalDraft }),
@@ -2070,14 +2190,16 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     $("build-desc")?.addEventListener("input", syncDraftListLabel);
 
     document.addEventListener("click", (e) => {
-      const drop = $("new-flow-dropdown");
-      if (!drop?.open) return;
-      if (drop.contains(e.target)) return;
-      drop.open = false;
+      const nf = $("new-flow-dropdown");
+      if (nf?.open && !nf.contains(e.target)) nf.open = false;
+      if (!e.target.closest("#panel-groups .groups-add-dropdown")) {
+        closeGroupsAddDropdowns();
+      }
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       closeNewFlowDropdown();
+      closeGroupsAddDropdowns();
     });
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
