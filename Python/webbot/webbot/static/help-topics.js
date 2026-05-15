@@ -30,7 +30,7 @@ const HELP_TOPICS = {
         ["Area", "What it does"],
         [
           ["Flows card", "Flows grouped into collapsible sections plus ungrouped; pick one to edit."],
-          ["New JSON / New Python / Groups / Delete", "Create JSON or Python drafts; <strong>Groups</strong> (or the <strong>Flow groups</strong> tab) edits sidebar sections; delete saved flows or discard a draft."],
+          ["New flow / Delete", "Use <strong>New flow</strong> for a JSON or Python draft; delete saved flows or discard a draft. Sidebar sections are edited under the <strong>Flow groups</strong> tab."],
           ["Run card", "Loops, pause between loops, pause between flows in a group, headless, Start/Stop."],
           ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
           ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: monospace source editor; flow name is read-only once saved."],
@@ -63,11 +63,11 @@ const HELP_TOPICS = {
   "help.flows": {
     title: "Flows tab",
     body: [
-      "<p>Create and edit flows: JSON in the step builder, or Python in the source editor (<strong>New Python</strong>).</p>",
+      "<p>Create and edit flows: JSON in the step builder, or Python in the source editor (<strong>New flow</strong> → Python flow).</p>",
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flow list", "Grouped sections and ungrouped flows; use Groups to edit membership."],
+          ["Flow list", "Grouped sections and ungrouped flows; edit membership under the Flow groups tab."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
           ["Scenario options", "Optional random delay between every step."],
           ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form, run_scenario (nested JSON or Python flow)."],

@@ -15,7 +15,7 @@ let cachedPreviewDoc = null;
 let cachedScenarioPreview = null;
 let runStatusPollTimer = null;
 
-/** True while editing an unsaved Python draft from "New Python". */
+/** True while editing an unsaved Python draft from New flow → Python. */
 let draftIsPython = false;
 
 const PYTHON_FLOW_TEMPLATE = `"""Edit this Python flow — saved as a .py file next to JSON scenarios."""
@@ -1822,6 +1822,11 @@ function setMainTab(which) {
   $("panel-groups")?.setAttribute("aria-hidden", isWorkspace ? "true" : "false");
 }
 
+function closeNewFlowDropdown() {
+  const drop = $("new-flow-dropdown");
+  if (drop) drop.open = false;
+}
+
 /** @type {Array<{id:string,label:string,scenario_names:string[]}>} */
 let groupsModalDraft = [];
 
@@ -1944,7 +1949,6 @@ async function startRunGroup(groupId) {
 
 $("btn-start").onclick = () => startRun();
 $("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
-$("btn-manage-groups")?.addEventListener("click", () => openGroupsPanel());
 $("tab-workspace")?.addEventListener("click", () => setMainTab("workspace"));
 $("tab-groups")?.addEventListener("click", () => openGroupsPanel());
 $("groups-save")?.addEventListener("click", () =>
@@ -1957,8 +1961,14 @@ $("btn-add-step").onclick = () => {
   renderSteps();
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
-$("btn-new-flow")?.addEventListener("click", () => newFlow());
-$("btn-new-python-flow")?.addEventListener("click", () => newPythonFlow());
+$("btn-new-flow")?.addEventListener("click", () => {
+  closeNewFlowDropdown();
+  newFlow();
+});
+$("btn-new-python-flow")?.addEventListener("click", () => {
+  closeNewFlowDropdown();
+  newPythonFlow();
+});
 $("btn-save-python")?.addEventListener("click", () =>
   savePythonScenario().catch((e) => ($("build-msg-python").textContent = e.message))
 );
@@ -2008,6 +2018,17 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     $("build-random-between-steps").addEventListener("change", () => renderScenarioOptions(readScenarioOptions()));
     $("build-name")?.addEventListener("input", syncDraftListLabel);
     $("build-desc")?.addEventListener("input", syncDraftListLabel);
+
+    document.addEventListener("click", (e) => {
+      const drop = $("new-flow-dropdown");
+      if (!drop?.open) return;
+      if (drop.contains(e.target)) return;
+      drop.open = false;
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      closeNewFlowDropdown();
+    });
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
   }

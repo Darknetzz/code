@@ -70,7 +70,7 @@ function initStaticIcons() {
     ["btn-add-step", "plus", { label: "Add step" }],
     ["btn-save", "save", { label: "Save flow" }],
     ["btn-test-run", "test", { label: "Test run" }],
-    ["btn-new-flow", "plus", { label: "New" }],
+    ["new-flow-menu-summary", "plus", { label: "New flow" }],
     ["btn-delete-flow", "trash", { label: "Delete" }],
     ["help-prev", "chevronLeft", { label: "Previous" }],
     ["help-next", "chevronRight", { label: "Next" }],

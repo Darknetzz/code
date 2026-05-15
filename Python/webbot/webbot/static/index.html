@@ -46,9 +46,23 @@
             <div class="workspace-sidebar-toolbar" data-page-help="help.home">
               <span class="field-label">Flows</span>
               <div class="workspace-sidebar-actions">
-                <button type="button" id="btn-new-flow" class="success outline">New JSON</button>
-                <button type="button" id="btn-new-python-flow" class="success outline">New Python</button>
-                <button type="button" id="btn-manage-groups" class="outline">Groups</button>
+                <details id="new-flow-dropdown" class="workspace-sidebar-dropdown">
+                  <summary
+                    id="new-flow-menu-summary"
+                    class="workspace-dropdown-summary success outline btn-with-icon"
+                    aria-haspopup="menu"
+                  >
+                    New flow
+                  </summary>
+                  <div class="workspace-dropdown-panel" role="menu" aria-label="New flow type">
+                    <button type="button" id="btn-new-flow" class="workspace-dropdown-item" role="menuitem">
+                      JSON flow
+                    </button>
+                    <button type="button" id="btn-new-python-flow" class="workspace-dropdown-item" role="menuitem">
+                      Python flow
+                    </button>
+                  </div>
+                </details>
                 <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
               </div>
             </div>

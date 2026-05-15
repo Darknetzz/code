@@ -378,9 +378,82 @@ main {
 
 .workspace-sidebar-actions {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.35rem;
+  align-items: start;
   width: 100%;
+}
+
+.workspace-sidebar-dropdown {
+  position: relative;
+  min-width: 0;
+}
+
+.workspace-dropdown-summary {
+  list-style: none;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  font: inherit;
+}
+
+summary.workspace-dropdown-summary.success.outline {
+  border-color: color-mix(in srgb, var(--success) 65%, var(--border));
+  color: var(--success);
+}
+
+summary.workspace-dropdown-summary.success.outline:hover {
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+}
+
+.workspace-dropdown-summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-sidebar-dropdown[open] > .workspace-dropdown-summary {
+  border-color: var(--accent);
+}
+
+.workspace-dropdown-panel {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  margin-top: 0.35rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.workspace-dropdown-item {
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.workspace-dropdown-item:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
 .workspace-sidebar-actions .btn-with-icon {
