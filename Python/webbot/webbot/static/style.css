@@ -1462,43 +1462,91 @@ button:disabled {
 
 .flow-run-status {
   display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  margin: 0 0 0.5rem;
-  font-size: 0.84rem;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.95rem;
   line-height: 1.35;
-  color: var(--muted);
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 92%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 8px;
+}
+
+.flow-run-status .run-status-text {
+  letter-spacing: 0.015em;
 }
 
 .run-status-dot {
   flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-top: 0.35em;
+  width: 0.72rem;
+  height: 0.72rem;
+  margin-top: 0;
   border-radius: 50%;
   background: var(--muted);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .flow-run-status.idle .run-status-dot {
   background: var(--accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 38%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .flow-run-status.running .run-status-dot,
 .flow-run-status.holding_session .run-status-dot {
   background: #d29922;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #d29922 35%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flow-run-status.running .run-status-dot,
+  .flow-run-status.holding_session .run-status-dot {
+    animation: run-status-dot-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes run-status-dot-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, #d29922 35%, transparent),
+      0 0 0 0 color-mix(in srgb, #d29922 28%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, #d29922 45%, transparent),
+      0 0 0 6px color-mix(in srgb, #d29922 12%, transparent);
+  }
 }
 
 .flow-run-status.completed .run-status-dot {
   background: var(--success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 38%, transparent);
 }
 
 .flow-run-status.failed .run-status-dot {
   background: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 38%, transparent);
 }
 
 .flow-run-status.stopped .run-status-dot,
 .flow-run-status.muted .run-status-dot {
   background: var(--muted);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.flow-run-status.stopped,
+.flow-run-status.muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.flow-run-status.idle {
+  color: color-mix(in srgb, var(--text) 78%, var(--accent));
 }
 
 .flow-run-status.running {
