@@ -64,6 +64,9 @@ function enhanceButton(button, iconName, opts = {}) {
 
 function initStaticIcons() {
   const buttons = [
+    ["tab-workspace", "edit", { label: "Workspace" }],
+    ["tab-groups", "flows", { label: "Flow groups" }],
+    ["groups-back", "chevronLeft", { label: "Back to workspace" }],
     ["btn-help", "help"],
     ["btn-start", "play"],
     ["btn-stop", "stop"],
