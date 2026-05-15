@@ -800,6 +800,31 @@ async function loadGroups() {
   groupsData = await api("/api/groups");
 }
 
+function getFlowListSearchQuery() {
+  return ($("flow-list-filter")?.value ?? "").trim().toLowerCase();
+}
+
+/** Match sidebar search against name, optional description, and optional displayName (drafts). */
+function scenarioEntryMatchesSearch(entry) {
+  const q = getFlowListSearchQuery();
+  if (!q) return true;
+  const name = String(entry.name ?? "").toLowerCase();
+  const desc = String(entry.description ?? "").toLowerCase();
+  const display = String(entry.displayName ?? "").toLowerCase();
+  return name.includes(q) || desc.includes(q) || display.includes(q);
+}
+
+/** Max lines kept in the log panel before oldest entries are trimmed. */
+const MAX_LOG_LINES = 4000;
+
+function getRunPlaywrightOptions() {
+  const chEl = $("run-channel");
+  const smEl = $("run-slow-mo");
+  const channel = chEl?.value?.trim() || "chrome";
+  const slowMo = Math.max(0, parseInt(smEl?.value, 10) || 0);
+  return { channel, slow_mo: slowMo };
+}
+
 function renderScenarioList(containerId, onSelect) {
   const list = $(containerId);
   if (!list) return;
@@ -807,11 +832,10 @@ function renderScenarioList(containerId, onSelect) {
 
   const draftRows = isDraftSelected() ? [getDraftListEntry()] : [];
   const editableFlows = scenarios.filter((s) => s.type === "json" || s.type === "python");
+  const hasGroupStructure = groupsData.groups && groupsData.groups.length > 0;
 
   const showEmpty =
-    draftRows.length === 0 &&
-    editableFlows.length === 0 &&
-    !(groupsData.groups && groupsData.groups.length);
+    draftRows.length === 0 && editableFlows.length === 0 && !hasGroupStructure;
 
   if (showEmpty) {
     const empty = document.createElement("li");
@@ -859,19 +883,26 @@ function renderScenarioList(containerId, onSelect) {
 
     const sub = document.createElement("ul");
     sub.className = "scenario-group-flows";
-    let anyMember = false;
+    const namesInGroup = (g.scenario_names || []).filter((nm) =>
+      editableFlows.some((x) => x.name === nm)
+    );
+    let anyMemberShown = false;
     for (const nm of g.scenario_names || []) {
       const flow = editableFlows.find((x) => x.name === nm);
       if (!flow) continue;
-      anyMember = true;
+      if (!scenarioEntryMatchesSearch(flow)) continue;
+      anyMemberShown = true;
       assigned.add(nm);
       sub.appendChild(buildScenarioListItem(flow, onSelect));
     }
-    if (!anyMember) {
+    if (!anyMemberShown) {
       const hint = document.createElement("li");
       hint.className = "muted scenario-list-empty";
       hint.style.listStyle = "none";
-      hint.textContent = "No flows in this group";
+      hint.textContent =
+        namesInGroup.length && getFlowListSearchQuery()
+          ? "No matching flows in this group"
+          : "No flows in this group";
       sub.appendChild(hint);
     }
     details.appendChild(sub);
@@ -883,7 +914,12 @@ function renderScenarioList(containerId, onSelect) {
     editableFlows.some((x) => x.name === nm)
   );
 
-  if (ungrouped.length) {
+  const ungroupedFlows = ungrouped
+    .map((nm) => editableFlows.find((x) => x.name === nm))
+    .filter(Boolean)
+    .filter((f) => scenarioEntryMatchesSearch(f));
+
+  if (ungrouped.length && ungroupedFlows.length) {
     const ugWrap = document.createElement("li");
     ugWrap.className = "scenario-list-group-wrap";
     const h = document.createElement("div");
@@ -892,16 +928,42 @@ function renderScenarioList(containerId, onSelect) {
     ugWrap.appendChild(h);
     const ul = document.createElement("ul");
     ul.className = "scenario-group-flows";
-    for (const nm of ungrouped) {
-      const flow = editableFlows.find((x) => x.name === nm);
-      if (!flow) continue;
+    for (const flow of ungroupedFlows) {
       ul.appendChild(buildScenarioListItem(flow, onSelect));
     }
+    ugWrap.appendChild(ul);
+    list.appendChild(ugWrap);
+  } else if (ungrouped.length && getFlowListSearchQuery()) {
+    const ugWrap = document.createElement("li");
+    ugWrap.className = "scenario-list-group-wrap";
+    const h = document.createElement("div");
+    h.className = "scenario-ungrouped-heading muted field-label";
+    h.textContent = "Ungrouped";
+    ugWrap.appendChild(h);
+    const ul = document.createElement("ul");
+    ul.className = "scenario-group-flows";
+    const hint = document.createElement("li");
+    hint.className = "muted scenario-list-empty";
+    hint.style.listStyle = "none";
+    hint.textContent = "No matching ungrouped flows";
+    ul.appendChild(hint);
     ugWrap.appendChild(ul);
     list.appendChild(ugWrap);
   }
 
   syncScenarioListSelection();
+
+  if (
+    getFlowListSearchQuery() &&
+    !list.querySelector(".scenario-item") &&
+    !(isDraftSelected() && list.querySelector(`[data-name="${DRAFT_SCENARIO_ID}"]`))
+  ) {
+    list.innerHTML = "";
+    const empty = document.createElement("li");
+    empty.className = "scenario-list-empty";
+    empty.textContent = "No flows match filter";
+    list.appendChild(empty);
+  }
 }
 
 function appendLog(line) {

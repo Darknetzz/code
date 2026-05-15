@@ -44,6 +44,7 @@ from webbot.scenario_store import (
     list_all_scenario_names,
     load_json_scenario,
     load_python_source,
+    remove_scenario_from_all_groups,
     save_groups_document,
     save_json_scenario,
     save_python_source,
@@ -314,6 +315,7 @@ def api_delete_scenario(name: str) -> dict:
             delete_python_scenario(name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    remove_scenario_from_all_groups(name)
     return {"ok": True}
 
 

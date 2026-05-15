@@ -232,3 +232,21 @@ def get_group_by_id(group_id: str) -> FlowGroup:
         if g.id == group_id:
             return FlowGroup(id=g.id, label=g.label, scenario_names=list(g.scenario_names))
     raise KeyError(f"Unknown group: {group_id}")
+
+
+def remove_scenario_from_all_groups(name: str) -> None:
+    """Drop ``name`` from every group's ``scenario_names`` and persist if anything changed."""
+    n = name.strip()
+    if not n:
+        return
+    doc = load_groups_document()
+    groups: list[FlowGroup] = []
+    changed = False
+    for g in doc.groups:
+        before = list(g.scenario_names)
+        filtered = [x for x in g.scenario_names if x.strip() != n]
+        if filtered != before:
+            changed = True
+        groups.append(FlowGroup(id=g.id, label=g.label, scenario_names=filtered))
+    if changed:
+        save_groups_document(GroupsDocument(groups=groups))

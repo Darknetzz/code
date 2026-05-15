@@ -46,6 +46,63 @@ header {
   min-width: 0;
 }
 
+.app-header-health-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+.app-header-health-row .muted {
+  margin: 0;
+}
+
+.header-ws-status {
+  font-size: 0.82rem;
+}
+
+.header-ws-status.ws-live {
+  color: var(--success);
+}
+
+.header-ws-status.ws-reconnect {
+  color: #d29922;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.flow-list-filter-input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.workspace-run-card .hint-below-field.run-channel-hint,
+.workspace-run-card .hint-below-field.run-slowmo-hint {
+  margin: -0.15rem 0 0.35rem;
+}
+
+.workspace-run-card select {
+  width: 100%;
+}
+
 header h1 {
   margin: 0 0 0.25rem;
   font-size: 1.5rem;
@@ -1364,6 +1421,31 @@ button:disabled {
 
 .status.failed {
   color: var(--danger);
+}
+
+.log-card-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.log-card-heading {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.log-card-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.log-card-actions button {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
 }
 
 .log-card pre {
