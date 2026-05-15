@@ -2308,7 +2308,8 @@ function fieldCheckbox(name, labelText, checked, hint = "", helpId = null) {
   return label;
 }
 
-function syncStepFromDom(index, row) {
+/** Apply root step row DOM into `builderSteps` without updating unsaved indicators. */
+function applyStepFromDom(index, row) {
   const prev = builderSteps[index];
   const action =
     row.querySelector('[data-field="action"]')?.value || prev.action;
@@ -2333,6 +2334,10 @@ function syncStepFromDom(index, row) {
     step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
   }
   builderSteps[index] = normalizeStep(step);
+}
+
+function syncStepFromDom(index, row) {
+  applyStepFromDom(index, row);
   syncUnsavedIndicators();
 }
 
@@ -2443,7 +2448,7 @@ function collectDocument() {
   flushAllIfPresentDomState();
   builderSteps.forEach((_, i) => {
     const row = document.querySelector(`[data-step-index="${i}"]`);
-    if (row) syncStepFromDom(i, row);
+    if (row) applyStepFromDom(i, row);
   });
   return {
     name: $("build-name").value.trim(),
