@@ -26,7 +26,7 @@ impl ShellState {
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),
-            argv0: String::from("xshe"),
+            argv0: String::from("dsh"),
             pending_exit: None,
             exported: HashSet::new(),
         }
@@ -43,7 +43,7 @@ impl ShellState {
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),
-            argv0: String::from("xshe"),
+            argv0: String::from("dsh"),
             pending_exit: None,
             exported,
         }

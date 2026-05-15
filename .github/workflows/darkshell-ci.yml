@@ -1,0 +1,34 @@
+name: darkshell-ci
+
+on:
+  push:
+    paths:
+      - "Rust/darkshell/**"
+      - ".github/workflows/darkshell-ci.yml"
+  pull_request:
+    paths:
+      - "Rust/darkshell/**"
+      - ".github/workflows/darkshell-ci.yml"
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Rust/darkshell
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo check
+        run: cargo check --verbose
+
+      - name: cargo test
+        run: cargo test --verbose

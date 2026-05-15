@@ -1,0 +1,27 @@
+[package]
+name = "darkshell"
+version = "0.1.0"
+edition = "2021"
+description = "Darkshell (dsh): Bash-inspired cross-platform experimental shell"
+license = "MIT OR Apache-2.0"
+default-run = "dsh"
+
+[[bin]]
+name = "dsh"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+dirs = "5"
+is-terminal = "0.4"
+rustyline = "14"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"

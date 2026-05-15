@@ -1,4 +1,4 @@
-//! Abstract syntax for xshe (Bash-inspired subset).
+//! Abstract syntax for Darkshell / `dsh` (Bash-inspired subset).
 #![allow(dead_code)]
 
 #[derive(Debug, Clone, PartialEq, Eq)]

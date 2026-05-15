@@ -17,7 +17,11 @@ use clap::Parser;
 use is_terminal::IsTerminal;
 
 #[derive(Parser, Debug)]
-#[command(name = "xshe", version, about = "Cross-platform Bash-like experimental shell")]
+#[command(
+    name = "dsh",
+    version,
+    about = "Darkshell (dsh) — cross-platform Bash-like experimental shell"
+)]
 struct Cli {
     #[arg(short = 'c', long, value_name = "COMMAND")]
     command: Option<String>,
@@ -39,7 +43,7 @@ fn main() -> Result<()> {
     let stdin_tty = stdin.is_terminal();
 
     if let Some(code) = cli.command {
-        st.argv0 = "xshe".into();
+        st.argv0 = "dsh".into();
         st.positional.clear();
         interp::eval_source(&mut st, &code)?;
     } else if let Some(path) = cli.script_and_args.first() {
