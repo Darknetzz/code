@@ -1391,6 +1391,23 @@ function fieldSection(title) {
   return el;
 }
 
+/** Collapsible group of fields inside a step row (native details/summary). */
+function collapsibleFieldGroup(title, nodes, options = {}) {
+  const { open = false } = options;
+  const details = document.createElement("details");
+  details.className = "step-fields-collapsible";
+  if (open) details.open = true;
+  const summary = document.createElement("summary");
+  summary.className = "step-fields-collapsible-summary";
+  summary.textContent = title;
+  details.appendChild(summary);
+  const body = document.createElement("div");
+  body.className = "step-fields-collapsible-body";
+  for (const node of nodes) body.appendChild(node);
+  details.appendChild(body);
+  return details;
+}
+
 function appendFieldLabel(parent, labelText, hint, helpId) {
   const row = document.createElement("div");
   row.className = "label-row";
