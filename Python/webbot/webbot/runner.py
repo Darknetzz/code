@@ -154,7 +154,7 @@ class Runner:
                     self._status.loop = i + 1
                     self._run_context.set_loop(i + 1, config.loops)
                     if config.loops > 1:
-                        self._log(f"—— Loop {i + 1}/{config.loops} ——")
+                        self._log(f"--- Loop {i + 1}/{config.loops} ---")
 
                     try:
                         await scenario_fn(page)

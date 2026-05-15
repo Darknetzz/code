@@ -23,7 +23,7 @@ def step_label(step: Step) -> str:
     if isinstance(step, GotoStep):
         return f"goto {step.url}"
     if isinstance(step, DelayStep):
-        return f"delay {step.min}–{step.max}s"
+        return f"delay {step.min}-{step.max}s"
     if isinstance(step, ScrollStep):
         dy = step.delta_y if step.delta_y is not None else "auto"
         return f"scroll (delta_y={dy})"

@@ -36,17 +36,17 @@ class RunContext:
         self.steps = total
         self.step_label = label
         loop_part = f"loop {self.loop}/{self.loops} · " if self.loops > 1 else ""
-        self._log(f"→ {loop_part}step {index}/{total}: {label}")
+        self._log(f"[..] {loop_part}step {index}/{total}: {label}")
         self._notify_status()
 
     def complete_step(self, index: int, total: int, label: str) -> None:
         loop_part = f"loop {self.loop}/{self.loops} · " if self.loops > 1 else ""
-        self._log(f"✓ {loop_part}step {index}/{total}: {label}")
+        self._log(f"[OK] {loop_part}step {index}/{total}: {label}")
         self._notify_status()
 
     def fail_step(self, index: int, total: int, label: str, error: str) -> None:
         loop_part = f"loop {self.loop}/{self.loops} · " if self.loops > 1 else ""
-        self._log(f"✗ {loop_part}step {index}/{total}: {label} — {error}")
+        self._log(f"[FAIL] {loop_part}step {index}/{total}: {label} - {error}")
         self._notify_status()
 
 
