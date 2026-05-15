@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+import webbrowser
 from enum import Enum
-from pathlib import Path
 from typing import Optional
 
 import typer
@@ -18,9 +18,10 @@ from rich.console import Console
 from rich.table import Table
 
 from webbot import __version__
-from webbot.browser import BrowserConfig, get_app_config_dir, get_profile_dir, persistent_browser, save_failure_screenshot
+from webbot.browser import get_profile_dir
 from webbot.nodriver_browser import nodriver_available, nodriver_browser
-from webbot.scenarios import get_scenario, list_scenarios
+from webbot.runner import RunConfig, get_runner
+from webbot.scenarios import get_scenario, list_scenario_info
 
 console = Console()
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -31,102 +32,34 @@ class Driver(str, Enum):
     nodriver = "nodriver"
 
 
-def _browser_config(
-    headless: bool,
-    channel: Optional[str],
-    slow_mo: int,
-) -> BrowserConfig:
-    return BrowserConfig(
-        headless=headless,
-        channel=channel or "chrome",
-        slow_mo=slow_mo,
-    )
+async def _open_url_playwright(url: str, headless: bool, channel: Optional[str], slow_mo: int) -> None:
+    from webbot.browser import BrowserConfig, persistent_browser
 
-
-async def _run_with_playwright(
-    config: BrowserConfig,
-    url: str | None,
-    scenario_name: str | None,
-    *,
-    loops: int = 1,
-    pause_between_loops_sec: float = 0.0,
-) -> None:
+    config = BrowserConfig(headless=headless, channel=channel or "chrome", slow_mo=slow_mo)
     async with persistent_browser(config) as (_context, page):
-        if url:
-            await page.goto(url, wait_until="domcontentloaded")
-            console.print(f"[green]Opened[/green] {url}")
-            console.print("[dim]Close the browser window to exit.[/dim]")
-            try:
-                while True:
-                    await asyncio.sleep(1)
-            except KeyboardInterrupt:
-                return
-
-        if scenario_name:
-            scenario = get_scenario(scenario_name)
-            try:
-                for i in range(loops):
-                    if loops > 1:
-                        console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
-                    await scenario(page)
-                    if i < loops - 1 and pause_between_loops_sec > 0:
-                        console.print(
-                            f"[dim]Pausing {pause_between_loops_sec:.0f}s before next loop...[/dim]"
-                        )
-                        await asyncio.sleep(pause_between_loops_sec)
-                console.print(f"[green]Scenario '{scenario_name}' completed.[/green]")
-            except Exception as exc:
-                shot = await save_failure_screenshot(page, scenario_name)
-                if shot:
-                    console.print(f"[yellow]Screenshot saved:[/yellow] {shot}")
-                raise exc
+        await page.goto(url, wait_until="domcontentloaded")
+        console.print(f"[green]Opened[/green] {url}")
+        console.print("[dim]Close the browser window to exit.[/dim]")
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            return
 
 
-async def _run_with_nodriver(
-    config: BrowserConfig,
-    url: str | None,
-    scenario_name: str | None,
-    *,
-    loops: int = 1,
-    pause_between_loops_sec: float = 0.0,
-) -> None:
+async def _open_url_nodriver(url: str, headless: bool) -> None:
+    from webbot.browser import BrowserConfig
+
+    config = BrowserConfig(headless=headless)
     async with nodriver_browser(config) as page:
-        if url:
-            await page.goto(url)
-            console.print(f"[green]Opened[/green] {url} [dim](nodriver)[/dim]")
-            console.print("[dim]Press Ctrl+C to exit.[/dim]")
-            try:
-                while True:
-                    await asyncio.sleep(1)
-            except KeyboardInterrupt:
-                return
-
-        if scenario_name:
-            if scenario_name != "example":
-                console.print(
-                    "[yellow]Nodriver mode only supports the 'example' scenario for now. "
-                    "Use --driver playwright for other scenarios.[/yellow]"
-                )
-            from webbot.scenarios.example_site import run as example_run
-
-            try:
-                for i in range(loops):
-                    if loops > 1:
-                        console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
-                    await example_run(page)  # type: ignore[arg-type]
-                    if i < loops - 1 and pause_between_loops_sec > 0:
-                        console.print(
-                            f"[dim]Pausing {pause_between_loops_sec:.0f}s before next loop...[/dim]"
-                        )
-                        await asyncio.sleep(pause_between_loops_sec)
-                console.print(f"[green]Scenario '{scenario_name}' completed.[/green]")
-            except Exception as exc:
-                screenshots = get_app_config_dir() / "screenshots"
-                screenshots.mkdir(parents=True, exist_ok=True)
-                path = screenshots / f"{scenario_name}-nodriver.png"
-                await page.screenshot(str(path))
-                console.print(f"[yellow]Screenshot saved:[/yellow] {path}")
-                raise exc
+        await page.goto(url)
+        console.print(f"[green]Opened[/green] {url} [dim](nodriver)[/dim]")
+        console.print("[dim]Press Ctrl+C to exit.[/dim]")
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            return
 
 
 @app.command()
@@ -142,8 +75,6 @@ def open(
     slow_mo: int = typer.Option(0, "--slow-mo", help="Playwright slow-motion delay in ms"),
 ):
     """Open a URL in a headed browser with a saved profile (cookies persist)."""
-    config = _browser_config(headless, channel, slow_mo)
-
     if driver == Driver.nodriver:
         if not nodriver_available():
             console.print(
@@ -151,9 +82,9 @@ def open(
                 "Use --driver playwright (default) or Python 3.10–3.12 with nodriver installed.[/bold red]"
             )
             raise typer.Exit(1)
-        asyncio.run(_run_with_nodriver(config, url, None))
+        asyncio.run(_open_url_nodriver(url, headless))
     else:
-        asyncio.run(_run_with_playwright(config, url, None))
+        asyncio.run(_open_url_playwright(url, headless, channel, slow_mo))
 
 
 @app.command("run")
@@ -171,8 +102,6 @@ def run_scenario(
     ),
 ):
     """Run a named click/type scenario with human-like behavior."""
-    config = _browser_config(headless, channel, slow_mo)
-
     if loops < 1:
         console.print("[bold red]--loops must be at least 1[/bold red]")
         raise typer.Exit(1)
@@ -190,25 +119,66 @@ def run_scenario(
                 "Use --driver playwright (default) or Python 3.10–3.12 with nodriver installed.[/bold red]"
             )
             raise typer.Exit(1)
-        asyncio.run(
-            _run_with_nodriver(
-                config,
-                None,
-                scenario,
-                loops=loops,
-                pause_between_loops_sec=pause_between_loops,
-            )
-        )
-    else:
-        asyncio.run(
-            _run_with_playwright(
-                config,
-                None,
-                scenario,
-                loops=loops,
-                pause_between_loops_sec=pause_between_loops,
-            )
-        )
+        console.print("[yellow]Nodriver: use playwright driver for JSON scenarios. Running example only.[/yellow]")
+        _run_nodriver_legacy(scenario, headless, loops, pause_between_loops)
+        return
+
+    runner = get_runner()
+    runner.add_log_handler(lambda msg: console.print(msg))
+
+    config = RunConfig(
+        scenario=scenario,
+        loops=loops,
+        pause_between_loops_sec=pause_between_loops,
+        headless=headless,
+        channel=channel,
+        slow_mo=slow_mo,
+    )
+    try:
+        asyncio.run(runner.run_once(config))
+    except Exception:
+        raise typer.Exit(1) from None
+
+
+def _run_nodriver_legacy(scenario: str, headless: bool, loops: int, pause: float) -> None:
+    from webbot.browser import BrowserConfig
+    from webbot.scenarios.example_site import run as example_run
+
+    if scenario != "example":
+        console.print("[yellow]Nodriver only supports 'example' for now.[/yellow]")
+
+    async def _go() -> None:
+        config = BrowserConfig(headless=headless)
+        async with nodriver_browser(config) as page:
+            for i in range(loops):
+                if loops > 1:
+                    console.print(f"[dim]Loop {i + 1}/{loops}[/dim]")
+                await example_run(page)  # type: ignore[arg-type]
+                if i < loops - 1 and pause > 0:
+                    await asyncio.sleep(pause)
+
+    asyncio.run(_go())
+
+
+@app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", help="Bind address (local only recommended)"),
+    port: int = typer.Option(8765, help="HTTP port"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open dashboard in browser"),
+):
+    """Launch the local web dashboard."""
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        console.print("[yellow]Warning: binding to non-localhost exposes the bot to your network.[/yellow]")
+
+    url = f"http://{host}:{port}/"
+    if open_browser:
+        webbrowser.open(url)
+    console.print(f"[green]Webbot UI[/green] at {url}")
+    console.print("[dim]Press Ctrl+C to stop.[/dim]")
+
+    import uvicorn
+
+    uvicorn.run("webbot.server:app", host=host, port=port, log_level="info")
 
 
 @app.command()
@@ -216,8 +186,10 @@ def scenarios():
     """List available scenarios."""
     table = Table(title="Scenarios")
     table.add_column("Name", style="cyan")
+    table.add_column("Type")
     table.add_column("Description")
-    table.add_row("example", "Browse example.com with human-like clicks")
+    for info in list_scenario_info():
+        table.add_row(info.name, info.type, info.description)
     console.print(table)
 
 

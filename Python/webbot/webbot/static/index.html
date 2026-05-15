@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Webbot</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Webbot</h1>
+    <p id="health" class="muted">Loading…</p>
+  </header>
+
+  <nav class="tabs">
+    <button type="button" class="tab active" data-tab="run">Run</button>
+    <button type="button" class="tab" data-tab="builder">Builder</button>
+  </nav>
+
+  <main>
+    <section id="panel-run" class="panel active">
+      <div class="card">
+        <label for="run-scenario">Scenario</label>
+        <select id="run-scenario"></select>
+
+        <div class="row">
+          <label for="run-loops">Loops</label>
+          <input type="number" id="run-loops" min="1" value="1" />
+        </div>
+        <div class="row">
+          <label for="run-pause">Pause between loops (sec)</label>
+          <input type="number" id="run-pause" min="0" step="1" value="0" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="run-headless" />
+          Headless
+        </label>
+
+        <div class="actions">
+          <button type="button" id="btn-start" class="primary">Start</button>
+          <button type="button" id="btn-stop" disabled>Stop</button>
+        </div>
+        <p id="run-status" class="status muted">Idle</p>
+      </div>
+
+      <div class="card log-card">
+        <h2>Log</h2>
+        <pre id="log-output"></pre>
+      </div>
+    </section>
+
+    <section id="panel-builder" class="panel">
+      <div class="card">
+        <label for="build-name">Scenario name</label>
+        <input type="text" id="build-name" placeholder="my_flow" />
+
+        <label for="build-desc">Description</label>
+        <input type="text" id="build-desc" placeholder="Optional" />
+
+        <label for="build-url">Start URL</label>
+        <input type="url" id="build-url" placeholder="https://example.com" />
+
+        <div class="steps-header">
+          <h2>Steps</h2>
+          <select id="add-step-type">
+            <option value="goto">goto</option>
+            <option value="click">click</option>
+            <option value="delay">delay</option>
+            <option value="scroll">scroll</option>
+          </select>
+          <button type="button" id="btn-add-step">Add step</button>
+        </div>
+        <div id="steps-list"></div>
+
+        <div class="actions">
+          <button type="button" id="btn-save" class="primary">Save scenario</button>
+          <button type="button" id="btn-load">Load from Run dropdown</button>
+          <button type="button" id="btn-test-run">Test run</button>
+        </div>
+        <p id="build-msg" class="muted"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
