@@ -446,27 +446,29 @@ function setFlowEditorMode(jsonEditable) {
   }
   const disable = jsonEditable === false;
   wrap?.querySelectorAll("input, select, button").forEach((el) => {
+    if (el.classList.contains("btn-delete-flow")) return;
     if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
       el.disabled = disable;
     } else if (!el.closest(".step-actions")) {
       el.disabled = disable;
     }
   });
+  updateDeleteFlowButton();
 }
 
 function updateDeleteFlowButton() {
-  const btn = $("btn-delete-flow");
-  if (!btn) return;
-  const label = btn.querySelector(".btn-label");
-  if (isDraftSelected()) {
-    btn.disabled = false;
-    if (label) label.textContent = "Discard";
-    btn.setAttribute("aria-label", "Discard draft");
-    return;
-  }
-  if (label) label.textContent = "Delete";
-  btn.setAttribute("aria-label", "Delete");
-  btn.disabled = !selectedScenario;
+  document.querySelectorAll(".btn-delete-flow").forEach((btn) => {
+    const label = btn.querySelector(".btn-label");
+    if (isDraftSelected()) {
+      btn.disabled = false;
+      if (label) label.textContent = "Discard";
+      btn.setAttribute("aria-label", "Discard draft");
+      return;
+    }
+    if (label) label.textContent = "Delete";
+    btn.setAttribute("aria-label", "Delete");
+    btn.disabled = !selectedScenario;
+  });
 }
 
 function populateFlowEditor(doc) {
@@ -2727,9 +2729,14 @@ $("btn-new-flow")?.addEventListener("click", () => createNewFlowFromToolbar());
 $("btn-save-python")?.addEventListener("click", () =>
   savePythonScenario().catch((e) => ($("build-msg-python").textContent = e.message))
 );
-$("btn-delete-flow")?.addEventListener("click", () =>
-  deleteSelectedFlow().catch((e) => ($("build-msg").textContent = e.message))
-);
+document.querySelectorAll(".btn-delete-flow").forEach((btn) => {
+  btn.addEventListener("click", () =>
+    deleteSelectedFlow().catch((e) => {
+      const jsonEditorVisible = !$("flow-editor-wrap")?.classList.contains("hidden");
+      $(jsonEditorVisible ? "build-msg" : "build-msg-python").textContent = e.message;
+    })
+  );
+});
 $("btn-test-run").onclick = async () => {
   try {
     await saveScenario();

@@ -73,8 +73,9 @@ function initStaticIcons() {
     ["btn-add-step", "plus", { label: "Add step" }],
     ["btn-save", "save", { label: "Save flow" }],
     ["btn-test-run", "test", { label: "Test run" }],
+    ["btn-save-python", "save", { label: "Save Python flow" }],
+    ["btn-test-run-python", "test", { label: "Test run" }],
     ["btn-new-flow", "plus", { label: "New flow" }],
-    ["btn-delete-flow", "trash", { label: "Delete" }],
     ["help-prev", "chevronLeft", { label: "Previous" }],
     ["help-next", "chevronRight", { label: "Next" }],
     ["help-close", "close", { label: "Close" }],
@@ -83,6 +84,11 @@ function initStaticIcons() {
     const el = document.getElementById(id);
     if (el) enhanceButton(el, name, opts || {});
   }
+
+  document.querySelectorAll(".btn-delete-flow").forEach((el) => {
+    const label = el.textContent.trim() || "Delete";
+    enhanceButton(el, "trash", { label });
+  });
 
   const logTitle = document.querySelector(".log-card h2");
   if (logTitle && !logTitle.querySelector(".icon")) {

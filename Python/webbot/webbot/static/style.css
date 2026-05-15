@@ -408,11 +408,37 @@ main {
   min-width: 0;
 }
 
-.editor-flow-danger-row {
-  margin: 0.35rem 0 0.75rem;
+/* JSON / Python editor: segmented action group (Save, Test, Delete) */
+.workspace-editor .actions.editor-flow-actions {
+  margin-top: 0.75rem;
 }
 
-.editor-flow-danger-row .btn-with-icon {
+.workspace-editor .button-group {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+}
+
+.workspace-editor .button-group > button {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: min(6.5rem, 100%);
+  border-radius: 0 !important;
+  border: none !important;
+  border-right: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.workspace-editor .button-group > button:last-child {
+  border-right: none !important;
+}
+
+.workspace-editor .button-group > .btn-with-icon {
   justify-content: center;
 }
 

@@ -91,10 +91,6 @@
           <label for="build-name">Flow name</label>
           <input type="text" id="build-name" placeholder="my_flow" autocomplete="off" />
 
-          <div class="editor-flow-danger-row">
-            <button type="button" id="btn-delete-flow" class="danger outline" disabled>Delete</button>
-          </div>
-
           <div id="flow-editor-wrap">
             <label for="build-desc">Description</label>
             <input type="text" id="build-desc" placeholder="Optional" />
@@ -117,9 +113,12 @@
             </div>
             <div id="steps-list"></div>
 
-            <div class="actions">
-              <button type="button" id="btn-save" class="primary">Save flow</button>
-              <button type="button" id="btn-test-run">Test run</button>
+            <div class="actions editor-flow-actions">
+              <div class="button-group" role="group" aria-label="Save, test, and delete flow">
+                <button type="button" id="btn-save" class="primary">Save flow</button>
+                <button type="button" id="btn-test-run">Test run</button>
+                <button type="button" class="btn-delete-flow danger outline" disabled>Delete</button>
+              </div>
             </div>
             <p id="build-msg" class="muted"></p>
           </div>
@@ -138,9 +137,12 @@
               autocomplete="off"
               aria-label="Python scenario source"
             ></textarea>
-            <div class="actions">
-              <button type="button" id="btn-save-python" class="primary">Save Python flow</button>
-              <button type="button" id="btn-test-run-python">Test run</button>
+            <div class="actions editor-flow-actions">
+              <div class="button-group" role="group" aria-label="Save, test, and delete flow">
+                <button type="button" id="btn-save-python" class="primary">Save Python flow</button>
+                <button type="button" id="btn-test-run-python">Test run</button>
+                <button type="button" class="btn-delete-flow danger outline" disabled>Delete</button>
+              </div>
             </div>
             <p id="build-msg-python" class="muted"></p>
           </div>
