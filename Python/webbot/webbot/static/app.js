@@ -2736,7 +2736,7 @@ function renderStepRow(step, index) {
 
   const actions = document.createElement("div");
   actions.className = "step-actions";
-  appendCollapsedWorkflowLabelTrigger(actions, step);
+  appendCollapsedWorkflowLabelTrigger(actions, step, placementMain);
   if (typeof makeIconButton === "function") {
     actions.appendChild(
       makeIconButton("trash", "Remove step", () => removeStep(index), { danger: true })
