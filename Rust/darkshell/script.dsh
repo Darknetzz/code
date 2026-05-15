@@ -1,0 +1,40 @@
+# Example Darkshell (`.dsh`) script — language sketch in SPEC.md.
+# Run from this directory: `cargo run -p dsh -- script.dsh` (or `dsh script.dsh`).
+
+export PROJECT=darkshell
+
+greet() {
+  echo "Hello from $PROJECT — \$# is $#, \$1 is '$1'"
+}
+
+echo "pwd says:"; pwd
+greet "dsh user"
+
+if false; then
+  echo "not taken"
+elif true; then
+  echo "elif branch runs"
+else
+  echo "not taken"
+fi
+
+false || echo "|| runs after a failing command"
+true && echo "&& runs after success"
+
+for w in one two three; do
+  echo "for word: $w"
+done
+
+while false; do
+  echo "this never prints"
+done
+echo "while finished (condition was false)"
+
+export TMPVAR=set
+unset TMPVAR
+echo "after unset, TMPVAR expands to: '$TMPVAR'"
+
+echo "literal dollar outside quotes: \$PATH"
+echo "double-quoted PROJECT: \"$PROJECT\""
+
+help echo
