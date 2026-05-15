@@ -141,7 +141,8 @@ def run_scenario(
         raise typer.Exit(1) from None
 
 
-def main() -> None:
+@app.command("ui")
+def ui(
     host: str = typer.Option("127.0.0.1", help="Bind address (local only recommended)"),
     port: int = typer.Option(8765, help="HTTP port"),
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open dashboard in browser"),
