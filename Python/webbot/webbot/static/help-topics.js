@@ -25,13 +25,13 @@ const HELP_TOPICS = {
   "help.home": {
     title: "Workspace",
     body: [
-      "<p>One screen: flow list and run controls on the left, editor on the right, log at the bottom.</p>",
+      "<p>One screen: <strong>Flows</strong> and <strong>Run</strong> cards on the left, editor on the right, log at the bottom.</p>",
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flow list", "Select a flow. JSON flows open in the editor; Python flows show read-only steps."],
+          ["Flows card", "Select a flow. JSON flows open in the editor; Python flows show read-only steps."],
           ["New / Delete", "Create JSON flows or remove saved JSON flows."],
-          ["Loops / Pause / Headless", "Run options below the list."],
+          ["Run card", "Loops, pause between loops, headless, Start/Stop, and status for the selected flow."],
           ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
           ["Editor", "Name, URL, scenario options, and steps (drag to reorder)."],
           ["Save / Test run", "Save JSON, or save and run immediately."],

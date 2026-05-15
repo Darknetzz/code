@@ -18,43 +18,48 @@
   <main>
     <section id="panel-main" class="panel active">
       <div class="workspace-layout">
-        <aside class="card workspace-sidebar">
-          <div class="workspace-sidebar-toolbar" data-page-help="help.home">
-            <span class="field-label">Flows</span>
-            <div class="workspace-sidebar-actions">
-              <button type="button" id="btn-new-flow">New</button>
-              <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
+        <aside class="workspace-sidebar-column">
+          <div class="card workspace-flows-card">
+            <div class="workspace-sidebar-toolbar" data-page-help="help.home">
+              <span class="field-label">Flows</span>
+              <div class="workspace-sidebar-actions">
+                <button type="button" id="btn-new-flow">New</button>
+                <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
+              </div>
             </div>
-          </div>
-          <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
-
-          <div class="workspace-run-options">
-            <div class="row">
-              <label for="run-loops">Loops</label>
-              <input type="number" id="run-loops" min="1" value="1" />
-            </div>
-            <div class="row">
-              <label for="run-pause">Pause between loops (sec)</label>
-              <input type="number" id="run-pause" min="0" step="1" value="0" />
-            </div>
-            <label class="checkbox">
-              <input type="checkbox" id="run-headless" />
-              Headless
-            </label>
+            <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
           </div>
 
-          <div class="actions workspace-run-actions">
-            <button type="button" id="btn-start" class="primary">Start</button>
-            <button type="button" id="btn-stop" disabled>Stop</button>
+          <div class="card workspace-run-card">
+            <span class="field-label workspace-run-heading">Run</span>
+            <div class="workspace-run-options">
+              <div class="row">
+                <label for="run-loops">Loops</label>
+                <input type="number" id="run-loops" min="1" value="1" />
+              </div>
+              <div class="row">
+                <label for="run-pause">Pause between loops (sec)</label>
+                <input type="number" id="run-pause" min="0" step="1" value="0" />
+              </div>
+              <label class="checkbox">
+                <input type="checkbox" id="run-headless" />
+                Headless
+              </label>
+            </div>
+
+            <div class="actions workspace-run-actions">
+              <button type="button" id="btn-start" class="primary">Start</button>
+              <button type="button" id="btn-stop" disabled>Stop</button>
+            </div>
+            <p id="run-status" class="status muted">Idle</p>
           </div>
-          <p id="run-status" class="status muted">Idle</p>
         </aside>
 
         <div class="card workspace-editor">
           <div id="flow-python-banner" class="flow-python-banner hidden">
             <p><strong id="flow-python-title">Python flow</strong> — defined in source code; not editable in this UI.</p>
             <p id="flow-python-desc" class="flow-python-desc hidden"></p>
-            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Press <strong>Start</strong> in the sidebar to run.</p>
+            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Press <strong>Start</strong> in the Run panel to run.</p>
           </div>
 
           <div id="flow-python-view" class="flow-python-view hidden">

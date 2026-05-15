@@ -322,22 +322,31 @@ main {
   margin-bottom: 1rem;
 }
 
-.workspace-sidebar {
-  position: sticky;
-  top: 1rem;
-  max-height: calc(85vh - 2rem);
+.workspace-sidebar-column {
   display: flex;
   flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 1rem;
   min-width: 0;
-  overflow: hidden;
 }
 
-.workspace-sidebar .scenario-list {
+.workspace-flows-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-flows-card .scenario-list {
   flex: 1;
   min-height: 0;
   max-height: 220px;
-  margin-bottom: 0.75rem;
   overflow-y: auto;
+}
+
+.workspace-run-heading {
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 .workspace-sidebar-toolbar {
@@ -362,9 +371,7 @@ main {
 }
 
 .workspace-run-options {
-  border-top: 1px solid var(--border);
-  padding-top: 0.75rem;
-  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .workspace-run-options .row {
@@ -510,13 +517,12 @@ main {
   }
 
   .flows-picker,
-  .workspace-sidebar {
+  .workspace-sidebar-column {
     position: static;
-    max-height: none;
   }
 
   .flows-picker .scenario-list,
-  .workspace-sidebar .scenario-list {
+  .workspace-flows-card .scenario-list {
     max-height: 180px;
   }
 }
