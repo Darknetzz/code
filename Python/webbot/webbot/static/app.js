@@ -56,9 +56,7 @@ function renderFlowPreviewHtml(doc) {
   if (steps.length === 0) {
     parts.push('<p class="muted">No steps defined.</p>');
   } else {
-    const items = steps
-      .map((s, i) => `<li><span class="flow-step-num">${i + 1}</span> ${escapeHtml(stepPreviewLabel(s))}</li>`)
-      .join("");
+    const items = steps.map((s) => `<li>${escapeHtml(stepPreviewLabel(s))}</li>`).join("");
     parts.push(`<ol class="flow-preview-steps">${items}</ol>`);
   }
   return parts.join("");

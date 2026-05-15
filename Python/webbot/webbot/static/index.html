@@ -23,19 +23,11 @@
   <main>
     <section id="panel-run" class="panel active">
       <div class="run-layout">
-        <div class="card">
+        <div class="card run-controls-card">
           <div class="scenario-list-header" data-help-id="run.scenario">
             <span class="field-label">Scenarios</span>
           </div>
           <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
-
-          <div id="run-flow-preview" class="flow-preview hidden">
-            <div class="flow-preview-header">
-              <h3 class="flow-preview-title">Flow preview</h3>
-              <button type="button" id="btn-edit-flow" class="btn-edit-flow">Edit flow</button>
-            </div>
-            <div id="run-flow-preview-body" class="flow-preview-body"></div>
-          </div>
 
           <div class="row">
             <label for="run-loops" data-help-id="run.loops">Loops</label>
@@ -55,6 +47,14 @@
             <button type="button" id="btn-stop" disabled>Stop</button>
           </div>
           <p id="run-status" class="status muted">Idle</p>
+        </div>
+
+        <div id="run-flow-preview" class="card flow-preview-card hidden">
+          <div class="flow-preview-header">
+            <h2 class="flow-preview-title heading-with-icon">Flow preview</h2>
+            <button type="button" id="btn-edit-flow" class="btn-edit-flow">Edit flow</button>
+          </div>
+          <div id="run-flow-preview-body" class="flow-preview-body"></div>
         </div>
 
         <div class="card log-card">

@@ -97,6 +97,11 @@ function initStaticIcons() {
     stepsHeader.classList.add("heading-with-icon");
     stepsHeader.prepend(icon("list", "icon icon-heading"));
   }
+
+  const previewTitle = document.querySelector(".flow-preview-card .flow-preview-title");
+  if (previewTitle && !previewTitle.querySelector(".icon")) {
+    previewTitle.prepend(icon("flows", "icon icon-heading"));
+  }
 }
 
 function makeIconButton(iconName, label, onClick) {
