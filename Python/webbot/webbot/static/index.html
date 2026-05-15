@@ -79,8 +79,9 @@
 
         <div class="card flows-editor">
           <div id="flow-python-banner" class="flow-python-banner hidden">
-            <p><strong>Python flow</strong> — this scenario is defined in code, not JSON.</p>
-            <p class="muted">Edit <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. You can still run it from the Run tab.</p>
+            <p><strong id="flow-python-title">Python flow</strong> — defined in source code; not editable in this UI.</p>
+            <p id="flow-python-desc" class="flow-python-desc hidden"></p>
+            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Run it from the <strong>Run</strong> tab.</p>
           </div>
 
           <div id="flow-editor-wrap">

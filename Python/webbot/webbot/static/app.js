@@ -81,12 +81,14 @@ async function updateRunFlowPreview(name) {
 
   panel.classList.remove("hidden");
   if (editBtn) {
-    editBtn.disabled = false;
-    editBtn.title = info.type === "json" ? "Edit this flow" : "View in Flows tab (read-only)";
+    const editable = info.type === "json";
+    editBtn.classList.toggle("hidden", !editable);
+    editBtn.disabled = !editable;
+    editBtn.title = "Edit this flow";
   }
 
   if (info.type === "python") {
-    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Not editable in the UI.</p>`;
+    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — edit <code>webbot/scenarios/</code>, not this UI.</p>`;
     return;
   }
 
@@ -106,19 +108,24 @@ function updateDeleteFlowButton() {
   btn.disabled = !info || info.type !== "json";
 }
 
-function setFlowEditorMode(jsonEditable) {
-  const wrap = $("flow-editor-wrap");
+function showPythonFlowPanel(info) {
   const banner = $("flow-python-banner");
-  if (banner) banner.classList.toggle("hidden", jsonEditable !== false);
-  if (wrap) wrap.classList.toggle("flow-editor-readonly", jsonEditable === false);
-  const disable = jsonEditable === false;
-  wrap?.querySelectorAll("input, select, button").forEach((el) => {
-    if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
-      el.disabled = disable;
-    } else if (!el.closest(".step-actions")) {
-      el.disabled = disable;
-    }
-  });
+  const wrap = $("flow-editor-wrap");
+  const titleEl = $("flow-python-title");
+  const descEl = $("flow-python-desc");
+  if (titleEl) titleEl.textContent = info?.name || "Python flow";
+  if (descEl) {
+    const desc = info?.description?.trim();
+    descEl.textContent = desc || "";
+    descEl.classList.toggle("hidden", !desc);
+  }
+  banner?.classList.remove("hidden");
+  wrap?.classList.add("hidden");
+}
+
+function showJsonFlowEditor() {
+  $("flow-python-banner")?.classList.add("hidden");
+  $("flow-editor-wrap")?.classList.remove("hidden");
 }
 
 function populateFlowEditor(doc) {
@@ -144,7 +151,7 @@ function newFlow() {
   selectedScenario = null;
   syncScenarioListSelection();
   clearFlowEditor();
-  setFlowEditorMode(true);
+  showJsonFlowEditor();
   $("build-msg").textContent = "New flow — enter a name and save.";
   updateDeleteFlowButton();
   updateRunFlowPreview(null);
@@ -166,23 +173,17 @@ async function loadFlowIntoEditor(name) {
   setSelectedScenario(name, { skipPreview: true });
 
   if (info.type === "python") {
-    $("build-name").value = info.name;
-    $("build-desc").value = info.description || "";
-    $("build-url").value = "";
-    builderSteps = [];
-    renderSteps();
-    renderScenarioOptions();
-    setFlowEditorMode(false);
-    $("build-msg").textContent = "Python flow — edit in webbot/scenarios/ (source).";
+    showPythonFlowPanel(info);
+    $("build-msg").textContent = "";
     updateDeleteFlowButton();
     await updateRunFlowPreview(name);
     return;
   }
 
+  showJsonFlowEditor();
   try {
     const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
     populateFlowEditor(doc);
-    setFlowEditorMode(true);
     $("build-msg").textContent = `Editing "${name}"`;
     updateDeleteFlowButton();
     await updateRunFlowPreview(name);
@@ -262,20 +263,22 @@ function buildScenarioListItem(s, onSelect) {
   btn.addEventListener("click", () => onSelect(s.name));
   li.appendChild(btn);
 
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.className = "scenario-item-edit btn-icon-only";
-  editBtn.title = s.type === "json" ? "Edit flow" : "View flow (read-only)";
-  if (typeof enhanceButton === "function") {
-    enhanceButton(editBtn, "edit", { iconOnly: true, label: editBtn.title });
-  } else {
-    editBtn.textContent = "✎";
+  if (s.type === "json") {
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "scenario-item-edit btn-icon-only";
+    editBtn.title = "Edit flow";
+    if (typeof enhanceButton === "function") {
+      enhanceButton(editBtn, "edit", { iconOnly: true, label: editBtn.title });
+    } else {
+      editBtn.textContent = "✎";
+    }
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openFlowsTab(s.name);
+    });
+    li.appendChild(editBtn);
   }
-  editBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    openFlowsTab(s.name);
-  });
-  li.appendChild(editBtn);
 
   return li;
 }
@@ -1156,6 +1159,10 @@ async function saveScenario() {
     $("build-msg").textContent = "Name is required";
     return;
   }
+  if (getScenarioInfo(doc.name)?.type === "python") {
+    $("build-msg").textContent = "Cannot save over a built-in Python flow";
+    return;
+  }
   await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
   $("build-msg").textContent = `Saved "${doc.name}"`;
   await loadScenarios();
@@ -1204,7 +1211,8 @@ $("btn-delete-flow")?.addEventListener("click", () =>
 );
 $("btn-edit-flow")?.addEventListener("click", () => {
   const name = getSelectedScenario();
-  if (name) openFlowsTab(name);
+  const info = name ? getScenarioInfo(name) : null;
+  if (name && info?.type === "json") openFlowsTab(name);
 });
 $("btn-test-run").onclick = async () => {
   try {
