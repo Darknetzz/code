@@ -1283,12 +1283,43 @@ function setWebSocketIndicator(mode) {
   }
 }
 
+let wsBackoffMs = 1000;
+let wsReconnectTimer = null;
+let wsGen = 0;
+
+function scheduleWebSocketReconnect() {
+  if (wsReconnectTimer != null) return;
+  const delay = Math.min(wsBackoffMs, 30000);
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = null;
+    connectWebSocket();
+  }, delay);
+  wsBackoffMs = Math.min(wsBackoffMs * 2, 30000);
+}
+
 function connectWebSocket() {
+  const myGen = ++wsGen;
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   setWebSocketIndicator("connecting");
-  ws = new WebSocket(`${proto}//${location.host}/ws/logs`);
-  ws.onopen = () => setWebSocketIndicator("open");
+  const socket = new WebSocket(`${proto}//${location.host}/ws/logs`);
+  if (ws && ws !== socket) {
+    try {
+      ws.onclose = null;
+      ws.close();
+    } catch (_) {}
+  }
+  ws = socket;
+  ws.onopen = () => {
+    if (myGen !== wsGen) return;
+    wsBackoffMs = 1000;
+    if (wsReconnectTimer != null) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    setWebSocketIndicator("open");
+  };
   ws.onmessage = (ev) => {
+    if (myGen !== wsGen) return;
     const msg = JSON.parse(ev.data);
     if (msg.type === "log") appendLog(msg.message);
     if (msg.type === "status") {
@@ -1302,11 +1333,28 @@ function connectWebSocket() {
       }
     }
   };
+  ws.onerror = () => {
+    /* onclose will schedule reconnect */
+  };
   ws.onclose = () => {
+    if (myGen !== wsGen) return;
     setWebSocketIndicator("reconnect");
-    setTimeout(connectWebSocket, 2000);
+    scheduleWebSocketReconnect();
   };
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const needsSocket = !ws || ws.readyState === WebSocket.CLOSED;
+  if (needsSocket) {
+    wsBackoffMs = 1000;
+    if (wsReconnectTimer != null) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    connectWebSocket();
+  }
+});
 
 const STEP_TYPES = [
   "open_url",
