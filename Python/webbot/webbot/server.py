@@ -10,10 +10,14 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
-from webbot.json_scenario import build_step_plan, collect_group_plan_labels, step_label
+from webbot.json_scenario import (
+    build_step_plan,
+    collect_group_plan_labels,
+    document_has_explicit_goto,
+    step_label,
+)
 from webbot.models import (
     FlowGroup,
-    GotoStep,
     GroupsDocument,
     GroupsResponse,
     PythonScenarioSave,
@@ -220,7 +224,7 @@ def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
     else:
         items_flat: list[tuple[int, str]] = []
         offset = 0
-        if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
+        if doc.start_url and not document_has_explicit_goto(doc.steps):
             items_flat.append((1, f"goto {doc.start_url}"))
             offset = 1
 

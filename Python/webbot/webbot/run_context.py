@@ -6,9 +6,11 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any, Literal, TypeVar
 
+from webbot.exceptions import WorkflowExit
+
 T = TypeVar("T")
 
-StepStatus = Literal["pending", "running", "ok", "failed"]
+StepStatus = Literal["pending", "running", "ok", "failed", "skipped"]
 
 _current: ContextVar[RunContext | None] = ContextVar("webbot_run_context", default=None)
 
@@ -99,6 +101,14 @@ class RunContext:
         self._log(f"[FAIL] {loop_part}step {index}/{total}: {label} - {error}")
         self._notify_status()
 
+    def skip_step(self, index: int, total: int, label: str) -> None:
+        entry = self._ensure_step(index, label)
+        entry["status"] = "skipped"
+        entry["error"] = None
+        loop_part = f"loop {self.loop}/{self.loops} · " if self.loops > 1 else ""
+        self._log(f"[SKIP] {loop_part}step {index}/{total}: {label}")
+        self._notify_status()
+
 
 def get_run_context() -> RunContext | None:
     return _current.get()
@@ -126,6 +136,10 @@ async def run_verified_step(
         await fn()
         if ctx:
             ctx.complete_step(index, total, label)
+    except WorkflowExit:
+        if ctx:
+            ctx.complete_step(index, total, label)
+        raise
     except Exception as exc:
         if ctx:
             ctx.fail_step(index, total, label, str(exc))

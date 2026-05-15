@@ -90,6 +90,30 @@ class RunScenarioStep(BaseModel):
     skip_start_url: bool = True
 
 
+class IfPresentStep(BaseModel):
+    """If a locator matches (visible within timeout), run ``then_steps``; otherwise ``else_steps``."""
+
+    action: Literal["if_present"] = "if_present"
+    by: Literal["role", "text", "css", "test_id", "data"] = "role"
+    role: str | None = None
+    name: str | None = None
+    text: str | None = None
+    selector: str | None = None
+    test_id: str | None = None
+    data_attr: str | None = None
+    data_value: str | None = None
+    timeout_ms: int = Field(default=3000, ge=0)
+    then_steps: list["Step"] = Field(default_factory=list)
+    else_steps: list["Step"] = Field(default_factory=list)
+
+
+class ExitStep(BaseModel):
+    """End the scenario run successfully without executing further steps."""
+
+    action: Literal["exit"] = "exit"
+    message: str = ""
+
+
 class SubmitFormStep(BaseModel):
     """Fill fields and submit a form (GET or POST per the form's method attribute)."""
 
@@ -109,7 +133,17 @@ class SubmitFormStep(BaseModel):
 
 
 Step = Annotated[
-    Union[GotoStep, DelayStep, ScrollStep, ClickStep, FillStep, SubmitFormStep, RunScenarioStep],
+    Union[
+        GotoStep,
+        DelayStep,
+        ScrollStep,
+        ClickStep,
+        FillStep,
+        SubmitFormStep,
+        RunScenarioStep,
+        IfPresentStep,
+        ExitStep,
+    ],
     Field(discriminator="action"),
 ]
 
@@ -208,7 +242,7 @@ class PythonScenarioSave(BaseModel):
 class StepProgressItem(BaseModel):
     index: int
     label: str
-    status: Literal["pending", "running", "ok", "failed"] = "pending"
+    status: Literal["pending", "running", "ok", "failed", "skipped"] = "pending"
     error: str | None = None
 
 
@@ -222,3 +256,7 @@ class RunStatusResponse(BaseModel):
     step_label: str | None = None
     error: str | None = None
     step_progress: list[StepProgressItem] = Field(default_factory=list)
+
+
+ScenarioDocument.model_rebuild()
+IfPresentStep.model_rebuild()

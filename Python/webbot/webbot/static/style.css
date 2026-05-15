@@ -304,6 +304,16 @@ main {
   font-weight: 700;
 }
 
+.run-step-skipped {
+  opacity: 0.6;
+  border-left-color: var(--border, #444);
+}
+
+.run-step-skipped .run-step-marker {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .run-step-marker {
   width: 1.1rem;
   text-align: center;

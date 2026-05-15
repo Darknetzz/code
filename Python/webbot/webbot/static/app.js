@@ -149,6 +149,10 @@ function stepPreviewLabel(step) {
       return `submit_form (${(step.method || "post").toUpperCase()}) ${(step.fields || []).length} field(s)`;
     case "run_scenario":
       return `run scenario: ${step.scenario || "?"}`;
+    case "if_present":
+      return `if_present (${step.by || "?"} …)`;
+    case "exit":
+      return step.message ? `exit: ${step.message}` : "exit";
     default:
       return step.action;
   }
@@ -162,6 +166,8 @@ function stepProgressMarker(status) {
       return "✓";
     case "failed":
       return "✗";
+    case "skipped":
+      return "–";
     default:
       return "○";
   }
@@ -304,7 +310,7 @@ function upsertRunStepEntry(index, label, status, error = null) {
 
 function applyStepProgressFromLogLine(line) {
   if (!runShowStepProgress) return;
-  const m = line.match(/\[(?:\.\.|OK|FAIL)\](?:.*?)step (\d+)\/(\d+):\s*(.+?)(?:\s+-\s+(.+))?$/);
+  const m = line.match(/\[(?:\.\.|OK|FAIL|SKIP)\](?:.*?)step (\d+)\/(\d+):\s*(.+?)(?:\s+-\s+(.+))?$/);
   if (!m) return;
   const index = parseInt(m[1], 10);
   const label = m[3].trim();
@@ -312,6 +318,7 @@ function applyStepProgressFromLogLine(line) {
   let status = "running";
   if (line.startsWith("[OK]")) status = "ok";
   else if (line.startsWith("[FAIL]")) status = "failed";
+  else if (line.startsWith("[SKIP]")) status = "skipped";
 
   upsertRunStepEntry(index, label, status, err);
   if (status === "running") {
@@ -913,7 +920,17 @@ function connectWebSocket() {
   ws.onclose = () => setTimeout(connectWebSocket, 2000);
 }
 
-const STEP_TYPES = ["goto", "click", "fill", "submit_form", "delay", "scroll", "run_scenario"];
+const STEP_TYPES = [
+  "goto",
+  "click",
+  "fill",
+  "submit_form",
+  "delay",
+  "scroll",
+  "run_scenario",
+  "if_present",
+  "exit",
+];
 
 function changeStepType(index, newAction) {
   if (builderSteps[index].action === newAction) return;
@@ -972,6 +989,18 @@ function defaultStep(action) {
         inherit_delays: false,
         skip_start_url: true,
       };
+    case "if_present":
+      return {
+        action: "if_present",
+        by: "role",
+        role: "button",
+        name: "",
+        timeout_ms: 3000,
+        then_steps: [],
+        else_steps: [],
+      };
+    case "exit":
+      return { action: "exit", message: "" };
     default:
       return { action };
   }
@@ -1001,6 +1030,12 @@ function normalizeStep(step) {
     s.skip_start_url = s.skip_start_url !== false;
     if (typeof s.scenario !== "string") s.scenario = "";
   }
+  if (s.action === "if_present") {
+    if (typeof s.timeout_ms !== "number" || Number.isNaN(s.timeout_ms)) s.timeout_ms = 3000;
+    if (!Array.isArray(s.then_steps)) s.then_steps = [];
+    if (!Array.isArray(s.else_steps)) s.else_steps = [];
+  }
+  if (s.action === "exit" && typeof s.message !== "string") s.message = "";
   return s;
 }
 
@@ -1471,6 +1506,29 @@ function renderStepRow(step, index) {
         null
       )
     );
+  } else if (step.action === "if_present") {
+    if (!step.by) step.by = "role";
+    appendLocatorFields(fields, step, false, index);
+    fields.appendChild(
+      labeledField(
+        "timeout_ms",
+        "Visible timeout (ms)",
+        step.timeout_ms ?? 3000,
+        "number",
+        "How long to wait for a visible match; 0 checks immediately",
+        "step.if_present.timeout"
+      )
+    );
+    fields.appendChild(
+      labeledJsonStepArray("then_steps", "Then steps (JSON array)", step.then_steps)
+    );
+    fields.appendChild(
+      labeledJsonStepArray("else_steps", "Else steps (JSON array)", step.else_steps)
+    );
+  } else if (step.action === "exit") {
+    fields.appendChild(
+      labeledField("message", "Log message (optional)", step.message || "", "text", "", "step.exit.message")
+    );
   } else if (step.action === "submit_form") {
     fields.appendChild(
       labeledSelect(
@@ -1565,12 +1623,31 @@ function renderStepRow(step, index) {
   }
   row.appendChild(actions);
 
-  fields.querySelectorAll("input, select").forEach((inp) => {
+  fields.querySelectorAll("input, select, textarea").forEach((inp) => {
     inp.addEventListener("change", () => syncStepFromDom(index, row));
     inp.addEventListener("input", () => syncStepFromDom(index, row));
   });
 
   return row;
+}
+
+function labeledJsonStepArray(name, labelText, stepsValue) {
+  const wrap = document.createElement("div");
+  wrap.className = "field-labeled step-json-array";
+  appendFieldLabel(
+    wrap,
+    labelText,
+    'Array of step objects, e.g. [{"action":"click","by":"role","role":"button"}]',
+    null
+  );
+  const ta = document.createElement("textarea");
+  ta.className = "step-json-array-input";
+  ta.dataset.jsonArray = name;
+  ta.rows = 5;
+  ta.spellcheck = false;
+  ta.value = JSON.stringify(stepsValue ?? [], null, 2);
+  wrap.appendChild(ta);
+  return wrap;
 }
 
 function fieldInput(name, value, type = "text") {
@@ -1677,7 +1754,29 @@ function syncStepFromDom(index, row) {
   if (prev.action === "submit_form" && prev.fields) {
     step.fields = prev.fields;
   }
-  builderSteps[index] = step;
+  if (action === "if_present") {
+    const thenTa = row.querySelector('textarea[data-json-array="then_steps"]');
+    const elseTa = row.querySelector('textarea[data-json-array="else_steps"]');
+    step.then_steps = Array.isArray(prev.then_steps) ? prev.then_steps : [];
+    step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
+    if (thenTa) {
+      try {
+        const parsed = JSON.parse(thenTa.value.trim() || "[]");
+        step.then_steps = Array.isArray(parsed) ? parsed : step.then_steps;
+      } catch {
+        /* keep previous */
+      }
+    }
+    if (elseTa) {
+      try {
+        const parsed = JSON.parse(elseTa.value.trim() || "[]");
+        step.else_steps = Array.isArray(parsed) ? parsed : step.else_steps;
+      } catch {
+        /* keep previous */
+      }
+    }
+  }
+  builderSteps[index] = normalizeStep(step);
 }
 
 function renderSteps() {

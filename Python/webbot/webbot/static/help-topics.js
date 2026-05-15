@@ -196,6 +196,8 @@ const HELP_TOPICS = {
         ["<code>delay</code>", "Wait a random duration."],
         ["<code>scroll</code>", "Wheel scroll with optional overshoot."],
         ["<code>run_scenario</code>", "Run another saved JSON flow inline (same browser tab)."],
+        ["<code>if_present</code>", "If an element is visible, run one branch of steps; otherwise the other."],
+        ["<code>exit</code>", "Stop the flow successfully (remaining steps are not run)."],
       ]),
     ],
   },
@@ -297,6 +299,31 @@ const HELP_TOPICS = {
       "<p><strong>Skip nested start URL goto</strong> — when checked, the nested flow’s implicit <code>start_url</code> navigation is omitted (useful when the parent already opened the right page).</p>",
       "<p>Circular references (A→B→A) are rejected.</p>",
     ],
+  },
+  "step.if_present": {
+    title: "If present (conditional)",
+    body: [
+      "<p>Waits for an element (same <strong>Find by</strong> options as a click). If it becomes visible within the timeout, Webbot runs every step in <strong>Then steps</strong>; otherwise it runs <strong>Else steps</strong>.</p>",
+      "<p><strong>Then / Else steps</strong> are a JSON array of step objects — the same shape as the top-level flow (each object has an <code>action</code> field). Unused branch steps are skipped in the live step list during a run.</p>",
+      "<p><code>timeout_ms: 0</code> means no wait: Webbot checks visibility immediately.</p>",
+    ],
+  },
+  "step.if_present.timeout": {
+    title: "Visible timeout (if present)",
+    body: [
+      "<p>Milliseconds to wait for at least one matching element to be visible. On timeout, the <strong>Else</strong> branch runs.</p>",
+    ],
+  },
+  "step.exit": {
+    title: "Exit step",
+    body: [
+      "<p>Ends the scenario run successfully. No further steps in the flow are executed; the run completes without error.</p>",
+      "<p>Use inside an <code>if_present</code> branch when one path should stop early.</p>",
+    ],
+  },
+  "step.exit.message": {
+    title: "Exit log message",
+    body: ["<p>Optional line written to the run log when the exit step runs.</p>"],
   },
   "step.submit_form": {
     title: "Submit form step",
@@ -449,6 +476,10 @@ const HELP_NAV = [
       "step.scroll.overscroll",
       "step.scroll.after",
       "step.run_scenario",
+      "step.if_present",
+      "step.if_present.timeout",
+      "step.exit",
+      "step.exit.message",
       "step.submit_form",
       "step.submit_form.method",
       "step.submit_form.form_selector",
