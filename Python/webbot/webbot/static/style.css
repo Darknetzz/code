@@ -154,6 +154,11 @@ main {
   color: var(--text);
 }
 
+.card select:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .scenario-list-header {
   display: flex;
   align-items: center;
@@ -557,7 +562,11 @@ summary.workspace-dropdown-summary.success.outline:hover {
 }
 
 .workspace-sidebar-actions .btn-with-icon {
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 .workspace-run-options {

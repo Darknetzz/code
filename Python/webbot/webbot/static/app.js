@@ -653,14 +653,17 @@ function syncFlowKindSelectFromDraftOrScenario() {
   if (!sel) return;
   if (selectedScenario === DRAFT_SCENARIO_ID) {
     sel.value = draftIsPython ? "python" : "json";
-    return;
-  }
-  if (selectedScenario) {
+  } else if (selectedScenario) {
     const info = getScenarioInfo(selectedScenario);
     sel.value = info?.type === "python" ? "python" : "json";
-    return;
+  } else {
+    sel.value = draftIsPython ? "python" : "json";
   }
-  sel.value = draftIsPython ? "python" : "json";
+  const canPickKind = isDraftSelected() || !selectedScenario;
+  sel.disabled = !canPickKind;
+  sel.title = canPickKind
+    ? "Choose JSON step builder or Python source for a new flow."
+    : "Saved flows are either .json or .py — type is fixed. Use New flow to create the other kind.";
 }
 
 function setSelectedScenario(name, options = {}) {

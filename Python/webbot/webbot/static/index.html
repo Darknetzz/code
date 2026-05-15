@@ -74,13 +74,18 @@
           </div>
 
           <label for="build-flow-kind">Flow type</label>
-          <select id="build-flow-kind" aria-describedby="build-flow-kind-hint">
+          <select
+            id="build-flow-kind"
+            aria-describedby="build-flow-kind-hint"
+            title="Choose JSON step builder or Python source for a new flow."
+          >
             <option value="json">JSON flow (step builder)</option>
             <option value="python">Python flow (source editor)</option>
           </select>
           <p id="build-flow-kind-hint" class="muted hint-below-field">
-            Picks the editor used for a <strong>new</strong> flow. Choosing a saved flow resets this to
-            that flow&rsquo;s type; switching while editing adjusts the draft (with confirmation).
+            Picks JSON steps vs Python source for a <strong>new draft</strong> only — a saved flow&rsquo;s type is fixed
+            by <code>.json</code> or <code>.py</code> (the menu is grayed while editing it). Use
+            <strong>New flow</strong> to start the other kind. Switching kinds on an unsaved draft asks for confirmation.
           </p>
 
           <label for="build-name">Flow name</label>
@@ -89,6 +94,8 @@
           <div class="editor-flow-danger-row">
             <button type="button" id="btn-delete-flow" class="danger outline" disabled>Delete</button>
           </div>
+
+          <div id="flow-editor-wrap">
             <label for="build-desc">Description</label>
             <input type="text" id="build-desc" placeholder="Optional" />
 
