@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from webbot.browser import BrowserConfig, persistent_browser, save_failure_screenshot
+from webbot.run_context import RunContext, reset_run_context, set_run_context
 from webbot.scenarios import get_scenario
 
 
@@ -35,10 +36,14 @@ class RunStatus:
     scenario: str | None = None
     loop: int = 0
     loops: int = 0
+    step: int = 0
+    steps: int = 0
+    step_label: str | None = None
     error: str | None = None
 
 
 LogHandler = Callable[[str], None]
+StatusHandler = Callable[[RunStatus], None]
 
 
 class Runner:
@@ -49,7 +54,9 @@ class Runner:
         self._cancel = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._log_handlers: list[LogHandler] = []
+        self._status_handlers: list[StatusHandler] = []
         self._lock = asyncio.Lock()
+        self._run_context: RunContext | None = None
 
     @property
     def status(self) -> RunStatus:
@@ -57,6 +64,9 @@ class Runner:
 
     def add_log_handler(self, handler: LogHandler) -> None:
         self._log_handlers.append(handler)
+
+    def add_status_handler(self, handler: StatusHandler) -> None:
+        self._status_handlers.append(handler)
 
     def remove_log_handler(self, handler: LogHandler) -> None:
         if handler in self._log_handlers:
@@ -66,6 +76,19 @@ class Runner:
         for handler in self._log_handlers:
             try:
                 handler(message)
+            except Exception:
+                pass
+
+    def _notify_status(self) -> None:
+        ctx = self._run_context
+        if ctx:
+            self._status.step = ctx.step
+            self._status.steps = ctx.steps
+            self._status.step_label = ctx.step_label
+            self._status.loop = ctx.loop
+        for handler in self._status_handlers:
+            try:
+                handler(self._status)
             except Exception:
                 pass
 
@@ -102,6 +125,7 @@ class Runner:
             if self._status.state == RunState.running:
                 self._status.state = RunState.stopped
         self._log("Run stopped by user")
+        self._notify_status()
 
     async def _execute(self, config: RunConfig) -> None:
         self._status = RunStatus(
@@ -110,7 +134,11 @@ class Runner:
             loop=0,
             loops=config.loops,
         )
+        self._notify_status()
         self._log(f"Starting scenario '{config.scenario}' ({config.loops} loop(s))")
+
+        self._run_context = RunContext(log=self._log, notify_status=self._notify_status)
+        token = set_run_context(self._run_context)
 
         browser_cfg = self._browser_config(config)
         scenario_fn = get_scenario(config.scenario)
@@ -120,11 +148,13 @@ class Runner:
                 for i in range(config.loops):
                     if self._cancel.is_set():
                         self._status.state = RunState.stopped
+                        self._notify_status()
                         return
 
                     self._status.loop = i + 1
+                    self._run_context.set_loop(i + 1, config.loops)
                     if config.loops > 1:
-                        self._log(f"Loop {i + 1}/{config.loops}")
+                        self._log(f"—— Loop {i + 1}/{config.loops} ——")
 
                     try:
                         await scenario_fn(page)
@@ -136,7 +166,12 @@ class Runner:
 
                     if self._cancel.is_set():
                         self._status.state = RunState.stopped
+                        self._notify_status()
                         return
+
+                    self._run_context.step = 0
+                    self._run_context.steps = 0
+                    self._run_context.step_label = None
 
                     if i < config.loops - 1 and config.pause_between_loops_sec > 0:
                         self._log(
@@ -148,22 +183,32 @@ class Runner:
                                 timeout=config.pause_between_loops_sec,
                             )
                             self._status.state = RunState.stopped
+                            self._notify_status()
                             return
                         except asyncio.TimeoutError:
                             pass
 
             self._status.state = RunState.completed
+            self._status.step = 0
+            self._status.steps = 0
+            self._status.step_label = None
             self._log(f"Scenario '{config.scenario}' completed")
+            self._notify_status()
 
         except asyncio.CancelledError:
             self._status.state = RunState.stopped
             self._log("Run cancelled")
+            self._notify_status()
             raise
         except Exception as exc:
             self._status.state = RunState.failed
             self._status.error = str(exc)
             self._log(f"Error: {exc}")
+            self._notify_status()
             raise
+        finally:
+            reset_run_context(token)
+            self._run_context = None
 
 
 _runner: Runner | None = None

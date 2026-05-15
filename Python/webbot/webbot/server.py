@@ -44,6 +44,9 @@ def _status_payload() -> dict:
         "scenario": st.scenario,
         "loop": st.loop,
         "loops": st.loops,
+        "step": st.step,
+        "steps": st.steps,
+        "step_label": st.step_label,
         "error": st.error,
     }
 
@@ -54,6 +57,13 @@ def _runner_log_handler(message: str) -> None:
     except RuntimeError:
         return
     loop.create_task(_broadcast({"type": "log", "message": message}))
+
+
+def _runner_status_handler(_status: object) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
     loop.create_task(_broadcast(_status_payload()))
 
 
@@ -63,7 +73,9 @@ _runner_hooked = False
 def _ensure_runner_hooks() -> None:
     global _runner_hooked
     if not _runner_hooked:
-        get_runner().add_log_handler(_runner_log_handler)
+        runner = get_runner()
+        runner.add_log_handler(_runner_log_handler)
+        runner.add_status_handler(_runner_status_handler)
         _runner_hooked = True
 
 
@@ -132,6 +144,9 @@ def api_run_status() -> RunStatusResponse:
         scenario=st.scenario,
         loop=st.loop,
         loops=st.loops,
+        step=st.step,
+        steps=st.steps,
+        step_label=st.step_label,
         error=st.error,
     )
 
@@ -189,16 +204,7 @@ async def ws_logs(websocket: WebSocket) -> None:
     _ws_clients.append(websocket)
     _ensure_runner_hooks()
     st = get_runner().status
-    await websocket.send_json(
-        {
-            "type": "status",
-            "state": st.state.value,
-            "scenario": st.scenario,
-            "loop": st.loop,
-            "loops": st.loops,
-            "error": st.error,
-        }
-    )
+    await websocket.send_json(_status_payload())
     try:
         while True:
             await websocket.receive_text()

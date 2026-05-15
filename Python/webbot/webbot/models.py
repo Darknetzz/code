@@ -67,4 +67,7 @@ class RunStatusResponse(BaseModel):
     scenario: str | None = None
     loop: int = 0
     loops: int = 0
+    step: int = 0
+    steps: int = 0
+    step_label: str | None = None
     error: str | None = None

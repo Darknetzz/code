@@ -10,7 +10,22 @@ function appendLog(line) {
   el.scrollTop = el.scrollHeight;
 }
 
-function setRunStatus(state, detail = "") {
+function formatRunDetail(msg) {
+  const parts = [];
+  if (msg.loops > 1 && msg.loop) {
+    parts.push(`loop ${msg.loop}/${msg.loops}`);
+  }
+  if (msg.state === "running" && msg.step && msg.steps) {
+    parts.push(`step ${msg.step}/${msg.steps}`);
+    if (msg.step_label) parts.push(msg.step_label);
+  } else if (msg.state === "completed" && msg.steps) {
+    parts.push(`${msg.steps} step(s) verified`);
+  }
+  return parts.join(" · ");
+}
+
+function setRunStatus(msg) {
+  const state = typeof msg === "string" ? msg : msg.state;
   const el = $("run-status");
   el.className = "status " + (state || "muted");
   const labels = {
@@ -20,6 +35,7 @@ function setRunStatus(state, detail = "") {
     failed: "Failed",
     stopped: "Stopped",
   };
+  const detail = typeof msg === "object" ? formatRunDetail(msg) : "";
   el.textContent = (labels[state] || state) + (detail ? ` — ${detail}` : "");
 }
 
@@ -66,7 +82,7 @@ function connectWebSocket() {
     const msg = JSON.parse(ev.data);
     if (msg.type === "log") appendLog(msg.message);
     if (msg.type === "status") {
-      setRunStatus(msg.state, msg.loop && msg.loops ? `loop ${msg.loop}/${msg.loops}` : "");
+      setRunStatus(msg);
       if (msg.error) appendLog("Error: " + msg.error);
       updateRunButtons(msg.state);
     }
@@ -290,7 +306,7 @@ $("btn-test-run").onclick = async () => {
     await loadHealth();
     await loadScenarios();
     const st = await api("/api/run/status");
-    setRunStatus(st.state);
+    setRunStatus(st);
     updateRunButtons(st.state);
     connectWebSocket();
     builderSteps = [defaultStep("goto")];
