@@ -8,17 +8,40 @@
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
+    integrity="sha384-zaeBlB/vwYsDRSlFajnDd7OydJ0cWk+c2OWybl3eSUf6hW2EbhlCsQPqKr3gkznT"
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   />
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css"
+    integrity="sha384-ccdJwIIg/K0Ab6aXF4MPACh7ckk61tvQFTrfkhXZEALgAETURNZIAuQLcS/aPbrM"
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   />
+  <script>
+    try {
+      if (localStorage.getItem("webbot.theme") === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    } catch (_) {}
+  </script>
 </head>
 <body>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <input type="file" id="flow-import-input" class="visually-hidden" accept=".json,.py,application/json,text/plain" />
+
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-dialog-title">
+    <div class="confirm-dialog-inner">
+      <h2 id="confirm-dialog-title" class="confirm-dialog-title">Confirm</h2>
+      <p id="confirm-dialog-message" class="confirm-dialog-message"></p>
+      <form method="dialog" class="confirm-dialog-actions">
+        <button type="submit" value="cancel" class="outline">Cancel</button>
+        <button type="submit" value="confirm" class="primary" id="confirm-dialog-ok">OK</button>
+      </form>
+    </div>
+  </dialog>
+
   <header class="app-header">
     <div class="app-header-main">
       <h1>Webbot</h1>
@@ -27,7 +50,10 @@
         <span id="ws-status" class="muted header-ws-status" aria-live="polite"></span>
       </div>
     </div>
-    <button type="button" id="btn-help" class="help-header-btn" aria-label="Help">Help</button>
+    <div class="app-header-actions">
+      <button type="button" id="btn-theme" class="outline theme-toggle-btn" title="Toggle light/dark theme" aria-label="Toggle theme">Theme</button>
+      <button type="button" id="btn-help" class="help-header-btn" aria-label="Help">Help</button>
+    </div>
   </header>
 
   <nav class="app-main-tabs" role="tablist" aria-label="Main views">
@@ -126,9 +152,12 @@
             <div id="steps-list"></div>
 
             <div class="actions editor-flow-actions">
-              <div class="button-group" role="group" aria-label="Save, test, and delete flow">
+              <div class="button-group" role="group" aria-label="Save, test, duplicate, export, import, and delete flow">
                 <button type="button" id="btn-save" class="primary outline">Save</button>
                 <button type="button" id="btn-test-run">Test run</button>
+                <button type="button" id="btn-dup-json" class="outline">Duplicate</button>
+                <button type="button" id="btn-export-json" class="outline">Export</button>
+                <button type="button" id="btn-import-json" class="outline">Import</button>
                 <button type="button" class="btn-delete-flow danger outline" disabled>Delete</button>
               </div>
             </div>
@@ -150,9 +179,12 @@
               aria-label="Python scenario source"
             ></textarea>
             <div class="actions editor-flow-actions">
-              <div class="button-group" role="group" aria-label="Save, test, and delete flow">
+              <div class="button-group" role="group" aria-label="Save, test, duplicate, export, import, and delete flow">
                 <button type="button" id="btn-save-python" class="primary">Save Python flow</button>
                 <button type="button" id="btn-test-run-python">Test run</button>
+                <button type="button" id="btn-dup-python" class="outline">Duplicate</button>
+                <button type="button" id="btn-export-python" class="outline">Export</button>
+                <button type="button" id="btn-import-python" class="outline">Import</button>
                 <button type="button" class="btn-delete-flow danger outline" disabled>Delete</button>
               </div>
             </div>
@@ -273,16 +305,19 @@
 
   <script
     src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
+    integrity="sha384-ZYmwuq4n2gOcNxMSiJ6jyTj+BbIrilr7p6dlq6q5nmSWKmsH9UU4K1qqjycMkfmR"
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   ></script>
   <script
     src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"
+    integrity="sha384-Xy+2exU6lBoT4OpUOtnQb+cUpn+nlJQEHvRobWVtwz6wIsw4oNoO7xyd/l8rYgMy"
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   ></script>
   <script
     src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"
+    integrity="sha384-LjCI3E8qhhxXZvu7+FCvqx9eZYSowFvuJ7z54KsgI/BDPGKEuysqCg/vYiKHvC4Y"
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   ></script>

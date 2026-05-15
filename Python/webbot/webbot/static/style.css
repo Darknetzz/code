@@ -11,6 +11,18 @@
   --layout-max-width: 1520px;
 }
 
+:root[data-theme="light"] {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --muted: #59636e;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --danger: #cf222e;
+  --success: #1a7f37;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -39,6 +51,19 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.app-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.theme-toggle-btn {
+  min-height: 2.25rem;
+  min-width: 2.75rem;
+  font-size: 0.85rem;
 }
 
 .app-header-main {
@@ -2177,5 +2202,115 @@ button:disabled {
     border-right: none;
     border-bottom: 1px solid var(--border);
     max-height: 140px;
+  }
+
+  .workspace-run-card {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 -4px 16px color-mix(in srgb, var(--bg) 40%, transparent);
+    padding-bottom: 0.35rem;
+  }
+
+  .workspace-run-column .workspace-run-actions button {
+    min-height: 2.75rem;
+  }
+
+  .workspace-editor .button-group > button {
+    min-height: 2.75rem;
+  }
+}
+
+/* Toasts & confirm (dashboard chrome) */
+.toast-region {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: none;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+}
+
+.toast-success {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+}
+
+.confirm-dialog {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text);
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+
+.confirm-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 55%, #000);
+}
+
+.confirm-dialog-inner {
+  padding: 1rem 1.15rem;
+}
+
+.confirm-dialog-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.confirm-dialog-message {
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.confirm-dialog-actions button.primary.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.confirm-dialog-actions button.primary.danger:hover {
+  filter: brightness(1.06);
+}
+
+@media (max-width: 1100px) {
+  .workspace-run-card {
+    position: static;
+  }
+}
+
+@media (max-width: 600px) {
+  .workspace-run-card {
+    position: sticky;
   }
 }
