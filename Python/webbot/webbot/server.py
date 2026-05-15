@@ -10,19 +10,33 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
+from webbot.json_scenario import build_step_plan
 from webbot.models import (
+    FlowGroup,
+    GroupsDocument,
+    GroupsResponse,
+    RunGroupRequest,
     RunRequest,
     RunStatusResponse,
     ScenarioDocument,
     ScenarioInfo,
     ScenarioPreview,
+    ScenarioStepPlan,
+    ScenarioStepPlanItem,
     StepProgressItem,
 )
 from webbot.scenario_preview import get_scenario_preview
 from webbot.nodriver_browser import nodriver_available
 from webbot.runner import RunConfig, RunState, get_runner
-from webbot.scenario_store import delete_json_scenario, load_json_scenario, save_json_scenario
-from webbot.scenarios import list_scenario_info, scenario_type
+from webbot.scenario_store import (
+    build_groups_response,
+    delete_json_scenario,
+    list_json_scenario_names,
+    load_json_scenario,
+    save_groups_document,
+    save_json_scenario,
+)
+from webbot.scenarios import get_scenario, list_scenario_info
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -93,6 +107,32 @@ def _startup() -> None:
     _ensure_runner_hooks()
 
 
+def _validate_groups_document(doc: GroupsDocument) -> GroupsDocument:
+    known = set(list_json_scenario_names())
+    seen_ids: set[str] = set()
+    groups: list[FlowGroup] = []
+    for g in doc.groups:
+        gid = g.id.strip()
+        if not gid:
+            raise HTTPException(status_code=400, detail="Each group must have a non-empty id")
+        if gid in seen_ids:
+            raise HTTPException(status_code=400, detail=f"Duplicate group id: {gid}")
+        seen_ids.add(gid)
+        names: list[str] = []
+        for sn in g.scenario_names:
+            s = sn.strip()
+            if not s:
+                continue
+            if s not in known:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown scenario '{s}' in group '{gid}'",
+                )
+            names.append(s)
+        groups.append(FlowGroup(id=gid, label=g.label.strip() or gid, scenario_names=names))
+    return GroupsDocument(groups=groups)
+
+
 @app.get("/api/health")
 def health() -> dict:
     try:
@@ -113,6 +153,18 @@ def api_list_scenarios() -> list[ScenarioInfo]:
     return list_scenario_info()
 
 
+@app.get("/api/groups", response_model=GroupsResponse)
+def api_get_groups() -> GroupsResponse:
+    return build_groups_response()
+
+
+@app.put("/api/groups", response_model=GroupsResponse)
+def api_put_groups(doc: GroupsDocument) -> GroupsResponse:
+    normalized = _validate_groups_document(doc)
+    save_groups_document(normalized)
+    return build_groups_response()
+
+
 @app.get("/api/scenarios/{name}/preview", response_model=ScenarioPreview)
 def api_scenario_preview(name: str) -> ScenarioPreview:
     try:
@@ -121,10 +173,35 @@ def api_scenario_preview(name: str) -> ScenarioPreview:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/scenarios/{name}/plan", response_model=ScenarioStepPlan)
+def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
+    try:
+        doc = load_json_scenario(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if expand:
+        pairs = build_step_plan(doc, root_name=name)
+    else:
+        from webbot.models import GotoStep
+
+        items_flat: list[tuple[int, str]] = []
+        offset = 0
+        if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
+            items_flat.append((1, f"goto {doc.start_url}"))
+            offset = 1
+        from webbot.json_scenario import step_label
+
+        for i, step in enumerate(doc.steps, start=1):
+            items_flat.append((i + offset, step_label(step)))
+        pairs = items_flat
+    return ScenarioStepPlan(
+        name=name,
+        steps=[ScenarioStepPlanItem(index=i, label=lab) for i, lab in pairs],
+    )
+
+
 @app.get("/api/scenarios/{name}", response_model=ScenarioDocument)
 def api_get_scenario(name: str) -> ScenarioDocument:
-    if scenario_type(name) != "json":
-        raise HTTPException(status_code=404, detail="Only JSON scenarios can be loaded for editing")
     try:
         return load_json_scenario(name)
     except FileNotFoundError as exc:
@@ -141,11 +218,8 @@ def api_save_scenario(doc: ScenarioDocument) -> ScenarioDocument:
 
 @app.delete("/api/scenarios/{name}")
 def api_delete_scenario(name: str) -> dict:
-    try:
-        if scenario_type(name) == "python":
-            raise HTTPException(status_code=400, detail="Cannot delete built-in Python scenarios")
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Unknown scenario: {name}") from exc
+    if name not in list_json_scenario_names():
+        raise HTTPException(status_code=404, detail=f"Unknown scenario: {name}")
     try:
         delete_json_scenario(name)
     except FileNotFoundError as exc:
@@ -179,8 +253,6 @@ async def api_start_run(req: RunRequest) -> dict:
     if req.loops < 1:
         raise HTTPException(status_code=400, detail="loops must be at least 1")
 
-    from webbot.scenarios import get_scenario
-
     try:
         get_scenario(req.scenario)
     except KeyError as exc:
@@ -207,6 +279,55 @@ async def api_start_run(req: RunRequest) -> dict:
     asyncio.create_task(_watch_run())
 
     return {"ok": True, "message": "Run started"}
+
+
+@app.post("/api/run/group")
+async def api_start_run_group(req: RunGroupRequest) -> dict:
+    _ensure_runner_hooks()
+    runner = get_runner()
+    if runner.status.state == RunState.running:
+        raise HTTPException(status_code=409, detail="A run is already in progress")
+
+    if req.loops < 1:
+        raise HTTPException(status_code=400, detail="loops must be at least 1")
+
+    from webbot.scenario_store import get_group_by_id
+
+    try:
+        group = get_group_by_id(req.group_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    names = [n.strip() for n in group.scenario_names if n.strip()]
+    if not names:
+        raise HTTPException(status_code=400, detail="Group has no flows")
+
+    config = RunConfig(
+        group_id=req.group_id,
+        loops=req.loops,
+        pause_between_loops_sec=req.pause_between_loops_sec,
+        pause_between_flows_sec=req.pause_between_flows_sec,
+        headless=req.headless,
+        channel=req.channel,
+        slow_mo=req.slow_mo,
+    )
+
+    async def _watch_run() -> None:
+        try:
+            if runner._task:
+                await runner._task
+        except Exception:
+            pass
+        await _broadcast(_status_payload())
+
+    try:
+        await runner.start(config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    asyncio.create_task(_watch_run())
+
+    return {"ok": True, "message": "Group run started"}
 
 
 @app.post("/api/run/stop")
