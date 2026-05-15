@@ -30,6 +30,53 @@ async def run(page: Page) -> None:
     await page.goto("https://example.com", wait_until="domcontentloaded")
 `;
 
+/** CodeMirror instance for the Python scenario editor (null if library missing). */
+let pythonCodeMirror = null;
+
+function getPythonSource() {
+  if (pythonCodeMirror) return pythonCodeMirror.getValue();
+  return $("python-source-editor")?.value ?? "";
+}
+
+function setPythonSource(text) {
+  const v = text ?? "";
+  if (pythonCodeMirror) {
+    if (pythonCodeMirror.getValue() !== v) pythonCodeMirror.setValue(v);
+  } else if ($("python-source-editor")) {
+    $("python-source-editor").value = v;
+  }
+}
+
+function refreshPythonEditorLayout() {
+  if (!pythonCodeMirror) return;
+  requestAnimationFrame(() => pythonCodeMirror.refresh());
+}
+
+function initPythonCodeMirror() {
+  const ta = $("python-source-editor");
+  // global CodeMirror from CDN (codemirror package)
+  if (!ta || pythonCodeMirror || typeof CodeMirror === "undefined") return;
+  pythonCodeMirror = CodeMirror.fromTextArea(ta, {
+    mode: {
+      name: "python",
+      version: 3,
+      singleLineStringErrors: false,
+    },
+    theme: "dracula",
+    lineNumbers: true,
+    indentUnit: 4,
+    tabSize: 4,
+    indentWithTabs: false,
+    lineWrapping: false,
+    matchBrackets: true,
+    viewportMargin: 80,
+    extraKeys: {
+      Tab: (cm) => cm.replaceSelection("    ", "end"),
+      "Shift-Tab": "indentLess",
+    },
+  });
+}
+
 function isDraftSelected() {
   return selectedScenario === DRAFT_SCENARIO_ID;
 }
@@ -182,6 +229,7 @@ function showPythonFlowEditor() {
   $("flow-python-editor-wrap")?.classList.remove("hidden");
   $("build-msg").textContent = "";
   updateFlowNameReadonly();
+  refreshPythonEditorLayout();
 }
 
 async function initRunStepProgress(runTarget) {
@@ -456,7 +504,7 @@ function newPythonFlow() {
     draftIsPython = true;
     clearFlowEditor();
     $("build-name").value = "";
-    $("python-source-editor").value = PYTHON_FLOW_TEMPLATE;
+    setPythonSource(PYTHON_FLOW_TEMPLATE);
     $("build-msg-python").textContent = "Draft — enter a name and save.";
     syncDraftListLabel();
     showPythonFlowEditor();
@@ -470,7 +518,7 @@ function newPythonFlow() {
   setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
   clearFlowEditor();
   $("build-name").value = "";
-  $("python-source-editor").value = PYTHON_FLOW_TEMPLATE;
+  setPythonSource(PYTHON_FLOW_TEMPLATE);
   showPythonFlowEditor();
   renderScenarioList("scenario-list", scenarioListOnSelect);
   syncScenarioListSelection();
@@ -539,7 +587,7 @@ async function loadFlowIntoEditor(name) {
     $("build-name").value = name;
     try {
       const payload = await api(`/api/scenarios/${encodeURIComponent(name)}/python-source`);
-      $("python-source-editor").value = payload.source;
+      setPythonSource(payload.source);
       $("build-msg-python").textContent = `Editing "${name}"`;
       updateDeleteFlowButton();
       updateFlowNameReadonly();
@@ -1741,7 +1789,7 @@ function collectDocument() {
 
 async function savePythonScenario() {
   const name = $("build-name").value.trim();
-  const source = $("python-source-editor")?.value ?? "";
+  const source = getPythonSource();
   if (!name) {
     $("build-msg-python").textContent = "Name is required";
     return;

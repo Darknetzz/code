@@ -488,6 +488,7 @@ summary.workspace-dropdown-summary.success.outline:hover {
   font-size: 0.85em;
 }
 
+/* Fallback when CodeMirror fails to load */
 .python-source-editor {
   width: 100%;
   min-height: 280px;
@@ -501,6 +502,42 @@ summary.workspace-dropdown-summary.success.outline:hover {
   border: 1px solid var(--border);
   border-radius: 6px;
   resize: vertical;
+}
+
+#flow-python-editor-wrap .CodeMirror {
+  margin-top: 0.35rem;
+  min-height: 280px;
+  height: min(420px, 55vh);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#flow-python-editor-wrap .cm-s-dracula.CodeMirror {
+  background-color: var(--bg);
+}
+
+#flow-python-editor-wrap .cm-s-dracula .CodeMirror-gutters {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+#flow-python-editor-wrap .cm-s-dracula .CodeMirror-linenumber {
+  color: var(--muted);
+}
+
+#flow-python-editor-wrap .cm-s-dracula .CodeMirror-cursor {
+  border-left-color: var(--text);
+}
+
+#flow-python-editor-wrap .cm-s-dracula.CodeMirror-focused .CodeMirror-selected {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+#flow-python-editor-wrap .cm-s-dracula .CodeMirror-selected {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .workspace-log {
