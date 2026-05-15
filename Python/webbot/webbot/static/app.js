@@ -574,21 +574,6 @@ function buildScenarioListItem(s, onSelect) {
   btn.addEventListener("click", () => onSelect(s.name));
   li.appendChild(btn);
 
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.className = "scenario-item-edit btn-icon-only";
-  editBtn.title = s.type === "json" ? "Edit flow" : "View flow (read-only)";
-  if (typeof enhanceButton === "function") {
-    enhanceButton(editBtn, s.type === "json" ? "edit" : "flows", { iconOnly: true, label: editBtn.title });
-  } else {
-    editBtn.textContent = "✎";
-  }
-  editBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    openFlowsTab(s.name);
-  });
-  li.appendChild(editBtn);
-
   return li;
 }
 
@@ -878,9 +863,6 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
     lab.className = "field-label";
     lab.textContent = labelText;
     labRow.appendChild(lab);
-    if (helpId && typeof createHelpButton === "function") {
-      labRow.appendChild(createHelpButton(helpId));
-    }
     col.appendChild(labRow);
     col.appendChild(el);
     parent.appendChild(col);
@@ -1050,9 +1032,6 @@ function renderStepRow(step, index) {
   typeLab.className = "field-label";
   typeLab.textContent = "Step type";
   typeLabRow.appendChild(typeLab);
-  if (typeof createHelpButton === "function") {
-    typeLabRow.appendChild(createHelpButton("step.types"));
-  }
   typeWrap.appendChild(typeLabRow);
   typeWrap.appendChild(typeSelect);
   row.appendChild(typeWrap);
@@ -1278,9 +1257,6 @@ function renderStepRow(step, index) {
     fieldsLabel.className = "form-fields-label";
     fieldsLabel.textContent = "Fields:";
     fieldsLabelRow.appendChild(fieldsLabel);
-    if (typeof createHelpButton === "function") {
-      fieldsLabelRow.appendChild(createHelpButton("step.submit_form.fields"));
-    }
     fields.appendChild(fieldsLabelRow);
 
     const fieldsWrap = document.createElement("div");
@@ -1373,9 +1349,6 @@ function appendFieldLabel(parent, labelText, hint, helpId) {
   lab.textContent = labelText;
   if (hint) lab.title = hint;
   row.appendChild(lab);
-  if (helpId && typeof createHelpButton === "function") {
-    row.appendChild(createHelpButton(helpId));
-  }
   parent.appendChild(row);
 }
 
@@ -1412,9 +1385,6 @@ function fieldCheckbox(name, labelText, checked, hint = "", helpId = null) {
   span.className = "field-label";
   span.textContent = labelText;
   label.appendChild(span);
-  if (helpId && typeof createHelpButton === "function") {
-    label.appendChild(createHelpButton(helpId));
-  }
   return label;
 }
 

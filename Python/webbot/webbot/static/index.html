@@ -12,7 +12,7 @@
       <h1>Webbot</h1>
       <p id="health" class="muted">Loading…</p>
     </div>
-    <button type="button" id="btn-help" class="help-header-btn">Help</button>
+    <button type="button" id="btn-help" class="help-header-btn" aria-label="Help for Run tab">Help</button>
   </header>
 
   <nav class="tabs">
@@ -24,20 +24,20 @@
     <section id="panel-run" class="panel active">
       <div class="run-layout">
         <div class="card run-controls-card">
-          <div class="scenario-list-header" data-help-id="run.scenario">
+          <div class="scenario-list-header" data-page-help="help.run">
             <span class="field-label">Scenarios</span>
           </div>
           <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
 
           <div class="row">
-            <label for="run-loops" data-help-id="run.loops">Loops</label>
+            <label for="run-loops">Loops</label>
             <input type="number" id="run-loops" min="1" value="1" />
           </div>
           <div class="row">
-            <label for="run-pause" data-help-id="run.pause">Pause between loops (sec)</label>
+            <label for="run-pause">Pause between loops (sec)</label>
             <input type="number" id="run-pause" min="0" step="1" value="0" />
           </div>
-          <label class="checkbox" data-help-id="run.headless">
+          <label class="checkbox">
             <input type="checkbox" id="run-headless" />
             Headless
           </label>
@@ -91,18 +91,18 @@
           </div>
 
           <div id="flow-editor-wrap">
-            <label for="build-name" data-help-id="builder.name">Scenario name</label>
+            <label for="build-name">Scenario name</label>
             <input type="text" id="build-name" placeholder="my_flow" />
 
-            <label for="build-desc" data-help-id="builder.description">Description</label>
+            <label for="build-desc">Description</label>
             <input type="text" id="build-desc" placeholder="Optional" />
 
-            <label for="build-url" data-help-id="builder.start_url">Start URL</label>
+            <label for="build-url">Start URL</label>
             <input type="url" id="build-url" placeholder="https://example.com" />
 
             <div class="scenario-options-card">
-              <h2 class="section-heading" data-help-id="scenario.options">Scenario options</h2>
-              <label class="checkbox" data-help-id="scenario.random_delay">
+              <h2 class="section-heading">Scenario options</h2>
+              <label class="checkbox">
                 <input type="checkbox" id="build-random-between-steps" />
                 Random delay between each step
               </label>
@@ -110,14 +110,14 @@
             </div>
 
             <div class="steps-header">
-              <h2 data-help-id="builder.steps">Steps</h2>
+              <h2 data-page-help="help.flows">Steps</h2>
               <button type="button" id="btn-add-step">Add step</button>
             </div>
             <div id="steps-list"></div>
 
             <div class="actions">
-              <button type="button" id="btn-save" class="primary" data-help-id="builder.save">Save flow</button>
-              <button type="button" id="btn-test-run" data-help-id="builder.test_run">Test run</button>
+              <button type="button" id="btn-save" class="primary">Save flow</button>
+              <button type="button" id="btn-test-run">Test run</button>
             </div>
             <p id="build-msg" class="muted"></p>
           </div>

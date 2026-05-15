@@ -23,6 +23,41 @@ const HELP_TOPICS = {
       "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Python scenarios live in the package and are registered separately.</p>",
     ],
   },
+  "help.run": {
+    title: "Run tab",
+    body: [
+      "<p>Pick a flow, preview its steps, set options, and start a run. The log and step list update live while the browser runs.</p>",
+      helpTable(
+        ["Control", "What it does"],
+        [
+          ["Scenarios", "Select a JSON or Python flow. Python flows run from code; JSON flows can be edited on the Flows tab."],
+          ["Loops", "How many full passes through the flow."],
+          ["Pause between loops", "Wait time after each pass (except the last)."],
+          ["Headless", "Hide the browser window (faster; harder to debug)."],
+          ["Flow preview", "Step list with live green/red status during a run."],
+          ["Log", "Timestamped messages from the runner."],
+        ]
+      ),
+      "<p>Use the sidebar in this dialog for details on each control.</p>",
+    ],
+  },
+  "help.flows": {
+    title: "Flows tab",
+    body: [
+      "<p>Create and edit JSON flows. Python flows are view-only here — change them in <code>webbot/scenarios/</code>.</p>",
+      helpTable(
+        ["Area", "What it does"],
+        [
+          ["Flow list", "Select, create, or delete JSON flows. Pencil opens the editor."],
+          ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
+          ["Scenario options", "Optional random delay between every step."],
+          ["Steps", "Drag by the grip or use ↑↓. Types: goto, click, fill, delay, scroll, submit_form."],
+          ["Save / Test run", "Write JSON to disk, or save then switch to Run and start."],
+        ]
+      ),
+      "<p>Use the sidebar for step types, locators, and scenario options.</p>",
+    ],
+  },
   "run.scenario": {
     title: "Scenarios",
     body: [
@@ -339,11 +374,12 @@ const HELP_NAV = [
   { label: "Overview", topics: ["overview"] },
   {
     label: "Run",
-    topics: ["run.scenario", "run.loops", "run.pause", "run.headless"],
+    topics: ["help.run", "run.scenario", "run.loops", "run.pause", "run.headless"],
   },
   {
     label: "Builder",
     topics: [
+      "help.flows",
       "builder.name",
       "builder.description",
       "builder.start_url",

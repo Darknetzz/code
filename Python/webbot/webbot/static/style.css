@@ -173,11 +173,6 @@ main {
   overflow: hidden;
 }
 
-.scenario-item-edit {
-  align-self: center;
-  flex-shrink: 0;
-}
-
 .run-layout {
   display: flex;
   flex-direction: column;
@@ -983,6 +978,10 @@ button:disabled {
 
 .card label.checkbox .help-btn {
   margin-left: 0.25rem;
+}
+
+.panel-help-row .help-btn {
+  flex-shrink: 0;
 }
 
 .help-action-wrap {

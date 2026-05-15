@@ -45,7 +45,7 @@ function _renderSidebar() {
 
   const hint = document.createElement("p");
   hint.className = "help-nav-hint";
-  hint.textContent = "Click a section to expand or collapse";
+  hint.textContent = "Expand a section in the sidebar for detailed topics";
   nav.appendChild(hint);
 
   for (const group of HELP_NAV) {
@@ -160,36 +160,29 @@ function closeHelp() {
   _lastTrigger = null;
 }
 
-function bindStaticHelpLabels() {
-  document.querySelectorAll("[data-help-id]").forEach((el) => {
-    if (el.querySelector(".help-btn") || el.closest(".help-action-wrap")) return;
-    const id = el.dataset.helpId;
-    if (!id) return;
-    const btn = createHelpButton(id);
-    if (el.tagName === "LABEL") {
-      el.appendChild(btn);
-      return;
-    }
-    if (el.tagName === "BUTTON") {
-      const wrap = document.createElement("span");
-      wrap.className = "help-action-wrap";
-      el.parentNode.insertBefore(wrap, el);
-      wrap.appendChild(el);
-      wrap.appendChild(btn);
-      return;
-    }
-    const row = document.createElement("span");
-    row.className = "label-row";
-    if (
-      el.classList.contains("section-heading") ||
-      el.classList.contains("scenario-list-header") ||
-      el.tagName === "H2"
-    ) {
-      row.classList.add("section-heading-row");
-    }
-    el.parentNode.insertBefore(row, el);
-    row.appendChild(el);
-    row.appendChild(btn);
+function getActivePanelHelpTopic() {
+  const flows = document.getElementById("panel-flows");
+  if (flows?.classList.contains("active")) return "help.flows";
+  return "help.run";
+}
+
+function _attachPageHelpButton(el, topicId) {
+  if (el.querySelector(".help-btn")) return;
+  const btn = createHelpButton(topicId);
+  const row = document.createElement("span");
+  row.className = "label-row panel-help-row";
+  if (el.classList.contains("section-heading") || el.tagName === "H2") {
+    row.classList.add("section-heading-row");
+  }
+  el.parentNode.insertBefore(row, el);
+  row.appendChild(el);
+  row.appendChild(btn);
+}
+
+function bindPageHelpButtons() {
+  document.querySelectorAll("[data-page-help]").forEach((el) => {
+    const id = el.dataset.pageHelp;
+    if (id) _attachPageHelpButton(el, id);
   });
 }
 
@@ -211,10 +204,18 @@ function initHelp() {
   }
 
   if (headerBtn) {
-    headerBtn.addEventListener("click", () => openHelp("overview", headerBtn));
+    headerBtn.addEventListener("click", () => openHelp(getActivePanelHelpTopic(), headerBtn));
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        headerBtn.setAttribute(
+          "aria-label",
+          `Help for ${tab.dataset.tab === "flows" ? "Flows" : "Run"} tab`
+        );
+      });
+    });
   }
 
-  bindStaticHelpLabels();
+  bindPageHelpButtons();
 }
 
 document.addEventListener("DOMContentLoaded", initHelp);
