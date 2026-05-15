@@ -741,6 +741,15 @@ button.danger:not(:disabled):hover {
   background: color-mix(in srgb, var(--danger) 12%, var(--surface));
 }
 
+button.success.outline:not(:disabled) {
+  border-color: color-mix(in srgb, var(--success) 65%, var(--border));
+  color: var(--success);
+}
+
+button.success.outline:not(:disabled):hover {
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

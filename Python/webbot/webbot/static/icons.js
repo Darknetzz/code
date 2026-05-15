@@ -100,6 +100,7 @@ function makeIconButton(iconName, label, onClick, options = {}) {
   btn.type = "button";
   enhanceButton(btn, iconName, { iconOnly: true, label });
   if (options.danger) btn.classList.add("danger");
+  if (options.success) btn.classList.add("success", "outline");
   if (onClick) btn.addEventListener("click", onClick);
   return btn;
 }

@@ -1221,7 +1221,7 @@ function renderStepRow(step, index) {
 
     const addField = document.createElement("button");
     addField.type = "button";
-    addField.className = "btn-add-field";
+    addField.className = "btn-add-field success outline";
     addField.onclick = (e) => {
       e.stopPropagation();
       if (!builderSteps[index].fields) builderSteps[index].fields = [];
