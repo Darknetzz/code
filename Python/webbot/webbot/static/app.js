@@ -144,6 +144,7 @@ function readRunOptionsFromForm() {
     slow_mo: Math.max(0, parseInt($("run-slow-mo")?.value, 10) || 0),
     headless: $("run-headless")?.checked ?? false,
     ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
+    keep_session_open: $("run-keep-session-open")?.checked ?? false,
   };
 }
 
@@ -163,6 +164,8 @@ function applyRunOptionsToForm(o) {
   if (head) head.checked = Boolean(o.headless);
   const ign = $("run-ignore-https-errors");
   if (ign) ign.checked = Boolean(o.ignore_https_errors);
+  const kso = $("run-keep-session-open");
+  if (kso) kso.checked = Boolean(o.keep_session_open);
 }
 
 function persistRunOptions() {
@@ -189,6 +192,7 @@ function wireRunOptionsPersistence() {
   }
   $("run-headless")?.addEventListener("change", persistRunOptions);
   $("run-ignore-https-errors")?.addEventListener("change", persistRunOptions);
+  $("run-keep-session-open")?.addEventListener("change", persistRunOptions);
 }
 
 async function maybeConfirmDiscardForImport() {
@@ -2964,6 +2968,137 @@ async function saveScenario() {
 }
 
 
+async function duplicateCurrentFlow() {
+  if (isDraftSelected() || !selectedScenario) {
+    showError("Save and select a flow before duplicating.");
+    return;
+  }
+  const info = getScenarioInfo(selectedScenario);
+  if (!info) return;
+  const newName = uniqueScenarioName(`${selectedScenario}_copy`);
+  try {
+    if (info.type === "python") {
+      const payload = await api(`/api/scenarios/${encodeURIComponent(selectedScenario)}/python-source`);
+      await api(`/api/scenarios/${encodeURIComponent(newName)}/python-source`, {
+        method: "PUT",
+        body: JSON.stringify({ source: payload.source }),
+      });
+    } else {
+      const doc = await api(`/api/scenarios/${encodeURIComponent(selectedScenario)}`);
+      doc.name = newName;
+      await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
+    }
+    await loadScenarios();
+    await selectScenario(newName);
+    showSuccess(`Duplicated as "${newName}".`);
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function exportCurrentJsonFlow() {
+  try {
+    const doc = collectDocument();
+    if (!doc.name) {
+      showError("Set a flow name before exporting.");
+      return;
+    }
+    downloadText(`${doc.name}.json`, JSON.stringify(doc, null, 2), "application/json;charset=utf-8");
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function exportCurrentPythonFlow() {
+  const name = $("build-name")?.value.trim();
+  if (!name) {
+    showError("Set a flow name before exporting.");
+    return;
+  }
+  downloadText(`${name}.py`, getPythonSource(), "text/x-python;charset=utf-8");
+}
+
+async function applyImportedJson(text, suggestedName) {
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("File is not valid JSON.");
+  }
+  const doc = normalizeImportedJsonDoc(raw);
+  const stem = (suggestedName && String(suggestedName).replace(/\.json$/i, "").trim()) || "";
+  if (stem && stem !== doc.name) doc.name = stem;
+  draftIsPython = false;
+  setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
+  showJsonFlowEditor();
+  populateFlowEditor(doc);
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  syncScenarioListSelection();
+  $("build-msg").textContent = `Imported draft "${doc.name}" — review and save.`;
+  updateDeleteFlowButton();
+  clearRunStepProgress();
+  commitSavedBaseline();
+}
+
+async function applyImportedPython(text, suggestedName) {
+  const stem = (suggestedName && String(suggestedName).replace(/\.py$/i, "").trim()) || "imported_flow";
+  const name = uniqueScenarioName(stem);
+  draftIsPython = true;
+  setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
+  setPythonSource(text);
+  $("build-name").value = name;
+  showPythonFlowEditor();
+  refreshPythonEditorLayout();
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  syncScenarioListSelection();
+  $("build-msg-python").textContent = `Imported draft "${name}" — review and save.`;
+  updateDeleteFlowButton();
+  clearRunStepProgress();
+  commitSavedBaseline();
+}
+
+function onFlowImportFileSelected(ev) {
+  const input = ev.target;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  void (async () => {
+    if (!(await maybeConfirmDiscardForImport())) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      void (async () => {
+        try {
+          const text = String(reader.result || "");
+          const fname = file.name || "";
+          if (importTargetKind === "python") {
+            if (/\.json$/i.test(fname) || /^\s*\{/.test(text)) {
+              try {
+                await applyImportedJson(text, fname);
+                return;
+              } catch {
+                /* fall through as Python source */
+              }
+            }
+            await applyImportedPython(text, fname);
+            return;
+          }
+          const looksPy =
+            /\.py$/i.test(fname) ||
+            (/async\s+def\s+run\s*\(/.test(text) && !/^\s*\{/.test(text));
+          if (looksPy) {
+            await applyImportedPython(text, fname);
+            return;
+          }
+          await applyImportedJson(text, fname);
+        } catch (e) {
+          showError(e.message);
+        }
+      })();
+    };
+    reader.readAsText(file);
+  })();
+}
+
 async function startRun(scenarioName) {
   const scenario = scenarioName || getSelectedScenario();
   if (!scenario) return;
@@ -2978,9 +3113,18 @@ async function startRun(scenarioName) {
     slow_mo: pw.slow_mo,
     keep_session_open: $("run-keep-session-open")?.checked ?? false,
   };
+  try {
+    await api("/api/run", { method: "POST", body: JSON.stringify(body) });
+  } catch (e) {
+    const msg =
+      e.status === 409
+        ? "A run is already in progress. Stop it or wait for it to finish."
+        : e.message;
+    showError(msg);
+    return;
+  }
   $("log-output").textContent = "";
   await initRunStepProgress(scenario);
-  await api("/api/run", { method: "POST", body: JSON.stringify(body) });
   startRunStatusPolling();
   try {
     await refreshRunStepProgressFromServer();
@@ -3240,9 +3384,18 @@ async function startRunGroup(groupId) {
     slow_mo: pw.slow_mo,
     keep_session_open: $("run-keep-session-open")?.checked ?? false,
   };
+  try {
+    await api("/api/run/group", { method: "POST", body: JSON.stringify(body) });
+  } catch (e) {
+    const msg =
+      e.status === 409
+        ? "A run is already in progress. Stop it or wait for it to finish."
+        : e.message;
+    showError(msg);
+    return;
+  }
   $("log-output").textContent = "";
   await initRunStepProgress(`group:${groupId}`);
-  await api("/api/run/group", { method: "POST", body: JSON.stringify(body) });
   startRunStatusPolling();
   try {
     await refreshRunStepProgressFromServer();
