@@ -80,7 +80,7 @@ function initStaticIcons() {
     ["btn-dup-json", "copy", { label: "Duplicate" }],
     ["btn-export-json", "export", { label: "Export" }],
     ["btn-import-json", "import", { label: "Import" }],
-    ["btn-save-python", "save", { label: "Save Python flow" }],
+    ["btn-save-python", "save", { label: "Save" }],
     ["btn-test-run-python", "test", { label: "Test run" }],
     ["btn-dup-python", "copy", { label: "Duplicate" }],
     ["btn-export-python", "export", { label: "Export" }],
