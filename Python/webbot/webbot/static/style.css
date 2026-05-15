@@ -1446,19 +1446,60 @@ button:disabled {
   background: color-mix(in srgb, var(--danger) 12%, var(--surface));
 }
 
-.status.running {
+.flow-run-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.run-status-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.35em;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.flow-run-status.idle .run-status-dot {
+  background: var(--accent);
+}
+
+.flow-run-status.running .run-status-dot,
+.flow-run-status.holding_session .run-status-dot {
+  background: #d29922;
+}
+
+.flow-run-status.completed .run-status-dot {
+  background: var(--success);
+}
+
+.flow-run-status.failed .run-status-dot {
+  background: var(--danger);
+}
+
+.flow-run-status.stopped .run-status-dot,
+.flow-run-status.muted .run-status-dot {
+  background: var(--muted);
+}
+
+.flow-run-status.running {
   color: var(--accent);
 }
 
-.status.holding_session {
+.flow-run-status.holding_session {
   color: #d29922;
 }
 
-.status.completed {
+.flow-run-status.completed {
   color: var(--success);
 }
 
-.status.failed {
+.flow-run-status.failed {
   color: var(--danger);
 }
 

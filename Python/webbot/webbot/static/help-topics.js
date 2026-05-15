@@ -29,9 +29,9 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flows", "Grouped sections and ungrouped; pick one to edit. Use the filter box above the list to narrow by flow name or description. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (next to <strong>Save</strong> and <strong>Test run</strong>) removes the selected flow from disk <em>and</em> drops it from all groups automatically; drafts are discarded instead. Organize sections under the <strong>Flow groups</strong> tab."],
+          ["Flows", "Grouped sections and ungrouped; pick one to edit. Run status (colored dot and label) appears above the flow list. Use the filter box to narrow by flow name or description. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (next to <strong>Save</strong> and <strong>Test run</strong>) removes the selected flow from disk <em>and</em> drops it from all groups automatically; drafts are discarded instead. Organize sections under the <strong>Flow groups</strong> tab."],
           ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved. <strong>Ctrl/Cmd+S</strong> saves the current flow; <strong>Ctrl/Cmd+Enter</strong> saves and starts a run (same as Test run)."],
-          ["Run", "Loops, pauses between loops and group runs, headless, Playwright <strong>Browser channel</strong> and <strong>Slow motion (ms)</strong> (CLI <code>--channel</code> / <code>--slow-mo</code>), Start/Stop, status. Run options are remembered in this browser (local storage). Live logs use the websocket indicator next to version in the header (reconnects with exponential backoff when the connection drops)."],
+          ["Run", "Loops, pauses between loops and group runs, headless, Playwright <strong>Browser channel</strong> and <strong>Slow motion (ms)</strong> (CLI <code>--channel</code> / <code>--slow-mo</code>), Start/Stop. Run options are remembered in this browser (local storage). Live logs use the websocket indicator next to version in the header (reconnects with exponential backoff when the connection drops)."],
           ["Save / Test run", "Save JSON or Python to disk, or save and run immediately. Use <strong>Duplicate</strong> / <strong>Export</strong> / <strong>Import</strong> in the button row to copy flows or move them as files."],
           ["Log", "Live output from the runner."],
         ]
@@ -90,7 +90,7 @@ const HELP_TOPICS = {
     title: "Loops",
     body: [
       "<p>How many times to run the entire scenario from the first step to the last.</p>",
-      "<p>Each loop is a full pass; step progress in the status bar shows <code>loop 2/5</code> when loops &gt; 1.</p>",
+      "<p>Each loop is a full pass; step progress in the run status above the flow list shows <code>loop 2/5</code> when loops &gt; 1.</p>",
     ],
   },
   "run.pause": {

@@ -1205,7 +1205,9 @@ function formatRunDetail(msg) {
 function setRunStatus(msg) {
   const state = typeof msg === "string" ? msg : msg.state;
   const el = $("run-status");
-  el.className = "status " + (state || "muted");
+  if (!el) return;
+  const textEl = el.querySelector(".run-status-text");
+  el.className = "flow-run-status status " + (state || "muted");
   const labels = {
     idle: "Idle",
     running: "Running…",
@@ -1215,7 +1217,8 @@ function setRunStatus(msg) {
     stopped: "Stopped",
   };
   const detail = typeof msg === "object" ? formatRunDetail(msg) : "";
-  el.textContent = (labels[state] || state) + (detail ? ` — ${detail}` : "");
+  const line = (labels[state] || state) + (detail ? ` — ${detail}` : "");
+  if (textEl) textEl.textContent = line;
 }
 
 function updateRunButtons(state) {

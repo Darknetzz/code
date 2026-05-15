@@ -101,6 +101,10 @@
                 </button>
               </div>
             </div>
+            <div id="run-status" class="flow-run-status status idle" role="status" aria-live="polite">
+              <span class="run-status-dot" aria-hidden="true"></span>
+              <span class="run-status-text">Idle</span>
+            </div>
             <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
           </div>
         </aside>
@@ -251,7 +255,6 @@
               <button type="button" id="btn-start" class="primary">Start</button>
               <button type="button" id="btn-stop" disabled>Stop</button>
             </div>
-            <p id="run-status" class="status muted">Idle</p>
           </div>
         </aside>
       </div>
