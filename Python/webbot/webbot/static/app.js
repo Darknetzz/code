@@ -1388,13 +1388,6 @@ function fieldSelect(name, value, options) {
   return sel;
 }
 
-function fieldSection(title) {
-  const el = document.createElement("div");
-  el.className = "field-section-title";
-  el.textContent = title;
-  return el;
-}
-
 /** Collapsible group of fields inside a step row (native details/summary). */
 function collapsibleFieldGroup(title, nodes, options = {}) {
   const { open = false } = options;
@@ -1550,11 +1543,10 @@ function renderScenarioOptions(doc = {}) {
   container.innerHTML = "";
   container.classList.toggle("hidden", !enabled);
   if (!enabled) return;
-  container.appendChild(fieldSection("Between-step wait"));
   container.appendChild(
     labeledScenarioField(
       "between_steps_min",
-      "Min (seconds)",
+      "Min (s)",
       doc.between_steps_min ?? 0.3,
       "number",
       "Shortest pause before the next step"
@@ -1563,7 +1555,7 @@ function renderScenarioOptions(doc = {}) {
   container.appendChild(
     labeledScenarioField(
       "between_steps_max",
-      "Max (seconds)",
+      "Max (s)",
       doc.between_steps_max ?? 1.2,
       "number",
       "Longest pause before the next step"

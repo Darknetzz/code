@@ -795,8 +795,8 @@ button:disabled {
 }
 
 .scenario-options-card {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--border);
 }
 
@@ -806,7 +806,11 @@ button:disabled {
 }
 
 .scenario-options-fields {
-  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.35rem;
+  align-items: end;
 }
 
 .hidden {
@@ -889,6 +893,7 @@ button:disabled {
 
 .step-type-col {
   min-width: 6.5rem;
+  align-self: end;
 }
 
 .step-type-col .step-type-select {
