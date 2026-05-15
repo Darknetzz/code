@@ -1242,7 +1242,7 @@ function appendStepFieldsNotIfPresent(fields, step, placement) {
       step.workflow_label || "",
       "text",
       "Optional anchor for workflow goto (unique among steps in this list)",
-      null
+      "scenario.workflow_label"
     )
   );
 
@@ -1811,6 +1811,23 @@ function normalizeLocatorFields(obj) {
 function normalizeStep(step) {
   if (!step) return step;
   const s = normalizeLocatorFields({ ...step });
+  const glRaw = typeof s.goto_label === "string" ? s.goto_label.trim() : "";
+  if (
+    s.action === "goto" &&
+    !glRaw &&
+    typeof s.url === "string" &&
+    s.url.trim() !== ""
+  ) {
+    s.action = "open_url";
+    delete s.goto_label;
+  }
+  if (typeof s.workflow_label !== "string") s.workflow_label = "";
+  if (s.action === "open_url") {
+    if (typeof s.url !== "string") s.url = "";
+  }
+  if (s.action === "goto") {
+    if (typeof s.goto_label !== "string") s.goto_label = "";
+  }
   if (s.action === "submit_form" && Array.isArray(s.fields)) {
     s.fields = s.fields.map((f) => normalizeLocatorFields({ ...f }));
   }

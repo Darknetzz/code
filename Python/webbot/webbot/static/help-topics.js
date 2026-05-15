@@ -66,9 +66,9 @@ const HELP_TOPICS = {
         ["Area", "What it does"],
         [
           ["Flow list", "Grouped sections and ungrouped flows; edit membership under the Flow groups tab."],
-          ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
+          ["Name / description / start URL", "Metadata; start URL is used when there is no <code>open_url</code> step."],
           ["Scenario options", "Optional random delay between every step."],
-          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form, run_scenario (nested JSON or Python flow)."],
+          ["Steps", "Drag by the grip to reorder. Types: open_url (navigate), goto (jump forward in this list via labels), click, fill, delay, scroll, submit_form, run_scenario, if_present, exit."],
           ["Save / Test run", "Write JSON to disk, or save and start immediately."],
         ]
       ),
@@ -118,8 +118,8 @@ const HELP_TOPICS = {
   "builder.start_url": {
     title: "Start URL",
     body: [
-      "<p>If set and no <code>goto</code> step appears in the step list, Webbot opens this URL as step 1 before running your steps.</p>",
-      "<p>If you already have a <code>goto</code> step, this field is not used automatically.</p>",
+      "<p>If set and no <code>open_url</code> step appears in the step list, Webbot opens this URL as step 1 before running your steps.</p>",
+      "<p>If you already have an <code>open_url</code> navigation step and your first action is redundant, trim or reorder as needed.</p>",
     ],
   },
   "builder.save": {
@@ -150,7 +150,7 @@ const HELP_TOPICS = {
   "scenario.random_delay": {
     title: "Random delay between steps",
     body: [
-      "<p>When enabled, Webbot waits a random amount before each step after the first (including after an auto start-URL goto).</p>",
+      "<p>When enabled, Webbot waits a random amount before each step after the first (including after an implicit start-URL navigation).</p>",
       "<p>Does not add a pause after the last step. Makes multi-step flows feel less robotic.</p>",
     ],
   },
@@ -189,7 +189,8 @@ const HELP_TOPICS = {
     body: [
       "<p>Each step in a scenario has one action type:</p>",
       helpTable(["Type", "What it does"], [
-        ["<code>goto</code>", "Navigate to a URL."],
+        ["<code>open_url</code>", "Navigate to a URL in this tab (<code>page.goto</code>, domcontentloaded)."],
+        ["<code>goto</code>", "Jump execution forward to a later step in the same list (targets that step’s <strong>Step label</strong>)."],
         ["<code>click</code>", "Human-like click on an element."],
         ["<code>fill</code>", "Type into one field."],
         ["<code>submit_form</code>", "Fill multiple fields and submit a form (GET or POST)."],
@@ -201,16 +202,36 @@ const HELP_TOPICS = {
       ]),
     ],
   },
-  "step.goto": {
-    title: "Goto step",
+  "scenario.workflow_label": {
+    title: "Step label",
     body: [
-      "<p>Opens a URL in the current tab. Uses <code>domcontentloaded</code> and a short reading pause after load.</p>",
+      "<p>Optional text on any step (JSON field <code>workflow_label</code>). Within one step list—the main flow steps, or either branch array of <code>if_present</code>—each non-empty label must be unique.</p>",
+      "<p><strong>goto</strong> steps jump forward only: their <strong>Jump to label</strong> must match another step’s <strong>Step label</strong> that appears lower in <em>that same list</em>. Webbot skips intervening verified plan rows accordingly.</p>",
     ],
   },
-  "step.goto.url": {
-    title: "URL (goto)",
+  "step.open_url": {
+    title: "Open URL step",
+    body: [
+      "<p>Opens a URL in the current tab (<code>domcontentloaded</code>) with a short reading pause after load. Replaces legacy JSON <code>{\"action\":\"goto\",\"url\":\"…\"}</code> (automatically migrated to <code>open_url</code>).</p>",
+    ],
+  },
+  "step.open_url.url": {
+    title: "URL (open_url)",
     body: [
       "<p>Full address including <code>https://</code>. Example: <code>https://example.com</code>.</p>",
+    ],
+  },
+  "step.goto": {
+    title: "goto (workflow jump)",
+    body: [
+      "<p>Jumps execution forward inside the same step array (main flow steps, or steps inside one <code>if_present</code> branch). Targets are matched by non-empty <code>workflow_label</code> on later steps (<strong>Step label</strong> in the builder).</p>",
+      "<p>Backward jumps and duplicate labels within a list raise validation errors. The run plan skips steps between the goto and the target so progress matches what actually executes.</p>",
+    ],
+  },
+  "step.goto.target": {
+    title: "Jump to label",
+    body: [
+      "<p>The <code>goto_label</code> field names a <strong>Step label</strong> (<code>workflow_label</code>) that must belong to a sibling step farther down the same array.</p>",
     ],
   },
   "step.click": {
@@ -461,8 +482,11 @@ const HELP_NAV = [
     label: "Step types",
     topics: [
       "step.types",
+      "scenario.workflow_label",
+      "step.open_url",
+      "step.open_url.url",
       "step.goto",
-      "step.goto.url",
+      "step.goto.target",
       "step.click",
       "step.fill",
       "step.delay",
