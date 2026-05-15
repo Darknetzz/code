@@ -234,10 +234,13 @@ function buildScenarioListItem(s, onSelect) {
   btn.dataset.name = s.name;
   btn.setAttribute("role", "option");
 
-  const nameEl = document.createElement("span");
-  nameEl.className = "scenario-item-name";
-  nameEl.textContent = s.name;
-  if (typeof icon === "function") nameEl.prepend(icon("list", "icon icon-scenario"));
+    const nameEl = document.createElement("span");
+    nameEl.className = "scenario-item-name";
+    if (typeof icon === "function") nameEl.appendChild(icon("list", "icon icon-scenario"));
+    const nameText = document.createElement("span");
+    nameText.className = "scenario-item-name-text";
+    nameText.textContent = s.name;
+    nameEl.appendChild(nameText);
 
   const typeEl = document.createElement("span");
   typeEl.className = `scenario-item-type type-${s.type}`;
