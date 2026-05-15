@@ -1,8 +1,22 @@
 const $ = (id) => document.getElementById(id);
 
 let scenarios = [];
+let selectedScenario = null;
 let builderSteps = [];
 let ws = null;
+
+function getSelectedScenario() {
+  return selectedScenario || scenarios[0]?.name || null;
+}
+
+function setSelectedScenario(name) {
+  selectedScenario = name;
+  document.querySelectorAll(".scenario-item").forEach((btn) => {
+    const on = btn.dataset.name === name;
+    btn.classList.toggle("selected", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+}
 
 function appendLog(line) {
   const el = $("log-output");
@@ -41,7 +55,7 @@ function setRunStatus(msg) {
 
 function updateRunButtons(state) {
   const running = state === "running";
-  $("btn-start").disabled = running;
+  $("btn-start").disabled = running || !getSelectedScenario();
   $("btn-stop").disabled = !running;
 }
 
@@ -65,14 +79,54 @@ async function loadHealth() {
 
 async function loadScenarios() {
   scenarios = await api("/api/scenarios");
-  const sel = $("run-scenario");
-  sel.innerHTML = "";
-  for (const s of scenarios) {
-    const opt = document.createElement("option");
-    opt.value = s.name;
-    opt.textContent = `${s.name} (${s.type})`;
-    sel.appendChild(opt);
+  const list = $("run-scenario-list");
+  list.innerHTML = "";
+
+  if (scenarios.length === 0) {
+    selectedScenario = null;
+    const empty = document.createElement("li");
+    empty.className = "scenario-list-empty";
+    empty.textContent = "No scenarios found";
+    list.appendChild(empty);
+    return;
   }
+
+  const stillValid =
+    selectedScenario && scenarios.some((s) => s.name === selectedScenario);
+  if (!stillValid) selectedScenario = scenarios[0].name;
+
+  for (const s of scenarios) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scenario-item";
+    btn.dataset.name = s.name;
+    btn.setAttribute("role", "option");
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "scenario-item-name";
+    nameEl.textContent = s.name;
+
+    const typeEl = document.createElement("span");
+    typeEl.className = "scenario-item-type";
+    typeEl.textContent = s.type;
+
+    btn.appendChild(nameEl);
+    btn.appendChild(typeEl);
+
+    if (s.description) {
+      const descEl = document.createElement("span");
+      descEl.className = "scenario-item-desc";
+      descEl.textContent = s.description;
+      btn.appendChild(descEl);
+    }
+
+    btn.addEventListener("click", () => setSelectedScenario(s.name));
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+
+  setSelectedScenario(selectedScenario);
 }
 
 function connectWebSocket() {
@@ -802,11 +856,11 @@ async function saveScenario() {
   await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
   $("build-msg").textContent = `Saved "${doc.name}"`;
   await loadScenarios();
-  $("run-scenario").value = doc.name;
+  setSelectedScenario(doc.name);
 }
 
 async function loadScenarioForEdit() {
-  const name = $("run-scenario").value;
+  const name = getSelectedScenario();
   const info = scenarios.find((s) => s.name === name);
   if (!info || info.type !== "json") {
     $("build-msg").textContent = "Select a JSON scenario in the Run tab first";
@@ -824,8 +878,10 @@ async function loadScenarioForEdit() {
 }
 
 async function startRun(scenarioName) {
+  const scenario = scenarioName || getSelectedScenario();
+  if (!scenario) return;
   const body = {
-    scenario: scenarioName || $("run-scenario").value,
+    scenario,
     loops: parseInt($("run-loops").value, 10) || 1,
     pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
     headless: $("run-headless").checked,

@@ -153,7 +153,11 @@ function bindStaticHelpLabels() {
     }
     const row = document.createElement("span");
     row.className = "label-row";
-    if (el.classList.contains("section-heading") || el.tagName === "H2") {
+    if (
+      el.classList.contains("section-heading") ||
+      el.classList.contains("scenario-list-header") ||
+      el.tagName === "H2"
+    ) {
       row.classList.add("section-heading-row");
     }
     el.parentNode.insertBefore(row, el);

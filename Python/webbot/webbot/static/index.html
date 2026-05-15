@@ -23,8 +23,10 @@
   <main>
     <section id="panel-run" class="panel active">
       <div class="card">
-        <label for="run-scenario" data-help-id="run.scenario">Scenario</label>
-        <select id="run-scenario"></select>
+        <div class="scenario-list-header" data-help-id="run.scenario">
+          <span class="field-label">Scenarios</span>
+        </div>
+        <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
 
         <div class="row">
           <label for="run-loops" data-help-id="run.loops">Loops</label>

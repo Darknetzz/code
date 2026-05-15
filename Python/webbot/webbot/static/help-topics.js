@@ -11,10 +11,10 @@ const HELP_TOPICS = {
     ],
   },
   "run.scenario": {
-    title: "Scenario",
+    title: "Scenarios",
     body: [
-      "<p>Which flow to execute. Lists both Python scenarios (from the package) and JSON scenarios (from your scenarios folder or the Builder).</p>",
-      "<p>Use the Builder tab to edit JSON scenarios, then return here to run them.</p>",
+      "<p>Click a scenario in the list to select it, then press <strong>Start</strong>. The list shows both Python scenarios (from the package) and JSON scenarios (from your scenarios folder or the Builder).</p>",
+      "<p>Type badges (<code>python</code> / <code>json</code>) and descriptions help tell flows apart. Use the Builder tab to edit JSON scenarios.</p>",
     ],
   },
   "run.loops": {
