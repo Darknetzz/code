@@ -148,24 +148,17 @@ function defaultStep(action) {
 }
 
 function appendLocatorFields(container, step, includeValue) {
-  const by = document.createElement("select");
-  ["role", "text", "css", "test_id", "label"].forEach((v) => {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    if (step.by === v) o.selected = true;
-    by.appendChild(o);
-  });
-  by.dataset.field = "by";
-  container.appendChild(by);
-  container.appendChild(fieldInput("role", step.role || ""));
-  container.appendChild(fieldInput("name", step.name || ""));
-  container.appendChild(fieldInput("label", step.label || ""));
-  container.appendChild(fieldInput("text", step.text || ""));
-  container.appendChild(fieldInput("selector", step.selector || ""));
-  container.appendChild(fieldInput("test_id", step.test_id || ""));
+  container.appendChild(
+    labeledSelect("by", "Find by", step.by || "css", ["role", "text", "css", "test_id", "label"])
+  );
+  container.appendChild(labeledField("role", "Role", step.role || "", "text"));
+  container.appendChild(labeledField("name", "Name", step.name || "", "text"));
+  container.appendChild(labeledField("label", "Label text", step.label || "", "text"));
+  container.appendChild(labeledField("text", "Text", step.text || "", "text"));
+  container.appendChild(labeledField("selector", "CSS selector", step.selector || "", "text"));
+  container.appendChild(labeledField("test_id", "Test ID", step.test_id || "", "text"));
   if (includeValue) {
-    container.appendChild(fieldInput("value", step.value || ""));
+    container.appendChild(labeledField("value", "Value to type", step.value || "", "text"));
   }
 }
 
@@ -187,26 +180,39 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
   selector.oninput = () => {
     field.selector = selector.value;
   };
-  const label = fieldInput("label", field.label || "");
-  label.oninput = () => {
-    field.label = label.value;
+  const labelInp = fieldInput("label", field.label || "");
+  labelInp.oninput = () => {
+    field.label = labelInp.value;
   };
   const value = fieldInput("value", field.value || "");
   value.oninput = () => {
     field.value = value.value;
   };
+  const addCol = (labelText, el) => {
+    const col = document.createElement("div");
+    col.className = "field-labeled";
+    const lab = document.createElement("span");
+    lab.className = "field-label";
+    lab.textContent = labelText;
+    col.appendChild(lab);
+    col.appendChild(el);
+    wrap.appendChild(col);
+  };
+
+  addCol("Find by", by);
+  addCol("Selector", selector);
+  addCol("Label", labelInp);
+  addCol("Value", value);
+
   const del = document.createElement("button");
   del.type = "button";
   del.textContent = "x";
+  del.title = "Remove field";
   del.onclick = (e) => {
     e.stopPropagation();
     builderSteps[stepIndex].fields.splice(fieldIndex, 1);
     renderSteps();
   };
-  wrap.appendChild(by);
-  wrap.appendChild(selector);
-  wrap.appendChild(label);
-  wrap.appendChild(value);
   wrap.appendChild(del);
   return wrap;
 }
@@ -233,70 +239,141 @@ function renderStepRow(step, index) {
   fields.className = "step-fields";
 
   if (step.action === "goto") {
-    fields.appendChild(fieldInput("url", step.url || ""));
+    fields.appendChild(labeledField("url", "URL", step.url || "", "url"));
   } else if (step.action === "delay") {
-    fields.appendChild(fieldInput("min", step.min ?? 0.5, "number"));
-    fields.appendChild(fieldInput("max", step.max ?? 1.2, "number"));
+    fields.appendChild(fieldSection("Wait time"));
     fields.appendChild(
-      fieldSelect("distribution", step.distribution || "uniform", [
-        "uniform",
-        "triangular",
-        "log_normal",
-      ])
+      labeledField("min", "Min (seconds)", step.min ?? 0.5, "number", "Shortest random wait")
     );
-    fields.appendChild(fieldInput("long_pause_chance", step.long_pause_chance ?? 0, "number"));
-    fields.appendChild(fieldInput("long_pause_min", step.long_pause_min ?? 2, "number"));
-    fields.appendChild(fieldInput("long_pause_max", step.long_pause_max ?? 5, "number"));
+    fields.appendChild(
+      labeledField("max", "Max (seconds)", step.max ?? 1.2, "number", "Longest random wait")
+    );
+    fields.appendChild(
+      labeledSelect(
+        "distribution",
+        "Random style",
+        step.distribution || "uniform",
+        ["uniform", "triangular", "log_normal"],
+        "How waits are picked between min and max"
+      )
+    );
+    fields.appendChild(fieldSection("Optional long pause"));
+    fields.appendChild(
+      labeledField(
+        "long_pause_chance",
+        "Chance (0–1)",
+        step.long_pause_chance ?? 0,
+        "number",
+        "Probability of an extra distraction pause"
+      )
+    );
+    fields.appendChild(
+      labeledField("long_pause_min", "Long pause min (s)", step.long_pause_min ?? 2, "number")
+    );
+    fields.appendChild(
+      labeledField("long_pause_max", "Long pause max (s)", step.long_pause_max ?? 5, "number")
+    );
   } else if (step.action === "scroll") {
-    fields.appendChild(fieldInput("delta_y", step.delta_y ?? 300, "number"));
-    fields.appendChild(fieldInput("steps_min", step.steps_min ?? 3, "number"));
-    fields.appendChild(fieldInput("steps_max", step.steps_max ?? 8, "number"));
-    fields.appendChild(fieldInput("step_delay_min", step.step_delay_min ?? 0.06, "number"));
-    fields.appendChild(fieldInput("step_delay_max", step.step_delay_max ?? 0.32, "number"));
-    fields.appendChild(fieldCheckbox("overscroll", "overscroll", step.overscroll !== false));
+    fields.appendChild(fieldSection("Scroll distance"));
     fields.appendChild(
-      fieldInput("overscroll_ratio_min", step.overscroll_ratio_min ?? 0.06, "number")
+      labeledField(
+        "delta_y",
+        "Pixels (delta Y)",
+        step.delta_y ?? 300,
+        "number",
+        "Positive = down, negative = up"
+      )
+    );
+    fields.appendChild(fieldSection("Wheel ticks"));
+    fields.appendChild(
+      labeledField("steps_min", "Min ticks", step.steps_min ?? 3, "number", "Fewest mouse-wheel steps")
     );
     fields.appendChild(
-      fieldInput("overscroll_ratio_max", step.overscroll_ratio_max ?? 0.16, "number")
+      labeledField("steps_max", "Max ticks", step.steps_max ?? 8, "number", "Most mouse-wheel steps")
     );
-    fields.appendChild(fieldInput("pause_after_min", step.pause_after_min ?? 0.2, "number"));
-    fields.appendChild(fieldInput("pause_after_max", step.pause_after_max ?? 0.85, "number"));
     fields.appendChild(
-      fieldCheckbox("variable_step_size", "variable step size", step.variable_step_size !== false)
+      labeledField(
+        "step_delay_min",
+        "Delay min (s)",
+        step.step_delay_min ?? 0.06,
+        "number",
+        "Pause between ticks (shortest)"
+      )
+    );
+    fields.appendChild(
+      labeledField(
+        "step_delay_max",
+        "Delay max (s)",
+        step.step_delay_max ?? 0.32,
+        "number",
+        "Pause between ticks (longest)"
+      )
+    );
+    fields.appendChild(fieldSection("Overscroll"));
+    fields.appendChild(
+      fieldCheckbox(
+        "overscroll",
+        "Overscroll then correct",
+        step.overscroll !== false,
+        "Scroll slightly past target, then scroll back"
+      )
+    );
+    fields.appendChild(
+      labeledField(
+        "overscroll_ratio_min",
+        "Overshoot min (ratio)",
+        step.overscroll_ratio_min ?? 0.06,
+        "number",
+        "Fraction of total scroll (e.g. 0.1 = 10%)"
+      )
+    );
+    fields.appendChild(
+      labeledField(
+        "overscroll_ratio_max",
+        "Overshoot max (ratio)",
+        step.overscroll_ratio_max ?? 0.16,
+        "number"
+      )
+    );
+    fields.appendChild(fieldSection("After scroll"));
+    fields.appendChild(
+      labeledField("pause_after_min", "Pause min (s)", step.pause_after_min ?? 0.2, "number")
+    );
+    fields.appendChild(
+      labeledField("pause_after_max", "Pause max (s)", step.pause_after_max ?? 0.85, "number")
+    );
+    fields.appendChild(
+      fieldCheckbox(
+        "variable_step_size",
+        "Variable tick size",
+        step.variable_step_size !== false,
+        "Each wheel tick moves a random amount"
+      )
     );
   } else if (step.action === "click") {
-    const by = document.createElement("select");
-    ["role", "text", "css", "test_id"].forEach((v) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      if (step.by === v) o.selected = true;
-      by.appendChild(o);
-    });
-    by.dataset.field = "by";
-    fields.appendChild(by);
-    fields.appendChild(fieldInput("role", step.role || ""));
-    fields.appendChild(fieldInput("name", step.name || ""));
-    fields.appendChild(fieldInput("text", step.text || ""));
-    fields.appendChild(fieldInput("selector", step.selector || ""));
-    fields.appendChild(fieldInput("test_id", step.test_id || ""));
+    fields.appendChild(
+      labeledSelect("by", "Find by", step.by || "role", ["role", "text", "css", "test_id"])
+    );
+    fields.appendChild(labeledField("role", "Role", step.role || "", "text"));
+    fields.appendChild(labeledField("name", "Accessible name", step.name || "", "text"));
+    fields.appendChild(labeledField("text", "Visible text", step.text || "", "text"));
+    fields.appendChild(labeledField("selector", "CSS selector", step.selector || "", "text"));
+    fields.appendChild(labeledField("test_id", "Test ID", step.test_id || "", "text"));
   } else if (step.action === "fill") {
     appendLocatorFields(fields, step, true);
   } else if (step.action === "submit_form") {
-    const method = document.createElement("select");
-    method.dataset.field = "method";
-    ["get", "post"].forEach((v) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v.toUpperCase();
-      if ((step.method || "post") === v) o.selected = true;
-      method.appendChild(o);
-    });
-    fields.appendChild(method);
-    fields.appendChild(fieldInput("form_selector", step.form_selector || ""));
-    fields.appendChild(fieldInput("submit_name", step.submit_name || ""));
-    fields.appendChild(fieldInput("submit_selector", step.submit_selector || ""));
+    fields.appendChild(
+      labeledSelect("method", "Form method", step.method || "post", ["get", "post"])
+    );
+    fields.appendChild(
+      labeledField("form_selector", "Form CSS selector", step.form_selector || "", "text")
+    );
+    fields.appendChild(
+      labeledField("submit_name", "Submit button name", step.submit_name || "", "text")
+    );
+    fields.appendChild(
+      labeledField("submit_selector", "Submit CSS selector", step.submit_selector || "", "text")
+    );
 
     const fieldsLabel = document.createElement("span");
     fieldsLabel.className = "form-fields-label";
@@ -348,9 +425,8 @@ function renderStepRow(step, index) {
 function fieldInput(name, value, type = "text") {
   const inp = document.createElement("input");
   inp.type = type;
-  inp.placeholder = name;
   inp.dataset.field = name;
-  inp.value = value;
+  inp.value = value ?? "";
   return inp;
 }
 
@@ -367,15 +443,50 @@ function fieldSelect(name, value, options) {
   return sel;
 }
 
-function fieldCheckbox(name, labelText, checked) {
+function fieldSection(title) {
+  const el = document.createElement("div");
+  el.className = "field-section-title";
+  el.textContent = title;
+  return el;
+}
+
+function labeledField(name, labelText, value, type = "text", hint = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "field-labeled";
+  const lab = document.createElement("span");
+  lab.className = "field-label";
+  lab.textContent = labelText;
+  if (hint) lab.title = hint;
+  wrap.appendChild(lab);
+  wrap.appendChild(fieldInput(name, value, type));
+  return wrap;
+}
+
+function labeledSelect(name, labelText, value, options, hint = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "field-labeled";
+  const lab = document.createElement("span");
+  lab.className = "field-label";
+  lab.textContent = labelText;
+  if (hint) lab.title = hint;
+  wrap.appendChild(lab);
+  wrap.appendChild(fieldSelect(name, value, options));
+  return wrap;
+}
+
+function fieldCheckbox(name, labelText, checked, hint = "") {
   const label = document.createElement("label");
-  label.className = "checkbox inline";
+  label.className = "checkbox inline field-labeled";
   const inp = document.createElement("input");
   inp.type = "checkbox";
   inp.dataset.field = name;
   inp.checked = !!checked;
+  if (hint) label.title = hint;
   label.appendChild(inp);
-  label.appendChild(document.createTextNode(" " + labelText));
+  const span = document.createElement("span");
+  span.className = "field-label";
+  span.textContent = labelText;
+  label.appendChild(span);
   return label;
 }
 

@@ -217,20 +217,60 @@ button:disabled {
 }
 
 .step-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.5rem 0.65rem;
+  align-items: end;
+  width: 100%;
 }
 
 .step-fields input,
 .step-fields select {
-  flex: 1;
-  min-width: 100px;
+  width: 100%;
+  min-width: 0;
   padding: 0.35rem 0.5rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
+}
+
+.field-labeled {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.field-section-title {
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-section-title:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.step-fields .checkbox.inline {
+  grid-column: span 1;
+  align-self: end;
+  padding-bottom: 0.35rem;
 }
 
 .step-actions {
@@ -259,22 +299,26 @@ button:disabled {
 }
 
 .form-field-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) auto;
+  gap: 0.35rem 0.5rem;
+  align-items: end;
   width: 100%;
 }
 
 .form-field-row input,
 .form-field-row select {
-  flex: 1;
-  min-width: 70px;
+  width: 100%;
+  min-width: 0;
   padding: 0.3rem 0.45rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
+}
+
+.form-field-row .field-labeled {
+  min-width: 0;
 }
 
 .btn-add-field {
