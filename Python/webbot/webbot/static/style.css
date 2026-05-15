@@ -119,11 +119,6 @@ header {
   color: var(--text);
 }
 
-.workspace-run-card .hint-below-field.run-channel-hint,
-.workspace-run-card .hint-below-field.run-slowmo-hint {
-  margin: -0.15rem 0 0.35rem;
-}
-
 .workspace-run-card select {
   width: 100%;
 }

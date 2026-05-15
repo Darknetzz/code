@@ -232,45 +232,73 @@
                 <input type="number" id="run-pause-flows" min="0" step="1" value="0" />
               </div>
               <div class="row">
-                <label for="run-channel">Browser channel</label>
-                <select id="run-channel" aria-describedby="run-channel-hint">
+                <label
+                  for="run-channel"
+                  title="Playwright channel (matches python webbot.py run --channel). Requires that browser installed."
+                  >Browser channel</label>
+                <select
+                  id="run-channel"
+                  aria-describedby="run-channel-hint"
+                  title="Playwright channel (matches python webbot.py run --channel). Requires that browser installed."
+                >
                   <option value="chrome" selected>Chrome</option>
                   <option value="msedge">Microsoft Edge</option>
                   <option value="chromium">Chromium</option>
                 </select>
               </div>
-              <p id="run-channel-hint" class="muted hint-below-field run-channel-hint">
-                Playwright channel (matches <code>python webbot.py run --channel</code>). Requires that browser installed.
-              </p>
+              <span id="run-channel-hint" class="visually-hidden"
+                >Playwright channel (matches python webbot.py run --channel). Requires that browser installed.</span>
               <div class="row">
-                <label for="run-slow-mo">Slow motion (ms)</label>
-                <input type="number" id="run-slow-mo" min="0" step="10" value="0" aria-describedby="run-slow-mo-hint" />
+                <label for="run-slow-mo" title="Extra delay between Playwright actions (debugging).">Slow motion (ms)</label>
+                <input
+                  type="number"
+                  id="run-slow-mo"
+                  min="0"
+                  step="10"
+                  value="0"
+                  aria-describedby="run-slow-mo-hint"
+                  title="Extra delay between Playwright actions (debugging)."
+                />
               </div>
-              <p id="run-slow-mo-hint" class="muted hint-below-field run-slowmo-hint">
-                Extra delay between Playwright actions (debugging).
-              </p>
+              <span id="run-slow-mo-hint" class="visually-hidden">Extra delay between Playwright actions (debugging).</span>
               <label class="toggle toggle-run" for="run-headless">
                 <input type="checkbox" id="run-headless" />
                 <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
                 <span class="toggle-text">Headless</span>
               </label>
-              <label class="toggle toggle-run" for="run-ignore-https-errors">
-                <input type="checkbox" id="run-ignore-https-errors" />
+              <label
+                class="toggle toggle-run"
+                for="run-ignore-https-errors"
+                title="Accepts invalid certs (e.g. self-signed). Does not fix servers with no TLS/SNI for this hostname (ERR_SSL_UNRECOGNIZED_NAME). Insecure—use only when you trust the server."
+              >
+                <input
+                  type="checkbox"
+                  id="run-ignore-https-errors"
+                  aria-describedby="run-ignore-https-hint"
+                  title="Accepts invalid certs (e.g. self-signed). Does not fix servers with no TLS/SNI for this hostname (ERR_SSL_UNRECOGNIZED_NAME). Insecure—use only when you trust the server."
+                />
                 <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
                 <span class="toggle-text">Ignore HTTPS errors</span>
               </label>
-              <label class="toggle toggle-run" for="run-keep-session-open">
-                <input type="checkbox" id="run-keep-session-open" />
+              <span id="run-ignore-https-hint" class="visually-hidden"
+                >Accepts invalid certs (e.g. self-signed). Does not fix servers with no TLS/SNI for this hostname
+                (ERR_SSL_UNRECOGNIZED_NAME). Insecure—use only when you trust the server.</span>
+              <label
+                class="toggle toggle-run"
+                for="run-keep-session-open"
+                title="After the flow or group finishes successfully, leave the browser open until you press Stop."
+              >
+                <input
+                  type="checkbox"
+                  id="run-keep-session-open"
+                  aria-describedby="run-keep-session-hint"
+                  title="After the flow or group finishes successfully, leave the browser open until you press Stop."
+                />
                 <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
                 <span class="toggle-text">Keep session open when done</span>
               </label>
-              <p id="run-keep-session-hint" class="muted hint-below-field">
-                After the flow or group finishes successfully, leave the browser open until you press Stop.
-              </p>
-              <p id="run-ignore-https-hint" class="muted hint-below-field">
-                Accepts invalid certs (e.g. self-signed). Does not fix servers with no TLS/SNI for this hostname (
-                <code>ERR_SSL_UNRECOGNIZED_NAME</code>). Insecure—use only when you trust the server.
-              </p>
+              <span id="run-keep-session-hint" class="visually-hidden"
+                >After the flow or group finishes successfully, leave the browser open until you press Stop.</span>
             </div>
 
             <div class="actions workspace-run-actions">
