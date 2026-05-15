@@ -29,9 +29,9 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flows", "Grouped sections and ungrouped; pick one to edit. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (next to <strong>Save</strong> and <strong>Test run</strong>) removes the selected flow or discards a draft; organize sections under the <strong>Flow groups</strong> tab."],
+          ["Flows", "Grouped sections and ungrouped; pick one to edit. Use the filter box above the list to narrow by flow name or description. <strong>New flow</strong> creates a draft from <strong>Flow type</strong>. <strong>Delete</strong> (next to <strong>Save</strong> and <strong>Test run</strong>) removes the selected flow from disk <em>and</em> drops it from all groups automatically; drafts are discarded instead. Organize sections under the <strong>Flow groups</strong> tab."],
           ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: source editor; flow name is read-only once saved."],
-          ["Run", "Loops, pauses, headless, Start/Stop, and run status."],
+          ["Run", "Loops, pauses between loops and group runs, headless, Playwright <strong>Browser channel</strong> and <strong>Slow motion (ms)</strong> (CLI <code>--channel</code> / <code>--slow-mo</code>), Start/Stop, status. Live logs use the websocket indicator next to version in the header."],
           ["Save / Test run", "Save JSON or Python to disk, or save and run immediately."],
           ["Log", "Live output from the runner."],
         ]
@@ -47,12 +47,16 @@ const HELP_TOPICS = {
         ["Control", "What it does"],
         [
           ["Scenarios", "Select a saved flow from the sidebar (ungrouped or inside a section)."],
+          ["Filter flows", "Search box narrows sidebar rows by flow name or description without changing what is saved."],
           ["Loops", "How many full passes through the flow."],
           ["Pause between loops", "Wait time after each full pass (except the last)."],
           ["Pause between flows in group", "Seconds to wait between flows when using Run group."],
+          ["Browser channel", "Playwright channel: Chrome, Chromium, or Edge — same as CLI <code>--channel</code>."],
+          ["Slow motion (ms)", "Optional delay injected between Playwright actions for debugging (<code>--slow-mo</code>)."],
           ["Headless", "Hide the browser window (faster; harder to debug)."],
+          ["Live log indicator", "Header shows websocket status for streamed log/status (Reconnecting uses a short backoff)."],
+          ["Log panel", "<strong>Copy</strong> / <strong>Clear</strong> above the transcript; oldest lines trim after about 4000 lines to keep the page responsive."],
           ["Flow preview", "Step list with live green/red status during a run."],
-          ["Log", "Timestamped messages from the runner."],
         ]
       ),
       "<p>Use the sidebar in this dialog for details on each control.</p>",
@@ -65,7 +69,7 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flow list", "Grouped sections and ungrouped flows; edit membership under the Flow groups tab."],
+          ["Flow list", "Grouped sections and ungrouped flows; filter by typing in the Workspace sidebar. Edit membership under the Flow groups tab."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>open_url</code> step."],
           ["Scenario options", "Optional random delay between every step."],
           ["Steps", "Drag by the grip to reorder. Types: open_url (navigate), goto (jump forward in this list via labels), click, fill, delay, scroll, submit_form, run_scenario, if_present, exit."],

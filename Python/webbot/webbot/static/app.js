@@ -849,7 +849,6 @@ function renderScenarioList(containerId, onSelect) {
     list.appendChild(buildScenarioListItem(d, onSelect));
   }
 
-  const assigned = new Set();
   for (const g of groupsData.groups || []) {
     const wrap = document.createElement("li");
     wrap.className = "scenario-list-group-wrap";
@@ -892,7 +891,6 @@ function renderScenarioList(containerId, onSelect) {
       if (!flow) continue;
       if (!scenarioEntryMatchesSearch(flow)) continue;
       anyMemberShown = true;
-      assigned.add(nm);
       sub.appendChild(buildScenarioListItem(flow, onSelect));
     }
     if (!anyMemberShown) {
@@ -952,23 +950,17 @@ function renderScenarioList(containerId, onSelect) {
   }
 
   syncScenarioListSelection();
-
-  if (
-    getFlowListSearchQuery() &&
-    !list.querySelector(".scenario-item") &&
-    !(isDraftSelected() && list.querySelector(`[data-name="${DRAFT_SCENARIO_ID}"]`))
-  ) {
-    list.innerHTML = "";
-    const empty = document.createElement("li");
-    empty.className = "scenario-list-empty";
-    empty.textContent = "No flows match filter";
-    list.appendChild(empty);
-  }
 }
 
 function appendLog(line) {
   const el = $("log-output");
-  el.textContent += line + "\n";
+  if (!el) return;
+  let text = el.textContent ? `${el.textContent}\n${line}` : line;
+  const lines = text.split("\n");
+  if (lines.length > MAX_LOG_LINES) {
+    text = lines.slice(-MAX_LOG_LINES).join("\n");
+  }
+  el.textContent = text;
   el.scrollTop = el.scrollHeight;
   applyStepProgressFromLogLine(line);
 }
@@ -1051,9 +1043,26 @@ async function loadScenarios() {
   if (selectedScenario) await selectScenario(selectedScenario);
 }
 
+function setWebSocketIndicator(mode) {
+  const el = $("ws-status");
+  if (!el) return;
+  if (mode === "open") {
+    el.textContent = "Log · connected";
+    el.className = "muted header-ws-status ws-live";
+  } else if (mode === "connecting") {
+    el.textContent = "Log · connecting…";
+    el.className = "muted header-ws-status";
+  } else {
+    el.textContent = "Log · reconnecting…";
+    el.className = "muted header-ws-status ws-reconnect";
+  }
+}
+
 function connectWebSocket() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  setWebSocketIndicator("connecting");
   ws = new WebSocket(`${proto}//${location.host}/ws/logs`);
+  ws.onopen = () => setWebSocketIndicator("open");
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "log") appendLog(msg.message);
@@ -1068,7 +1077,10 @@ function connectWebSocket() {
       }
     }
   };
-  ws.onclose = () => setTimeout(connectWebSocket, 2000);
+  ws.onclose = () => {
+    setWebSocketIndicator("reconnect");
+    setTimeout(connectWebSocket, 2000);
+  };
 }
 
 const STEP_TYPES = [
@@ -2592,13 +2604,14 @@ async function saveScenario() {
 async function startRun(scenarioName) {
   const scenario = scenarioName || getSelectedScenario();
   if (!scenario) return;
+  const pw = getRunPlaywrightOptions();
   const body = {
     scenario,
     loops: parseInt($("run-loops").value, 10) || 1,
     pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
     headless: $("run-headless").checked,
-    channel: "chrome",
-    slow_mo: 0,
+    channel: pw.channel,
+    slow_mo: pw.slow_mo,
   };
   $("log-output").textContent = "";
   await initRunStepProgress(scenario);
@@ -2850,14 +2863,15 @@ async function saveGroupsModal() {
 }
 
 async function startRunGroup(groupId) {
+  const pw = getRunPlaywrightOptions();
   const body = {
     group_id: groupId,
     loops: parseInt($("run-loops").value, 10) || 1,
     pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
     pause_between_flows_sec: parseFloat($("run-pause-flows")?.value || "0") || 0,
     headless: $("run-headless").checked,
-    channel: "chrome",
-    slow_mo: 0,
+    channel: pw.channel,
+    slow_mo: pw.slow_mo,
   };
   $("log-output").textContent = "";
   await initRunStepProgress(`group:${groupId}`);
@@ -2986,6 +3000,35 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       closeGroupsAddDropdowns();
+    });
+
+    $("flow-list-filter")?.addEventListener("input", () =>
+      renderScenarioList("scenario-list", scenarioListOnSelect)
+    );
+
+    $("btn-log-clear")?.addEventListener("click", () => {
+      const el = $("log-output");
+      if (el) el.textContent = "";
+    });
+
+    $("btn-log-copy")?.addEventListener("click", async () => {
+      const el = $("log-output");
+      if (!el) return;
+      try {
+        await navigator.clipboard.writeText(el.textContent || "");
+      } catch {
+        appendLog("Copy failed (clipboard unavailable). Select log text manually.");
+      }
+    });
+
+    window.addEventListener("beforeunload", (e) => {
+      const dirty =
+        selectedScenario &&
+        savedFlowBaseline !== null &&
+        captureCurrentFlowSnapshot() !== savedFlowBaseline;
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
     });
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
