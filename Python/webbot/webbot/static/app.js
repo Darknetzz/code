@@ -247,6 +247,14 @@ let selectedScenario = null;
 let builderSteps = [];
 /** Opt-in UI: show the workflow label field while the label text is still empty (WeakMap — never serialized). */
 const workflowLabelUiExpandedByStepRef = new WeakMap();
+
+function transferWorkflowLabelUiExpanded(fromStep, toStep) {
+  if (!fromStep || !toStep || fromStep === toStep) return;
+  if (workflowLabelUiExpandedByStepRef.get(fromStep) === true) {
+    workflowLabelUiExpandedByStepRef.set(toStep, true);
+  }
+}
+
 let ws = null;
 let runStepProgress = null;
 let runShowStepProgress = false;
@@ -1494,7 +1502,9 @@ function syncBranchStepRowIntoModel(segments, rowEl) {
     step.then_steps = Array.isArray(prev.then_steps) ? prev.then_steps : [];
     step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
   }
-  replaceBranchStepAtSegments(segments, normalizeStep(step));
+  const next = normalizeStep(step);
+  transferWorkflowLabelUiExpanded(prev, next);
+  replaceBranchStepAtSegments(segments, next);
 }
 
 function replaceBranchStepAtSegments(segments, normalizedStep) {
@@ -2780,7 +2790,9 @@ function applyStepFromDom(index, row) {
     step.then_steps = Array.isArray(prev.then_steps) ? prev.then_steps : [];
     step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
   }
-  builderSteps[index] = normalizeStep(step);
+  const next = normalizeStep(step);
+  transferWorkflowLabelUiExpanded(prev, next);
+  builderSteps[index] = next;
 }
 
 function syncStepFromDom(index, row) {
