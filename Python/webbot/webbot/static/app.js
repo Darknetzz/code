@@ -956,6 +956,158 @@ const STEP_TYPES = [
   "exit",
 ];
 
+/** Max nesting depth for if/then branches in the step builder UI. */
+const MAX_BRANCH_BUILDER_DEPTH = 6;
+
+function branchSegmentTypes(depth) {
+  if (depth >= MAX_BRANCH_BUILDER_DEPTH) {
+    return STEP_TYPES.filter((t) => t !== "if_present");
+  }
+  return STEP_TYPES;
+}
+
+function branchSegmentsKey(segments) {
+  return segments.join("\u241e");
+}
+
+/** Walk builderSteps: [rootIdx] → row; append branchKey/index pairs for nested steps. */
+function getBranchStepBySegments(segments) {
+  try {
+    if (!segments || segments.length === 0) return undefined;
+    let cur = builderSteps[segments[0]];
+    if (!cur || segments.length === 1) return cur;
+    for (let i = 1; i < segments.length; i += 2) {
+      const key = segments[i];
+      const idx = Number(segments[i + 1]);
+      const arr = cur[key];
+      if (!Array.isArray(arr) || arr[idx] === undefined) return undefined;
+      cur = arr[idx];
+    }
+    return cur;
+  } catch {
+    return undefined;
+  }
+}
+
+function childSegments(ifStepSegments, branchKey, childIdx) {
+  return [...ifStepSegments, branchKey, childIdx];
+}
+
+function flushIfPresentSubtreeFromDom(ifStepSegments) {
+  const step = getBranchStepBySegments(ifStepSegments);
+  if (!step || step.action !== "if_present") return;
+  for (const bk of ["then_steps", "else_steps"]) {
+    const arr = step[bk] || [];
+    for (let ci = 0; ci < arr.length; ci++) {
+      const cs = childSegments(ifStepSegments, bk, ci);
+      const sel = `[data-branch-seg="${CSS.escape(branchSegmentsKey(cs))}"]`;
+      const row = document.querySelector(sel);
+      if (row) {
+        syncBranchStepRowIntoModel(cs, row);
+      }
+    }
+  }
+}
+
+/** Sync every if_present subtree deepest-first so nested rows update parent models before outer rows read them. */
+function flushAllIfPresentDomState() {
+  const paths = collectIfPresentSegmentPaths();
+  paths.sort((a, b) => b.length - a.length);
+  for (const seg of paths) {
+    flushIfPresentSubtreeFromDom(seg);
+  }
+}
+
+function collectIfPresentSegmentPaths() {
+  /** @type {Array<Array<number|string>>} */
+  const paths = [];
+  builderSteps.forEach((rootStep, ri) => {
+    function visit(step, segPath) {
+      if (!step || step.action !== "if_present") return;
+      paths.push([...segPath]);
+      for (const bk of ["then_steps", "else_steps"]) {
+        (step[bk] || []).forEach((child, ci) => {
+          visit(child, childSegments(segPath, bk, ci));
+        });
+      }
+    }
+    visit(rootStep, [ri]);
+  });
+  return paths;
+}
+
+function flushEveryIfPresentSubtreeFromDom() {
+  flushAllIfPresentDomState();
+}
+
+function syncBranchStepRowIntoModel(segments, rowEl) {
+  const prev = getBranchStepBySegments(segments);
+  if (!prev) return;
+  const action =
+    rowEl.querySelector(':scope > .nested-branch-toolbar [data-field="action"]')?.value ||
+    prev.action;
+  const scoped = rowEl.querySelector(".nested-branch-step-fields");
+  if (!scoped) return;
+  const step = { action };
+  scoped.querySelectorAll("[data-field]").forEach((el) => {
+    const key = el.dataset.field;
+    if (!key || key === "action") return;
+    if (el.type === "checkbox") {
+      step[key] = el.checked;
+      return;
+    }
+    let val = el.value;
+    if (el.type === "number") val = parseFloat(val);
+    if (val !== "" && val !== null && !Number.isNaN(val)) step[key] = val;
+  });
+  if (prev.action === "submit_form" && prev.fields) {
+    step.fields = prev.fields;
+  }
+  if (action === "if_present") {
+    step.then_steps = Array.isArray(prev.then_steps) ? prev.then_steps : [];
+    step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
+  }
+  replaceBranchStepAtSegments(segments, normalizeStep(step));
+}
+
+function replaceBranchStepAtSegments(segments, normalizedStep) {
+  if (!segments || segments.length < 3) return;
+  const branchKey = segments[segments.length - 2];
+  const leafIdx = Number(segments[segments.length - 1]);
+  let parentArr;
+  if (segments.length === 3) {
+    const rootIdx = segments[0];
+    parentArr = builderSteps[rootIdx]?.[branchKey];
+  } else {
+    const parentSeg = segments.slice(0, -2);
+    const ps = getBranchStepBySegments(parentSeg);
+    parentArr = ps?.[branchKey];
+  }
+  if (!Array.isArray(parentArr) || !parentArr[leafIdx]) return;
+  parentArr[leafIdx] = normalizedStep;
+}
+
+function changeNestedBranchStepType(segments, newAction) {
+  const cur = getBranchStepBySegments(segments);
+  if (!cur || cur.action === newAction) return;
+  replaceBranchStepAtSegments(segments, normalizeStep(defaultStep(newAction)));
+  renderSteps();
+}
+
+function attachBranchStepScopedListeners(rowEl, segments) {
+  const syncThis = () => {
+    const st = getBranchStepBySegments(segments);
+    if (st?.action === "if_present") {
+      flushIfPresentSubtreeFromDom(segments);
+    }
+    syncBranchStepRowIntoModel(segments, rowEl);
+  };
+  rowEl.querySelectorAll("input, select, textarea").forEach((inp) => {
+    inp.addEventListener("change", syncThis);
+    inp.addEventListener("input", syncThis);
+  });
+}
+
 function changeStepType(index, newAction) {
   if (builderSteps[index].action === newAction) return;
   builderSteps[index] = defaultStep(newAction);
@@ -1115,7 +1267,7 @@ function renderLocatorInputs(container, step, includeValue) {
   }
 }
 
-function appendLocatorFields(container, step, includeValue, stepIndex) {
+function appendLocatorFields(container, step, includeValue, stepIndexOrSegments) {
   const loc = normalizeLocatorFields(step);
   const byWrap = labeledSelect(
     "by",
@@ -1126,9 +1278,13 @@ function appendLocatorFields(container, step, includeValue, stepIndex) {
     "locator.by"
   );
   byWrap.querySelector("select").addEventListener("change", (e) => {
-    const row = document.querySelector(`[data-step-index="${stepIndex}"]`);
-    if (row) syncStepFromDom(stepIndex, row);
-    builderSteps[stepIndex].by = e.target.value;
+    if (typeof stepIndexOrSegments === "number") {
+      const row = document.querySelector(`[data-step-index="${stepIndexOrSegments}"]`);
+      if (row) syncStepFromDom(stepIndexOrSegments, row);
+      builderSteps[stepIndexOrSegments].by = e.target.value;
+    } else {
+      step.by = e.target.value;
+    }
     renderSteps();
   });
   container.appendChild(byWrap);
