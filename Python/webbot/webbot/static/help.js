@@ -23,9 +23,13 @@ function _renderBody(topic) {
 function createHelpButton(topicId) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "help-btn";
-  btn.textContent = "?";
+  btn.className = "help-btn btn-icon-only";
   btn.setAttribute("aria-label", `Help: ${HELP_TOPICS[topicId]?.title || topicId}`);
+  if (typeof icon === "function") {
+    btn.appendChild(icon("helpSm", "icon icon-help-btn"));
+  } else {
+    btn.textContent = "?";
+  }
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();

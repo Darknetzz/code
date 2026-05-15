@@ -108,9 +108,17 @@ async function loadScenarios() {
     nameEl.textContent = s.name;
 
     const typeEl = document.createElement("span");
-    typeEl.className = "scenario-item-type";
-    typeEl.textContent = s.type;
+    typeEl.className = `scenario-item-type type-${s.type}`;
+    if (typeof icon === "function") {
+      typeEl.appendChild(icon(s.type === "python" ? "python" : "json", "icon icon-badge"));
+    }
+    const typeLabel = document.createElement("span");
+    typeLabel.textContent = s.type;
+    typeEl.appendChild(typeLabel);
 
+    if (typeof icon === "function") {
+      nameEl.prepend(icon("list", "icon icon-scenario"));
+    }
     btn.appendChild(nameEl);
     btn.appendChild(typeEl);
 
@@ -350,15 +358,26 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
   renderFieldInputs();
   wrap.appendChild(locGrid);
 
-  const del = document.createElement("button");
-  del.type = "button";
-  del.textContent = "x";
-  del.title = "Remove field";
-  del.onclick = (e) => {
-    e.stopPropagation();
-    builderSteps[stepIndex].fields.splice(fieldIndex, 1);
-    renderSteps();
-  };
+  const del =
+    typeof makeIconButton === "function"
+      ? makeIconButton("trash", "Remove field", (e) => {
+          e.stopPropagation();
+          builderSteps[stepIndex].fields.splice(fieldIndex, 1);
+          renderSteps();
+        })
+      : (() => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = "×";
+          b.title = "Remove field";
+          b.onclick = (e) => {
+            e.stopPropagation();
+            builderSteps[stepIndex].fields.splice(fieldIndex, 1);
+            renderSteps();
+          };
+          return b;
+        })();
+  del.classList.add("btn-remove-field");
   wrap.appendChild(del);
   return wrap;
 }
@@ -630,13 +649,17 @@ function renderStepRow(step, index) {
     const addField = document.createElement("button");
     addField.type = "button";
     addField.className = "btn-add-field";
-    addField.textContent = "+ field";
     addField.onclick = (e) => {
       e.stopPropagation();
       if (!builderSteps[index].fields) builderSteps[index].fields = [];
       builderSteps[index].fields.push({ by: "css", selector: "", value: "" });
       renderSteps();
     };
+    if (typeof enhanceButton === "function") {
+      enhanceButton(addField, "plus", { label: "Add field" });
+    } else {
+      addField.textContent = "+ field";
+    }
     fields.appendChild(addField);
   }
 
@@ -644,14 +667,20 @@ function renderStepRow(step, index) {
 
   const actions = document.createElement("div");
   actions.className = "step-actions";
-  actions.innerHTML = `
-    <button type="button" data-up>↑</button>
-    <button type="button" data-down>↓</button>
-    <button type="button" data-del>×</button>
-  `;
-  actions.querySelector("[data-up]").onclick = () => moveStep(index, -1);
-  actions.querySelector("[data-down]").onclick = () => moveStep(index, 1);
-  actions.querySelector("[data-del]").onclick = () => removeStep(index);
+  if (typeof makeIconButton === "function") {
+    actions.appendChild(makeIconButton("chevronUp", "Move step up", () => moveStep(index, -1)));
+    actions.appendChild(makeIconButton("chevronDown", "Move step down", () => moveStep(index, 1)));
+    actions.appendChild(makeIconButton("trash", "Remove step", () => removeStep(index)));
+  } else {
+    actions.innerHTML = `
+      <button type="button" data-up title="Move step up">↑</button>
+      <button type="button" data-down title="Move step down">↓</button>
+      <button type="button" data-del title="Remove step">×</button>
+    `;
+    actions.querySelector("[data-up]").onclick = () => moveStep(index, -1);
+    actions.querySelector("[data-down]").onclick = () => moveStep(index, 1);
+    actions.querySelector("[data-del]").onclick = () => removeStep(index);
+  }
   row.appendChild(actions);
 
   fields.querySelectorAll("input, select").forEach((inp) => {
