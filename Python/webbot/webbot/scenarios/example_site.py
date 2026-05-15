@@ -13,6 +13,15 @@ from webbot.human import (
 )
 from webbot.run_context import run_verified_step
 
+# Shown in the dashboard preview (keep in sync with run_verified_step labels below).
+STEP_LABELS = (
+    "goto https://example.com",
+    "reading pause",
+    "idle mouse drift",
+    "wait for heading",
+    'click link "Learn more"',
+)
+
 
 async def run(page: Page) -> None:
     total = 5

@@ -404,6 +404,16 @@ main {
   color: var(--muted);
 }
 
+.flow-python-view {
+  margin-bottom: 1rem;
+}
+
+.flow-python-steps-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .flow-editor-readonly {
   opacity: 0.65;
   pointer-events: none;

@@ -122,6 +122,24 @@ class ScenarioInfo(BaseModel):
     description: str = ""
 
 
+class ScenarioPreviewStep(BaseModel):
+    index: int
+    label: str
+
+
+class ScenarioPreview(BaseModel):
+    name: str
+    type: Literal["python", "json"]
+    description: str = ""
+    steps: list[ScenarioPreviewStep] = Field(default_factory=list)
+    source: str | None = None
+    start_url: str | None = None
+    random_delay_between_steps: bool = False
+    between_steps_min: float = 0.3
+    between_steps_max: float = 1.2
+    between_steps_distribution: Literal["uniform", "triangular", "log_normal"] = "triangular"
+
+
 class RunRequest(BaseModel):
     scenario: str
     loops: int = 1

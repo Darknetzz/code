@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from playwright.async_api import Page
 
@@ -13,9 +14,30 @@ from webbot.scenarios import example_site
 
 ScenarioFn = Callable[[Page], Awaitable[None]]
 
-_PYTHON_SCENARIOS: dict[str, tuple[ScenarioFn, str]] = {
-    "example": (example_site.run, "Browse example.com with human-like clicks (Python)"),
+
+@dataclass(frozen=True)
+class PythonScenarioMeta:
+    description: str
+    step_labels: tuple[str, ...]
+    source: str
+
+
+_PYTHON_SCENARIOS: dict[str, tuple[ScenarioFn, PythonScenarioMeta]] = {
+    "example": (
+        example_site.run,
+        PythonScenarioMeta(
+            description="Browse example.com with human-like clicks (Python)",
+            step_labels=example_site.STEP_LABELS,
+            source="webbot/scenarios/example_site.py",
+        ),
+    ),
 }
+
+
+def get_python_scenario_meta(name: str) -> PythonScenarioMeta:
+    if name not in _PYTHON_SCENARIOS:
+        raise KeyError(name)
+    return _PYTHON_SCENARIOS[name][1]
 
 
 def list_scenarios() -> list[str]:
@@ -24,7 +46,11 @@ def list_scenarios() -> list[str]:
 
 def list_scenario_info() -> list[ScenarioInfo]:
     items: list[ScenarioInfo] = []
-    for name, (_, desc) in _PYTHON_SCENARIOS.items():
+    for name, (_, meta) in _PYTHON_SCENARIOS.items():
+        n = len(meta.step_labels)
+        desc = meta.description
+        if n and "step" not in desc.lower():
+            desc = f"{desc} ({n} steps)"
         items.append(ScenarioInfo(name=name, type="python", description=desc))
     for name in list_json_scenario_names():
         try:

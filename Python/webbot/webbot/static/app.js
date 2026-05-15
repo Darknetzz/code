@@ -7,6 +7,7 @@ let ws = null;
 let runStepProgress = null;
 let runShowStepProgress = false;
 let cachedPreviewDoc = null;
+let cachedScenarioPreview = null;
 let runStatusPollTimer = null;
 
 function getSelectedScenario() {
@@ -115,22 +116,28 @@ function renderRunFlowPreviewBody(loopInfo) {
     body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Edit in <code>webbot/scenarios/</code>.</p>`;
     return;
   }
-  if (cachedPreviewDoc) {
+  if (cachedScenarioPreview) {
+    body.innerHTML = renderScenarioPreviewHtml(cachedScenarioPreview);
+  } else if (cachedPreviewDoc) {
     body.innerHTML = renderFlowPreviewHtml(cachedPreviewDoc);
   }
 }
 
 async function initRunStepProgress(scenario) {
-  const info = getScenarioInfo(scenario);
   runStepProgress = [];
-  if (info?.type === "json") {
-    try {
-      const doc = await api(`/api/scenarios/${encodeURIComponent(scenario)}`);
-      cachedPreviewDoc = doc;
-      runStepProgress = buildStepPlanFromDoc(doc);
-    } catch {
-      runStepProgress = [];
+  try {
+    const preview = await fetchScenarioPreview(scenario);
+    cachedScenarioPreview = preview;
+    runStepProgress = stepPlanFromPreview(preview);
+    if (preview.type === "json") {
+      try {
+        cachedPreviewDoc = await api(`/api/scenarios/${encodeURIComponent(scenario)}`);
+      } catch {
+        cachedPreviewDoc = null;
+      }
     }
+  } catch {
+    runStepProgress = [];
   }
   runShowStepProgress = true;
   const panel = $("run-flow-preview");
@@ -248,25 +255,88 @@ function clearRunStepProgress() {
   stopRunStatusPolling();
 }
 
-function renderFlowPreviewHtml(doc) {
+async function fetchScenarioPreview(name) {
+  return api(`/api/scenarios/${encodeURIComponent(name)}/preview`);
+}
+
+function renderScenarioPreviewHtml(preview) {
   const parts = [];
-  if (doc.description) parts.push(`<p class="flow-preview-desc">${escapeHtml(doc.description)}</p>`);
-  if (doc.start_url) {
-    parts.push(`<p class="flow-preview-meta"><strong>Start URL:</strong> ${escapeHtml(doc.start_url)}</p>`);
-  }
-  if (doc.random_delay_between_steps) {
+  if (preview.description) parts.push(`<p class="flow-preview-desc">${escapeHtml(preview.description)}</p>`);
+  if (preview.source) {
     parts.push(
-      `<p class="flow-preview-meta"><strong>Between steps:</strong> ${doc.between_steps_min}–${doc.between_steps_max}s (${escapeHtml(doc.between_steps_distribution || "triangular")})</p>`
+      `<p class="flow-preview-meta"><strong>Source:</strong> <code>${escapeHtml(preview.source)}</code></p>`
     );
   }
-  const steps = doc.steps || [];
+  if (preview.start_url) {
+    parts.push(`<p class="flow-preview-meta"><strong>Start URL:</strong> ${escapeHtml(preview.start_url)}</p>`);
+  }
+  if (preview.random_delay_between_steps) {
+    parts.push(
+      `<p class="flow-preview-meta"><strong>Between steps:</strong> ${preview.between_steps_min}–${preview.between_steps_max}s (${escapeHtml(preview.between_steps_distribution || "triangular")})</p>`
+    );
+  }
+  const steps = preview.steps || [];
   if (steps.length === 0) {
     parts.push('<p class="muted">No steps defined.</p>');
   } else {
-    const items = steps.map((s) => `<li>${escapeHtml(stepPreviewLabel(s))}</li>`).join("");
+    const items = steps
+      .map((s) => `<li>${escapeHtml(typeof s === "string" ? s : s.label)}</li>`)
+      .join("");
     parts.push(`<ol class="flow-preview-steps">${items}</ol>`);
   }
   return parts.join("");
+}
+
+function stepPlanFromPreview(preview) {
+  return (preview.steps || []).map((s) => ({
+    index: s.index,
+    label: s.label,
+    status: "pending",
+    error: null,
+  }));
+}
+
+function renderFlowPreviewHtml(doc) {
+  return renderScenarioPreviewHtml({
+    description: doc.description,
+    start_url: doc.start_url,
+    random_delay_between_steps: doc.random_delay_between_steps,
+    between_steps_min: doc.between_steps_min,
+    between_steps_max: doc.between_steps_max,
+    between_steps_distribution: doc.between_steps_distribution,
+    steps: buildStepPlanFromDoc(doc).map((s) => ({ index: s.index, label: s.label })),
+  });
+}
+
+function renderPythonFlowView(preview) {
+  updatePythonBanner({ name: preview.name, description: preview.description });
+  $("flow-python-banner")?.classList.remove("hidden");
+  $("flow-python-view")?.classList.remove("hidden");
+  $("flow-editor-wrap")?.classList.add("hidden");
+  const list = $("flow-python-steps");
+  if (list) {
+    const steps = preview.steps || [];
+    list.innerHTML = steps.length
+      ? steps.map((s) => `<li>${escapeHtml(s.label)}</li>`).join("")
+      : '<li class="muted">No steps listed — add STEP_LABELS in the scenario module.</li>';
+  }
+  const src = $("flow-python-source");
+  if (src) {
+    if (preview.source) {
+      src.innerHTML = `<strong>Source:</strong> <code>${escapeHtml(preview.source)}</code>`;
+      src.classList.remove("hidden");
+    } else {
+      src.textContent = "";
+      src.classList.add("hidden");
+    }
+  }
+}
+
+function showJsonFlowEditor() {
+  $("flow-python-banner")?.classList.add("hidden");
+  $("flow-python-view")?.classList.add("hidden");
+  $("flow-editor-wrap")?.classList.remove("hidden");
+  setFlowEditorMode(true);
 }
 
 async function updateRunFlowPreview(name) {
@@ -302,19 +372,23 @@ async function updateRunFlowPreview(name) {
     return;
   }
 
-  if (info.type === "python") {
-    cachedPreviewDoc = null;
-    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Edit in <code>webbot/scenarios/</code>.</p>`;
-    return;
-  }
-
   try {
     body.innerHTML = '<p class="muted">Loading…</p>';
-    const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
-    cachedPreviewDoc = doc;
-    body.innerHTML = renderFlowPreviewHtml(doc);
+    const preview = await fetchScenarioPreview(name);
+    cachedScenarioPreview = preview;
+    if (info.type === "json") {
+      try {
+        cachedPreviewDoc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
+      } catch {
+        cachedPreviewDoc = null;
+      }
+    } else {
+      cachedPreviewDoc = null;
+    }
+    body.innerHTML = renderScenarioPreviewHtml(preview);
   } catch (e) {
     cachedPreviewDoc = null;
+    cachedScenarioPreview = null;
     body.innerHTML = `<p class="status failed">${escapeHtml(e.message)}</p>`;
   }
 }
@@ -378,7 +452,7 @@ function newFlow() {
   selectedScenario = null;
   syncScenarioListSelection();
   clearFlowEditor();
-  setFlowEditorMode(true);
+  showJsonFlowEditor();
   $("build-msg").textContent = "New flow — enter a name and save.";
   updateDeleteFlowButton();
   updateRunFlowPreview(null);
@@ -400,21 +474,20 @@ async function loadFlowIntoEditor(name) {
   setSelectedScenario(name, { skipPreview: true });
 
   if (info.type === "python") {
-    updatePythonBanner(info);
-    $("build-name").value = info.name;
-    $("build-desc").value = info.description || "";
-    $("build-url").value = "";
-    builderSteps = [];
-    renderSteps();
-    renderScenarioOptions();
-    setFlowEditorMode(false);
-    $("build-msg").textContent = "Python flow — view only. Edit in webbot/scenarios/ (source).";
+    try {
+      const preview = await fetchScenarioPreview(name);
+      cachedScenarioPreview = preview;
+      renderPythonFlowView(preview);
+      $("build-msg").textContent = "Python flow — view only. Edit source to change steps.";
+    } catch (e) {
+      $("build-msg").textContent = e.message;
+    }
     updateDeleteFlowButton();
     await updateRunFlowPreview(name);
     return;
   }
 
-  setFlowEditorMode(true);
+  showJsonFlowEditor();
   try {
     const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
     populateFlowEditor(doc);

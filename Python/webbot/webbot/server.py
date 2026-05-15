@@ -10,7 +10,15 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
-from webbot.models import RunRequest, RunStatusResponse, ScenarioDocument, ScenarioInfo, StepProgressItem
+from webbot.models import (
+    RunRequest,
+    RunStatusResponse,
+    ScenarioDocument,
+    ScenarioInfo,
+    ScenarioPreview,
+    StepProgressItem,
+)
+from webbot.scenario_preview import get_scenario_preview
 from webbot.nodriver_browser import nodriver_available
 from webbot.runner import RunConfig, RunState, get_runner
 from webbot.scenario_store import delete_json_scenario, load_json_scenario, save_json_scenario
@@ -103,6 +111,14 @@ def health() -> dict:
 @app.get("/api/scenarios", response_model=list[ScenarioInfo])
 def api_list_scenarios() -> list[ScenarioInfo]:
     return list_scenario_info()
+
+
+@app.get("/api/scenarios/{name}/preview", response_model=ScenarioPreview)
+def api_scenario_preview(name: str) -> ScenarioPreview:
+    try:
+        return get_scenario_preview(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/scenarios/{name}", response_model=ScenarioDocument)
