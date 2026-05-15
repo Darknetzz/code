@@ -304,7 +304,7 @@ const HELP_TOPICS = {
     title: "If present (conditional)",
     body: [
       "<p>Waits for an element (same <strong>Find by</strong> options as a click). If it becomes visible within the timeout, Webbot runs every step in <strong>Then steps</strong>; otherwise it runs <strong>Else steps</strong>.</p>",
-      "<p><strong>Then / Else steps</strong> are a JSON array of step objects — the same shape as the top-level flow (each object has an <code>action</code> field). Unused branch steps are skipped in the live step list during a run.</p>",
+      "<p><strong>Then / Else branches</strong> are edited inline: use <strong>Add step</strong> under each branch to queue multiple steps — the same shapes as top-level steps. In raw JSON they are still <code>then_steps</code> / <code>else_steps</code> arrays. Unused branch steps are skipped in the live step list during a run.</p>",
       "<p><code>timeout_ms: 0</code> means no wait: Webbot checks visibility immediately.</p>",
     ],
   },

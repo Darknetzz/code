@@ -2,17 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-class GotoStep(BaseModel):
-    action: Literal["goto"] = "goto"
+class StepBase(BaseModel):
+    """Optional anchor for ``goto`` steps within the same linear step list (root or one branch)."""
+
+    workflow_label: str = ""
+
+
+class OpenUrlStep(StepBase):
+    action: Literal["open_url"] = "open_url"
     url: str
 
 
-class DelayStep(BaseModel):
+class WorkflowGotoStep(StepBase):
+    """Jump forward to a later step in the same step list (must share the same parent array)."""
+
+    action: Literal["goto"] = "goto"
+    goto_label: str = Field(min_length=1)
+
+
+class DelayStep(StepBase):
     action: Literal["delay"] = "delay"
     min: float = 0.3
     max: float = 1.2
@@ -22,7 +35,7 @@ class DelayStep(BaseModel):
     long_pause_max: float = 5.0
 
 
-class ScrollStep(BaseModel):
+class ScrollStep(StepBase):
     action: Literal["scroll"] = "scroll"
     delta_y: int | None = None
     steps: int | None = None
@@ -40,7 +53,7 @@ class ScrollStep(BaseModel):
     variable_step_size: bool = True
 
 
-class ClickStep(BaseModel):
+class ClickStep(StepBase):
     action: Literal["click"] = "click"
     by: Literal["role", "text", "css", "test_id", "data"] = "role"
     role: str | None = None
@@ -52,7 +65,7 @@ class ClickStep(BaseModel):
     data_value: str | None = None
 
 
-class FillStep(BaseModel):
+class FillStep(StepBase):
     """Fill a single input, textarea, or select."""
 
     action: Literal["fill"] = "fill"
@@ -81,7 +94,7 @@ class FormField(BaseModel):
     value: str
 
 
-class RunScenarioStep(BaseModel):
+class RunScenarioStep(StepBase):
     """Run another saved scenario inline (same browser session): JSON expands steps; Python runs as one block)."""
 
     action: Literal["run_scenario"] = "run_scenario"
@@ -90,7 +103,7 @@ class RunScenarioStep(BaseModel):
     skip_start_url: bool = True
 
 
-class IfPresentStep(BaseModel):
+class IfPresentStep(StepBase):
     """If a locator matches (visible within timeout), run ``then_steps``; otherwise ``else_steps``."""
 
     action: Literal["if_present"] = "if_present"
@@ -107,14 +120,14 @@ class IfPresentStep(BaseModel):
     else_steps: list["Step"] = Field(default_factory=list)
 
 
-class ExitStep(BaseModel):
+class ExitStep(StepBase):
     """End the scenario run successfully without executing further steps."""
 
     action: Literal["exit"] = "exit"
     message: str = ""
 
 
-class SubmitFormStep(BaseModel):
+class SubmitFormStep(StepBase):
     """Fill fields and submit a form (GET or POST per the form's method attribute)."""
 
     action: Literal["submit_form"] = "submit_form"
@@ -134,7 +147,8 @@ class SubmitFormStep(BaseModel):
 
 Step = Annotated[
     Union[
-        GotoStep,
+        OpenUrlStep,
+        WorkflowGotoStep,
         DelayStep,
         ScrollStep,
         ClickStep,
@@ -157,6 +171,17 @@ class ScenarioDocument(BaseModel):
     between_steps_min: float = 0.3
     between_steps_max: float = 1.2
     between_steps_distribution: Literal["uniform", "triangular", "log_normal"] = "triangular"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_navigation_goto(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        steps = data.get("steps")
+        if isinstance(steps, list):
+            data = {**data, "steps": [_migrate_legacy_step_payload(s) for s in steps]}
+        return data
 
 
 class ScenarioInfo(BaseModel):
@@ -256,6 +281,36 @@ class RunStatusResponse(BaseModel):
     step_label: str | None = None
     error: str | None = None
     step_progress: list[StepProgressItem] = Field(default_factory=list)
+
+
+def _migrate_legacy_step_payload(step: object) -> object:
+    """Turn legacy ``goto`` URL steps into ``open_url`` before discriminated parsing."""
+    if not isinstance(step, dict):
+        return step
+    out = dict(step)
+    action = out.get("action")
+
+    then_steps = out.get("then_steps")
+    if isinstance(then_steps, list):
+        out["then_steps"] = [_migrate_legacy_step_payload(s) for s in then_steps]
+
+    else_steps = out.get("else_steps")
+    if isinstance(else_steps, list):
+        out["else_steps"] = [_migrate_legacy_step_payload(s) for s in else_steps]
+
+    if action == "goto":
+        goto_label_raw = out.get("goto_label")
+        has_target = isinstance(goto_label_raw, str) and goto_label_raw.strip() != ""
+        if has_target:
+            return out  # Workflow goto (already new shape)
+        if isinstance(out.get("url"), str) and str(out["url"]).strip() != "":
+            out["action"] = "open_url"
+            return out
+        raise ValueError(
+            "JSON step action 'goto' requires either legacy 'url' (use open_url) or non-empty goto_label "
+            "(workflow goto)"
+        )
+    return out
 
 
 ScenarioDocument.model_rebuild()

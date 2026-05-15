@@ -16,13 +16,14 @@ from webbot.models import (
     ExitStep,
     FillStep,
     FormField,
-    GotoStep,
     IfPresentStep,
+    OpenUrlStep,
     RunScenarioStep,
     ScenarioDocument,
     ScrollStep,
     Step,
     SubmitFormStep,
+    WorkflowGotoStep,
 )
 from webbot.run_context import get_run_context, run_verified_step
 from webbot.scenario_store import load_json_scenario, scenario_kind
@@ -58,18 +59,22 @@ def _loc_kwargs_click(step: ClickStep) -> dict:
 
 
 def step_label(step: Step) -> str:
-    if isinstance(step, GotoStep):
-        return f"goto {step.url}"
+    wl = (getattr(step, "workflow_label", None) or "").strip()
+    wl_s = f" @{wl}" if wl else ""
+    if isinstance(step, OpenUrlStep):
+        return f"open URL {step.url}{wl_s}"
+    if isinstance(step, WorkflowGotoStep):
+        return f"goto › {step.goto_label}{wl_s}"
     if isinstance(step, DelayStep):
         extra = f" ({step.distribution})" if step.distribution != "uniform" else ""
-        return f"delay {step.min}-{step.max}s{extra}"
+        return f"delay {step.min}-{step.max}s{extra}{wl_s}"
     if isinstance(step, ScrollStep):
         dy = step.delta_y if step.delta_y is not None else "auto"
         os = " +overscroll" if step.overscroll else ""
-        return f"scroll dy={dy}{os}"
+        return f"scroll dy={dy}{os}{wl_s}"
     if isinstance(step, FillStep):
         target = step.selector or step.label or step.name or step.role or "?"
-        return f"fill {target} = {step.value!r}"
+        return f"fill {target} = {step.value!r}{wl_s}"
     if isinstance(step, ClickStep):
         target = (
             step.role
@@ -80,12 +85,12 @@ def step_label(step: Step) -> str:
             or "?"
         )
         extra = f' "{step.name}"' if step.name else ""
-        return f"click {step.by} {target}{extra}"
+        return f"click {step.by} {target}{extra}{wl_s}"
     if isinstance(step, SubmitFormStep):
         n = len(step.fields)
-        return f"submit_form ({step.method.upper()}) {n} field(s)"
+        return f"submit_form ({step.method.upper()}) {n} field(s){wl_s}"
     if isinstance(step, RunScenarioStep):
-        return f"run scenario: {step.scenario}"
+        return f"run scenario: {step.scenario}{wl_s}"
     if isinstance(step, IfPresentStep):
         target = (
             step.role
@@ -96,33 +101,94 @@ def step_label(step: Step) -> str:
             or "?"
         )
         extra = f' "{step.name}"' if step.name else ""
-        return f"if_present {step.by} {target}{extra} ({step.timeout_ms}ms)"
+        return f"if_present {step.by} {target}{extra} ({step.timeout_ms}ms){wl_s}"
     if isinstance(step, ExitStep):
-        return f"exit{': ' + step.message if step.message.strip() else ''}"
-    return step.action  # type: ignore[union-attr]
+        return f"exit{': ' + step.message if step.message.strip() else ''}{wl_s}"
+    return f"{step.action}{wl_s}"
 
 
 def _needs_implicit_goto(doc: ScenarioDocument, skip_implicit_start_url: bool) -> bool:
     return (
         bool(doc.start_url)
-        and not document_has_explicit_goto(doc.steps)
+        and not document_has_explicit_open_url(doc.steps)
         and not skip_implicit_start_url
     )
 
 
-def document_has_explicit_goto(steps: list[Step]) -> bool:
-    """True if ``steps`` (recursively inside ``if_present``) contain a ``goto`` action."""
+def document_has_explicit_open_url(steps: list[Step]) -> bool:
+    """True when steps already navigate (recursive), so ``start_url`` is not injected implicitly."""
 
     for step in steps:
-        if isinstance(step, GotoStep):
+        if isinstance(step, OpenUrlStep):
             return True
         if isinstance(step, IfPresentStep):
-            if document_has_explicit_goto(step.then_steps) or document_has_explicit_goto(step.else_steps):
+            if document_has_explicit_open_url(step.then_steps) or document_has_explicit_open_url(
+                step.else_steps
+            ):
                 return True
     return False
 
 
-def _append_labels_for_step(
+def validate_workflow_jump_constraints(doc: ScenarioDocument) -> None:
+    """Ensure unique ``workflow_label`` anchors and forward-only ``goto`` within each step list."""
+
+    _validate_workflow_jump_step_list(doc.steps, context=f"scenario {doc.name!r} (root)")
+
+
+def _validate_workflow_jump_step_list(steps: list[Step], *, context: str) -> None:
+    anchors: dict[str, int] = {}
+    for i, st in enumerate(steps):
+        raw = getattr(st, "workflow_label", None)
+        lab = raw.strip() if isinstance(raw, str) else ""
+        if lab:
+            if lab in anchors:
+                prev = anchors[lab]
+                raise ValueError(f"Duplicate workflow_label {lab!r} in {context}: indices {prev} and {i}.")
+            anchors[lab] = i
+
+    for i, st in enumerate(steps):
+        if isinstance(st, WorkflowGotoStep):
+            gl = st.goto_label.strip()
+            if gl not in anchors:
+                raise ValueError(
+                    f"goto step at index {i} in {context} references unknown label {gl!r} "
+                    "(set workflow_label on a later step in the same list)."
+                )
+            ti = anchors[gl]
+            if ti <= i:
+                raise ValueError(
+                    f"goto in {context} at index {i} must target a later step; "
+                    f"label {gl!r} is at index {ti}."
+                )
+        if isinstance(st, IfPresentStep):
+            _validate_workflow_jump_step_list(st.then_steps, context=f"{context} › if_present then")
+            _validate_workflow_jump_step_list(st.else_steps, context=f"{context} › if_present else")
+
+
+def _workflow_dispatch_weights(
+    steps: list[Step],
+    *,
+    scenario_name: str,
+    stack: frozenset[str],
+    label_prefix: str,
+    depth: int,
+) -> list[int]:
+    return [
+        _flattened_label_count_for_steps(
+            [st], scenario_name=scenario_name, stack=stack, label_prefix=label_prefix, depth=depth
+        )
+        for st in steps
+    ]
+
+
+def _anchors_for_jump_targets(steps: list[Step]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for i, st in enumerate(steps):
+        raw = getattr(st, "workflow_label", None)
+        lab = raw.strip() if isinstance(raw, str) else ""
+        if lab:
+            out[lab] = i
+    return out
     labels: list[str],
     step: Step,
     *,
@@ -207,7 +273,7 @@ def collect_expanded_plan_labels(
 
     labels: list[str] = []
     if _needs_implicit_goto(doc, skip_implicit_start_url):
-        labels.append(label_prefix + f"goto {doc.start_url}")
+        labels.append(label_prefix + f"open URL {doc.start_url}")
 
     for step in doc.steps:
         _append_labels_for_step(
@@ -339,7 +405,7 @@ async def _locator_visible_if_present(page: Page, step: IfPresentStep) -> bool:
 
 
 async def execute_step(page: Page, step: Step) -> None:
-    if isinstance(step, GotoStep):
+    if isinstance(step, OpenUrlStep):
         await page.goto(step.url, wait_until="domcontentloaded")
         await reading_pause(0.8, 2.0)
     elif isinstance(step, DelayStep):
@@ -405,6 +471,10 @@ async def execute_step(page: Page, step: Step) -> None:
         raise ValueError(
             "if_present steps must be executed via the JSON scenario runner (branch handling)"
         )
+    elif isinstance(step, WorkflowGotoStep):
+        raise ValueError(
+            "goto (workflow jump) steps must be executed via _run_step_sequence (runner handles jumps)"
+        )
     else:
         raise ValueError(f"Unknown step: {step}")
 
@@ -427,6 +497,7 @@ async def _between_steps_pause(doc: ScenarioDocument) -> None:
 
 def build_step_plan(doc: ScenarioDocument, *, root_name: str | None = None) -> list[tuple[int, str]]:
     name = root_name if root_name is not None else doc.name
+    validate_workflow_jump_constraints(doc)
     labels = collect_expanded_plan_labels(
         doc,
         scenario_name=name,
@@ -449,11 +520,38 @@ async def _run_step_sequence(
     depth: int,
     tracker: JsonRunTracker,
 ) -> None:
+    if not steps:
+        return
+
+    anchors = _anchors_for_jump_targets(steps)
+    weights = _workflow_dispatch_weights(
+        steps, scenario_name=scenario_name, stack=stack, label_prefix=label_prefix, depth=depth
+    )
+
+    idx = 0
     executed_sub = False
-    for s in steps:
+
+    while idx < len(steps):
+        s = steps[idx]
         if executed_sub:
             await _between_steps_pause(delay_doc)
         executed_sub = True
+
+        if isinstance(s, WorkflowGotoStep):
+            gl = s.goto_label.strip()
+            tgt_ix = anchors[gl]
+            if tgt_ix <= idx:
+                raise RuntimeError("workflow goto index mismatch (should have been validated)")
+            skip = sum(weights[idx + 1 : tgt_ix])
+
+            async def _noop() -> None:
+                await asyncio.sleep(0)
+
+            await tracker.verified_step(_noop)
+            tracker.skip_plan_steps(skip)
+            idx = tgt_ix
+            continue
+
         await dispatch_json_step(
             page,
             s,
@@ -464,6 +562,7 @@ async def _run_step_sequence(
             depth=depth,
             tracker=tracker,
         )
+        idx += 1
 
 
 async def _execute_if_present(
@@ -634,6 +733,7 @@ async def run_json_scenario(
 ) -> None:
     del log  # retained for backward-compatible call sites
     name = root_name if root_name is not None else doc.name
+    validate_workflow_jump_constraints(doc)
     labels = collect_expanded_plan_labels(
         doc,
         scenario_name=name,

@@ -13,7 +13,7 @@ from webbot import __version__
 from webbot.json_scenario import (
     build_step_plan,
     collect_group_plan_labels,
-    document_has_explicit_goto,
+    document_has_explicit_open_url,
     step_label,
 )
 from webbot.models import (
@@ -224,8 +224,8 @@ def api_scenario_plan(name: str, expand: bool = True) -> ScenarioStepPlan:
     else:
         items_flat: list[tuple[int, str]] = []
         offset = 0
-        if doc.start_url and not document_has_explicit_goto(doc.steps):
-            items_flat.append((1, f"goto {doc.start_url}"))
+        if doc.start_url and not document_has_explicit_open_url(doc.steps):
+            items_flat.append((1, f"open URL {doc.start_url}"))
             offset = 1
 
         for i, step in enumerate(doc.steps, start=1):

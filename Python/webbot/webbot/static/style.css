@@ -943,6 +943,18 @@ summary.workspace-dropdown-summary.success.outline:hover {
   margin-bottom: 0.35rem;
 }
 
+.groups-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.groups-card-actions .groups-add-flow-wrap {
+  margin-bottom: 0;
+}
+
 .groups-add-dropdown {
   position: relative;
 }
@@ -1382,6 +1394,62 @@ button:disabled {
 .step-row.step-drop-before {
   border-color: var(--accent);
   box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.nested-branch-arms-root {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+.nested-branch-arm {
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+}
+
+.nested-branch-arm-header {
+  margin-bottom: 0.35rem;
+}
+
+.nested-branch-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nested-branch-step {
+  padding: 0.4rem 0.45rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 5px;
+  background: var(--bg);
+}
+
+.nested-branch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.nested-branch-step-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
+  gap: 0.35rem 0.5rem;
+  align-items: end;
+}
+
+.nested-branch-arms {
+  margin-top: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.btn-add-nested-step {
+  margin-top: 0.4rem;
 }
 
 #steps-list {

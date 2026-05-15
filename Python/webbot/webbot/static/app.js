@@ -135,8 +135,10 @@ function escapeHtml(text) {
 function stepPreviewLabel(step) {
   if (!step?.action) return "step";
   switch (step.action) {
+    case "open_url":
+      return `open ${step.url || "?"}`;
     case "goto":
-      return `goto ${step.url || "?"}`;
+      return `goto › ${step.goto_label || "?"}`;
     case "delay":
       return `delay ${step.min ?? "?"}–${step.max ?? "?"}s`;
     case "scroll":
@@ -482,7 +484,7 @@ function clearFlowEditor() {
   $("build-url").value = "";
   $("build-random-between-steps").checked = false;
   renderScenarioOptions();
-  builderSteps = [defaultStep("goto")];
+  builderSteps = [defaultStep("open_url")];
   renderSteps();
 }
 
@@ -945,6 +947,7 @@ function connectWebSocket() {
 }
 
 const STEP_TYPES = [
+  "open_url",
   "goto",
   "click",
   "fill",
@@ -1192,6 +1195,37 @@ function targetStepForPlacement(placement) {
   return getBranchStepBySegments(placement.segments);
 }
 
+function getSiblingStepsArrayRef(placement) {
+  if (placement.type === "main") return builderSteps;
+  const segs = placement.segments;
+  if (!segs || segs.length < 3) return null;
+  const host = getBranchStepBySegments(segs.slice(0, -2));
+  const bk = segs[segs.length - 2];
+  if (!host || !bk) return null;
+  const arr = host[bk];
+  return Array.isArray(arr) ? arr : null;
+}
+
+/** Index of this step inside its sibling list (main flow row index or nested branch leaf index). */
+function siblingIndexFromPlacement(placement) {
+  if (placement.type === "main") return placement.index;
+  const segs = placement.segments;
+  return Number(segs[segs.length - 1]);
+}
+
+/** Non-empty workflow_label values on sibling steps strictly after siblingIndex (valid goto targets). */
+function forwardWorkflowLabelTargets(placement, siblingIndex) {
+  const arr = getSiblingStepsArrayRef(placement);
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (let j = siblingIndex + 1; j < arr.length; j++) {
+    const wl =
+      typeof arr[j].workflow_label === "string" ? arr[j].workflow_label.trim() : "";
+    if (wl) out.push(wl);
+  }
+  return [...new Set(out)].sort();
+}
+
 /**
  * All step field UIs except if_present branch arms (handled separately).
  * @param {{ type: "main", index: number } | { type: "branch", segments: (string|number)[] }} placement
@@ -1199,9 +1233,48 @@ function targetStepForPlacement(placement) {
 function appendStepFieldsNotIfPresent(fields, step, placement) {
   const locCtx = placement.type === "main" ? placement.index : placement.segments;
   const curName = $("build-name").value.trim();
+  const sibIx = siblingIndexFromPlacement(placement);
 
-  if (step.action === "goto") {
-    fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.goto.url"));
+  fields.appendChild(
+    labeledField(
+      "workflow_label",
+      "Step label",
+      step.workflow_label || "",
+      "text",
+      "Optional anchor for workflow goto (unique among steps in this list)",
+      null
+    )
+  );
+
+  if (step.action === "open_url") {
+    fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.open_url.url"));
+  } else if (step.action === "goto") {
+    const fwd = forwardWorkflowLabelTargets(placement, sibIx);
+    const val = typeof step.goto_label === "string" ? step.goto_label.trim() : "";
+    if (fwd.length) {
+      const mergedOpts = [...new Set([...fwd, val].filter(Boolean))].sort();
+      fields.appendChild(
+        labeledSelect(
+          "goto_label",
+          "Jump to label",
+          val || mergedOpts[0],
+          mergedOpts,
+          "Forward-only: must match a later step’s Step label in this list.",
+          "step.goto.target"
+        )
+      );
+    } else {
+      fields.appendChild(
+        labeledField(
+          "goto_label",
+          "Jump to label",
+          val,
+          "text",
+          "Set Step label on later steps first, then pick the target.",
+          "step.goto.target"
+        )
+      );
+    }
   } else if (step.action === "delay") {
     fields.appendChild(
       labeledField("min", "Min (s)", step.min ?? 0.5, "number", "Shortest random wait", "step.delay.min")
@@ -1503,7 +1576,7 @@ function appendStepFieldsNotIfPresent(fields, step, placement) {
   }
 }
 
-/** @param nestingDepth nesting level of parent if_present (0 = arms under root step). */
+/** @param nestingDepth Depth of the parent if_present step (0 = root flow step's if_present). */
 function renderBranchStepsSection(ifParentSegments, branchKey, branchTitle, nestingDepth) {
   const wrap = document.createElement("div");
   wrap.className = "nested-branch-arm";
@@ -1520,7 +1593,7 @@ function renderBranchStepsSection(ifParentSegments, branchKey, branchTitle, nest
   const host = getBranchStepBySegments(ifParentSegments);
   const arr = (host && Array.isArray(host[branchKey]) ? host[branchKey] : []) || [];
   arr.forEach((_st, ci) => {
-    list.appendChild(renderNestedBranchStepRow(childSegments(ifParentSegments, branchKey, ci), nestingDepth));
+    list.appendChild(renderNestedBranchStepRow(childSegments(ifParentSegments, branchKey, ci), nestingDepth + 1));
   });
   wrap.appendChild(list);
 
@@ -1533,14 +1606,14 @@ function renderBranchStepsSection(ifParentSegments, branchKey, branchTitle, nest
     flushAllIfPresentDomState();
     const p = getBranchStepBySegments(ifParentSegments);
     if (!p || !Array.isArray(p[branchKey])) return;
-    p[branchKey].push(normalizeStep(defaultStep("goto")));
+    p[branchKey].push(normalizeStep(defaultStep("open_url")));
     renderSteps();
   });
   wrap.appendChild(addBtn);
   return wrap;
 }
 
-/** @param ifNestingDepth 1-based depth of branch steps relative to nearest root (1 = outer then/else). */
+/** @param ifNestingDepth 1-based depth of this row under branch arms (1 = direct child of root if_present's Then/Else). */
 function renderNestedBranchStepRow(segments, ifNestingDepth) {
   const step = getBranchStepBySegments(segments);
   const row = document.createElement("div");
@@ -1607,8 +1680,8 @@ function renderNestedBranchStepRow(segments, ifNestingDepth) {
   fields.className = "nested-branch-step-fields";
 
   let armsEl = null;
-  if (!step || step.action === "if_present") {
-    appendStepFieldsNotIfPresent(fields, step || normalizeStep(defaultStep("if_present")), placement);
+  if (step && step.action === "if_present") {
+    appendStepFieldsNotIfPresent(fields, step, placement);
     armsEl = document.createElement("div");
     armsEl.className = "nested-branch-arms";
     armsEl.appendChild(
@@ -1618,7 +1691,7 @@ function renderNestedBranchStepRow(segments, ifNestingDepth) {
       renderBranchStepsSection(segments, "else_steps", "Else (not matched)", ifNestingDepth)
     );
   } else {
-    appendStepFieldsNotIfPresent(fields, step, placement);
+    appendStepFieldsNotIfPresent(fields, step ?? normalizeStep(defaultStep("open_url")), placement);
   }
 
   row.appendChild(fields);
@@ -1654,8 +1727,10 @@ function changeStepType(index, newAction) {
 
 function defaultStep(action) {
   switch (action) {
+    case "open_url":
+      return { action: "open_url", url: $("build-url").value || "https://example.com" };
     case "goto":
-      return { action: "goto", url: $("build-url").value || "https://example.com" };
+      return { action: "goto", goto_label: "later_step", workflow_label: "" };
     case "click":
       return { action: "click", by: "role", role: "button", name: "" };
     case "delay":
@@ -2059,25 +2134,6 @@ function renderStepRow(step, index) {
   return row;
 }
 
-function labeledJsonStepArray(name, labelText, stepsValue) {
-  const wrap = document.createElement("div");
-  wrap.className = "field-labeled step-json-array";
-  appendFieldLabel(
-    wrap,
-    labelText,
-    'Array of step objects, e.g. [{"action":"click","by":"role","role":"button"}]',
-    null
-  );
-  const ta = document.createElement("textarea");
-  ta.className = "step-json-array-input";
-  ta.dataset.jsonArray = name;
-  ta.rows = 5;
-  ta.spellcheck = false;
-  ta.value = JSON.stringify(stepsValue ?? [], null, 2);
-  wrap.appendChild(ta);
-  return wrap;
-}
-
 function fieldInput(name, value, type = "text") {
   const inp = document.createElement("input");
   inp.type = type;
@@ -2169,6 +2225,7 @@ function syncStepFromDom(index, row) {
     row.querySelector('[data-field="action"]')?.value || prev.action;
   const step = { action };
   row.querySelectorAll("[data-field]").forEach((el) => {
+    if (el.closest(".nested-branch-arms")) return;
     const key = el.dataset.field;
     if (key === "action") return;
     if (el.type === "checkbox") {
@@ -2183,26 +2240,8 @@ function syncStepFromDom(index, row) {
     step.fields = prev.fields;
   }
   if (action === "if_present") {
-    const thenTa = row.querySelector('textarea[data-json-array="then_steps"]');
-    const elseTa = row.querySelector('textarea[data-json-array="else_steps"]');
     step.then_steps = Array.isArray(prev.then_steps) ? prev.then_steps : [];
     step.else_steps = Array.isArray(prev.else_steps) ? prev.else_steps : [];
-    if (thenTa) {
-      try {
-        const parsed = JSON.parse(thenTa.value.trim() || "[]");
-        step.then_steps = Array.isArray(parsed) ? parsed : step.then_steps;
-      } catch {
-        /* keep previous */
-      }
-    }
-    if (elseTa) {
-      try {
-        const parsed = JSON.parse(elseTa.value.trim() || "[]");
-        step.else_steps = Array.isArray(parsed) ? parsed : step.else_steps;
-      } catch {
-        /* keep previous */
-      }
-    }
   }
   builderSteps[index] = normalizeStep(step);
 }
@@ -2306,6 +2345,11 @@ function renderScenarioOptions(doc = {}) {
 }
 
 function collectDocument() {
+  flushAllIfPresentDomState();
+  builderSteps.forEach((_, i) => {
+    const row = document.querySelector(`[data-step-index="${i}"]`);
+    if (row) syncStepFromDom(i, row);
+  });
   return {
     name: $("build-name").value.trim(),
     description: $("build-desc").value.trim(),
@@ -2523,9 +2567,13 @@ function renderGroupsModalEditor() {
     details.className = "groups-add-dropdown";
 
     const summary = document.createElement("summary");
-    summary.className = "groups-add-summary outline success";
-    summary.textContent = "Add flow";
+    summary.className = "groups-add-summary outline success btn-with-icon";
     summary.setAttribute("aria-haspopup", "menu");
+    summary.appendChild(icon("plus"));
+    const addFlowLabel = document.createElement("span");
+    addFlowLabel.className = "btn-label";
+    addFlowLabel.textContent = "Add flow";
+    summary.appendChild(addFlowLabel);
 
     const panel = document.createElement("div");
     panel.className = "groups-add-panel";
@@ -2565,21 +2613,26 @@ function renderGroupsModalEditor() {
 
     flowsSection.appendChild(flowsHeading);
     flowsSection.appendChild(memberList);
-    flowsSection.appendChild(addWrap);
+
+    const cardActions = document.createElement("div");
+    cardActions.className = "groups-card-actions";
 
     const del = document.createElement("button");
     del.type = "button";
     del.className = "danger outline";
-    del.textContent = "Remove group";
     del.addEventListener("click", () => {
       groupsModalDraft.splice(gi, 1);
       renderGroupsModalEditor();
     });
+    enhanceButton(del, "trash", { label: "Remove group" });
+
+    cardActions.appendChild(addWrap);
+    cardActions.appendChild(del);
+    flowsSection.appendChild(cardActions);
 
     row.appendChild(labLab);
     row.appendChild(labInp);
     row.appendChild(flowsSection);
-    row.appendChild(del);
     body.appendChild(row);
   });
 
@@ -2646,7 +2699,7 @@ $("groups-save")?.addEventListener("click", () =>
 $("groups-back")?.addEventListener("click", () => setMainTab("workspace"));
 $("btn-add-step").onclick = () => {
   const last = builderSteps[builderSteps.length - 1];
-  builderSteps.push(defaultStep(last?.action || "goto"));
+  builderSteps.push(defaultStep(last?.action || "open_url"));
   renderSteps();
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
@@ -2710,7 +2763,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
       if (wantPython === draftIsPython) return;
       const msg = wantPython
         ? "Switch this draft to a Python flow? The JSON step builder will be replaced by the Python template."
-        : "Switch this draft to JSON? The Python editor will reset to the JSON step builder with a goto step.";
+        : "Switch this draft to JSON? The Python editor will reset to the JSON step builder with an open_url step.";
       if (!confirm(msg)) {
         sel.value = draftIsPython ? "python" : "json";
         return;
