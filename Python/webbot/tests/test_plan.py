@@ -5,8 +5,78 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from webbot.json_scenario import collect_expanded_plan_labels
-from webbot.models import ClickStep, DelayStep, ExitStep, IfPresentStep, RunScenarioStep, ScenarioDocument
+from webbot.json_scenario import collect_expanded_plan_labels, document_has_explicit_open_url, validate_workflow_jump_constraints
+from webbot.models import (
+    ClickStep,
+    DelayStep,
+    ExitStep,
+    IfPresentStep,
+    OpenUrlStep,
+    RunScenarioStep,
+    ScenarioDocument,
+    WorkflowGotoStep,
+)
+
+
+class TestLegacyGotoMigration(unittest.TestCase):
+    def test_legacy_goto_url_becomes_open_url(self) -> None:
+        doc = ScenarioDocument.model_validate(
+            {
+                "name": "m",
+                "steps": [{"action": "goto", "url": "https://legacy.example"}],
+            }
+        )
+        self.assertIsInstance(doc.steps[0], OpenUrlStep)
+        self.assertEqual(doc.steps[0].url, "https://legacy.example")
+
+    def test_workflow_goto_with_label_preserved(self) -> None:
+        doc = ScenarioDocument.model_validate(
+            {
+                "name": "m",
+                "steps": [{"action": "goto", "goto_label": "here", "url": "https://ignored.example"}],
+            }
+        )
+        self.assertIsInstance(doc.steps[0], WorkflowGotoStep)
+        self.assertEqual(doc.steps[0].goto_label, "here")
+
+
+class TestWorkflowGotoValidation(unittest.TestCase):
+    def test_document_has_explicit_open_url(self) -> None:
+        doc = ScenarioDocument(name="x", steps=[OpenUrlStep(url="https://a")])
+        self.assertTrue(document_has_explicit_open_url(doc.steps))
+
+    def test_validate_forward_goto(self) -> None:
+        doc = ScenarioDocument(
+            name="x",
+            steps=[
+                DelayStep(),
+                WorkflowGotoStep(goto_label="end"),
+                OpenUrlStep(url="https://x", workflow_label="end"),
+            ],
+        )
+        validate_workflow_jump_constraints(doc)
+
+    def test_duplicate_workflow_label_rejected(self) -> None:
+        doc = ScenarioDocument(
+            name="x",
+            steps=[
+                OpenUrlStep(url="https://a", workflow_label="dup"),
+                OpenUrlStep(url="https://b", workflow_label="dup"),
+            ],
+        )
+        with self.assertRaises(ValueError):
+            validate_workflow_jump_constraints(doc)
+
+    def test_backward_goto_rejected(self) -> None:
+        doc = ScenarioDocument(
+            name="x",
+            steps=[
+                OpenUrlStep(url="https://a", workflow_label="first"),
+                WorkflowGotoStep(goto_label="first"),
+            ],
+        )
+        with self.assertRaises(ValueError):
+            validate_workflow_jump_constraints(doc)
 
 
 class TestExpandedPlan(unittest.TestCase):

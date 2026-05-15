@@ -189,6 +189,9 @@ def _anchors_for_jump_targets(steps: list[Step]) -> dict[str, int]:
         if lab:
             out[lab] = i
     return out
+
+
+def _append_labels_for_step(
     labels: list[str],
     step: Step,
     *,
@@ -701,6 +704,8 @@ async def execute_json_document(
     if depth > MAX_SCENARIO_NEST_DEPTH:
         raise ValueError(f"Scenario nesting exceeds maximum depth ({MAX_SCENARIO_NEST_DEPTH})")
 
+    validate_workflow_jump_constraints(doc)
+
     executed = False
     if _needs_implicit_goto(doc, skip_implicit_start_url):
         url = doc.start_url
@@ -733,7 +738,6 @@ async def run_json_scenario(
 ) -> None:
     del log  # retained for backward-compatible call sites
     name = root_name if root_name is not None else doc.name
-    validate_workflow_jump_constraints(doc)
     labels = collect_expanded_plan_labels(
         doc,
         scenario_name=name,

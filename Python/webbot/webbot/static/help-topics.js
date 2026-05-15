@@ -118,8 +118,8 @@ const HELP_TOPICS = {
   "builder.start_url": {
     title: "Start URL",
     body: [
-      "<p>If set and no <code>open_url</code> step appears in the step list, Webbot opens this URL as step 1 before running your steps.</p>",
-      "<p>If you already have an <code>open_url</code> navigation step and your first action is redundant, trim or reorder as needed.</p>",
+      "<p>If set and there is no explicit <code>open_url</code> step in the list, Webbot opens this URL as step 1 before running your steps.</p>",
+      "<p>If the first step already opens a page (usually <code>open_url</code>), you can leave this empty or keep it as a default for short flows.</p>",
     ],
   },
   "builder.save": {
@@ -317,7 +317,7 @@ const HELP_TOPICS = {
       "<p>Loads another JSON flow by name and runs its steps inline in the same browser session.</p>",
       "<p><strong>Flow to run</strong> — must be a saved JSON scenario (cannot be the same file you are editing).</p>",
       "<p><strong>Use parent delay settings</strong> — when checked, random pauses between steps use the outer flow’s scenario options instead of the nested flow’s.</p>",
-      "<p><strong>Skip nested start URL goto</strong> — when checked, the nested flow’s implicit <code>start_url</code> navigation is omitted (useful when the parent already opened the right page).</p>",
+      "<p><strong>Skip nested start URL navigation</strong> — when checked, the nested flow’s implicit <code>start_url</code> open (first step) is omitted (useful when the parent already opened the right page).</p>",
       "<p>Circular references (A→B→A) are rejected.</p>",
     ],
   },
