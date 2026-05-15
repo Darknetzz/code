@@ -18,8 +18,8 @@ const HELP_TOPICS = {
     title: "Webbot overview",
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
-      "<p>Pick a flow in the sidebar (optionally organized into groups), edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows are JSON; use <strong>run_scenario</strong> steps to compose subflows.</p>",
-      "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Group membership is saved in <code>groups.json</code> in that folder.</p>",
+      "<p>Pick a flow in the sidebar (optionally organized into groups), edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows can be JSON (step builder) or Python (editable source panel). Use <strong>run_scenario</strong> steps in JSON flows to compose subflows of either kind.</p>",
+      "<p>Scenarios live under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere): <code>.json</code> for JSON flows and <code>.py</code> for Python flows (only one extension per flow name). Group membership is saved in <code>groups.json</code> in that folder.</p>",
     ],
   },
   "help.home": {
@@ -30,11 +30,11 @@ const HELP_TOPICS = {
         ["Area", "What it does"],
         [
           ["Flows card", "Flows grouped into collapsible sections plus ungrouped; pick one to edit."],
-          ["New / Groups / Delete", "Create flows, edit group membership, delete saved flows, or discard a draft."],
+          ["New JSON / New Python / Groups / Delete", "Create JSON or Python drafts, edit group membership, delete saved flows, or discard a draft."],
           ["Run card", "Loops, pause between loops, pause between flows in a group, headless, Start/Stop."],
           ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
-          ["Editor", "Name, URL, scenario options, and steps (drag to reorder)."],
-          ["Save / Test run", "Save JSON, or save and run immediately."],
+          ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: monospace source editor; flow name is read-only once saved."],
+          ["Save / Test run", "Save JSON or Python to disk, or save and run immediately."],
           ["Log", "Live output from the runner."],
         ]
       ),
@@ -48,7 +48,7 @@ const HELP_TOPICS = {
       helpTable(
         ["Control", "What it does"],
         [
-          ["Scenarios", "Select a JSON flow from the sidebar (ungrouped or inside a section)."],
+          ["Scenarios", "Select a saved flow from the sidebar (ungrouped or inside a section)."],
           ["Loops", "How many full passes through the flow."],
           ["Pause between loops", "Wait time after each full pass (except the last)."],
           ["Pause between flows in group", "Seconds to wait between flows when using Run group."],
@@ -63,14 +63,14 @@ const HELP_TOPICS = {
   "help.flows": {
     title: "Flows tab",
     body: [
-      "<p>Create and edit JSON flows in the builder.</p>",
+      "<p>Create and edit flows: JSON in the step builder, or Python in the source editor (<strong>New Python</strong>).</p>",
       helpTable(
         ["Area", "What it does"],
         [
           ["Flow list", "Grouped sections and ungrouped flows; use Groups to edit membership."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
           ["Scenario options", "Optional random delay between every step."],
-          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form, run_scenario."],
+          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form, run_scenario (nested JSON or Python flow)."],
           ["Save / Test run", "Write JSON to disk, or save and start immediately."],
         ]
       ),
@@ -81,7 +81,7 @@ const HELP_TOPICS = {
     title: "Scenarios",
     body: [
       "<p>Click a flow in the list to select it, then press <strong>Start</strong>. Use <strong>Run group</strong> on a section header to run every flow in that group in order.</p>",
-      "<p>Descriptions and the <code>json</code> badge identify saved flows.</p>",
+      "<p>Descriptions and the <code>json</code> / <code>python</code> badges identify saved flows.</p>",
     ],
   },
   "run.loops": {

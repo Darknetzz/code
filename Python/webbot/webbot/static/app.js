@@ -18,7 +18,7 @@ let runStatusPollTimer = null;
 /** True while editing an unsaved Python draft from "New Python". */
 let draftIsPython = false;
 
-const PYTHON_FLOW_TEMPLATE = `"""Edit this Python flow — saved as {name}.py alongside JSON scenarios."""
+const PYTHON_FLOW_TEMPLATE = `"""Edit this Python flow — saved as a .py file next to JSON scenarios."""
 
 from playwright.async_api import Page
 
@@ -566,6 +566,7 @@ async function deleteSelectedFlow() {
     if (!confirm("Discard unsaved draft?")) return;
     await discardDraft();
     $("build-msg").textContent = "Draft discarded";
+    $("build-msg-python").textContent = "";
     return;
   }
   const name = selectedScenario;
@@ -576,6 +577,7 @@ async function deleteSelectedFlow() {
   if (scenarios.length) await selectScenario(scenarios[0].name);
   else newFlow();
   $("build-msg").textContent = `Deleted "${name}"`;
+  $("build-msg-python").textContent = "";
 }
 
 function syncScenarioListSelection() {
@@ -1761,6 +1763,7 @@ async function savePythonScenario() {
     renderScenarioList("scenario-list", scenarioListOnSelect);
   }
   setSelectedScenario(name);
+  updateFlowNameReadonly();
 }
 
 async function saveScenario() {
@@ -1941,6 +1944,10 @@ $("btn-add-step").onclick = () => {
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
 $("btn-new-flow")?.addEventListener("click", () => newFlow());
+$("btn-new-python-flow")?.addEventListener("click", () => newPythonFlow());
+$("btn-save-python")?.addEventListener("click", () =>
+  savePythonScenario().catch((e) => ($("build-msg-python").textContent = e.message))
+);
 $("btn-delete-flow")?.addEventListener("click", () =>
   deleteSelectedFlow().catch((e) => ($("build-msg").textContent = e.message))
 );
@@ -1952,6 +1959,14 @@ $("btn-test-run").onclick = async () => {
     $("build-msg").textContent = e.message;
   }
 };
+$("btn-test-run-python")?.addEventListener("click", async () => {
+  try {
+    await savePythonScenario();
+    await startRun($("build-name").value.trim());
+  } catch (e) {
+    $("build-msg-python").textContent = e.message;
+  }
+});
 
 (async () => {
   try {

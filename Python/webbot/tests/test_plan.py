@@ -27,7 +27,12 @@ class TestExpandedPlan(unittest.TestCase):
         def load(name: str) -> ScenarioDocument:
             return docs[name]
 
-        with patch("webbot.json_scenario.load_json_scenario", load):
+        def kind(name: str) -> str | None:
+            return "json" if name in docs else None
+
+        with patch("webbot.json_scenario.load_json_scenario", load), patch(
+            "webbot.json_scenario.scenario_kind", kind
+        ):
             labels = collect_expanded_plan_labels(
                 outer,
                 scenario_name="outer",
@@ -46,7 +51,12 @@ class TestExpandedPlan(unittest.TestCase):
         def load(name: str) -> ScenarioDocument:
             return docs[name]
 
-        with patch("webbot.json_scenario.load_json_scenario", load):
+        def kind(name: str) -> str | None:
+            return "json" if name in docs else None
+
+        with patch("webbot.json_scenario.load_json_scenario", load), patch(
+            "webbot.json_scenario.scenario_kind", kind
+        ):
             with self.assertRaises(ValueError):
                 collect_expanded_plan_labels(
                     a,
