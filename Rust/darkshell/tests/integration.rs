@@ -26,6 +26,18 @@ fn export_and_expand_double_quote() {
 }
 
 #[test]
+fn help_builtin_is_dsh_not_cmd() {
+    dsh()
+        .arg("-c")
+        .arg("help")
+        .assert()
+        .success()
+        .stdout(contains("Darkshell (dsh)"))
+        .stdout(contains("Builtins:"))
+        .stdout(contains("not Windows CMD"));
+}
+
+#[test]
 fn conditional_and_chain() {
     dsh()
         .arg("-c")

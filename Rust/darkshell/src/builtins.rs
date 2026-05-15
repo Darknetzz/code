@@ -14,7 +14,7 @@ pub enum BuiltinOutcome {
 pub fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "cd" | "export" | "unset" | "pwd" | "echo" | "exit" | ":" | "true" | "false"
+        "cd" | "export" | "unset" | "pwd" | "echo" | "exit" | "help" | ":" | "true" | "false"
     )
 }
 
@@ -55,6 +55,7 @@ pub fn run_builtin(
         "cd" => cd(st, &argv),
         "export" => export(st, &argv, &mut out),
         "unset" => unset(st, &argv),
+        "help" => help(&argv, &mut out),
         other => bail!("unknown builtin `{other}`"),
     }
 }
@@ -109,6 +110,60 @@ fn export<W: Write>(st: &mut ShellState, argv: &[String], out: &mut W) -> Result
         }
     }
     Ok(BuiltinOutcome::Status(0))
+}
+
+fn help(argv: &[String], out: &mut impl Write) -> Result<BuiltinOutcome> {
+    match argv.len() {
+        0 => writeln!(out, "{HELP_OVERVIEW}")?,
+        1 => {
+            let topic = &argv[0];
+            if let Some(body) = help_topic(topic) {
+                write!(out, "{body}")?;
+            } else {
+                bail!("help: no help for `{topic}` (try `help` for a list)");
+            }
+        }
+        _ => bail!("help: too many arguments"),
+    }
+    Ok(BuiltinOutcome::Status(0))
+}
+
+const HELP_OVERVIEW: &str = "\
+Darkshell (dsh) — experimental bash-like shell. This is `help` for dsh, not Windows CMD.
+
+Builtins:
+  help [TOPIC]     Show this overview or one-line help for TOPIC.
+  cd [DIR]         Change directory; default is your home/profile directory.
+  pwd              Print the current directory.
+  echo WORDS...    Print words separated by spaces, then a newline.
+  export [N=V...]  Set variables and mark them exported; with no args, list exports.
+  unset NAME...    Remove shell variables.
+  exit [N]         Leave the shell with status N (default: last command status).
+  true / false     Exit with status 0 or 1.
+  :                No-op, status 0.
+
+Syntax highlights:
+  a && b / a || b  Run b depending on a’s exit status; ; runs the next command always.
+  a | b            Pipeline (stdout of a to stdin of b).
+  VAR=value cmd    Set VAR for that command only.
+  # text           Rest of line is a comment.
+
+For Windows CMD help (SET, PATH, …), run e.g.  cmd /c help  or  where help
+";
+
+fn help_topic(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "help" => "help [TOPIC] — show dsh help; TOPIC is a builtin name.\n",
+        "cd" => "cd [DIR] — change directory; DIR defaults to home.\n",
+        "pwd" => "pwd — print working directory; no arguments.\n",
+        "echo" => "echo [WORD ...] — print arguments, newline at end.\n",
+        "export" => "export [NAME[=VALUE] ...] — set/export vars; no args lists exports.\n",
+        "unset" => "unset NAME ... — remove variables from the shell.\n",
+        "exit" => "exit [N] — exit dsh with status N (0–255 typical).\n",
+        "true" | "false" => "true / false — exit 0 or 1.\n",
+        ":" => ": — no-op, always succeeds.\n",
+        _ => return None,
+    })
 }
 
 fn unset(st: &mut ShellState, argv: &[String]) -> Result<BuiltinOutcome> {

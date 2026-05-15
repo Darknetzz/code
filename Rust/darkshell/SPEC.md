@@ -73,6 +73,7 @@ Redirections may appear before or after the command words; they apply to that si
 | `unset NAME ...` | Remove variables. |
 | `pwd` | Print working directory. |
 | `echo [args...]` | Print arguments separated by spaces, then newline. |
+| `help [topic]` | Print dsh usage (not Windows `help`); optional `topic` is a builtin name. |
 | `exit [n]` | Exit the shell with status `n` (default last status or `0`). |
 
 ## Exit status
