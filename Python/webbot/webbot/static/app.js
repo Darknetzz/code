@@ -3028,6 +3028,7 @@ async function applyImportedJson(text, suggestedName) {
   const doc = normalizeImportedJsonDoc(raw);
   const stem = (suggestedName && String(suggestedName).replace(/\.json$/i, "").trim()) || "";
   if (stem && stem !== doc.name) doc.name = stem;
+  doc.name = uniqueScenarioName(doc.name);
   draftIsPython = false;
   setSelectedScenario(DRAFT_SCENARIO_ID, { skipPreview: true });
   showJsonFlowEditor();
@@ -3404,12 +3405,16 @@ async function startRunGroup(groupId) {
   }
 }
 
-$("btn-start").onclick = () => startRun();
-$("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
+$("btn-start").onclick = () => startRun().catch((e) => showError(e.message));
+$("btn-stop").onclick = () =>
+  api("/api/run/stop", { method: "POST" }).catch((e) => showError(e.message));
 $("tab-workspace")?.addEventListener("click", () => setMainTab("workspace"));
 $("tab-groups")?.addEventListener("click", () => openGroupsPanel());
 $("groups-save")?.addEventListener("click", () =>
-  saveGroupsModal().catch((e) => ($("groups-msg").textContent = e.message))
+  saveGroupsModal().catch((e) => {
+    $("groups-msg").textContent = e.message;
+    showError(e.message);
+  })
 );
 $("groups-back")?.addEventListener("click", () => setMainTab("workspace"));
 $("btn-add-step").onclick = () => {
@@ -3417,25 +3422,49 @@ $("btn-add-step").onclick = () => {
   builderSteps.push(defaultStep(last?.action || "open_url"));
   renderSteps();
 };
-$("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
-$("btn-new-flow")?.addEventListener("click", () => createNewFlowFromToolbar());
+$("btn-save").onclick = () =>
+  saveScenario().catch((e) => {
+    $("build-msg").textContent = e.message;
+    showError(e.message);
+  });
+$("btn-new-flow")?.addEventListener("click", () =>
+  createNewFlowFromToolbar().catch((e) => showError(e.message))
+);
 $("btn-save-python")?.addEventListener("click", () =>
-  savePythonScenario().catch((e) => ($("build-msg-python").textContent = e.message))
+  savePythonScenario().catch((e) => {
+    $("build-msg-python").textContent = e.message;
+    showError(e.message);
+  })
 );
 document.querySelectorAll(".btn-delete-flow").forEach((btn) => {
   btn.addEventListener("click", () =>
     deleteSelectedFlow().catch((e) => {
       const jsonEditorVisible = !$("flow-editor-wrap")?.classList.contains("hidden");
       $(jsonEditorVisible ? "build-msg" : "build-msg-python").textContent = e.message;
+      showError(e.message);
     })
   );
 });
+$("btn-dup-json")?.addEventListener("click", () => duplicateCurrentFlow());
+$("btn-export-json")?.addEventListener("click", () => exportCurrentJsonFlow());
+$("btn-import-json")?.addEventListener("click", () => {
+  importTargetKind = "json";
+  $("flow-import-input")?.click();
+});
+$("btn-dup-python")?.addEventListener("click", () => duplicateCurrentFlow());
+$("btn-export-python")?.addEventListener("click", () => exportCurrentPythonFlow());
+$("btn-import-python")?.addEventListener("click", () => {
+  importTargetKind = "python";
+  $("flow-import-input")?.click();
+});
+$("flow-import-input")?.addEventListener("change", onFlowImportFileSelected);
 $("btn-test-run").onclick = async () => {
   try {
     await saveScenario();
     await startRun($("build-name").value.trim());
   } catch (e) {
     $("build-msg").textContent = e.message;
+    showError(e.message);
   }
 };
 $("btn-test-run-python")?.addEventListener("click", async () => {
@@ -3444,11 +3473,18 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     await startRun($("build-name").value.trim());
   } catch (e) {
     $("build-msg-python").textContent = e.message;
+    showError(e.message);
   }
 });
 
 (async () => {
   try {
+    loadPersistedRunOptions();
+    wireRunOptionsPersistence();
+    const isLightInit = document.documentElement.getAttribute("data-theme") === "light";
+    if ($("btn-theme")) $("btn-theme").textContent = isLightInit ? "Dark" : "Light";
+    $("btn-theme")?.addEventListener("click", toggleTheme);
+
     initPythonCodeMirror();
     await loadHealth();
     await loadScenarios();
@@ -3469,7 +3505,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
       await loadFlowIntoEditor(selectedScenario);
       if (runShowStepProgress && runStepProgress?.length) renderRunProgressPanel();
     } else {
-      newFlow();
+      await newFlow();
     }
     $("build-random-between-steps").addEventListener("change", () => {
       renderScenarioOptions(readScenarioOptions());
@@ -3481,35 +3517,37 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     $("python-source-editor")?.addEventListener("input", syncUnsavedIndicators);
 
     $("build-flow-kind")?.addEventListener("change", () => {
-      const sel = $("build-flow-kind");
-      if (!sel) return;
-      const wantPython = sel.value === "python";
-      if (!isDraftSelected()) return;
-      if (wantPython === draftIsPython) return;
-      const msg = wantPython
-        ? "Switch this draft to a Python flow? The JSON step builder will be replaced by the Python template."
-        : "Switch this draft to JSON? The Python editor will reset to the JSON step builder with an open_url step.";
-      if (!confirm(msg)) {
-        sel.value = draftIsPython ? "python" : "json";
-        return;
-      }
-      if (wantPython) {
-        draftIsPython = true;
-        setPythonSource(PYTHON_FLOW_TEMPLATE);
-        showPythonFlowEditor();
-        $("build-msg").textContent = "";
-        $("build-msg-python").textContent = "Draft — enter a name and save.";
-      } else {
-        draftIsPython = false;
-        clearFlowEditor();
-        showJsonFlowEditor();
-        $("build-msg-python").textContent = "";
-        $("build-msg").textContent = "Draft — enter a name and save.";
-      }
-      syncDraftListLabel();
-      renderScenarioList("scenario-list", scenarioListOnSelect);
-      syncScenarioListSelection();
-      commitSavedBaseline();
+      void (async () => {
+        const sel = $("build-flow-kind");
+        if (!sel) return;
+        const wantPython = sel.value === "python";
+        if (!isDraftSelected()) return;
+        if (wantPython === draftIsPython) return;
+        const msg = wantPython
+          ? "Switch this draft to a Python flow? The JSON step builder will be replaced by the Python template."
+          : "Switch this draft to JSON? The Python editor will reset to the JSON step builder with an open_url step.";
+        if (!(await showConfirmAsync(msg))) {
+          sel.value = draftIsPython ? "python" : "json";
+          return;
+        }
+        if (wantPython) {
+          draftIsPython = true;
+          setPythonSource(PYTHON_FLOW_TEMPLATE);
+          showPythonFlowEditor();
+          $("build-msg").textContent = "";
+          $("build-msg-python").textContent = "Draft — enter a name and save.";
+        } else {
+          draftIsPython = false;
+          clearFlowEditor();
+          showJsonFlowEditor();
+          $("build-msg-python").textContent = "";
+          $("build-msg").textContent = "Draft — enter a name and save.";
+        }
+        syncDraftListLabel();
+        renderScenarioList("scenario-list", scenarioListOnSelect);
+        syncScenarioListSelection();
+        commitSavedBaseline();
+      })();
     });
 
     document.addEventListener("click", (e) => {
@@ -3518,8 +3556,43 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
       }
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      closeGroupsAddDropdowns();
+      if (e.key === "Escape") {
+        closeGroupsAddDropdowns();
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (isHelpFilterShortcutsTarget(e.target)) return;
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        if (isPythonUi()) {
+          void savePythonScenario().catch((err) => showError(err.message));
+        } else {
+          void saveScenario().catch((err) => showError(err.message));
+        }
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (isPythonUi()) {
+          void (async () => {
+            try {
+              await savePythonScenario();
+              await startRun($("build-name").value.trim());
+            } catch (err) {
+              showError(err.message);
+            }
+          })();
+        } else {
+          void (async () => {
+            try {
+              await saveScenario();
+              await startRun($("build-name").value.trim());
+            } catch (err) {
+              showError(err.message);
+            }
+          })();
+        }
+      }
     });
 
     $("flow-list-filter")?.addEventListener("input", () =>
