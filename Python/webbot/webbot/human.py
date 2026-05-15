@@ -3,19 +3,56 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import random
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from playwright.async_api import Locator, Page
 
-
-async def human_delay(min_sec: float = 0.3, max_sec: float = 1.2) -> None:
-    await asyncio.sleep(random.uniform(min_sec, max_sec))
+DelayDistribution = Literal["uniform", "triangular", "log_normal"]
 
 
-async def reading_pause(min_sec: float = 1.5, max_sec: float = 4.0) -> None:
-    await asyncio.sleep(random.uniform(min_sec, max_sec))
+def _sample_delay(
+    min_sec: float,
+    max_sec: float,
+    distribution: DelayDistribution = "uniform",
+) -> float:
+    if max_sec <= min_sec:
+        return min_sec
+    if distribution == "triangular":
+        # Skew toward shorter waits, occasional longer tail
+        return random.triangular(min_sec, max_sec, min_sec + (max_sec - min_sec) * 0.35)
+    if distribution == "log_normal":
+        # Heavy tail: mostly short, sometimes much longer
+        mu = math.log(min_sec + (max_sec - min_sec) * 0.25)
+        sigma = 0.45
+        return min(max_sec, max(min_sec, random.lognormvariate(mu, sigma)))
+    return random.uniform(min_sec, max_sec)
+
+
+async def human_delay(
+    min_sec: float = 0.3,
+    max_sec: float = 1.2,
+    *,
+    distribution: DelayDistribution = "uniform",
+    long_pause_chance: float = 0.0,
+    long_pause_min: float = 2.0,
+    long_pause_max: float = 5.0,
+) -> None:
+    await asyncio.sleep(_sample_delay(min_sec, max_sec, distribution))
+    if long_pause_chance > 0 and random.random() < long_pause_chance:
+        await asyncio.sleep(random.uniform(long_pause_min, long_pause_max))
+
+
+async def reading_pause(
+    min_sec: float = 1.5,
+    max_sec: float = 4.0,
+    *,
+    distribution: DelayDistribution = "triangular",
+) -> None:
+    await asyncio.sleep(_sample_delay(min_sec, max_sec, distribution))
 
 
 def _bezier_point(t: float, p0: float, p1: float, p2: float, p3: float) -> float:
@@ -102,16 +139,132 @@ async def human_fill(page: Page, locator: Locator, text: str) -> None:
     await human_delay(0.2, 0.5)
 
 
+@dataclass
+class ScrollOptions:
+    delta_y: int | None = None
+    steps: int | None = None
+    steps_min: int = 3
+    steps_max: int = 8
+    step_delay_min: float = 0.06
+    step_delay_max: float = 0.32
+    overscroll: bool = True
+    overscroll_min: int | None = None
+    overscroll_max: int | None = None
+    overscroll_ratio_min: float = 0.06
+    overscroll_ratio_max: float = 0.16
+    pause_after_min: float = 0.2
+    pause_after_max: float = 0.85
+    variable_step_size: bool = True
+
+
+async def _wheel_chunks(
+    page: Page,
+    total: int,
+    step_count: int,
+    *,
+    step_delay_min: float,
+    step_delay_max: float,
+    variable_step_size: bool,
+) -> None:
+    if step_count <= 0:
+        return
+    sign = 1 if total >= 0 else -1
+    remaining = abs(total)
+    for i in range(step_count):
+        if i == step_count - 1:
+            chunk = remaining
+        elif variable_step_size:
+            chunk = max(1, int(remaining * random.uniform(0.15, 0.45)))
+        else:
+            chunk = max(1, remaining // (step_count - i))
+        remaining -= chunk
+        await page.mouse.wheel(0, sign * chunk)
+        await asyncio.sleep(random.uniform(step_delay_min, step_delay_max))
+        if remaining <= 0:
+            break
+
+
 async def human_scroll(
     page: Page,
     *,
     delta_y: int | None = None,
     steps: int | None = None,
+    steps_min: int = 3,
+    steps_max: int = 8,
+    step_delay_min: float = 0.06,
+    step_delay_max: float = 0.32,
+    overscroll: bool = True,
+    overscroll_min: int | None = None,
+    overscroll_max: int | None = None,
+    overscroll_ratio_min: float = 0.06,
+    overscroll_ratio_max: float = 0.16,
+    pause_after_min: float = 0.2,
+    pause_after_max: float = 0.85,
+    variable_step_size: bool = True,
+    options: ScrollOptions | None = None,
 ) -> None:
-    total = delta_y if delta_y is not None else random.randint(200, 500)
-    step_count = steps or random.randint(3, 7)
-    per_step = total // step_count
-    for _ in range(step_count):
-        await page.mouse.wheel(0, per_step + random.randint(-10, 10))
-        await asyncio.sleep(random.uniform(0.08, 0.25))
-    await human_delay(0.3, 0.8)
+    """Scroll with variable speed, optional overshoot-and-correct."""
+    opts = options or ScrollOptions(
+        delta_y=delta_y,
+        steps=steps,
+        steps_min=steps_min,
+        steps_max=steps_max,
+        step_delay_min=step_delay_min,
+        step_delay_max=step_delay_max,
+        overscroll=overscroll,
+        overscroll_min=overscroll_min,
+        overscroll_max=overscroll_max,
+        overscroll_ratio_min=overscroll_ratio_min,
+        overscroll_ratio_max=overscroll_ratio_max,
+        pause_after_min=pause_after_min,
+        pause_after_max=pause_after_max,
+        variable_step_size=variable_step_size,
+    )
+
+    total = opts.delta_y if opts.delta_y is not None else random.randint(200, 500)
+    if opts.steps is not None:
+        step_count = max(1, opts.steps)
+    else:
+        lo, hi = min(opts.steps_min, opts.steps_max), max(opts.steps_min, opts.steps_max)
+        step_count = random.randint(lo, hi)
+
+    await _wheel_chunks(
+        page,
+        total,
+        step_count,
+        step_delay_min=opts.step_delay_min,
+        step_delay_max=opts.step_delay_max,
+        variable_step_size=opts.variable_step_size,
+    )
+
+    if opts.overscroll and total != 0:
+        if opts.overscroll_min is not None and opts.overscroll_max is not None:
+            overshoot = random.randint(
+                min(opts.overscroll_min, opts.overscroll_max),
+                max(opts.overscroll_min, opts.overscroll_max),
+            )
+        else:
+            ratio = random.uniform(opts.overscroll_ratio_min, opts.overscroll_ratio_max)
+            overshoot = max(8, int(abs(total) * ratio))
+
+        sign = 1 if total > 0 else -1
+        await asyncio.sleep(random.uniform(0.08, 0.22))
+        await _wheel_chunks(
+            page,
+            sign * overshoot,
+            random.randint(1, 3),
+            step_delay_min=opts.step_delay_min * 0.8,
+            step_delay_max=opts.step_delay_max * 0.9,
+            variable_step_size=True,
+        )
+        await asyncio.sleep(random.uniform(0.12, 0.35))
+        await _wheel_chunks(
+            page,
+            -sign * overshoot,
+            random.randint(2, 4),
+            step_delay_min=opts.step_delay_min,
+            step_delay_max=opts.step_delay_max,
+            variable_step_size=True,
+        )
+
+    await asyncio.sleep(random.uniform(opts.pause_after_min, opts.pause_after_max))

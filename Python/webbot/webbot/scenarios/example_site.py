@@ -37,7 +37,7 @@ async def run(page: Page) -> None:
     link = page.get_by_role("link", name="Learn more")
 
     async def click_learn_more() -> None:
-        await human_scroll(page, delta_y=120, steps=3)
+        await human_scroll(page, delta_y=120, overscroll=True, steps_min=3, steps_max=6)
         await human_delay(0.3, 0.8)
         await human_click(page, link)
         await page.wait_for_load_state("domcontentloaded")

@@ -105,9 +105,30 @@ function defaultStep(action) {
     case "click":
       return { action: "click", by: "role", role: "button", name: "" };
     case "delay":
-      return { action: "delay", min: 0.5, max: 1.2 };
+      return {
+        action: "delay",
+        min: 0.5,
+        max: 1.2,
+        distribution: "triangular",
+        long_pause_chance: 0.08,
+        long_pause_min: 2,
+        long_pause_max: 5,
+      };
     case "scroll":
-      return { action: "scroll", delta_y: 300 };
+      return {
+        action: "scroll",
+        delta_y: 300,
+        steps_min: 4,
+        steps_max: 9,
+        step_delay_min: 0.06,
+        step_delay_max: 0.35,
+        overscroll: true,
+        overscroll_ratio_min: 0.06,
+        overscroll_ratio_max: 0.14,
+        pause_after_min: 0.25,
+        pause_after_max: 0.9,
+        variable_step_size: true,
+      };
     case "fill":
       return { action: "fill", by: "css", selector: "", value: "" };
     case "submit_form":

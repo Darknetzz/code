@@ -16,12 +16,28 @@ class DelayStep(BaseModel):
     action: Literal["delay"] = "delay"
     min: float = 0.3
     max: float = 1.2
+    distribution: Literal["uniform", "triangular", "log_normal"] = "uniform"
+    long_pause_chance: float = Field(default=0.0, ge=0.0, le=1.0)
+    long_pause_min: float = 2.0
+    long_pause_max: float = 5.0
 
 
 class ScrollStep(BaseModel):
     action: Literal["scroll"] = "scroll"
     delta_y: int | None = None
     steps: int | None = None
+    steps_min: int = 3
+    steps_max: int = 8
+    step_delay_min: float = 0.06
+    step_delay_max: float = 0.32
+    overscroll: bool = True
+    overscroll_min: int | None = None
+    overscroll_max: int | None = None
+    overscroll_ratio_min: float = 0.06
+    overscroll_ratio_max: float = 0.16
+    pause_after_min: float = 0.2
+    pause_after_max: float = 0.85
+    variable_step_size: bool = True
 
 
 class ClickStep(BaseModel):

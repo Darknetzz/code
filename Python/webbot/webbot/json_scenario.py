@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from playwright.async_api import Locator, Page
 
-from webbot.human import human_click, human_delay, human_fill, human_scroll, reading_pause
+from webbot.human import ScrollOptions, human_click, human_delay, human_fill, human_scroll, reading_pause
 from webbot.locators import resolve_locator
 from webbot.models import (
     ClickStep,
@@ -50,10 +50,12 @@ def step_label(step: Step) -> str:
     if isinstance(step, GotoStep):
         return f"goto {step.url}"
     if isinstance(step, DelayStep):
-        return f"delay {step.min}-{step.max}s"
+        extra = f" ({step.distribution})" if step.distribution != "uniform" else ""
+        return f"delay {step.min}-{step.max}s{extra}"
     if isinstance(step, ScrollStep):
         dy = step.delta_y if step.delta_y is not None else "auto"
-        return f"scroll (delta_y={dy})"
+        os = " +overscroll" if step.overscroll else ""
+        return f"scroll dy={dy}{os}"
     if isinstance(step, FillStep):
         target = step.selector or step.label or step.name or step.role or "?"
         return f"fill {target} = {step.value!r}"
@@ -130,9 +132,34 @@ async def execute_step(page: Page, step: Step) -> None:
         await page.goto(step.url, wait_until="domcontentloaded")
         await reading_pause(0.8, 2.0)
     elif isinstance(step, DelayStep):
-        await human_delay(step.min, step.max)
+        await human_delay(
+            step.min,
+            step.max,
+            distribution=step.distribution,
+            long_pause_chance=step.long_pause_chance,
+            long_pause_min=step.long_pause_min,
+            long_pause_max=step.long_pause_max,
+        )
     elif isinstance(step, ScrollStep):
-        await human_scroll(page, delta_y=step.delta_y, steps=step.steps)
+        await human_scroll(
+            page,
+            options=ScrollOptions(
+                delta_y=step.delta_y,
+                steps=step.steps,
+                steps_min=step.steps_min,
+                steps_max=step.steps_max,
+                step_delay_min=step.step_delay_min,
+                step_delay_max=step.step_delay_max,
+                overscroll=step.overscroll,
+                overscroll_min=step.overscroll_min,
+                overscroll_max=step.overscroll_max,
+                overscroll_ratio_min=step.overscroll_ratio_min,
+                overscroll_ratio_max=step.overscroll_ratio_max,
+                pause_after_min=step.pause_after_min,
+                pause_after_max=step.pause_after_max,
+                variable_step_size=step.variable_step_size,
+            ),
+        )
     elif isinstance(step, FillStep):
         await _fill_field(
             page,
