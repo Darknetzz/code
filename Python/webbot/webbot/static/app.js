@@ -1344,19 +1344,13 @@ function renderStepRow(step, index) {
   const actions = document.createElement("div");
   actions.className = "step-actions";
   if (typeof makeIconButton === "function") {
-    actions.appendChild(makeIconButton("chevronUp", "Move step up", () => moveStep(index, -1)));
-    actions.appendChild(makeIconButton("chevronDown", "Move step down", () => moveStep(index, 1)));
     actions.appendChild(
       makeIconButton("trash", "Remove step", () => removeStep(index), { danger: true })
     );
   } else {
     actions.innerHTML = `
-      <button type="button" data-up title="Move step up">↑</button>
-      <button type="button" data-down title="Move step down">↓</button>
       <button type="button" class="danger" data-del title="Remove step">×</button>
     `;
-    actions.querySelector("[data-up]").onclick = () => moveStep(index, -1);
-    actions.querySelector("[data-down]").onclick = () => moveStep(index, 1);
     actions.querySelector("[data-del]").onclick = () => removeStep(index);
   }
   row.appendChild(actions);
@@ -1471,13 +1465,6 @@ function renderSteps() {
   list.innerHTML = "";
   builderSteps.forEach((step, i) => list.appendChild(renderStepRow(step, i)));
   initStepDragDrop(list);
-}
-
-function moveStep(index, dir) {
-  const j = index + dir;
-  if (j < 0 || j >= builderSteps.length) return;
-  [builderSteps[index], builderSteps[j]] = [builderSteps[j], builderSteps[index]];
-  renderSteps();
 }
 
 function removeStep(index) {

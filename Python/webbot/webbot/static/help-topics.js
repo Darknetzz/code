@@ -69,7 +69,7 @@ const HELP_TOPICS = {
           ["Flow list", "Select, create, or delete JSON flows."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
           ["Scenario options", "Optional random delay between every step."],
-          ["Steps", "Drag by the grip or use ↑↓. Types: goto, click, fill, delay, scroll, submit_form."],
+          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form."],
           ["Save / Test run", "Write JSON to disk, or save and start immediately."],
         ]
       ),
@@ -181,7 +181,7 @@ const HELP_TOPICS = {
   "builder.steps": {
     title: "Steps",
     body: [
-      "<p>Ordered actions executed top to bottom. Use ↑/↓ to reorder and × to remove.</p>",
+      "<p>Ordered actions executed top to bottom. Drag by the grip to reorder; × removes a step.</p>",
       "<p>Add steps with <strong>Add step</strong>; change <strong>Step type</strong> to switch action kind.</p>",
     ],
   },
