@@ -71,7 +71,7 @@ function initStaticIcons() {
     ["btn-start", "play"],
     ["btn-stop", "stop"],
     ["btn-add-step", "plus", { label: "Add step" }],
-    ["btn-save", "save", { label: "Save flow" }],
+    ["btn-save", "save", { label: "Save" }],
     ["btn-test-run", "test", { label: "Test run" }],
     ["btn-save-python", "save", { label: "Save Python flow" }],
     ["btn-test-run-python", "test", { label: "Test run" }],
