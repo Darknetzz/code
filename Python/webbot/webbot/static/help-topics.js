@@ -18,8 +18,8 @@ const HELP_TOPICS = {
     title: "Webbot overview",
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
-      "<p>Pick a flow in the sidebar, edit it on the right, and press <strong>Start</strong>. JSON flows are editable in the UI; Python flows are read-only (edit source code).</p>",
-      "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Python scenarios live in the package and are registered separately.</p>",
+      "<p>Pick a flow in the sidebar (optionally organized into groups), edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows are JSON; use <strong>run_scenario</strong> steps to compose subflows.</p>",
+      "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Group membership is saved in <code>groups.json</code> in that folder.</p>",
     ],
   },
   "help.home": {
@@ -29,9 +29,9 @@ const HELP_TOPICS = {
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flows card", "Select a flow. JSON flows open in the editor; Python flows show read-only steps."],
-          ["New / Delete", "Create JSON flows or remove saved JSON flows."],
-          ["Run card", "Loops, pause between loops, headless, Start/Stop, and status for the selected flow."],
+          ["Flows card", "Flows grouped into collapsible sections plus ungrouped; pick one to edit."],
+          ["New / Groups / Delete", "Create flows, edit group membership, delete saved flows, or discard a draft."],
+          ["Run card", "Loops, pause between loops, pause between flows in a group, headless, Start/Stop."],
           ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
           ["Editor", "Name, URL, scenario options, and steps (drag to reorder)."],
           ["Save / Test run", "Save JSON, or save and run immediately."],
@@ -48,9 +48,10 @@ const HELP_TOPICS = {
       helpTable(
         ["Control", "What it does"],
         [
-          ["Scenarios", "Select a JSON or Python flow. Python flows run from code; JSON flows open in the editor."],
+          ["Scenarios", "Select a JSON flow from the sidebar (ungrouped or inside a section)."],
           ["Loops", "How many full passes through the flow."],
-          ["Pause between loops", "Wait time after each pass (except the last)."],
+          ["Pause between loops", "Wait time after each full pass (except the last)."],
+          ["Pause between flows in group", "Seconds to wait between flows when using Run group."],
           ["Headless", "Hide the browser window (faster; harder to debug)."],
           ["Flow preview", "Step list with live green/red status during a run."],
           ["Log", "Timestamped messages from the runner."],
@@ -62,14 +63,14 @@ const HELP_TOPICS = {
   "help.flows": {
     title: "Flows tab",
     body: [
-      "<p>Create and edit JSON flows. Python flows are view-only here — change them in <code>webbot/scenarios/</code>.</p>",
+      "<p>Create and edit JSON flows in the builder.</p>",
       helpTable(
         ["Area", "What it does"],
         [
-          ["Flow list", "Select, create, or delete JSON flows."],
+          ["Flow list", "Grouped sections and ungrouped flows; use Groups to edit membership."],
           ["Name / description / start URL", "Metadata; start URL is used when there is no <code>goto</code> step."],
           ["Scenario options", "Optional random delay between every step."],
-          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form."],
+          ["Steps", "Drag by the grip to reorder. Types: goto, click, fill, delay, scroll, submit_form, run_scenario."],
           ["Save / Test run", "Write JSON to disk, or save and start immediately."],
         ]
       ),
@@ -79,8 +80,8 @@ const HELP_TOPICS = {
   "run.scenario": {
     title: "Scenarios",
     body: [
-      "<p>Click a scenario in the list to select it, then press <strong>Start</strong>. The list shows both Python scenarios (from the package) and JSON scenarios (from your scenarios folder or the Builder).</p>",
-      "<p>Type badges (<code>python</code> / <code>json</code>) and descriptions help tell flows apart.</p>",
+      "<p>Click a flow in the list to select it, then press <strong>Start</strong>. Use <strong>Run group</strong> on a section header to run every flow in that group in order.</p>",
+      "<p>Descriptions and the <code>json</code> badge identify saved flows.</p>",
     ],
   },
   "run.loops": {
@@ -196,6 +197,7 @@ const HELP_TOPICS = {
         ["<code>submit_form</code>", "Fill multiple fields and submit a form (GET or POST)."],
         ["<code>delay</code>", "Wait a random duration."],
         ["<code>scroll</code>", "Wheel scroll with optional overshoot."],
+        ["<code>run_scenario</code>", "Run another saved JSON flow inline (same browser tab)."],
       ]),
     ],
   },
@@ -286,6 +288,16 @@ const HELP_TOPICS = {
     body: [
       "<p><strong>Pause min/max</strong> — idle time after scrolling finishes.</p>",
       "<p><strong>Variable tick size</strong> — each wheel tick moves a slightly random amount.</p>",
+    ],
+  },
+  "step.run_scenario": {
+    title: "Run scenario step",
+    body: [
+      "<p>Loads another JSON flow by name and runs its steps inline in the same browser session.</p>",
+      "<p><strong>Flow to run</strong> — must be a saved JSON scenario (cannot be the same file you are editing).</p>",
+      "<p><strong>Use parent delay settings</strong> — when checked, random pauses between steps use the outer flow’s scenario options instead of the nested flow’s.</p>",
+      "<p><strong>Skip nested start URL goto</strong> — when checked, the nested flow’s implicit <code>start_url</code> navigation is omitted (useful when the parent already opened the right page).</p>",
+      "<p>Circular references (A→B→A) are rejected.</p>",
     ],
   },
   "step.submit_form": {
@@ -438,6 +450,7 @@ const HELP_NAV = [
       "step.scroll.ticks",
       "step.scroll.overscroll",
       "step.scroll.after",
+      "step.run_scenario",
       "step.submit_form",
       "step.submit_form.method",
       "step.submit_form.form_selector",

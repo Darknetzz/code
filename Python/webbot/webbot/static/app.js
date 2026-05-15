@@ -1286,7 +1286,7 @@ function renderStepRow(step, index) {
         step.scenario || "",
         opts,
         "Runs another saved JSON flow inline",
-        null
+        "step.run_scenario"
       )
     );
     fields.appendChild(
@@ -1634,10 +1634,6 @@ async function saveScenario() {
     $("build-msg").textContent = "Choose a different scenario name";
     return;
   }
-  if (getScenarioInfo(doc.name)?.type === "python") {
-    $("build-msg").textContent = "Cannot save over a built-in Python flow";
-    return;
-  }
   await api("/api/scenarios", { method: "POST", body: JSON.stringify(doc) });
   const wasDraft = isDraftSelected();
   $("build-msg").textContent = `Saved "${doc.name}"`;
@@ -1672,8 +1668,133 @@ async function startRun(scenarioName) {
   }
 }
 
+/** @type {Array<{id:string,label:string,scenario_names:string[]}>} */
+let groupsModalDraft = [];
+
+function renderGroupsModalEditor() {
+  const body = $("groups-editor-body");
+  if (!body) return;
+  body.innerHTML = "";
+  groupsModalDraft.forEach((g, gi) => {
+    const row = document.createElement("div");
+    row.className = "groups-modal-row card";
+
+    const idLab = document.createElement("label");
+    idLab.className = "field-label";
+    idLab.textContent = "Group id";
+    const idInp = document.createElement("input");
+    idInp.type = "text";
+    idInp.value = g.id || "";
+    idInp.placeholder = "my_group";
+    idInp.addEventListener("input", () => {
+      groupsModalDraft[gi].id = idInp.value.trim();
+    });
+
+    const labLab = document.createElement("label");
+    labLab.className = "field-label";
+    labLab.textContent = "Label";
+    const labInp = document.createElement("input");
+    labInp.type = "text";
+    labInp.value = g.label || "";
+    labInp.addEventListener("input", () => {
+      groupsModalDraft[gi].label = labInp.value.trim();
+    });
+
+    const selLab = document.createElement("label");
+    selLab.className = "field-label";
+    selLab.textContent = "Flows in group (multi-select)";
+    const sel = document.createElement("select");
+    sel.multiple = true;
+    const names = scenarios.filter((s) => s.type === "json").map((s) => s.name);
+    sel.size = Math.min(12, Math.max(4, names.length || 4));
+    names.forEach((nm) => {
+      const o = document.createElement("option");
+      o.value = nm;
+      o.textContent = nm;
+      o.selected = (g.scenario_names || []).includes(nm);
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", () => {
+      groupsModalDraft[gi].scenario_names = Array.from(sel.selectedOptions).map((o) => o.value);
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger outline";
+    del.textContent = "Remove group";
+    del.addEventListener("click", () => {
+      groupsModalDraft.splice(gi, 1);
+      renderGroupsModalEditor();
+    });
+
+    row.appendChild(idLab);
+    row.appendChild(idInp);
+    row.appendChild(labLab);
+    row.appendChild(labInp);
+    row.appendChild(selLab);
+    row.appendChild(sel);
+    row.appendChild(del);
+    body.appendChild(row);
+  });
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "success outline";
+  addBtn.textContent = "+ Add group";
+  addBtn.addEventListener("click", () => {
+    groupsModalDraft.push({ id: `g_${Date.now()}`, label: "New group", scenario_names: [] });
+    renderGroupsModalEditor();
+  });
+  body.appendChild(addBtn);
+}
+
+function openGroupsModal() {
+  $("groups-msg").textContent = "";
+  groupsModalDraft = structuredClone(groupsData.groups || []);
+  renderGroupsModalEditor();
+  $("groups-dialog")?.showModal();
+}
+
+async function saveGroupsModal() {
+  $("groups-msg").textContent = "";
+  await api("/api/groups", {
+    method: "PUT",
+    body: JSON.stringify({ groups: groupsModalDraft }),
+  });
+  await loadGroups();
+  renderScenarioList("scenario-list", scenarioListOnSelect);
+  $("groups-dialog")?.close();
+  $("build-msg").textContent = "Groups saved";
+}
+
+async function startRunGroup(groupId) {
+  const body = {
+    group_id: groupId,
+    loops: parseInt($("run-loops").value, 10) || 1,
+    pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
+    pause_between_flows_sec: parseFloat($("run-pause-flows")?.value || "0") || 0,
+    headless: $("run-headless").checked,
+    channel: "chrome",
+    slow_mo: 0,
+  };
+  $("log-output").textContent = "";
+  await initRunStepProgress(`group:${groupId}`);
+  await api("/api/run/group", { method: "POST", body: JSON.stringify(body) });
+  startRunStatusPolling();
+  try {
+    await refreshRunStepProgressFromServer();
+  } catch {
+    /* polling / websocket will catch up */
+  }
+}
+
 $("btn-start").onclick = () => startRun();
 $("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
+$("btn-manage-groups")?.addEventListener("click", () => openGroupsModal());
+$("groups-save")?.addEventListener("click", () =>
+  saveGroupsModal().catch((e) => ($("groups-msg").textContent = e.message))
+);
+$("groups-cancel")?.addEventListener("click", () => $("groups-dialog")?.close());
 $("btn-add-step").onclick = () => {
   const last = builderSteps[builderSteps.length - 1];
   builderSteps.push(defaultStep(last?.action || "goto"));

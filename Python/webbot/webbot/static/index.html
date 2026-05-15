@@ -24,6 +24,7 @@
               <span class="field-label">Flows</span>
               <div class="workspace-sidebar-actions">
                 <button type="button" id="btn-new-flow" class="success outline">New</button>
+                <button type="button" id="btn-manage-groups" class="outline">Groups</button>
                 <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
               </div>
             </div>
@@ -41,6 +42,10 @@
                 <label for="run-pause">Pause between loops (sec)</label>
                 <input type="number" id="run-pause" min="0" step="1" value="0" />
               </div>
+              <div class="row">
+                <label for="run-pause-flows">Pause between flows in group (sec)</label>
+                <input type="number" id="run-pause-flows" min="0" step="1" value="0" />
+              </div>
               <label class="checkbox">
                 <input type="checkbox" id="run-headless" />
                 Headless
@@ -56,18 +61,6 @@
         </aside>
 
         <div class="card workspace-editor">
-          <div id="flow-python-banner" class="flow-python-banner hidden">
-            <p><strong id="flow-python-title">Python flow</strong> — defined in source code; not editable in this UI.</p>
-            <p id="flow-python-desc" class="flow-python-desc hidden"></p>
-            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Press <strong>Start</strong> in the Run panel to run.</p>
-          </div>
-
-          <div id="flow-python-view" class="flow-python-view hidden">
-            <h3 class="flow-python-steps-heading">Steps</h3>
-            <ol id="flow-python-steps" class="flow-preview-steps"></ol>
-            <p id="flow-python-source" class="flow-preview-meta muted hidden"></p>
-          </div>
-
           <div id="run-progress-wrap" class="run-progress-wrap hidden">
             <h3 class="run-progress-heading">Run progress</h3>
             <div id="run-progress-body" class="run-progress-body"></div>
@@ -129,6 +122,19 @@
           <button type="button" id="help-next">Next</button>
           <button type="button" id="help-close" class="primary">Close</button>
         </footer>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="groups-dialog" class="groups-dialog">
+    <div class="groups-dialog-inner">
+      <h2>Flow groups</h2>
+      <p class="muted">Organize flows into sections. Use <strong>Run group</strong> on each section to run flows in order.</p>
+      <div id="groups-editor-body"></div>
+      <p id="groups-msg" class="muted"></p>
+      <div class="groups-dialog-actions">
+        <button type="button" id="groups-cancel">Cancel</button>
+        <button type="button" id="groups-save" class="primary">Save groups</button>
       </div>
     </div>
   </dialog>
