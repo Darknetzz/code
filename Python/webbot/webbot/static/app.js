@@ -901,7 +901,7 @@ async function deleteSelectedFlow() {
   await api(`/api/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" });
   await loadScenarios();
   if (scenarios.length) await selectScenario(scenarios[0].name);
-  else newFlow();
+  else await newFlow();
   $("build-msg").textContent = `Deleted "${name}"`;
   $("build-msg-python").textContent = "";
 }
@@ -1094,7 +1094,7 @@ function renderScenarioList(containerId, onSelect) {
       e.preventDefault();
       e.stopPropagation();
       startRunGroup(g.id).catch((err) => {
-        $("build-msg").textContent = err.message;
+        showError(err.message);
       });
     });
 
