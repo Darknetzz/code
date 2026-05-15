@@ -421,21 +421,29 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.35rem;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
 }
 
 .workspace-sidebar-dropdown {
   position: relative;
   min-width: 0;
+  display: flex;
+  align-items: stretch;
 }
 
 .workspace-dropdown-summary {
   list-style: none;
   box-sizing: border-box;
   width: 100%;
+  flex: 1;
   margin: 0;
-  padding: 0.45rem 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.375rem;
+  padding: 0.45rem 0.65rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -443,6 +451,14 @@ main {
   cursor: pointer;
   user-select: none;
   font: inherit;
+  font-size: 0.85rem;
+}
+
+.workspace-sidebar-actions > button {
+  box-sizing: border-box;
+  min-height: 2.375rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.85rem;
 }
 
 summary.workspace-dropdown-summary.success.outline {
@@ -503,8 +519,6 @@ summary.workspace-dropdown-summary.success.outline:hover {
 
 .workspace-sidebar-actions .btn-with-icon {
   justify-content: center;
-  padding: 0.45rem 0.5rem;
-  font-size: 0.85rem;
 }
 
 .workspace-run-options {
@@ -1601,6 +1615,13 @@ button:disabled {
 
 .panel-help-row .help-btn {
   flex-shrink: 0;
+}
+
+/* Match Flows toolbar button row height (sidebar actions min-height 2.375rem). */
+.workspace-flows-card > .panel-help-row > .help-btn {
+  width: 2.375rem;
+  height: 2.375rem;
+  min-width: 2.375rem;
 }
 
 .help-action-wrap {
