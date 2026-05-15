@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 from playwright.async_api import Locator, Page
 
-LocatorBy = Literal["role", "text", "css", "test_id", "label"]
+LocatorBy = Literal["role", "text", "css", "test_id", "label", "data"]
+
+
+def normalize_data_attr(attr: str) -> str:
+    """Normalize user input to a full data-* attribute name (e.g. cy -> data-cy)."""
+    a = attr.strip()
+    if not a:
+        raise ValueError("data_attr is required")
+    if a in ("testid", "test-id"):
+        return "data-testid"
+    if a.startswith("data-"):
+        return a
+    return f"data-{a}"
 
 
 def resolve_locator(
@@ -19,6 +32,8 @@ def resolve_locator(
     selector: str | None = None,
     test_id: str | None = None,
     label: str | None = None,
+    data_attr: str | None = None,
+    data_value: str | None = None,
 ) -> Locator:
     if by == "role":
         if not role:
@@ -36,6 +51,14 @@ def resolve_locator(
         if not test_id:
             raise ValueError("locator with by=test_id requires 'test_id'")
         return page.get_by_test_id(test_id)
+    if by == "data":
+        value = data_value or test_id
+        if not value:
+            raise ValueError("locator with by=data requires 'data_value'")
+        attr = normalize_data_attr(data_attr or "data-testid")
+        if attr == "data-testid":
+            return page.get_by_test_id(value)
+        return page.locator(f"[{attr}={json.dumps(value)}]")
     if by == "label":
         label_text = label or name or text
         if not label_text:

@@ -201,7 +201,27 @@ function defaultStep(action) {
   }
 }
 
-const LOCATOR_BY_OPTIONS = ["role", "text", "css", "test_id", "label"];
+const LOCATOR_BY_OPTIONS = ["role", "text", "css", "data", "label"];
+
+/** Map legacy test_id locators to the data-attribute editor. */
+function normalizeLocatorFields(obj) {
+  if (!obj || obj.by !== "test_id") return obj;
+  return {
+    ...obj,
+    by: "data",
+    data_attr: obj.data_attr || "data-testid",
+    data_value: obj.data_value ?? obj.test_id ?? "",
+  };
+}
+
+function normalizeStep(step) {
+  if (!step) return step;
+  const s = normalizeLocatorFields({ ...step });
+  if (s.action === "submit_form" && Array.isArray(s.fields)) {
+    s.fields = s.fields.map((f) => normalizeLocatorFields({ ...f }));
+  }
+  return s;
+}
 
 /** [fieldKey, label, inputType, hint, helpId] for each Find-by mode */
 function locatorFieldDefs(by) {
@@ -217,8 +237,17 @@ function locatorFieldDefs(by) {
       return [
         ["selector", "CSS selector", "text", "e.g. #id, .class, button.submit", "locator.selector"],
       ];
-    case "test_id":
-      return [["test_id", "Test ID", "text", "data-testid attribute value", "locator.test_id"]];
+    case "data":
+      return [
+        [
+          "data_attr",
+          "Data attribute",
+          "text",
+          "e.g. data-testid, data-cy, data-qa",
+          "locator.data_attr",
+        ],
+        ["data_value", "Attribute value", "text", "Value on that attribute", "locator.data_value"],
+      ];
     case "label":
       return [["label", "Label text", "text", "Text on the associated <label>", "locator.label"]];
     default:
@@ -227,16 +256,17 @@ function locatorFieldDefs(by) {
 }
 
 function renderLocatorInputs(container, step, includeValue) {
-  const by = step.by || "css";
+  const loc = normalizeLocatorFields(step);
+  const by = loc.by || "css";
   for (const [field, label, type, hint, helpId] of locatorFieldDefs(by)) {
-    container.appendChild(labeledField(field, label, step[field] || "", type, hint, helpId));
+    container.appendChild(labeledField(field, label, loc[field] || "", type, hint, helpId));
   }
   if (includeValue) {
     container.appendChild(
       labeledField(
         "value",
         "Value to type",
-        step.value || "",
+        loc.value || "",
         "text",
         "Text entered into the field",
         "locator.value"
@@ -246,10 +276,11 @@ function renderLocatorInputs(container, step, includeValue) {
 }
 
 function appendLocatorFields(container, step, includeValue, stepIndex) {
+  const loc = normalizeLocatorFields(step);
   const byWrap = labeledSelect(
     "by",
     "Find by",
-    step.by || "css",
+    loc.by || "css",
     LOCATOR_BY_OPTIONS,
     "",
     "locator.by"
@@ -261,7 +292,7 @@ function appendLocatorFields(container, step, includeValue, stepIndex) {
     renderSteps();
   });
   container.appendChild(byWrap);
-  renderLocatorInputs(container, step, includeValue);
+  renderLocatorInputs(container, loc, includeValue);
 }
 
 function renderFormFieldRow(stepIndex, fieldIndex, field) {
@@ -290,6 +321,8 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
 
   const renderFieldInputs = () => {
     locGrid.innerHTML = "";
+    const normalized = normalizeLocatorFields(field);
+    Object.assign(field, normalized);
     const by = field.by || "css";
 
     const bySel = fieldSelect("by", by, LOCATOR_BY_OPTIONS);
@@ -842,7 +875,7 @@ function collectDocument() {
     name: $("build-name").value.trim(),
     description: $("build-desc").value.trim(),
     start_url: $("build-url").value.trim(),
-    steps: builderSteps.map((s) => ({ ...s })),
+    steps: builderSteps.map((s) => normalizeStep({ ...s })),
     ...readScenarioOptions(),
   };
 }
@@ -871,7 +904,7 @@ async function loadScenarioForEdit() {
   $("build-desc").value = doc.description || "";
   $("build-url").value = doc.start_url || "";
   renderScenarioOptions(doc);
-  builderSteps = doc.steps || [];
+  builderSteps = (doc.steps || []).map((s) => normalizeStep({ ...s }));
   renderSteps();
   $("build-msg").textContent = `Loaded "${name}"`;
   document.querySelector('.tab[data-tab="builder"]').click();

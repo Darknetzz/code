@@ -250,7 +250,7 @@ const HELP_TOPICS = {
       "<p><code>role</code> — ARIA role + name (recommended for buttons/links).</p>",
       "<p><code>text</code> — visible text on the page.</p>",
       "<p><code>css</code> — CSS selector.</p>",
-      "<p><code>test_id</code> — <code>data-testid</code> attribute.</p>",
+      "<p><code>data</code> — any <code>data-*</code> attribute (e.g. <code>data-testid</code>, <code>data-cy</code>, <code>data-qa</code>).</p>",
       "<p><code>label</code> — associated <code>&lt;label&gt;</code> text.</p>",
     ],
   },
@@ -276,9 +276,19 @@ const HELP_TOPICS = {
       "<p>Standard CSS, e.g. <code>#id</code>, <code>.class</code>, <code>button.submit</code>, <code>input[name=q]</code>.</p>",
     ],
   },
-  "locator.test_id": {
-    title: "Test ID",
-    body: ["<p>Value of the <code>data-testid</code> attribute on the element.</p>"],
+  "locator.data_attr": {
+    title: "Data attribute",
+    body: [
+      "<p>Name of the HTML attribute, usually starting with <code>data-</code>. Examples: <code>data-testid</code>, <code>data-cy</code> (Cypress), <code>data-qa</code>.</p>",
+      "<p>You can type <code>testid</code> or <code>data-testid</code> — both target the same attribute.</p>",
+    ],
+  },
+  "locator.data_value": {
+    title: "Attribute value",
+    body: [
+      "<p>The exact string value of that attribute on the element, e.g. <code>login-submit</code> for <code>data-testid=\"login-submit\"</code>.</p>",
+      "<p>Inspect the element in DevTools and copy the value inside the quotes.</p>",
+    ],
   },
   "locator.label": {
     title: "Label text",
@@ -352,7 +362,8 @@ const HELP_NAV = [
       "locator.name",
       "locator.text",
       "locator.selector",
-      "locator.test_id",
+      "locator.data_attr",
+      "locator.data_value",
       "locator.label",
       "locator.value",
     ],

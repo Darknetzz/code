@@ -32,6 +32,8 @@ def _loc_kwargs_field(field: FormField) -> dict:
         "text": field.text,
         "selector": field.selector,
         "test_id": field.test_id,
+        "data_attr": field.data_attr,
+        "data_value": field.data_value,
     }
 
 
@@ -43,6 +45,8 @@ def _loc_kwargs_click(step: ClickStep) -> dict:
         "text": step.text,
         "selector": step.selector,
         "test_id": step.test_id,
+        "data_attr": step.data_attr,
+        "data_value": step.data_value,
     }
 
 
@@ -60,7 +64,14 @@ def step_label(step: Step) -> str:
         target = step.selector or step.label or step.name or step.role or "?"
         return f"fill {target} = {step.value!r}"
     if isinstance(step, ClickStep):
-        target = step.role or step.text or step.selector or step.test_id or "?"
+        target = (
+            step.role
+            or step.text
+            or step.selector
+            or step.data_value
+            or step.test_id
+            or "?"
+        )
         extra = f' "{step.name}"' if step.name else ""
         return f"click {step.by} {target}{extra}"
     if isinstance(step, SubmitFormStep):
@@ -116,6 +127,8 @@ async def execute_submit_form(page: Page, step: SubmitFormStep) -> None:
             text=step.submit_text,
             selector=step.submit_selector,
             test_id=step.submit_test_id,
+            data_attr=step.submit_data_attr,
+            data_value=step.submit_data_value,
         )
         await submit_loc.wait_for(state="visible", timeout=15_000)
         if step.wait_for_navigation:

@@ -42,36 +42,42 @@ class ScrollStep(BaseModel):
 
 class ClickStep(BaseModel):
     action: Literal["click"] = "click"
-    by: Literal["role", "text", "css", "test_id"] = "role"
+    by: Literal["role", "text", "css", "test_id", "data"] = "role"
     role: str | None = None
     name: str | None = None
     text: str | None = None
     selector: str | None = None
     test_id: str | None = None
+    data_attr: str | None = None
+    data_value: str | None = None
 
 
 class FillStep(BaseModel):
     """Fill a single input, textarea, or select."""
 
     action: Literal["fill"] = "fill"
-    by: Literal["role", "text", "css", "test_id", "label"] = "css"
+    by: Literal["role", "text", "css", "test_id", "label", "data"] = "css"
     role: str | None = None
     name: str | None = None
     label: str | None = None
     text: str | None = None
     selector: str | None = None
     test_id: str | None = None
+    data_attr: str | None = None
+    data_value: str | None = None
     value: str
 
 
 class FormField(BaseModel):
-    by: Literal["role", "text", "css", "test_id", "label"] = "css"
+    by: Literal["role", "text", "css", "test_id", "label", "data"] = "css"
     role: str | None = None
     name: str | None = None
     label: str | None = None
     text: str | None = None
     selector: str | None = None
     test_id: str | None = None
+    data_attr: str | None = None
+    data_value: str | None = None
     value: str
 
 
@@ -82,12 +88,14 @@ class SubmitFormStep(BaseModel):
     method: Literal["get", "post"] = "post"
     form_selector: str | None = None
     fields: list[FormField] = Field(default_factory=list)
-    submit_by: Literal["role", "text", "css", "test_id", "form"] = "role"
+    submit_by: Literal["role", "text", "css", "test_id", "data", "form"] = "role"
     submit_role: str | None = "button"
     submit_name: str | None = None
     submit_text: str | None = None
     submit_selector: str | None = None
     submit_test_id: str | None = None
+    submit_data_attr: str | None = None
+    submit_data_value: str | None = None
     wait_for_navigation: bool = True
 
 
