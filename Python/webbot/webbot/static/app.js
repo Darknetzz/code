@@ -7,6 +7,7 @@ let ws = null;
 let runStepProgress = null;
 let runShowStepProgress = false;
 let cachedPreviewDoc = null;
+let runStatusPollTimer = null;
 
 function getSelectedScenario() {
   return selectedScenario || scenarios[0]?.name || null;
@@ -137,36 +138,114 @@ async function initRunStepProgress(scenario) {
   renderRunFlowPreviewBody();
 }
 
+function stopRunStatusPolling() {
+  if (runStatusPollTimer != null) {
+    clearInterval(runStatusPollTimer);
+    runStatusPollTimer = null;
+  }
+}
+
+function startRunStatusPolling() {
+  stopRunStatusPolling();
+  runStatusPollTimer = setInterval(() => {
+    refreshRunStepProgressFromServer().catch(() => {});
+  }, 350);
+}
+
+async function refreshRunStepProgressFromServer() {
+  const st = await api("/api/run/status");
+  setRunStatus(st);
+  applyRunStepProgress(st);
+  updateRunButtons(st.state);
+  if (st.state !== "running") stopRunStatusPolling();
+  return st;
+}
+
+function upsertRunStepEntry(index, label, status, error = null) {
+  if (!runStepProgress) runStepProgress = [];
+  let entry = runStepProgress.find((s) => s.index === index);
+  if (!entry) {
+    entry = { index, label, status, error };
+    runStepProgress.push(entry);
+    runStepProgress.sort((a, b) => a.index - b.index);
+  } else {
+    if (label) entry.label = label;
+    entry.status = status;
+    entry.error = error;
+  }
+  runShowStepProgress = true;
+}
+
+function applyStepProgressFromLogLine(line) {
+  if (!runShowStepProgress) return;
+  const m = line.match(/\[(?:\.\.|OK|FAIL)\](?:.*?)step (\d+)\/(\d+):\s*(.+?)(?:\s+-\s+(.+))?$/);
+  if (!m) return;
+  const index = parseInt(m[1], 10);
+  const label = m[3].trim();
+  const err = m[4]?.trim() || null;
+  let status = "running";
+  if (line.startsWith("[OK]")) status = "ok";
+  else if (line.startsWith("[FAIL]")) status = "failed";
+
+  upsertRunStepEntry(index, label, status, err);
+  if (status === "running") {
+    runStepProgress.forEach((s) => {
+      if (s.index < index && s.status === "running") s.status = "ok";
+    });
+  }
+  renderRunFlowPreviewBody();
+}
+
 function applyRunStepProgress(msg) {
+  const loopInfo = { loop: msg.loop, loops: msg.loops };
+
   if (msg.step_progress?.length) {
-    runStepProgress = msg.step_progress;
+    runStepProgress = msg.step_progress.map((s) => ({ ...s }));
     runShowStepProgress = true;
-    renderRunFlowPreviewBody({ loop: msg.loop, loops: msg.loops });
+    renderRunFlowPreviewBody(loopInfo);
     return;
   }
+
   if (msg.state === "running" && msg.step && msg.step_label) {
-    if (!runStepProgress) runStepProgress = [];
     const idx = msg.step;
-    let entry = runStepProgress.find((s) => s.index === idx);
-    if (!entry) {
-      entry = { index: idx, label: msg.step_label, status: "running", error: null };
-      runStepProgress.push(entry);
-      runStepProgress.sort((a, b) => a.index - b.index);
-    } else {
-      entry.label = msg.step_label;
-      entry.status = "running";
-    }
+    upsertRunStepEntry(idx, msg.step_label, "running");
     runStepProgress.forEach((s) => {
       if (s.index < idx && s.status === "running") s.status = "ok";
     });
+    renderRunFlowPreviewBody(loopInfo);
+    return;
+  }
+
+  if (
+    runStepProgress?.length &&
+    (msg.state === "completed" || msg.state === "failed" || msg.state === "stopped")
+  ) {
+    if (msg.state === "completed") {
+      runStepProgress.forEach((s) => {
+        s.status = "ok";
+        s.error = null;
+      });
+    } else if (msg.state === "failed" && msg.step) {
+      const failAt = msg.step;
+      runStepProgress.forEach((s) => {
+        if (s.index < failAt) {
+          s.status = "ok";
+          s.error = null;
+        } else if (s.index === failAt) {
+          s.status = "failed";
+          s.error = msg.error || s.error;
+        }
+      });
+    }
     runShowStepProgress = true;
-    renderRunFlowPreviewBody({ loop: msg.loop, loops: msg.loops });
+    renderRunFlowPreviewBody(loopInfo);
   }
 }
 
 function clearRunStepProgress() {
   runStepProgress = null;
   runShowStepProgress = false;
+  stopRunStatusPolling();
 }
 
 function renderFlowPreviewHtml(doc) {
@@ -372,11 +451,12 @@ function syncScenarioListSelection() {
 }
 
 function setSelectedScenario(name, options = {}) {
+  const prev = selectedScenario;
   selectedScenario = name || null;
   syncScenarioListSelection();
   updateDeleteFlowButton();
   if (!options.skipPreview) {
-    clearRunStepProgress();
+    if (prev !== selectedScenario) clearRunStepProgress();
     updateRunFlowPreview(name);
   }
 }
@@ -461,6 +541,7 @@ function appendLog(line) {
   const el = $("log-output");
   el.textContent += line + "\n";
   el.scrollTop = el.scrollHeight;
+  applyStepProgressFromLogLine(line);
 }
 
 function formatRunDetail(msg) {
@@ -548,6 +629,10 @@ function connectWebSocket() {
       applyRunStepProgress(msg);
       if (msg.error) appendLog("Error: " + msg.error);
       updateRunButtons(msg.state);
+      if (msg.state === "completed" || msg.state === "failed" || msg.state === "stopped") {
+        stopRunStatusPolling();
+        refreshRunStepProgressFromServer().catch(() => {});
+      }
     }
   };
   ws.onclose = () => setTimeout(connectWebSocket, 2000);
@@ -1341,13 +1426,11 @@ async function startRun(scenarioName) {
   $("log-output").textContent = "";
   await initRunStepProgress(scenario);
   await api("/api/run", { method: "POST", body: JSON.stringify(body) });
+  startRunStatusPolling();
   try {
-    const st = await api("/api/run/status");
-    setRunStatus(st);
-    applyRunStepProgress(st);
-    updateRunButtons(st.state);
+    await refreshRunStepProgressFromServer();
   } catch {
-    /* websocket will catch up */
+    /* polling / websocket will catch up */
   }
 }
 
@@ -1395,21 +1478,19 @@ $("btn-test-run").onclick = async () => {
     await loadScenarios();
     const st = await api("/api/run/status");
     setRunStatus(st);
+    updateRunButtons(st.state);
     if (st.state === "running" && st.scenario) {
-      runShowStepProgress = true;
-      if (st.step_progress?.length) {
-        runStepProgress = st.step_progress;
-      } else {
-        await initRunStepProgress(st.scenario);
-      }
+      await initRunStepProgress(st.scenario);
+      applyRunStepProgress(st);
+      startRunStatusPolling();
     } else if (st.step_progress?.length) {
-      runStepProgress = st.step_progress;
+      runStepProgress = st.step_progress.map((s) => ({ ...s }));
       runShowStepProgress = true;
     }
-    updateRunButtons(st.state);
     connectWebSocket();
     if (selectedScenario) {
       await loadFlowIntoEditor(selectedScenario);
+      if (runShowStepProgress && runStepProgress?.length) renderRunFlowPreviewBody();
     } else {
       newFlow();
     }
