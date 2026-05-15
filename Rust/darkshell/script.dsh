@@ -1,5 +1,9 @@
 # Example Darkshell (.dsh) script. See SPEC.md in this crate for the language sketch.
-# Run from the darkshell directory: cargo run -- script.dsh
+# Run from this directory:
+#   cargo run -- .\script.dsh
+#   .\target\release\dsh.exe .\script.dsh
+# In PowerShell, if `dsh` is a function, it must forward arguments, e.g.:
+#   function dsh { & "$PSScriptRoot\target\release\dsh.exe" @args }
 #
 # Tip: end statements with `;` before a line that starts with `name()` so the
 # parser does not treat `name()` as extra arguments to the previous command.

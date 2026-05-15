@@ -43,6 +43,18 @@ fn main() -> Result<()> {
     let stdin = std::io::stdin();
     let stdin_tty = stdin.is_terminal();
 
+    // If argv is only the program name, `dsh .\script.dsh` never reached us (common: a
+    // PowerShell `function dsh { ... }` that omits `@args`). Help before we REPL or read stdin.
+    if cli.command.is_none() && cli.script_and_args.is_empty() {
+        let argc = std::env::args().count();
+        if argc <= 1 {
+            eprintln!("dsh: note: this process started with no script path on the command line.");
+            eprintln!("dsh:       if you ran `dsh .\\script.dsh` but see this, your `dsh` is probably a shell function or alias that does not forward arguments.");
+            eprintln!("dsh:       try:  & '.\\target\\release\\dsh.exe' '.\\script.dsh'   (or `cargo run -- .\\script.dsh`)");
+            let _ = io::stderr().flush();
+        }
+    }
+
     if let Some(code) = cli.command {
         st.argv0 = "dsh".into();
         st.positional.clear();
