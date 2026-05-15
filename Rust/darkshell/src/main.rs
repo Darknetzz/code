@@ -10,7 +10,7 @@ mod signals;
 mod style;
 
 use std::fs;
-use std::io::Read;
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -62,8 +62,27 @@ fn main() -> Result<()> {
     } else if cli.interactive || stdin_tty {
         repl::repl_loop(&mut st)?;
     } else {
-        let mut buf = String::new();
-        stdin.lock().read_to_string(&mut buf)?;
+        const STDIN_SCRIPT_MAX: u64 = 4 * 1024 * 1024;
+        eprintln!(
+            "dsh: no script path on the command line; reading a script from standard input (max {} MiB).",
+            STDIN_SCRIPT_MAX / 1024 / 1024
+        );
+        eprintln!(
+            "dsh: send EOF when done (Ctrl+Z then Enter in classic CMD), or run e.g.  dsh .\\script.dsh"
+        );
+        let _ = io::stderr().flush();
+        let mut raw = Vec::new();
+        stdin
+            .lock()
+            .take(STDIN_SCRIPT_MAX.saturating_add(1))
+            .read_to_end(&mut raw)?;
+        if raw.len() as u64 > STDIN_SCRIPT_MAX {
+            anyhow::bail!(
+                "dsh: standard input exceeds {} MiB; pass a file path instead",
+                STDIN_SCRIPT_MAX / 1024 / 1024
+            );
+        }
+        let buf = String::from_utf8(raw).context("dsh: standard input is not valid UTF-8")?;
         interp::eval_source_streams(
             &mut st,
             &buf,
