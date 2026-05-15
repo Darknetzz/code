@@ -12,82 +12,60 @@
       <h1>Webbot</h1>
       <p id="health" class="muted">Loading…</p>
     </div>
-    <button type="button" id="btn-help" class="help-header-btn" aria-label="Help for Run tab">Help</button>
+    <button type="button" id="btn-help" class="help-header-btn" aria-label="Help">Help</button>
   </header>
 
-  <nav class="tabs">
-    <button type="button" class="tab active" data-tab="run">Run</button>
-    <button type="button" class="tab" data-tab="flows">Flows</button>
-  </nav>
-
   <main>
-    <section id="panel-run" class="panel active">
-      <div class="run-layout">
-        <div class="card run-controls-card">
-          <div class="scenario-list-header" data-page-help="help.run">
-            <span class="field-label">Scenarios</span>
-          </div>
-          <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
-
-          <div class="row">
-            <label for="run-loops">Loops</label>
-            <input type="number" id="run-loops" min="1" value="1" />
-          </div>
-          <div class="row">
-            <label for="run-pause">Pause between loops (sec)</label>
-            <input type="number" id="run-pause" min="0" step="1" value="0" />
-          </div>
-          <label class="checkbox">
-            <input type="checkbox" id="run-headless" />
-            Headless
-          </label>
-
-          <div class="actions">
-            <button type="button" id="btn-start" class="primary">Start</button>
-            <button type="button" id="btn-stop" disabled>Stop</button>
-          </div>
-          <p id="run-status" class="status muted">Idle</p>
-        </div>
-
-        <div id="run-flow-preview" class="card flow-preview-card hidden">
-          <div class="flow-preview-header">
-            <h2 class="flow-preview-title heading-with-icon">Flow preview</h2>
-            <button type="button" id="btn-edit-flow" class="btn-edit-flow">Edit flow</button>
-          </div>
-          <div id="run-flow-preview-body" class="flow-preview-body"></div>
-        </div>
-
-        <div class="card log-card">
-          <h2>Log</h2>
-          <pre id="log-output"></pre>
-        </div>
-      </div>
-    </section>
-
-    <section id="panel-flows" class="panel">
-      <div class="flows-layout">
-        <aside class="card flows-picker">
-          <div class="flows-picker-toolbar">
+    <section id="panel-main" class="panel active">
+      <div class="workspace-layout">
+        <aside class="card workspace-sidebar">
+          <div class="workspace-sidebar-toolbar" data-page-help="help.home">
             <span class="field-label">Flows</span>
-            <div class="flows-picker-actions">
+            <div class="workspace-sidebar-actions">
               <button type="button" id="btn-new-flow">New</button>
               <button type="button" id="btn-delete-flow" class="danger" disabled>Delete</button>
             </div>
           </div>
-          <ul id="flows-scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
+          <ul id="scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
+
+          <div class="workspace-run-options">
+            <div class="row">
+              <label for="run-loops">Loops</label>
+              <input type="number" id="run-loops" min="1" value="1" />
+            </div>
+            <div class="row">
+              <label for="run-pause">Pause between loops (sec)</label>
+              <input type="number" id="run-pause" min="0" step="1" value="0" />
+            </div>
+            <label class="checkbox">
+              <input type="checkbox" id="run-headless" />
+              Headless
+            </label>
+          </div>
+
+          <div class="actions workspace-run-actions">
+            <button type="button" id="btn-start" class="primary">Start</button>
+            <button type="button" id="btn-stop" disabled>Stop</button>
+          </div>
+          <p id="run-status" class="status muted">Idle</p>
         </aside>
 
-        <div class="card flows-editor">
+        <div class="card workspace-editor">
           <div id="flow-python-banner" class="flow-python-banner hidden">
             <p><strong id="flow-python-title">Python flow</strong> — defined in source code; not editable in this UI.</p>
             <p id="flow-python-desc" class="flow-python-desc hidden"></p>
-            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Run it from the <strong>Run</strong> tab.</p>
+            <p class="muted">Change it in <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. Press <strong>Start</strong> in the sidebar to run.</p>
           </div>
 
           <div id="flow-python-view" class="flow-python-view hidden">
             <h3 class="flow-python-steps-heading">Steps</h3>
             <ol id="flow-python-steps" class="flow-preview-steps"></ol>
             <p id="flow-python-source" class="flow-preview-meta muted hidden"></p>
+          </div>
+
+          <div id="run-progress-wrap" class="run-progress-wrap hidden">
+            <h3 class="run-progress-heading">Run progress</h3>
+            <div id="run-progress-body" class="run-progress-body"></div>
           </div>
 
           <div id="flow-editor-wrap">
@@ -110,7 +88,7 @@
             </div>
 
             <div class="steps-header">
-              <h2 data-page-help="help.flows">Steps</h2>
+              <h2>Steps</h2>
               <button type="button" id="btn-add-step">Add step</button>
             </div>
             <div id="steps-list"></div>
@@ -122,6 +100,11 @@
             <p id="build-msg" class="muted"></p>
           </div>
         </div>
+      </div>
+
+      <div class="card log-card workspace-log">
+        <h2>Log</h2>
+        <pre id="log-output"></pre>
       </div>
     </section>
   </main>

@@ -99,27 +99,34 @@ function renderRunStepProgressHtml(steps, loopInfo) {
   return `${loopHdr}<ol class="run-step-progress">${items}</ol>`;
 }
 
-function renderRunFlowPreviewBody(loopInfo) {
-  const body = $("run-flow-preview-body");
-  if (!body) return;
-  if (runShowStepProgress && runStepProgress?.length) {
-    body.innerHTML = renderRunStepProgressHtml(runStepProgress, loopInfo);
-    return;
+function renderRunProgressPanel(loopInfo) {
+  const body = $("run-progress-body");
+  if (!body || !runStepProgress?.length) return;
+  body.innerHTML = renderRunStepProgressHtml(runStepProgress, loopInfo);
+}
+
+function setRunProgressVisible(show) {
+  $("run-progress-wrap")?.classList.toggle("hidden", !show);
+  if (show) {
+    $("flow-editor-wrap")?.classList.add("hidden");
+    $("flow-python-banner")?.classList.add("hidden");
+    $("flow-python-view")?.classList.add("hidden");
   }
-  const name = getSelectedScenario();
-  const info = name ? getScenarioInfo(name) : null;
-  if (!name || !info) {
-    body.innerHTML = "";
+}
+
+function restoreEditorViewAfterRun() {
+  if (runShowStepProgress) return;
+  const info = selectedScenario ? getScenarioInfo(selectedScenario) : null;
+  if (!info) {
+    showJsonFlowEditor();
     return;
   }
   if (info.type === "python") {
-    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Edit in <code>webbot/scenarios/</code>.</p>`;
-    return;
-  }
-  if (cachedScenarioPreview) {
-    body.innerHTML = renderScenarioPreviewHtml(cachedScenarioPreview);
-  } else if (cachedPreviewDoc) {
-    body.innerHTML = renderFlowPreviewHtml(cachedPreviewDoc);
+    $("flow-editor-wrap")?.classList.add("hidden");
+    $("flow-python-banner")?.classList.remove("hidden");
+    $("flow-python-view")?.classList.remove("hidden");
+  } else {
+    showJsonFlowEditor();
   }
 }
 
@@ -140,9 +147,8 @@ async function initRunStepProgress(scenario) {
     runStepProgress = [];
   }
   runShowStepProgress = true;
-  const panel = $("run-flow-preview");
-  panel?.classList.remove("hidden");
-  renderRunFlowPreviewBody();
+  setRunProgressVisible(true);
+  renderRunProgressPanel();
 }
 
 function stopRunStatusPolling() {
@@ -200,7 +206,7 @@ function applyStepProgressFromLogLine(line) {
       if (s.index < index && s.status === "running") s.status = "ok";
     });
   }
-  renderRunFlowPreviewBody();
+  renderRunProgressPanel();
 }
 
 function applyRunStepProgress(msg) {
@@ -209,7 +215,8 @@ function applyRunStepProgress(msg) {
   if (msg.step_progress?.length) {
     runStepProgress = msg.step_progress.map((s) => ({ ...s }));
     runShowStepProgress = true;
-    renderRunFlowPreviewBody(loopInfo);
+    setRunProgressVisible(true);
+    renderRunProgressPanel(loopInfo);
     return;
   }
 
@@ -219,7 +226,8 @@ function applyRunStepProgress(msg) {
     runStepProgress.forEach((s) => {
       if (s.index < idx && s.status === "running") s.status = "ok";
     });
-    renderRunFlowPreviewBody(loopInfo);
+    setRunProgressVisible(true);
+    renderRunProgressPanel(loopInfo);
     return;
   }
 
@@ -245,7 +253,8 @@ function applyRunStepProgress(msg) {
       });
     }
     runShowStepProgress = true;
-    renderRunFlowPreviewBody(loopInfo);
+    setRunProgressVisible(true);
+    renderRunProgressPanel(loopInfo);
   }
 }
 
@@ -253,6 +262,8 @@ function clearRunStepProgress() {
   runStepProgress = null;
   runShowStepProgress = false;
   stopRunStatusPolling();
+  $("run-progress-wrap")?.classList.add("hidden");
+  restoreEditorViewAfterRun();
 }
 
 async function fetchScenarioPreview(name) {
@@ -309,6 +320,7 @@ function renderFlowPreviewHtml(doc) {
 }
 
 function renderPythonFlowView(preview) {
+  if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
   updatePythonBanner({ name: preview.name, description: preview.description });
   $("flow-python-banner")?.classList.remove("hidden");
   $("flow-python-view")?.classList.remove("hidden");
@@ -333,64 +345,11 @@ function renderPythonFlowView(preview) {
 }
 
 function showJsonFlowEditor() {
+  if (!runShowStepProgress) $("run-progress-wrap")?.classList.add("hidden");
   $("flow-python-banner")?.classList.add("hidden");
   $("flow-python-view")?.classList.add("hidden");
   $("flow-editor-wrap")?.classList.remove("hidden");
   setFlowEditorMode(true);
-}
-
-async function updateRunFlowPreview(name) {
-  const panel = $("run-flow-preview");
-  const body = $("run-flow-preview-body");
-  const editBtn = $("btn-edit-flow");
-  if (!panel || !body) return;
-
-  if (!name) {
-    panel.classList.add("hidden");
-    return;
-  }
-
-  const info = getScenarioInfo(name);
-  if (!info) {
-    panel.classList.add("hidden");
-    return;
-  }
-
-  panel.classList.remove("hidden");
-  if (editBtn) {
-    const isJson = info.type === "json";
-    editBtn.classList.remove("hidden");
-    editBtn.disabled = false;
-    editBtn.title = isJson ? "Edit this flow" : "View in Flows tab (read-only)";
-    const label = editBtn.querySelector(".btn-label");
-    if (label) label.textContent = isJson ? "Edit flow" : "View flow";
-    editBtn.setAttribute("aria-label", editBtn.title);
-  }
-
-  if (runShowStepProgress && runStepProgress?.length) {
-    renderRunFlowPreviewBody();
-    return;
-  }
-
-  try {
-    body.innerHTML = '<p class="muted">Loading…</p>';
-    const preview = await fetchScenarioPreview(name);
-    cachedScenarioPreview = preview;
-    if (info.type === "json") {
-      try {
-        cachedPreviewDoc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
-      } catch {
-        cachedPreviewDoc = null;
-      }
-    } else {
-      cachedPreviewDoc = null;
-    }
-    body.innerHTML = renderScenarioPreviewHtml(preview);
-  } catch (e) {
-    cachedPreviewDoc = null;
-    cachedScenarioPreview = null;
-    body.innerHTML = `<p class="status failed">${escapeHtml(e.message)}</p>`;
-  }
 }
 
 function updateDeleteFlowButton() {
@@ -455,7 +414,13 @@ function newFlow() {
   showJsonFlowEditor();
   $("build-msg").textContent = "New flow — enter a name and save.";
   updateDeleteFlowButton();
-  updateRunFlowPreview(null);
+  clearRunStepProgress();
+}
+
+async function selectScenario(name) {
+  if (selectedScenario !== name) clearRunStepProgress();
+  setSelectedScenario(name, { skipPreview: true });
+  await loadFlowIntoEditor(name);
 }
 
 async function loadFlowIntoEditor(name) {
@@ -483,7 +448,6 @@ async function loadFlowIntoEditor(name) {
       $("build-msg").textContent = e.message;
     }
     updateDeleteFlowButton();
-    await updateRunFlowPreview(name);
     return;
   }
 
@@ -493,15 +457,9 @@ async function loadFlowIntoEditor(name) {
     populateFlowEditor(doc);
     $("build-msg").textContent = `Editing "${name}"`;
     updateDeleteFlowButton();
-    await updateRunFlowPreview(name);
   } catch (e) {
     $("build-msg").textContent = e.message;
   }
-}
-
-function openFlowsTab(name) {
-  document.querySelector('.tab[data-tab="flows"]')?.click();
-  if (name) loadFlowIntoEditor(name);
 }
 
 async function deleteSelectedFlow() {
@@ -528,10 +486,7 @@ function setSelectedScenario(name, options = {}) {
   selectedScenario = name || null;
   syncScenarioListSelection();
   updateDeleteFlowButton();
-  if (!options.skipPreview) {
-    if (prev !== selectedScenario) clearRunStepProgress();
-    updateRunFlowPreview(name);
-  }
+  if (!options.skipPreview && prev !== selectedScenario) clearRunStepProgress();
 }
 
 function buildScenarioListItem(s, onSelect) {
@@ -660,9 +615,8 @@ async function loadScenarios() {
 
   if (scenarios.length === 0) {
     selectedScenario = null;
-    renderScenarioList("run-scenario-list", (name) => setSelectedScenario(name));
-    renderScenarioList("flows-scenario-list", (name) => loadFlowIntoEditor(name));
-    updateRunFlowPreview(null);
+    renderScenarioList("scenario-list", (name) => selectScenario(name));
+    clearRunStepProgress();
     updateDeleteFlowButton();
     return;
   }
@@ -671,9 +625,8 @@ async function loadScenarios() {
     selectedScenario && scenarios.some((s) => s.name === selectedScenario);
   if (!stillValid) selectedScenario = scenarios[0].name;
 
-  renderScenarioList("run-scenario-list", (name) => setSelectedScenario(name));
-  renderScenarioList("flows-scenario-list", (name) => loadFlowIntoEditor(name));
-  setSelectedScenario(selectedScenario);
+  renderScenarioList("scenario-list", (name) => selectScenario(name));
+  await selectScenario(selectedScenario);
 }
 
 function connectWebSocket() {
@@ -1565,18 +1518,6 @@ async function startRun(scenarioName) {
   }
 }
 
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    $(`panel-${tab.dataset.tab}`).classList.add("active");
-    if (tab.dataset.tab === "flows" && selectedScenario) {
-      loadFlowIntoEditor(selectedScenario);
-    }
-  });
-});
-
 $("btn-start").onclick = () => startRun();
 $("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
 $("btn-add-step").onclick = () => {
@@ -1589,14 +1530,9 @@ $("btn-new-flow")?.addEventListener("click", () => newFlow());
 $("btn-delete-flow")?.addEventListener("click", () =>
   deleteSelectedFlow().catch((e) => ($("build-msg").textContent = e.message))
 );
-$("btn-edit-flow")?.addEventListener("click", () => {
-  const name = getSelectedScenario();
-  if (name) openFlowsTab(name);
-});
 $("btn-test-run").onclick = async () => {
   try {
     await saveScenario();
-    document.querySelector('.tab[data-tab="run"]').click();
     await startRun($("build-name").value.trim());
   } catch (e) {
     $("build-msg").textContent = e.message;
@@ -1617,11 +1553,12 @@ $("btn-test-run").onclick = async () => {
     } else if (st.step_progress?.length) {
       runStepProgress = st.step_progress.map((s) => ({ ...s }));
       runShowStepProgress = true;
+      setRunProgressVisible(true);
     }
     connectWebSocket();
     if (selectedScenario) {
       await loadFlowIntoEditor(selectedScenario);
-      if (runShowStepProgress && runStepProgress?.length) renderRunFlowPreviewBody();
+      if (runShowStepProgress && runStepProgress?.length) renderRunProgressPanel();
     } else {
       newFlow();
     }
