@@ -9,13 +9,292 @@ function getSelectedScenario() {
   return selectedScenario || scenarios[0]?.name || null;
 }
 
-function setSelectedScenario(name) {
-  selectedScenario = name;
+function getScenarioInfo(name) {
+  return scenarios.find((s) => s.name === name) || null;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function stepPreviewLabel(step) {
+  if (!step?.action) return "step";
+  switch (step.action) {
+    case "goto":
+      return `goto ${step.url || "?"}`;
+    case "delay":
+      return `delay ${step.min ?? "?"}–${step.max ?? "?"}s`;
+    case "scroll":
+      return `scroll dy=${step.delta_y ?? "auto"}`;
+    case "fill":
+      return `fill ${step.selector || step.label || step.name || "?"} = ${JSON.stringify(step.value ?? "")}`;
+    case "click":
+      return `click ${step.by || "?"} ${step.role || step.text || step.selector || step.data_value || step.test_id || ""}`.trim();
+    case "submit_form":
+      return `submit_form (${(step.method || "post").toUpperCase()}) ${(step.fields || []).length} field(s)`;
+    default:
+      return step.action;
+  }
+}
+
+function renderFlowPreviewHtml(doc) {
+  const parts = [];
+  if (doc.description) parts.push(`<p class="flow-preview-desc">${escapeHtml(doc.description)}</p>`);
+  if (doc.start_url) {
+    parts.push(`<p class="flow-preview-meta"><strong>Start URL:</strong> ${escapeHtml(doc.start_url)}</p>`);
+  }
+  if (doc.random_delay_between_steps) {
+    parts.push(
+      `<p class="flow-preview-meta"><strong>Between steps:</strong> ${doc.between_steps_min}–${doc.between_steps_max}s (${escapeHtml(doc.between_steps_distribution || "triangular")})</p>`
+    );
+  }
+  const steps = doc.steps || [];
+  if (steps.length === 0) {
+    parts.push('<p class="muted">No steps defined.</p>');
+  } else {
+    const items = steps
+      .map((s, i) => `<li><span class="flow-step-num">${i + 1}</span> ${escapeHtml(stepPreviewLabel(s))}</li>`)
+      .join("");
+    parts.push(`<ol class="flow-preview-steps">${items}</ol>`);
+  }
+  return parts.join("");
+}
+
+async function updateRunFlowPreview(name) {
+  const panel = $("run-flow-preview");
+  const body = $("run-flow-preview-body");
+  const editBtn = $("btn-edit-flow");
+  if (!panel || !body) return;
+
+  if (!name) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  const info = getScenarioInfo(name);
+  if (!info) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  if (editBtn) {
+    editBtn.disabled = false;
+    editBtn.title = info.type === "json" ? "Edit this flow" : "View in Flows tab (read-only)";
+  }
+
+  if (info.type === "python") {
+    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Not editable in the UI.</p>`;
+    return;
+  }
+
+  try {
+    body.innerHTML = '<p class="muted">Loading…</p>';
+    const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
+    body.innerHTML = renderFlowPreviewHtml(doc);
+  } catch (e) {
+    body.innerHTML = `<p class="status failed">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function updateDeleteFlowButton() {
+  const btn = $("btn-delete-flow");
+  if (!btn) return;
+  const info = selectedScenario ? getScenarioInfo(selectedScenario) : null;
+  btn.disabled = !info || info.type !== "json";
+}
+
+function setFlowEditorMode(jsonEditable) {
+  const wrap = $("flow-editor-wrap");
+  const banner = $("flow-python-banner");
+  if (banner) banner.classList.toggle("hidden", jsonEditable !== false);
+  if (wrap) wrap.classList.toggle("flow-editor-readonly", jsonEditable === false);
+  const disable = jsonEditable === false;
+  wrap?.querySelectorAll("input, select, button").forEach((el) => {
+    if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
+      el.disabled = disable;
+    } else if (!el.closest(".step-actions")) {
+      el.disabled = disable;
+    }
+  });
+}
+
+function populateFlowEditor(doc) {
+  $("build-name").value = doc.name || "";
+  $("build-desc").value = doc.description || "";
+  $("build-url").value = doc.start_url || "";
+  renderScenarioOptions(doc);
+  builderSteps = (doc.steps || []).map((s) => normalizeStep({ ...s }));
+  renderSteps();
+}
+
+function clearFlowEditor() {
+  $("build-name").value = "";
+  $("build-desc").value = "";
+  $("build-url").value = "";
+  $("build-random-between-steps").checked = false;
+  renderScenarioOptions();
+  builderSteps = [defaultStep("goto")];
+  renderSteps();
+}
+
+function newFlow() {
+  selectedScenario = null;
+  syncScenarioListSelection();
+  clearFlowEditor();
+  setFlowEditorMode(true);
+  $("build-msg").textContent = "New flow — enter a name and save.";
+  updateDeleteFlowButton();
+  updateRunFlowPreview(null);
+}
+
+async function loadFlowIntoEditor(name) {
+  $("build-msg").textContent = "";
+  if (!name) {
+    newFlow();
+    return;
+  }
+
+  const info = getScenarioInfo(name);
+  if (!info) {
+    $("build-msg").textContent = "Flow not found";
+    return;
+  }
+
+  setSelectedScenario(name, { skipPreview: true });
+
+  if (info.type === "python") {
+    $("build-name").value = info.name;
+    $("build-desc").value = info.description || "";
+    $("build-url").value = "";
+    builderSteps = [];
+    renderSteps();
+    renderScenarioOptions();
+    setFlowEditorMode(false);
+    $("build-msg").textContent = "Python flow — edit in webbot/scenarios/ (source).";
+    updateDeleteFlowButton();
+    await updateRunFlowPreview(name);
+    return;
+  }
+
+  try {
+    const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
+    populateFlowEditor(doc);
+    setFlowEditorMode(true);
+    $("build-msg").textContent = `Editing "${name}"`;
+    updateDeleteFlowButton();
+    await updateRunFlowPreview(name);
+  } catch (e) {
+    $("build-msg").textContent = e.message;
+  }
+}
+
+function openFlowsTab(name) {
+  document.querySelector('.tab[data-tab="flows"]')?.click();
+  if (name) loadFlowIntoEditor(name);
+}
+
+async function deleteSelectedFlow() {
+  const name = selectedScenario;
+  const info = name ? getScenarioInfo(name) : null;
+  if (!info || info.type !== "json") return;
+  if (!confirm(`Delete flow "${name}"? This cannot be undone.`)) return;
+  await api(`/api/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" });
+  await loadScenarios();
+  newFlow();
+  $("build-msg").textContent = `Deleted "${name}"`;
+}
+
+function syncScenarioListSelection() {
   document.querySelectorAll(".scenario-item").forEach((btn) => {
-    const on = btn.dataset.name === name;
+    const on = selectedScenario && btn.dataset.name === selectedScenario;
     btn.classList.toggle("selected", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
   });
+}
+
+function setSelectedScenario(name, options = {}) {
+  selectedScenario = name || null;
+  syncScenarioListSelection();
+  updateDeleteFlowButton();
+  if (!options.skipPreview) updateRunFlowPreview(name);
+}
+
+function buildScenarioListItem(s, onSelect) {
+  const li = document.createElement("li");
+  li.className = "scenario-list-item";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "scenario-item";
+  btn.dataset.name = s.name;
+  btn.setAttribute("role", "option");
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "scenario-item-name";
+  nameEl.textContent = s.name;
+  if (typeof icon === "function") nameEl.prepend(icon("list", "icon icon-scenario"));
+
+  const typeEl = document.createElement("span");
+  typeEl.className = `scenario-item-type type-${s.type}`;
+  if (typeof icon === "function") {
+    typeEl.appendChild(icon(s.type === "python" ? "python" : "json", "icon icon-badge"));
+  }
+  const typeLabel = document.createElement("span");
+  typeLabel.textContent = s.type;
+  typeEl.appendChild(typeLabel);
+
+  btn.appendChild(nameEl);
+  btn.appendChild(typeEl);
+
+  if (s.description) {
+    const descEl = document.createElement("span");
+    descEl.className = "scenario-item-desc";
+    descEl.textContent = s.description;
+    btn.appendChild(descEl);
+  }
+
+  btn.addEventListener("click", () => onSelect(s.name));
+  li.appendChild(btn);
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "scenario-item-edit btn-icon-only";
+  editBtn.title = s.type === "json" ? "Edit flow" : "View flow (read-only)";
+  if (typeof enhanceButton === "function") {
+    enhanceButton(editBtn, "edit", { iconOnly: true, label: editBtn.title });
+  } else {
+    editBtn.textContent = "✎";
+  }
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openFlowsTab(s.name);
+  });
+  li.appendChild(editBtn);
+
+  return li;
+}
+
+function renderScenarioList(containerId, onSelect) {
+  const list = $(containerId);
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (scenarios.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "scenario-list-empty";
+    empty.textContent = "No flows found";
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const s of scenarios) {
+    list.appendChild(buildScenarioListItem(s, onSelect));
+  }
 }
 
 function appendLog(line) {
@@ -79,15 +358,13 @@ async function loadHealth() {
 
 async function loadScenarios() {
   scenarios = await api("/api/scenarios");
-  const list = $("run-scenario-list");
-  list.innerHTML = "";
 
   if (scenarios.length === 0) {
     selectedScenario = null;
-    const empty = document.createElement("li");
-    empty.className = "scenario-list-empty";
-    empty.textContent = "No scenarios found";
-    list.appendChild(empty);
+    renderScenarioList("run-scenario-list", (name) => setSelectedScenario(name));
+    renderScenarioList("flows-scenario-list", (name) => loadFlowIntoEditor(name));
+    updateRunFlowPreview(null);
+    updateDeleteFlowButton();
     return;
   }
 
@@ -95,45 +372,8 @@ async function loadScenarios() {
     selectedScenario && scenarios.some((s) => s.name === selectedScenario);
   if (!stillValid) selectedScenario = scenarios[0].name;
 
-  for (const s of scenarios) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "scenario-item";
-    btn.dataset.name = s.name;
-    btn.setAttribute("role", "option");
-
-    const nameEl = document.createElement("span");
-    nameEl.className = "scenario-item-name";
-    nameEl.textContent = s.name;
-
-    const typeEl = document.createElement("span");
-    typeEl.className = `scenario-item-type type-${s.type}`;
-    if (typeof icon === "function") {
-      typeEl.appendChild(icon(s.type === "python" ? "python" : "json", "icon icon-badge"));
-    }
-    const typeLabel = document.createElement("span");
-    typeLabel.textContent = s.type;
-    typeEl.appendChild(typeLabel);
-
-    if (typeof icon === "function") {
-      nameEl.prepend(icon("list", "icon icon-scenario"));
-    }
-    btn.appendChild(nameEl);
-    btn.appendChild(typeEl);
-
-    if (s.description) {
-      const descEl = document.createElement("span");
-      descEl.className = "scenario-item-desc";
-      descEl.textContent = s.description;
-      btn.appendChild(descEl);
-    }
-
-    btn.addEventListener("click", () => setSelectedScenario(s.name));
-    li.appendChild(btn);
-    list.appendChild(li);
-  }
-
+  renderScenarioList("run-scenario-list", (name) => setSelectedScenario(name));
+  renderScenarioList("flows-scenario-list", (name) => loadFlowIntoEditor(name));
   setSelectedScenario(selectedScenario);
 }
 
@@ -921,23 +1161,6 @@ async function saveScenario() {
   setSelectedScenario(doc.name);
 }
 
-async function loadScenarioForEdit() {
-  const name = getSelectedScenario();
-  const info = scenarios.find((s) => s.name === name);
-  if (!info || info.type !== "json") {
-    $("build-msg").textContent = "Select a JSON scenario in the Run tab first";
-    return;
-  }
-  const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
-  $("build-name").value = doc.name;
-  $("build-desc").value = doc.description || "";
-  $("build-url").value = doc.start_url || "";
-  renderScenarioOptions(doc);
-  builderSteps = (doc.steps || []).map((s) => normalizeStep({ ...s }));
-  renderSteps();
-  $("build-msg").textContent = `Loaded "${name}"`;
-  document.querySelector('.tab[data-tab="builder"]').click();
-}
 
 async function startRun(scenarioName) {
   const scenario = scenarioName || getSelectedScenario();
@@ -960,6 +1183,9 @@ document.querySelectorAll(".tab").forEach((tab) => {
     document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
     tab.classList.add("active");
     $(`panel-${tab.dataset.tab}`).classList.add("active");
+    if (tab.dataset.tab === "flows" && selectedScenario) {
+      loadFlowIntoEditor(selectedScenario);
+    }
   });
 });
 
@@ -971,7 +1197,14 @@ $("btn-add-step").onclick = () => {
   renderSteps();
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));
-$("btn-load").onclick = () => loadScenarioForEdit().catch((e) => ($("build-msg").textContent = e.message));
+$("btn-new-flow")?.addEventListener("click", () => newFlow());
+$("btn-delete-flow")?.addEventListener("click", () =>
+  deleteSelectedFlow().catch((e) => ($("build-msg").textContent = e.message))
+);
+$("btn-edit-flow")?.addEventListener("click", () => {
+  const name = getSelectedScenario();
+  if (name) openFlowsTab(name);
+});
 $("btn-test-run").onclick = async () => {
   try {
     await saveScenario();
@@ -990,10 +1223,12 @@ $("btn-test-run").onclick = async () => {
     setRunStatus(st);
     updateRunButtons(st.state);
     connectWebSocket();
-    builderSteps = [defaultStep("goto")];
-    renderScenarioOptions();
+    if (selectedScenario) {
+      await loadFlowIntoEditor(selectedScenario);
+    } else {
+      newFlow();
+    }
     $("build-random-between-steps").addEventListener("change", () => renderScenarioOptions(readScenarioOptions()));
-    renderSteps();
   } catch (e) {
     $("health").textContent = "Failed to connect: " + e.message;
   }

@@ -146,6 +146,151 @@ main {
   overflow-y: auto;
 }
 
+.scenario-list-item {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.scenario-list-item .scenario-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.scenario-item-edit {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.flow-preview {
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.flow-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.flow-preview-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.flow-preview-body {
+  font-size: 0.88rem;
+}
+
+.flow-preview-desc {
+  margin: 0 0 0.5rem;
+}
+
+.flow-preview-meta {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.flow-preview-steps {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.flow-preview-steps li {
+  margin-bottom: 0.25rem;
+}
+
+.flow-step-num {
+  display: inline-block;
+  min-width: 1.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.flows-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.flows-picker {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(85vh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.flows-picker .scenario-list {
+  flex: 1;
+  max-height: none;
+  margin-bottom: 0;
+  overflow-y: auto;
+}
+
+.flows-picker-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.flows-picker-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.flow-python-banner {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  font-size: 0.9rem;
+}
+
+.flow-python-banner p {
+  margin: 0 0 0.5rem;
+}
+
+.flow-python-banner p:last-child {
+  margin-bottom: 0;
+}
+
+.flow-editor-readonly {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.flow-editor-readonly .steps-header button,
+.flow-editor-readonly .step-actions {
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .flows-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .flows-picker {
+    position: static;
+    max-height: none;
+  }
+
+  .flows-picker .scenario-list {
+    max-height: 180px;
+  }
+}
+
 .scenario-list-empty {
   padding: 0.65rem 0.75rem;
   font-size: 0.9rem;

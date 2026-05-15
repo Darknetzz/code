@@ -18,8 +18,8 @@ const HELP_TOPICS = {
     title: "Webbot overview",
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
-      "<p><strong>Run</strong> — pick a saved scenario, set loops, and watch the live log.</p>",
-      "<p><strong>Builder</strong> — create JSON scenarios step by step, save them, and test run.</p>",
+      "<p><strong>Run</strong> — pick a flow, preview its steps, set loops, and watch the live log.</p>",
+      "<p><strong>Flows</strong> — view and edit JSON flows step by step; Python flows are read-only in the UI.</p>",
       "<p>JSON scenarios are stored under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere). Python scenarios live in the package and are registered separately.</p>",
     ],
   },
@@ -77,10 +77,10 @@ const HELP_TOPICS = {
     ],
   },
   "builder.load": {
-    title: "Load from Run dropdown",
+    title: "Select a flow",
     body: [
-      "<p>Copies the JSON scenario currently selected on the Run tab into the Builder for editing.</p>",
-      "<p>Only works for JSON scenarios, not Python ones.</p>",
+      "<p>Click a flow in the list on the left to open it in the editor.</p>",
+      "<p>Use <strong>New</strong> for a blank JSON flow, or the edit icon on any row. Python flows open read-only.</p>",
     ],
   },
   "builder.test_run": {

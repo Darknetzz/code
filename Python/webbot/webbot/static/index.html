@@ -17,75 +17,104 @@
 
   <nav class="tabs">
     <button type="button" class="tab active" data-tab="run">Run</button>
-    <button type="button" class="tab" data-tab="builder">Builder</button>
+    <button type="button" class="tab" data-tab="flows">Flows</button>
   </nav>
 
   <main>
     <section id="panel-run" class="panel active">
-      <div class="card">
-        <div class="scenario-list-header" data-help-id="run.scenario">
-          <span class="field-label">Scenarios</span>
-        </div>
-        <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
+      <div class="run-layout">
+        <div class="card">
+          <div class="scenario-list-header" data-help-id="run.scenario">
+            <span class="field-label">Scenarios</span>
+          </div>
+          <ul id="run-scenario-list" class="scenario-list" role="listbox" aria-label="Scenarios"></ul>
 
-        <div class="row">
-          <label for="run-loops" data-help-id="run.loops">Loops</label>
-          <input type="number" id="run-loops" min="1" value="1" />
-        </div>
-        <div class="row">
-          <label for="run-pause" data-help-id="run.pause">Pause between loops (sec)</label>
-          <input type="number" id="run-pause" min="0" step="1" value="0" />
-        </div>
-        <label class="checkbox" data-help-id="run.headless">
-          <input type="checkbox" id="run-headless" />
-          Headless
-        </label>
+          <div id="run-flow-preview" class="flow-preview hidden">
+            <div class="flow-preview-header">
+              <h3 class="flow-preview-title">Flow preview</h3>
+              <button type="button" id="btn-edit-flow" class="btn-edit-flow">Edit flow</button>
+            </div>
+            <div id="run-flow-preview-body" class="flow-preview-body"></div>
+          </div>
 
-        <div class="actions">
-          <button type="button" id="btn-start" class="primary">Start</button>
-          <button type="button" id="btn-stop" disabled>Stop</button>
-        </div>
-        <p id="run-status" class="status muted">Idle</p>
-      </div>
+          <div class="row">
+            <label for="run-loops" data-help-id="run.loops">Loops</label>
+            <input type="number" id="run-loops" min="1" value="1" />
+          </div>
+          <div class="row">
+            <label for="run-pause" data-help-id="run.pause">Pause between loops (sec)</label>
+            <input type="number" id="run-pause" min="0" step="1" value="0" />
+          </div>
+          <label class="checkbox" data-help-id="run.headless">
+            <input type="checkbox" id="run-headless" />
+            Headless
+          </label>
 
-      <div class="card log-card">
-        <h2>Log</h2>
-        <pre id="log-output"></pre>
+          <div class="actions">
+            <button type="button" id="btn-start" class="primary">Start</button>
+            <button type="button" id="btn-stop" disabled>Stop</button>
+          </div>
+          <p id="run-status" class="status muted">Idle</p>
+        </div>
+
+        <div class="card log-card">
+          <h2>Log</h2>
+          <pre id="log-output"></pre>
+        </div>
       </div>
     </section>
 
-    <section id="panel-builder" class="panel">
-      <div class="card">
-        <label for="build-name" data-help-id="builder.name">Scenario name</label>
-        <input type="text" id="build-name" placeholder="my_flow" />
+    <section id="panel-flows" class="panel">
+      <div class="flows-layout">
+        <aside class="card flows-picker">
+          <div class="flows-picker-toolbar">
+            <span class="field-label">Flows</span>
+            <div class="flows-picker-actions">
+              <button type="button" id="btn-new-flow">New</button>
+              <button type="button" id="btn-delete-flow" disabled>Delete</button>
+            </div>
+          </div>
+          <ul id="flows-scenario-list" class="scenario-list" role="listbox" aria-label="Flows"></ul>
+        </aside>
 
-        <label for="build-desc" data-help-id="builder.description">Description</label>
-        <input type="text" id="build-desc" placeholder="Optional" />
+        <div class="card flows-editor">
+          <div id="flow-python-banner" class="flow-python-banner hidden">
+            <p><strong>Python flow</strong> — this scenario is defined in code, not JSON.</p>
+            <p class="muted">Edit <code>webbot/scenarios/</code> and register it in <code>scenarios/__init__.py</code>. You can still run it from the Run tab.</p>
+          </div>
 
-        <label for="build-url" data-help-id="builder.start_url">Start URL</label>
-        <input type="url" id="build-url" placeholder="https://example.com" />
+          <div id="flow-editor-wrap">
+            <label for="build-name" data-help-id="builder.name">Scenario name</label>
+            <input type="text" id="build-name" placeholder="my_flow" />
 
-        <div class="scenario-options-card">
-          <h2 class="section-heading" data-help-id="scenario.options">Scenario options</h2>
-          <label class="checkbox" data-help-id="scenario.random_delay">
-            <input type="checkbox" id="build-random-between-steps" />
-            Random delay between each step
-          </label>
-          <div id="between-steps-fields" class="step-fields scenario-options-fields hidden"></div>
+            <label for="build-desc" data-help-id="builder.description">Description</label>
+            <input type="text" id="build-desc" placeholder="Optional" />
+
+            <label for="build-url" data-help-id="builder.start_url">Start URL</label>
+            <input type="url" id="build-url" placeholder="https://example.com" />
+
+            <div class="scenario-options-card">
+              <h2 class="section-heading" data-help-id="scenario.options">Scenario options</h2>
+              <label class="checkbox" data-help-id="scenario.random_delay">
+                <input type="checkbox" id="build-random-between-steps" />
+                Random delay between each step
+              </label>
+              <div id="between-steps-fields" class="step-fields scenario-options-fields hidden"></div>
+            </div>
+
+            <div class="steps-header">
+              <h2 data-help-id="builder.steps">Steps</h2>
+              <button type="button" id="btn-add-step">Add step</button>
+            </div>
+            <div id="steps-list"></div>
+
+            <div class="actions">
+              <button type="button" id="btn-save" class="primary" data-help-id="builder.save">Save flow</button>
+              <button type="button" id="btn-test-run" data-help-id="builder.test_run">Test run</button>
+            </div>
+            <p id="build-msg" class="muted"></p>
+          </div>
         </div>
-
-        <div class="steps-header">
-          <h2 data-help-id="builder.steps">Steps</h2>
-          <button type="button" id="btn-add-step">Add step</button>
-        </div>
-        <div id="steps-list"></div>
-
-        <div class="actions">
-          <button type="button" id="btn-save" class="primary" data-help-id="builder.save">Save scenario</button>
-          <button type="button" id="btn-load" data-help-id="builder.load">Load from Run dropdown</button>
-          <button type="button" id="btn-test-run" data-help-id="builder.test_run">Test run</button>
-        </div>
-        <p id="build-msg" class="muted"></p>
       </div>
     </section>
   </main>
