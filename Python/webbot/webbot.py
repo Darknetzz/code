@@ -116,6 +116,11 @@ def run_scenario(
         "--pause-between-loops",
         help="Seconds to wait after each run before the next (ignored on last loop)",
     ),
+    ignore_https_errors: bool = typer.Option(
+        False,
+        "--ignore-https-errors",
+        help="Accept invalid/mismatched TLS certificates (insecure; debugging only)",
+    ),
 ):
     """Run a named click/type scenario with human-like behavior."""
     if loops < 1:
@@ -150,6 +155,7 @@ def run_scenario(
         headless=headless,
         channel=channel,
         slow_mo=slow_mo,
+        ignore_https_errors=ignore_https_errors,
     )
     try:
         asyncio.run(runner.run_once(config))

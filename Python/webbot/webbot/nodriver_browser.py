@@ -179,10 +179,17 @@ async def nodriver_browser(
     profile = cfg.user_data_dir or get_profile_dir()
     profile.mkdir(parents=True, exist_ok=True)
 
+    args = [
+        f"--window-size={cfg.viewport_width},{cfg.viewport_height}",
+        *cfg.extra_args,
+    ]
+    if cfg.ignore_https_errors:
+        args.append("--ignore-certificate-errors")
+
     browser = await uc.start(
         headless=cfg.headless,
         user_data_dir=str(profile),
-        browser_args=[f"--window-size={cfg.viewport_width},{cfg.viewport_height}", *cfg.extra_args],
+        browser_args=args,
     )
     tab = await browser.get("about:blank")
     page = NodriverPage(tab)

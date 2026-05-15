@@ -2685,6 +2685,7 @@ async function startRun(scenarioName) {
     loops: parseInt($("run-loops").value, 10) || 1,
     pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
     headless: $("run-headless").checked,
+    ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
     channel: pw.channel,
     slow_mo: pw.slow_mo,
   };
@@ -2945,6 +2946,7 @@ async function startRunGroup(groupId) {
     pause_between_loops_sec: parseFloat($("run-pause").value) || 0,
     pause_between_flows_sec: parseFloat($("run-pause-flows")?.value || "0") || 0,
     headless: $("run-headless").checked,
+    ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
     channel: pw.channel,
     slow_mo: pw.slow_mo,
   };
