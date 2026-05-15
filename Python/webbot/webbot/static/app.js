@@ -1098,12 +1098,11 @@ function renderStepRow(step, index) {
   if (step.action === "goto") {
     fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.goto.url"));
   } else if (step.action === "delay") {
-    fields.appendChild(fieldSection("Wait time"));
     fields.appendChild(
-      labeledField("min", "Min (seconds)", step.min ?? 0.5, "number", "Shortest random wait", "step.delay.min")
+      labeledField("min", "Min (s)", step.min ?? 0.5, "number", "Shortest random wait", "step.delay.min")
     );
     fields.appendChild(
-      labeledField("max", "Max (seconds)", step.max ?? 1.2, "number", "Longest random wait", "step.delay.max")
+      labeledField("max", "Max (s)", step.max ?? 1.2, "number", "Longest random wait", "step.delay.max")
     );
     fields.appendChild(
       labeledSelect(
@@ -1115,39 +1114,39 @@ function renderStepRow(step, index) {
         "step.delay.distribution"
       )
     );
-    fields.appendChild(fieldSection("Optional long pause"));
     fields.appendChild(
-      labeledField(
-        "long_pause_chance",
-        "Chance (0–1)",
-        step.long_pause_chance ?? 0,
-        "number",
-        "Probability of an extra distraction pause",
-        "step.delay.long_pause"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "long_pause_min",
-        "Long pause min (s)",
-        step.long_pause_min ?? 2,
-        "number",
-        "",
-        "step.delay.long_pause"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "long_pause_max",
-        "Long pause max (s)",
-        step.long_pause_max ?? 5,
-        "number",
-        "",
-        "step.delay.long_pause"
+      collapsibleFieldGroup(
+        "Long pause (optional)",
+        [
+          labeledField(
+            "long_pause_chance",
+            "Chance (0–1)",
+            step.long_pause_chance ?? 0,
+            "number",
+            "Probability of an extra distraction pause",
+            "step.delay.long_pause"
+          ),
+          labeledField(
+            "long_pause_min",
+            "Pause min (s)",
+            step.long_pause_min ?? 2,
+            "number",
+            "",
+            "step.delay.long_pause"
+          ),
+          labeledField(
+            "long_pause_max",
+            "Pause max (s)",
+            step.long_pause_max ?? 5,
+            "number",
+            "",
+            "step.delay.long_pause"
+          ),
+        ],
+        { open: (step.long_pause_chance ?? 0) > 0 }
       )
     );
   } else if (step.action === "scroll") {
-    fields.appendChild(fieldSection("Scroll distance"));
     fields.appendChild(
       labeledField(
         "delta_y",
@@ -1158,105 +1157,106 @@ function renderStepRow(step, index) {
         "step.scroll.delta_y"
       )
     );
-    fields.appendChild(fieldSection("Wheel ticks"));
     fields.appendChild(
-      labeledField(
-        "steps_min",
-        "Min ticks",
-        step.steps_min ?? 3,
-        "number",
-        "Fewest mouse-wheel steps",
-        "step.scroll.ticks"
+      collapsibleFieldGroup(
+        "Wheel ticks",
+        [
+          labeledField(
+            "steps_min",
+            "Min ticks",
+            step.steps_min ?? 3,
+            "number",
+            "Fewest mouse-wheel steps",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "steps_max",
+            "Max ticks",
+            step.steps_max ?? 8,
+            "number",
+            "Most mouse-wheel steps",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "step_delay_min",
+            "Tick delay min (s)",
+            step.step_delay_min ?? 0.06,
+            "number",
+            "Pause between ticks (shortest)",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "step_delay_max",
+            "Tick delay max (s)",
+            step.step_delay_max ?? 0.32,
+            "number",
+            "Pause between ticks (longest)",
+            "step.scroll.ticks"
+          ),
+        ],
+        { open: false }
       )
     );
     fields.appendChild(
-      labeledField(
-        "steps_max",
-        "Max ticks",
-        step.steps_max ?? 8,
-        "number",
-        "Most mouse-wheel steps",
-        "step.scroll.ticks"
+      collapsibleFieldGroup(
+        "Overscroll",
+        [
+          fieldCheckbox(
+            "overscroll",
+            "Overscroll then correct",
+            step.overscroll !== false,
+            "Scroll slightly past target, then scroll back",
+            "step.scroll.overscroll"
+          ),
+          labeledField(
+            "overscroll_ratio_min",
+            "Overshoot min",
+            step.overscroll_ratio_min ?? 0.06,
+            "number",
+            "Fraction of total scroll (e.g. 0.1 = 10%)",
+            "step.scroll.overscroll"
+          ),
+          labeledField(
+            "overscroll_ratio_max",
+            "Overshoot max",
+            step.overscroll_ratio_max ?? 0.16,
+            "number",
+            "",
+            "step.scroll.overscroll"
+          ),
+        ],
+        { open: step.overscroll === false }
       )
     );
     fields.appendChild(
-      labeledField(
-        "step_delay_min",
-        "Delay min (s)",
-        step.step_delay_min ?? 0.06,
-        "number",
-        "Pause between ticks (shortest)",
-        "step.scroll.ticks"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "step_delay_max",
-        "Delay max (s)",
-        step.step_delay_max ?? 0.32,
-        "number",
-        "Pause between ticks (longest)",
-        "step.scroll.ticks"
-      )
-    );
-    fields.appendChild(fieldSection("Overscroll"));
-    fields.appendChild(
-      fieldCheckbox(
-        "overscroll",
-        "Overscroll then correct",
-        step.overscroll !== false,
-        "Scroll slightly past target, then scroll back",
-        "step.scroll.overscroll"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "overscroll_ratio_min",
-        "Overshoot min (ratio)",
-        step.overscroll_ratio_min ?? 0.06,
-        "number",
-        "Fraction of total scroll (e.g. 0.1 = 10%)",
-        "step.scroll.overscroll"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "overscroll_ratio_max",
-        "Overshoot max (ratio)",
-        step.overscroll_ratio_max ?? 0.16,
-        "number",
-        "",
-        "step.scroll.overscroll"
-      )
-    );
-    fields.appendChild(fieldSection("After scroll"));
-    fields.appendChild(
-      labeledField(
-        "pause_after_min",
-        "Pause min (s)",
-        step.pause_after_min ?? 0.2,
-        "number",
-        "",
-        "step.scroll.after"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "pause_after_max",
-        "Pause max (s)",
-        step.pause_after_max ?? 0.85,
-        "number",
-        "",
-        "step.scroll.after"
-      )
-    );
-    fields.appendChild(
-      fieldCheckbox(
-        "variable_step_size",
-        "Variable tick size",
-        step.variable_step_size !== false,
-        "Each wheel tick moves a random amount",
-        "step.scroll.after"
+      collapsibleFieldGroup(
+        "After scroll",
+        [
+          labeledField(
+            "pause_after_min",
+            "Pause min (s)",
+            step.pause_after_min ?? 0.2,
+            "number",
+            "",
+            "step.scroll.after"
+          ),
+          labeledField(
+            "pause_after_max",
+            "Pause max (s)",
+            step.pause_after_max ?? 0.85,
+            "number",
+            "",
+            "step.scroll.after"
+          ),
+          fieldCheckbox(
+            "variable_step_size",
+            "Variable tick size",
+            step.variable_step_size !== false,
+            "Each wheel tick moves a random amount",
+            "step.scroll.after"
+          ),
+        ],
+        { open: false }
       )
     );
   } else if (step.action === "click") {
@@ -1278,16 +1278,6 @@ function renderStepRow(step, index) {
     );
     fields.appendChild(
       labeledField(
-        "form_selector",
-        "Form CSS selector",
-        step.form_selector || "",
-        "text",
-        "",
-        "step.submit_form.form_selector"
-      )
-    );
-    fields.appendChild(
-      labeledField(
         "submit_name",
         "Submit button name",
         step.submit_name || "",
@@ -1297,13 +1287,27 @@ function renderStepRow(step, index) {
       )
     );
     fields.appendChild(
-      labeledField(
-        "submit_selector",
-        "Submit CSS selector",
-        step.submit_selector || "",
-        "text",
-        "",
-        "step.submit_form.submit"
+      collapsibleFieldGroup(
+        "Selectors (optional)",
+        [
+          labeledField(
+            "form_selector",
+            "Form CSS selector",
+            step.form_selector || "",
+            "text",
+            "",
+            "step.submit_form.form_selector"
+          ),
+          labeledField(
+            "submit_selector",
+            "Submit CSS selector",
+            step.submit_selector || "",
+            "text",
+            "",
+            "step.submit_form.submit"
+          ),
+        ],
+        { open: !!(step.form_selector || step.submit_selector) }
       )
     );
 

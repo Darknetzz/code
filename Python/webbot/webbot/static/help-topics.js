@@ -181,7 +181,7 @@ const HELP_TOPICS = {
   "builder.steps": {
     title: "Steps",
     body: [
-      "<p>Ordered actions executed top to bottom. Drag by the grip to reorder; × removes a step.</p>",
+      "<p>Ordered actions executed top to bottom. Drag by the grip to reorder; expand collapsed sections for optional settings; × removes a step.</p>",
       "<p>Add steps with <strong>Add step</strong>; change <strong>Step type</strong> to switch action kind.</p>",
     ],
   },
