@@ -919,14 +919,20 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
 
   const del =
     typeof makeIconButton === "function"
-      ? makeIconButton("trash", "Remove field", (e) => {
-          e.stopPropagation();
-          builderSteps[stepIndex].fields.splice(fieldIndex, 1);
-          renderSteps();
-        })
+      ? makeIconButton(
+          "trash",
+          "Remove field",
+          (e) => {
+            e.stopPropagation();
+            builderSteps[stepIndex].fields.splice(fieldIndex, 1);
+            renderSteps();
+          },
+          { danger: true }
+        )
       : (() => {
           const b = document.createElement("button");
           b.type = "button";
+          b.className = "danger";
           b.textContent = "×";
           b.title = "Remove field";
           b.onclick = (e) => {
@@ -1229,12 +1235,14 @@ function renderStepRow(step, index) {
   if (typeof makeIconButton === "function") {
     actions.appendChild(makeIconButton("chevronUp", "Move step up", () => moveStep(index, -1)));
     actions.appendChild(makeIconButton("chevronDown", "Move step down", () => moveStep(index, 1)));
-    actions.appendChild(makeIconButton("trash", "Remove step", () => removeStep(index)));
+    actions.appendChild(
+      makeIconButton("trash", "Remove step", () => removeStep(index), { danger: true })
+    );
   } else {
     actions.innerHTML = `
       <button type="button" data-up title="Move step up">↑</button>
       <button type="button" data-down title="Move step down">↓</button>
-      <button type="button" data-del title="Remove step">×</button>
+      <button type="button" class="danger" data-del title="Remove step">×</button>
     `;
     actions.querySelector("[data-up]").onclick = () => moveStep(index, -1);
     actions.querySelector("[data-down]").onclick = () => moveStep(index, 1);

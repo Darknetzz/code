@@ -104,10 +104,11 @@ function initStaticIcons() {
   }
 }
 
-function makeIconButton(iconName, label, onClick) {
+function makeIconButton(iconName, label, onClick, options = {}) {
   const btn = document.createElement("button");
   btn.type = "button";
   enhanceButton(btn, iconName, { iconOnly: true, label });
+  if (options.danger) btn.classList.add("danger");
   if (onClick) btn.addEventListener("click", onClick);
   return btn;
 }
