@@ -723,7 +723,7 @@ button:disabled {
 
 .step-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: end;
   padding: 0.75rem;
@@ -733,6 +733,47 @@ button:disabled {
   border: 1px solid var(--border);
   max-width: 100%;
   overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.step-drag-handle {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.step-drag-handle:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.step-drag-handle:active {
+  cursor: grabbing;
+}
+
+.step-drag-handle .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.step-row.step-dragging {
+  opacity: 0.45;
+}
+
+.step-row.step-drop-before {
+  border-color: var(--accent);
+  box-shadow: inset 0 3px 0 var(--accent);
 }
 
 #steps-list {
@@ -896,7 +937,7 @@ button:disabled {
 }
 
 .step-row:has(.form-fields-wrap) {
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
 .label-row {

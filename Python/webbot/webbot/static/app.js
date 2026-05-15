@@ -947,10 +947,89 @@ function renderFormFieldRow(stepIndex, fieldIndex, field) {
   return wrap;
 }
 
+let stepDragFromIndex = null;
+
+function reorderStep(from, to) {
+  if (from === to || from < 0 || to < 0 || from >= builderSteps.length || to >= builderSteps.length) {
+    return;
+  }
+  const [item] = builderSteps.splice(from, 1);
+  builderSteps.splice(to, 0, item);
+  renderSteps();
+}
+
+function clearStepDropIndicators() {
+  document.querySelectorAll(".step-row").forEach((row) => {
+    row.classList.remove("step-drop-before", "step-dragging");
+  });
+}
+
+function initStepDragDrop(list) {
+  if (!list || list.closest(".flow-editor-readonly")) return;
+
+  list.querySelectorAll(".step-row").forEach((row) => {
+    const handle = row.querySelector(".step-drag-handle");
+    if (!handle) return;
+
+    const rowIndex = () => parseInt(row.dataset.stepIndex, 10);
+
+    handle.addEventListener("dragstart", (e) => {
+      stepDragFromIndex = rowIndex();
+      row.classList.add("step-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(stepDragFromIndex));
+      if (e.dataTransfer.setDragImage) {
+        e.dataTransfer.setDragImage(row, 20, 20);
+      }
+    });
+
+    handle.addEventListener("dragend", () => {
+      stepDragFromIndex = null;
+      clearStepDropIndicators();
+    });
+
+    row.addEventListener("dragover", (e) => {
+      if (stepDragFromIndex === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (rowIndex() === stepDragFromIndex) return;
+      list.querySelectorAll(".step-row").forEach((r) => r.classList.remove("step-drop-before"));
+      row.classList.add("step-drop-before");
+    });
+
+    row.addEventListener("dragleave", (e) => {
+      if (!row.contains(e.relatedTarget)) row.classList.remove("step-drop-before");
+    });
+
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const from = stepDragFromIndex;
+      const to = rowIndex();
+      stepDragFromIndex = null;
+      clearStepDropIndicators();
+      if (from === null || from === to) return;
+      reorderStep(from, to);
+    });
+  });
+}
+
 function renderStepRow(step, index) {
   const row = document.createElement("div");
   row.className = "step-row";
   row.dataset.stepIndex = String(index);
+
+  const handle = document.createElement("button");
+  handle.type = "button";
+  handle.className = "step-drag-handle";
+  handle.draggable = true;
+  handle.title = "Drag to reorder";
+  handle.setAttribute("aria-label", `Drag step ${index + 1} to reorder`);
+  if (typeof icon === "function") {
+    handle.appendChild(icon("grip", "icon"));
+  } else {
+    handle.textContent = "⋮⋮";
+  }
+  row.appendChild(handle);
 
   const typeSelect = document.createElement("select");
   typeSelect.className = "step-type-select";
@@ -1365,6 +1444,7 @@ function renderSteps() {
   const list = $("steps-list");
   list.innerHTML = "";
   builderSteps.forEach((step, i) => list.appendChild(renderStepRow(step, i)));
+  initStepDragDrop(list);
 }
 
 function moveStep(index, dir) {

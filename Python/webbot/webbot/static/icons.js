@@ -18,6 +18,7 @@ const ICONS = {
   chevronRight: `<svg ${_SVG}><polyline points="9 18 15 12 9 6"/></svg>`,
   chevronUp: `<svg ${_SVG}><polyline points="18 15 12 9 6 15"/></svg>`,
   chevronDown: `<svg ${_SVG}><polyline points="6 9 12 15 18 9"/></svg>`,
+  grip: `<svg ${_SVG}><circle cx="9" cy="5" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="19" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="5" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="19" r="1.25" fill="currentColor" stroke="none"/></svg>`,
   close: `<svg ${_SVG}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   trash: `<svg ${_SVG}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
   log: `<svg ${_SVG}><polyline points="4 17 10 11 14 15 20 9"/><line x1="4" y1="21" x2="20" y2="21"/></svg>`,
