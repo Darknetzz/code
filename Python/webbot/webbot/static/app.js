@@ -588,6 +588,7 @@ async function loadFlowIntoEditor(name) {
     try {
       const payload = await api(`/api/scenarios/${encodeURIComponent(name)}/python-source`);
       setPythonSource(payload.source);
+      refreshPythonEditorLayout();
       $("build-msg-python").textContent = `Editing "${name}"`;
       updateDeleteFlowButton();
       updateFlowNameReadonly();
@@ -2042,6 +2043,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
 
 (async () => {
   try {
+    initPythonCodeMirror();
     await loadHealth();
     await loadScenarios();
     const st = await api("/api/run/status");
