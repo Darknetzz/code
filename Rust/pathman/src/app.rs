@@ -549,7 +549,18 @@ impl PathmanApp {
                 path_model::dedupe_adjacent_tagged(&mut segs);
                 self.effective_segments = segs.clone();
                 let (machine, user) = path_model::split_origins(&segs);
-                self.save_user(&user).and_then(|_| self.save_system(&machine))
+                let machine_join = path_model::join(&machine);
+                // Unix (and our stores): never write an empty system snippet — but user-only edits
+                // are common; skip the system write when nothing was on disk and remains empty.
+                let skip_system_write =
+                    machine_join.is_empty() && self.baseline_machine_join.is_empty();
+                self.save_user(&user).and_then(|_| {
+                    if skip_system_write {
+                        Ok(())
+                    } else {
+                        self.save_system(&machine)
+                    }
+                })
             }
         };
         match res {
