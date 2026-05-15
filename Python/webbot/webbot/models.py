@@ -82,7 +82,7 @@ class FormField(BaseModel):
 
 
 class RunScenarioStep(BaseModel):
-    """Run another JSON scenario inline (same browser session)."""
+    """Run another saved scenario inline (same browser session): JSON expands steps; Python runs as one block)."""
 
     action: Literal["run_scenario"] = "run_scenario"
     scenario: str
@@ -127,7 +127,7 @@ class ScenarioDocument(BaseModel):
 
 class ScenarioInfo(BaseModel):
     name: str
-    type: Literal["json"]
+    type: Literal["json", "python"]
     description: str = ""
 
 
@@ -138,7 +138,7 @@ class ScenarioPreviewStep(BaseModel):
 
 class ScenarioPreview(BaseModel):
     name: str
-    type: Literal["json"]
+    type: Literal["json", "python"]
     description: str = ""
     steps: list[ScenarioPreviewStep] = Field(default_factory=list)
     source: str | None = None
@@ -191,6 +191,18 @@ class ScenarioStepPlanItem(BaseModel):
 class ScenarioStepPlan(BaseModel):
     name: str
     steps: list[ScenarioStepPlanItem]
+
+
+class PythonScenarioSource(BaseModel):
+    """Raw editor payload for ``{name}.py`` scenarios."""
+
+    name: str
+    source: str
+    description: str = ""
+
+
+class PythonScenarioSave(BaseModel):
+    source: str
 
 
 class StepProgressItem(BaseModel):

@@ -12,6 +12,10 @@ from webbot.models import FlowGroup, GroupsDocument, GroupsResponse, ScenarioDoc
 _BUILTIN_DIR = Path(__file__).parent / "builtin_scenarios"
 
 
+class ScenarioStoreConflict(ValueError):
+    """Both ``name.json`` and ``name.py`` exist."""
+
+
 def get_user_scenarios_dir() -> Path:
     path = get_app_config_dir() / "scenarios"
     path.mkdir(parents=True, exist_ok=True)
@@ -23,6 +27,10 @@ def _seed_builtin_scenarios() -> None:
     if not _BUILTIN_DIR.exists():
         return
     for src in _BUILTIN_DIR.glob("*.json"):
+        dest = user_dir / src.name
+        if not dest.exists():
+            shutil.copy2(src, dest)
+    for src in _BUILTIN_DIR.glob("*.py"):
         dest = user_dir / src.name
         if not dest.exists():
             shutil.copy2(src, dest)
