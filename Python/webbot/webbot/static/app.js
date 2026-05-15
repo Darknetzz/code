@@ -90,7 +90,7 @@ function connectWebSocket() {
   ws.onclose = () => setTimeout(connectWebSocket, 2000);
 }
 
-const STEP_TYPES = ["goto", "click", "delay", "scroll"];
+const STEP_TYPES = ["goto", "click", "fill", "submit_form", "delay", "scroll"];
 
 function changeStepType(index, newAction) {
   if (builderSteps[index].action === newAction) return;
@@ -108,9 +108,86 @@ function defaultStep(action) {
       return { action: "delay", min: 0.5, max: 1.2 };
     case "scroll":
       return { action: "scroll", delta_y: 300 };
+    case "fill":
+      return { action: "fill", by: "css", selector: "", value: "" };
+    case "submit_form":
+      return {
+        action: "submit_form",
+        method: "post",
+        form_selector: "",
+        fields: [],
+        submit_by: "role",
+        submit_role: "button",
+        submit_name: "Submit",
+        wait_for_navigation: true,
+      };
     default:
       return { action };
   }
+}
+
+function appendLocatorFields(container, step, includeValue) {
+  const by = document.createElement("select");
+  ["role", "text", "css", "test_id", "label"].forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = v;
+    if (step.by === v) o.selected = true;
+    by.appendChild(o);
+  });
+  by.dataset.field = "by";
+  container.appendChild(by);
+  container.appendChild(fieldInput("role", step.role || ""));
+  container.appendChild(fieldInput("name", step.name || ""));
+  container.appendChild(fieldInput("label", step.label || ""));
+  container.appendChild(fieldInput("text", step.text || ""));
+  container.appendChild(fieldInput("selector", step.selector || ""));
+  container.appendChild(fieldInput("test_id", step.test_id || ""));
+  if (includeValue) {
+    container.appendChild(fieldInput("value", step.value || ""));
+  }
+}
+
+function renderFormFieldRow(stepIndex, fieldIndex, field) {
+  const wrap = document.createElement("div");
+  wrap.className = "form-field-row";
+  const by = document.createElement("select");
+  ["role", "text", "css", "test_id", "label"].forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = v;
+    if (field.by === v) o.selected = true;
+    by.appendChild(o);
+  });
+  by.onchange = () => {
+    field.by = by.value;
+  };
+  const selector = fieldInput("selector", field.selector || "");
+  selector.oninput = () => {
+    field.selector = selector.value;
+  };
+  const label = fieldInput("label", field.label || "");
+  label.oninput = () => {
+    field.label = label.value;
+  };
+  const value = fieldInput("value", field.value || "");
+  value.oninput = () => {
+    field.value = value.value;
+  };
+  const del = document.createElement("button");
+  del.type = "button";
+  del.textContent = "x";
+  del.onclick = (e) => {
+    e.stopPropagation();
+    builderSteps[stepIndex].fields.splice(fieldIndex, 1);
+    renderSteps();
+  };
+  wrap.appendChild(by);
+  wrap.appendChild(selector);
+  wrap.appendChild(label);
+  wrap.appendChild(value);
+  wrap.appendChild(del);
+  return wrap;
 }
 
 function renderStepRow(step, index) {
@@ -157,6 +234,46 @@ function renderStepRow(step, index) {
     fields.appendChild(fieldInput("text", step.text || ""));
     fields.appendChild(fieldInput("selector", step.selector || ""));
     fields.appendChild(fieldInput("test_id", step.test_id || ""));
+  } else if (step.action === "fill") {
+    appendLocatorFields(fields, step, true);
+  } else if (step.action === "submit_form") {
+    const method = document.createElement("select");
+    method.dataset.field = "method";
+    ["get", "post"].forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v.toUpperCase();
+      if ((step.method || "post") === v) o.selected = true;
+      method.appendChild(o);
+    });
+    fields.appendChild(method);
+    fields.appendChild(fieldInput("form_selector", step.form_selector || ""));
+    fields.appendChild(fieldInput("submit_name", step.submit_name || ""));
+    fields.appendChild(fieldInput("submit_selector", step.submit_selector || ""));
+
+    const fieldsLabel = document.createElement("span");
+    fieldsLabel.className = "form-fields-label";
+    fieldsLabel.textContent = "Fields:";
+    fields.appendChild(fieldsLabel);
+
+    const fieldsWrap = document.createElement("div");
+    fieldsWrap.className = "form-fields-wrap";
+    (step.fields || []).forEach((f, fi) => {
+      fieldsWrap.appendChild(renderFormFieldRow(index, fi, f));
+    });
+    fields.appendChild(fieldsWrap);
+
+    const addField = document.createElement("button");
+    addField.type = "button";
+    addField.className = "btn-add-field";
+    addField.textContent = "+ field";
+    addField.onclick = (e) => {
+      e.stopPropagation();
+      if (!builderSteps[index].fields) builderSteps[index].fields = [];
+      builderSteps[index].fields.push({ by: "css", selector: "", value: "" });
+      renderSteps();
+    };
+    fields.appendChild(addField);
   }
 
   row.appendChild(fields);
@@ -191,8 +308,9 @@ function fieldInput(name, value, type = "text") {
 }
 
 function syncStepFromDom(index, row) {
+  const prev = builderSteps[index];
   const action =
-    row.querySelector('[data-field="action"]')?.value || builderSteps[index].action;
+    row.querySelector('[data-field="action"]')?.value || prev.action;
   const step = { action };
   row.querySelectorAll("[data-field]").forEach((el) => {
     const key = el.dataset.field;
@@ -201,6 +319,9 @@ function syncStepFromDom(index, row) {
     if (el.type === "number") val = parseFloat(val);
     if (val !== "" && val !== null && !Number.isNaN(val)) step[key] = val;
   });
+  if (prev.action === "submit_form" && prev.fields) {
+    step.fields = prev.fields;
+  }
   builderSteps[index] = step;
 }
 

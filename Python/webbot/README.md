@@ -19,7 +19,7 @@ python webbot.py ui
 Opens `http://127.0.0.1:8765/` in your browser.
 
 - **Run** — pick a scenario, set loops and pause between loops, Start / Stop, live log
-- **Builder** — define steps (goto, click, delay, scroll), save as JSON, test run
+- **Builder** — define steps (goto, click, fill, submit_form, delay, scroll), save as JSON, test run
 
 JSON scenarios are stored in `%APPDATA%/webbot/scenarios/` (Windows) or `~/.config/webbot/scenarios/`.
 
@@ -43,3 +43,41 @@ python webbot.py codegen https://yoursite.com
 | `example_flow` | JSON | Same flow via the step builder (seeded on first run) |
 
 Add Python scenarios under `webbot/scenarios/` and register in `scenarios/__init__.py`, or create flows in the Builder UI.
+
+## Form submission (GET and POST)
+
+Use **`fill`** for a single field, or **`submit_form`** to fill multiple fields and submit in one step. The browser uses the form’s HTML `method` attribute (`get` or `post`); the step’s `method` field is checked against it before submit.
+
+**GET search form example:**
+
+```json
+{
+  "action": "submit_form",
+  "method": "get",
+  "form_selector": "#search-form",
+  "fields": [
+    { "by": "css", "selector": "input[name=q]", "value": "playwright automation" }
+  ],
+  "submit_by": "role",
+  "submit_role": "button",
+  "submit_name": "Search"
+}
+```
+
+**POST login example:**
+
+```json
+{
+  "action": "submit_form",
+  "method": "post",
+  "form_selector": "form.login",
+  "fields": [
+    { "by": "label", "label": "Email", "value": "user@example.com" },
+    { "by": "label", "label": "Password", "value": "secret" }
+  ],
+  "submit_by": "css",
+  "submit_selector": "button[type=submit]"
+}
+```
+
+Set `"submit_by": "form"` and provide `form_selector` to call `form.submit()` instead of clicking a button (less human-like, but reliable).

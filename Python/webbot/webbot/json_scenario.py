@@ -6,17 +6,44 @@ from collections.abc import Callable
 
 from playwright.async_api import Locator, Page
 
-from webbot.human import human_click, human_delay, human_scroll, reading_pause
+from webbot.human import human_click, human_delay, human_fill, human_scroll, reading_pause
+from webbot.locators import resolve_locator
 from webbot.models import (
     ClickStep,
     DelayStep,
+    FillStep,
+    FormField,
     GotoStep,
     ScenarioDocument,
     ScrollStep,
     Step,
+    SubmitFormStep,
 )
 from webbot.run_context import run_verified_step
 from webbot.scenario_store import load_json_scenario
+
+
+def _loc_kwargs_field(field: FormField) -> dict:
+    return {
+        "by": field.by,
+        "role": field.role,
+        "name": field.name,
+        "label": field.label,
+        "text": field.text,
+        "selector": field.selector,
+        "test_id": field.test_id,
+    }
+
+
+def _loc_kwargs_click(step: ClickStep) -> dict:
+    return {
+        "by": step.by,
+        "role": step.role,
+        "name": step.name,
+        "text": step.text,
+        "selector": step.selector,
+        "test_id": step.test_id,
+    }
 
 
 def step_label(step: Step) -> str:
@@ -27,31 +54,75 @@ def step_label(step: Step) -> str:
     if isinstance(step, ScrollStep):
         dy = step.delta_y if step.delta_y is not None else "auto"
         return f"scroll (delta_y={dy})"
+    if isinstance(step, FillStep):
+        target = step.selector or step.label or step.name or step.role or "?"
+        return f"fill {target} = {step.value!r}"
     if isinstance(step, ClickStep):
         target = step.role or step.text or step.selector or step.test_id or "?"
         extra = f' "{step.name}"' if step.name else ""
         return f"click {step.by} {target}{extra}"
+    if isinstance(step, SubmitFormStep):
+        n = len(step.fields)
+        return f"submit_form ({step.method.upper()}) {n} field(s)"
     return step.action  # type: ignore[union-attr]
 
 
-def resolve_locator(page: Page, step: ClickStep) -> Locator:
-    if step.by == "role":
-        if not step.role:
-            raise ValueError("click step with by=role requires 'role'")
-        return page.get_by_role(step.role, name=step.name or None)
-    if step.by == "text":
-        if not step.text:
-            raise ValueError("click step with by=text requires 'text'")
-        return page.get_by_text(step.text)
-    if step.by == "css":
-        if not step.selector:
-            raise ValueError("click step with by=css requires 'selector'")
-        return page.locator(step.selector)
-    if step.by == "test_id":
-        if not step.test_id:
-            raise ValueError("click step with by=test_id requires 'test_id'")
-        return page.get_by_test_id(step.test_id)
-    raise ValueError(f"Unknown locator by: {step.by}")
+async def _fill_field(page: Page, field: FormField) -> None:
+    loc = resolve_locator(page, **_loc_kwargs_field(field))
+    await loc.wait_for(state="visible", timeout=15_000)
+    tag = await loc.evaluate("el => el.tagName.toLowerCase()")
+    if tag == "select":
+        await loc.select_option(value=field.value)
+        await human_delay(0.2, 0.5)
+    else:
+        await human_fill(page, loc, field.value)
+
+
+async def _verify_form_method(form_loc: Locator, expected: str) -> None:
+    raw = await form_loc.get_attribute("method")
+    actual = (raw or "get").strip().lower()
+    expected_l = expected.lower()
+    if actual != expected_l:
+        raise ValueError(
+            f"Form method is {actual!r} but step expects {expected_l!r}. "
+            "Check form_selector or method on the step."
+        )
+
+
+async def execute_submit_form(page: Page, step: SubmitFormStep) -> None:
+    form_loc: Locator | None = None
+    if step.form_selector:
+        form_loc = page.locator(step.form_selector)
+        await form_loc.wait_for(state="visible", timeout=15_000)
+        await _verify_form_method(form_loc, step.method)
+
+    for field in step.fields:
+        await _fill_field(page, field)
+
+    if step.submit_by == "form":
+        if not form_loc:
+            raise ValueError("submit_by=form requires form_selector")
+        nav = page.expect_navigation(wait_until="domcontentloaded", timeout=30_000)
+        async with nav:
+            await form_loc.evaluate("form => form.submit()")
+    else:
+        submit_loc = resolve_locator(
+            page,
+            by=step.submit_by,
+            role=step.submit_role,
+            name=step.submit_name,
+            text=step.submit_text,
+            selector=step.submit_selector,
+            test_id=step.submit_test_id,
+        )
+        await submit_loc.wait_for(state="visible", timeout=15_000)
+        if step.wait_for_navigation:
+            async with page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+                await human_click(page, submit_loc)
+        else:
+            await human_click(page, submit_loc)
+
+    await reading_pause(0.5, 1.5)
 
 
 async def execute_step(page: Page, step: Step) -> None:
@@ -62,10 +133,26 @@ async def execute_step(page: Page, step: Step) -> None:
         await human_delay(step.min, step.max)
     elif isinstance(step, ScrollStep):
         await human_scroll(page, delta_y=step.delta_y, steps=step.steps)
+    elif isinstance(step, FillStep):
+        await _fill_field(
+            page,
+            FormField(
+                by=step.by,
+                role=step.role,
+                name=step.name,
+                label=step.label,
+                text=step.text,
+                selector=step.selector,
+                test_id=step.test_id,
+                value=step.value,
+            ),
+        )
     elif isinstance(step, ClickStep):
-        loc = resolve_locator(page, step)
+        loc = resolve_locator(page, **_loc_kwargs_click(step))
         await loc.wait_for(state="visible", timeout=15_000)
         await human_click(page, loc)
+    elif isinstance(step, SubmitFormStep):
+        await execute_submit_form(page, step)
     else:
         raise ValueError(f"Unknown step: {step}")
 
