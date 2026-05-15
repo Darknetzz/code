@@ -67,7 +67,7 @@ function initPythonCodeMirror() {
     indentUnit: 4,
     tabSize: 4,
     indentWithTabs: false,
-    lineWrapping: false,
+    lineWrapping: true,
     matchBrackets: true,
     viewportMargin: 80,
     extraKeys: {

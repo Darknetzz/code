@@ -8,7 +8,7 @@
   --accent-hover: #5a9fff;
   --danger: #f85149;
   --success: #3fb950;
-  --layout-max-width: 1280px;
+  --layout-max-width: 1520px;
 }
 
 * {
@@ -338,7 +338,7 @@ main {
 
 .workspace-layout {
   display: grid;
-  grid-template-columns: minmax(268px, 380px) minmax(0, 1fr) minmax(252px, 300px);
+  grid-template-columns: minmax(248px, 300px) minmax(0, 1fr) minmax(228px, 252px);
   gap: 1.25rem;
   align-items: start;
   width: 100%;
