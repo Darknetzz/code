@@ -1598,6 +1598,19 @@ button:disabled {
   margin-bottom: 0.35rem;
 }
 
+.nested-branch-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.nested-branch-toolbar-actions .btn-icon-only {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0.35rem;
+}
+
 .nested-branch-step-fields {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
@@ -1647,10 +1660,6 @@ button:disabled {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-}
-
-.workflow-label-add-wrap {
-  grid-column: 1 / -1;
 }
 
 .workflow-label-row {
@@ -1773,7 +1782,8 @@ button:disabled {
 
 .step-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 0.25rem;
   align-self: center;
   padding-top: 1.1rem;

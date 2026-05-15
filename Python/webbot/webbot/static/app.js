@@ -1375,31 +1375,42 @@ function trimmedWorkflowLabel(step) {
   return typeof step.workflow_label === "string" ? step.workflow_label.trim() : "";
 }
 
-/** Optional workflow label: collapsed behind "Add step label" unless already set or expanded in-session. */
+/** Icon-only control beside delete when step label is hidden (empty + not expanded). */
+function appendCollapsedWorkflowLabelTrigger(container, step) {
+  if (!step) return;
+  const wl = trimmedWorkflowLabel(step);
+  if (wl !== "" || workflowLabelUiExpandedByStepRef.get(step) === true) return;
+
+  const reveal = (e) => {
+    e.stopPropagation();
+    workflowLabelUiExpandedByStepRef.set(step, true);
+    renderSteps();
+  };
+
+  if (typeof makeIconButton === "function") {
+    const btn = makeIconButton("plus", "Add step label", reveal);
+    btn.classList.add("outline");
+    container.appendChild(btn);
+    return;
+  }
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "outline";
+  btn.textContent = "+";
+  btn.title = "Add step label";
+  btn.setAttribute("aria-label", "Add step label");
+  btn.addEventListener("click", reveal);
+  container.appendChild(btn);
+}
+
+/** Optional workflow label: field appears once expanded or when a label exists (collapse trigger lives in row toolbar). */
 function appendWorkflowLabelField(fields, step) {
   const wl = trimmedWorkflowLabel(step);
   const expandedEmptySession = workflowLabelUiExpandedByStepRef.get(step) === true;
   const showField = wl !== "" || expandedEmptySession;
 
-  if (!showField) {
-    const wrap = document.createElement("div");
-    wrap.className = "workflow-label-add-wrap";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-add-workflow-label outline";
-    btn.textContent = "Add step label";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      workflowLabelUiExpandedByStepRef.set(step, true);
-      renderSteps();
-    });
-    if (typeof enhanceButton === "function") {
-      enhanceButton(btn, "plus", { label: "Add step label" });
-    }
-    wrap.appendChild(btn);
-    fields.appendChild(wrap);
-    return;
-  }
+  if (!showField) return;
 
   const row = document.createElement("div");
   row.className = "workflow-label-row";
@@ -1862,8 +1873,12 @@ function renderNestedBranchStepRow(segments, ifNestingDepth) {
   typeWrap.appendChild(typeSelect);
   toolbar.appendChild(typeWrap);
 
+  const toolbarActions = document.createElement("div");
+  toolbarActions.className = "nested-branch-toolbar-actions";
+  appendCollapsedWorkflowLabelTrigger(toolbarActions, step);
+
   if (typeof makeIconButton === "function") {
-    toolbar.appendChild(
+    toolbarActions.appendChild(
       makeIconButton(
         "trash",
         "Remove step",
@@ -1884,8 +1899,9 @@ function renderNestedBranchStepRow(segments, ifNestingDepth) {
       e.stopPropagation();
       removeNestedBranchLeafStep(segments);
     };
-    toolbar.appendChild(del);
+    toolbarActions.appendChild(del);
   }
+  toolbar.appendChild(toolbarActions);
   row.appendChild(toolbar);
 
   const placement = /** @type {const} */ ({ type: "branch", segments });
@@ -2348,6 +2364,7 @@ function renderStepRow(step, index) {
 
   const actions = document.createElement("div");
   actions.className = "step-actions";
+  appendCollapsedWorkflowLabelTrigger(actions, step);
   if (typeof makeIconButton === "function") {
     actions.appendChild(
       makeIconButton("trash", "Remove step", () => removeStep(index), { danger: true })
