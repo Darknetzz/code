@@ -213,12 +213,27 @@ async def _between_steps_pause(doc: ScenarioDocument) -> None:
         ctx._log(f"[OK] {label}")
 
 
+def build_step_plan(doc: ScenarioDocument) -> list[tuple[int, str]]:
+    items: list[tuple[int, str]] = []
+    offset = 0
+    if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
+        items.append((1, f"goto {doc.start_url}"))
+        offset = 1
+    for i, step in enumerate(doc.steps, start=1):
+        items.append((i + offset, step_label(step)))
+    return items
+
+
 async def run_json_scenario(
     page: Page,
     doc: ScenarioDocument,
     *,
     log: Callable[[str], None] | None = None,
 ) -> None:
+    ctx = get_run_context()
+    if ctx:
+        ctx.plan_steps(build_step_plan(doc))
+
     if doc.start_url and not any(isinstance(s, GotoStep) for s in doc.steps):
         total = len(doc.steps) + 1
         await run_verified_step(

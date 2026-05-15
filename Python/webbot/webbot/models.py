@@ -131,6 +131,13 @@ class RunRequest(BaseModel):
     slow_mo: int = 0
 
 
+class StepProgressItem(BaseModel):
+    index: int
+    label: str
+    status: Literal["pending", "running", "ok", "failed"] = "pending"
+    error: str | None = None
+
+
 class RunStatusResponse(BaseModel):
     state: str
     scenario: str | None = None
@@ -140,3 +147,4 @@ class RunStatusResponse(BaseModel):
     steps: int = 0
     step_label: str | None = None
     error: str | None = None
+    step_progress: list[StepProgressItem] = Field(default_factory=list)

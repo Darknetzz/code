@@ -235,6 +235,84 @@ main {
   font-weight: 600;
 }
 
+.run-step-loop {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+}
+
+.run-step-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.run-step {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.35rem 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.25rem;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  font-size: 0.88rem;
+}
+
+.run-step-pending {
+  color: var(--muted);
+  border-left-color: var(--border);
+}
+
+.run-step-running {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+.run-step-ok {
+  border-left-color: #3d9a5d;
+  color: color-mix(in srgb, #3d9a5d 85%, var(--text));
+}
+
+.run-step-ok .run-step-marker {
+  color: #3d9a5d;
+  font-weight: 700;
+}
+
+.run-step-failed {
+  border-left-color: #c94a4a;
+  background: color-mix(in srgb, #c94a4a 10%, var(--bg));
+  color: color-mix(in srgb, #c94a4a 90%, var(--text));
+}
+
+.run-step-failed .run-step-marker {
+  color: #c94a4a;
+  font-weight: 700;
+}
+
+.run-step-marker {
+  width: 1.1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.run-step-num {
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-step-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-step-error {
+  grid-column: 2 / -1;
+  font-size: 0.8rem;
+  color: #c94a4a;
+}
+
 .flows-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);

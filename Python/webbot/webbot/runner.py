@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from webbot.browser import BrowserConfig, persistent_browser, save_failure_screenshot
 from webbot.run_context import RunContext, reset_run_context, set_run_context
@@ -40,6 +41,7 @@ class RunStatus:
     steps: int = 0
     step_label: str | None = None
     error: str | None = None
+    step_progress: list[dict[str, Any]] = field(default_factory=list)
 
 
 LogHandler = Callable[[str], None]
@@ -86,6 +88,7 @@ class Runner:
             self._status.steps = ctx.steps
             self._status.step_label = ctx.step_label
             self._status.loop = ctx.loop
+            self._status.step_progress = ctx.step_progress_snapshot
         for handler in self._status_handlers:
             try:
                 handler(self._status)
@@ -169,10 +172,6 @@ class Runner:
                         self._notify_status()
                         return
 
-                    self._run_context.step = 0
-                    self._run_context.steps = 0
-                    self._run_context.step_label = None
-
                     if i < config.loops - 1 and config.pause_between_loops_sec > 0:
                         self._log(
                             f"Pausing {config.pause_between_loops_sec:.0f}s before next loop..."
@@ -189,9 +188,6 @@ class Runner:
                             pass
 
             self._status.state = RunState.completed
-            self._status.step = 0
-            self._status.steps = 0
-            self._status.step_label = None
             self._log(f"Scenario '{config.scenario}' completed")
             self._notify_status()
 

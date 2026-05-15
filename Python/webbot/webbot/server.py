@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from webbot import __version__
-from webbot.models import RunRequest, RunStatusResponse, ScenarioDocument, ScenarioInfo
+from webbot.models import RunRequest, RunStatusResponse, ScenarioDocument, ScenarioInfo, StepProgressItem
 from webbot.nodriver_browser import nodriver_available
 from webbot.runner import RunConfig, RunState, get_runner
 from webbot.scenario_store import delete_json_scenario, load_json_scenario, save_json_scenario
@@ -48,6 +48,7 @@ def _status_payload() -> dict:
         "steps": st.steps,
         "step_label": st.step_label,
         "error": st.error,
+        "step_progress": st.step_progress,
     }
 
 
@@ -148,6 +149,7 @@ def api_run_status() -> RunStatusResponse:
         steps=st.steps,
         step_label=st.step_label,
         error=st.error,
+        step_progress=[StepProgressItem.model_validate(item) for item in st.step_progress],
     )
 
 

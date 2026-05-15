@@ -4,6 +4,9 @@ let scenarios = [];
 let selectedScenario = null;
 let builderSteps = [];
 let ws = null;
+let runStepProgress = null;
+let runShowStepProgress = false;
+let cachedPreviewDoc = null;
 
 function getSelectedScenario() {
   return selectedScenario || scenarios[0]?.name || null;
@@ -39,6 +42,131 @@ function stepPreviewLabel(step) {
     default:
       return step.action;
   }
+}
+
+function buildStepPlanFromDoc(doc) {
+  const items = [];
+  const steps = doc.steps || [];
+  const hasGoto = steps.some((s) => s.action === "goto");
+  let offset = 0;
+  if (doc.start_url && !hasGoto) {
+    items.push({ index: 1, label: `goto ${doc.start_url}`, status: "pending", error: null });
+    offset = 1;
+  }
+  steps.forEach((s, i) => {
+    items.push({
+      index: i + 1 + offset,
+      label: stepPreviewLabel(s),
+      status: "pending",
+      error: null,
+    });
+  });
+  return items;
+}
+
+function stepProgressMarker(status) {
+  switch (status) {
+    case "running":
+      return "…";
+    case "ok":
+      return "✓";
+    case "failed":
+      return "✗";
+    default:
+      return "○";
+  }
+}
+
+function renderRunStepProgressHtml(steps, loopInfo) {
+  const loopHdr =
+    loopInfo && loopInfo.loops > 1
+      ? `<p class="run-step-loop muted">Loop ${loopInfo.loop}/${loopInfo.loops}</p>`
+      : "";
+  const items = steps
+    .map((s) => {
+      const err = s.error
+        ? `<span class="run-step-error">${escapeHtml(s.error)}</span>`
+        : "";
+      return `<li class="run-step run-step-${s.status}" data-index="${s.index}">
+        <span class="run-step-marker" aria-hidden="true">${stepProgressMarker(s.status)}</span>
+        <span class="run-step-num">${s.index}.</span>
+        <span class="run-step-label">${escapeHtml(s.label)}</span>${err}
+      </li>`;
+    })
+    .join("");
+  return `${loopHdr}<ol class="run-step-progress">${items}</ol>`;
+}
+
+function renderRunFlowPreviewBody(loopInfo) {
+  const body = $("run-flow-preview-body");
+  if (!body) return;
+  if (runShowStepProgress && runStepProgress?.length) {
+    body.innerHTML = renderRunStepProgressHtml(runStepProgress, loopInfo);
+    return;
+  }
+  const name = getSelectedScenario();
+  const info = name ? getScenarioInfo(name) : null;
+  if (!name || !info) {
+    body.innerHTML = "";
+    return;
+  }
+  if (info.type === "python") {
+    body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Edit in <code>webbot/scenarios/</code>.</p>`;
+    return;
+  }
+  if (cachedPreviewDoc) {
+    body.innerHTML = renderFlowPreviewHtml(cachedPreviewDoc);
+  }
+}
+
+async function initRunStepProgress(scenario) {
+  const info = getScenarioInfo(scenario);
+  runStepProgress = [];
+  if (info?.type === "json") {
+    try {
+      const doc = await api(`/api/scenarios/${encodeURIComponent(scenario)}`);
+      cachedPreviewDoc = doc;
+      runStepProgress = buildStepPlanFromDoc(doc);
+    } catch {
+      runStepProgress = [];
+    }
+  }
+  runShowStepProgress = true;
+  const panel = $("run-flow-preview");
+  panel?.classList.remove("hidden");
+  renderRunFlowPreviewBody();
+}
+
+function applyRunStepProgress(msg) {
+  if (msg.step_progress?.length) {
+    runStepProgress = msg.step_progress;
+    runShowStepProgress = true;
+    renderRunFlowPreviewBody({ loop: msg.loop, loops: msg.loops });
+    return;
+  }
+  if (msg.state === "running" && msg.step && msg.step_label) {
+    if (!runStepProgress) runStepProgress = [];
+    const idx = msg.step;
+    let entry = runStepProgress.find((s) => s.index === idx);
+    if (!entry) {
+      entry = { index: idx, label: msg.step_label, status: "running", error: null };
+      runStepProgress.push(entry);
+      runStepProgress.sort((a, b) => a.index - b.index);
+    } else {
+      entry.label = msg.step_label;
+      entry.status = "running";
+    }
+    runStepProgress.forEach((s) => {
+      if (s.index < idx && s.status === "running") s.status = "ok";
+    });
+    runShowStepProgress = true;
+    renderRunFlowPreviewBody({ loop: msg.loop, loops: msg.loops });
+  }
+}
+
+function clearRunStepProgress() {
+  runStepProgress = null;
+  runShowStepProgress = false;
 }
 
 function renderFlowPreviewHtml(doc) {
@@ -90,7 +218,13 @@ async function updateRunFlowPreview(name) {
     editBtn.setAttribute("aria-label", editBtn.title);
   }
 
+  if (runShowStepProgress && runStepProgress?.length) {
+    renderRunFlowPreviewBody();
+    return;
+  }
+
   if (info.type === "python") {
+    cachedPreviewDoc = null;
     body.innerHTML = `<p>${escapeHtml(info.description || "Python scenario")}</p><p class="muted">Defined in source code — open the <strong>Flows</strong> tab to view details. Edit in <code>webbot/scenarios/</code>.</p>`;
     return;
   }
@@ -98,8 +232,10 @@ async function updateRunFlowPreview(name) {
   try {
     body.innerHTML = '<p class="muted">Loading…</p>';
     const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
+    cachedPreviewDoc = doc;
     body.innerHTML = renderFlowPreviewHtml(doc);
   } catch (e) {
+    cachedPreviewDoc = null;
     body.innerHTML = `<p class="status failed">${escapeHtml(e.message)}</p>`;
   }
 }
@@ -239,7 +375,10 @@ function setSelectedScenario(name, options = {}) {
   selectedScenario = name || null;
   syncScenarioListSelection();
   updateDeleteFlowButton();
-  if (!options.skipPreview) updateRunFlowPreview(name);
+  if (!options.skipPreview) {
+    clearRunStepProgress();
+    updateRunFlowPreview(name);
+  }
 }
 
 function buildScenarioListItem(s, onSelect) {
@@ -406,6 +545,7 @@ function connectWebSocket() {
     if (msg.type === "log") appendLog(msg.message);
     if (msg.type === "status") {
       setRunStatus(msg);
+      applyRunStepProgress(msg);
       if (msg.error) appendLog("Error: " + msg.error);
       updateRunButtons(msg.state);
     }
@@ -1199,7 +1339,16 @@ async function startRun(scenarioName) {
     slow_mo: 0,
   };
   $("log-output").textContent = "";
+  await initRunStepProgress(scenario);
   await api("/api/run", { method: "POST", body: JSON.stringify(body) });
+  try {
+    const st = await api("/api/run/status");
+    setRunStatus(st);
+    applyRunStepProgress(st);
+    updateRunButtons(st.state);
+  } catch {
+    /* websocket will catch up */
+  }
 }
 
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -1246,6 +1395,17 @@ $("btn-test-run").onclick = async () => {
     await loadScenarios();
     const st = await api("/api/run/status");
     setRunStatus(st);
+    if (st.state === "running" && st.scenario) {
+      runShowStepProgress = true;
+      if (st.step_progress?.length) {
+        runStepProgress = st.step_progress;
+      } else {
+        await initRunStepProgress(st.scenario);
+      }
+    } else if (st.step_progress?.length) {
+      runStepProgress = st.step_progress;
+      runShowStepProgress = true;
+    }
     updateRunButtons(st.state);
     connectWebSocket();
     if (selectedScenario) {
