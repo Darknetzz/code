@@ -357,6 +357,7 @@ async def api_start_run(req: RunRequest) -> dict:
         headless=req.headless,
         channel=req.channel,
         slow_mo=req.slow_mo,
+        ignore_https_errors=req.ignore_https_errors,
     )
 
     async def _watch_run() -> None:
@@ -402,6 +403,7 @@ async def api_start_run_group(req: RunGroupRequest) -> dict:
         headless=req.headless,
         channel=req.channel,
         slow_mo=req.slow_mo,
+        ignore_https_errors=req.ignore_https_errors,
     )
 
     async def _watch_run() -> None:

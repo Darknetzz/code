@@ -32,10 +32,21 @@ class Driver(str, Enum):
     nodriver = "nodriver"
 
 
-async def _open_url_playwright(url: str, headless: bool, channel: Optional[str], slow_mo: int) -> None:
+async def _open_url_playwright(
+    url: str,
+    headless: bool,
+    channel: Optional[str],
+    slow_mo: int,
+    ignore_https_errors: bool,
+) -> None:
     from webbot.browser import BrowserConfig, persistent_browser
 
-    config = BrowserConfig(headless=headless, channel=channel or "chrome", slow_mo=slow_mo)
+    config = BrowserConfig(
+        headless=headless,
+        channel=channel or "chrome",
+        slow_mo=slow_mo,
+        ignore_https_errors=ignore_https_errors,
+    )
     async with persistent_browser(config) as (_context, page):
         await page.goto(url, wait_until="domcontentloaded")
         console.print(f"[green]Opened[/green] {url}")
@@ -47,10 +58,10 @@ async def _open_url_playwright(url: str, headless: bool, channel: Optional[str],
             return
 
 
-async def _open_url_nodriver(url: str, headless: bool) -> None:
+async def _open_url_nodriver(url: str, headless: bool, ignore_https_errors: bool) -> None:
     from webbot.browser import BrowserConfig
 
-    config = BrowserConfig(headless=headless)
+    config = BrowserConfig(headless=headless, ignore_https_errors=ignore_https_errors)
     async with nodriver_browser(config) as page:
         await page.goto(url)
         console.print(f"[green]Opened[/green] {url} [dim](nodriver)[/dim]")
@@ -73,6 +84,11 @@ def open(
         help="Playwright browser channel (chrome, msedge, chromium). Ignored by nodriver.",
     ),
     slow_mo: int = typer.Option(0, "--slow-mo", help="Playwright slow-motion delay in ms"),
+    ignore_https_errors: bool = typer.Option(
+        False,
+        "--ignore-https-errors",
+        help="Accept invalid/mismatched TLS certificates (insecure; debugging only)",
+    ),
 ):
     """Open a URL in a headed browser with a saved profile (cookies persist)."""
     if driver == Driver.nodriver:
@@ -82,9 +98,9 @@ def open(
                 "Use --driver playwright (default) or Python 3.10–3.12 with nodriver installed.[/bold red]"
             )
             raise typer.Exit(1)
-        asyncio.run(_open_url_nodriver(url, headless))
+        asyncio.run(_open_url_nodriver(url, headless, ignore_https_errors))
     else:
-        asyncio.run(_open_url_playwright(url, headless, channel, slow_mo))
+        asyncio.run(_open_url_playwright(url, headless, channel, slow_mo, ignore_https_errors))
 
 
 @app.command("run")
