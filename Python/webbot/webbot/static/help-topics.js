@@ -18,7 +18,7 @@ const HELP_TOPICS = {
     title: "Webbot overview",
     body: [
       "<p>Webbot runs human-like browser automation: curved mouse moves, variable delays, and a persistent profile.</p>",
-      "<p>Pick a flow in the sidebar (optionally organized into groups), edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows can be JSON (step builder) or Python (editable source panel). Use <strong>run_scenario</strong> steps in JSON flows to compose subflows of either kind.</p>",
+      "<p>Use the top tabs to switch between <strong>Workspace</strong> (editor and log) and <strong>Flow groups</strong> (sidebar sections). Pick a flow in the sidebar, edit it on the right, and press <strong>Start</strong> or use <strong>Run group</strong> on a section. Flows can be JSON (step builder) or Python (editable source panel). Use <strong>run_scenario</strong> steps in JSON flows to compose subflows of either kind.</p>",
       "<p>Scenarios live under <code>%APPDATA%/webbot/scenarios/</code> on Windows (or <code>~/.config/webbot/scenarios/</code> elsewhere): <code>.json</code> for JSON flows and <code>.py</code> for Python flows (only one extension per flow name). Group membership is saved in <code>groups.json</code> in that folder.</p>",
     ],
   },
@@ -30,7 +30,7 @@ const HELP_TOPICS = {
         ["Area", "What it does"],
         [
           ["Flows card", "Flows grouped into collapsible sections plus ungrouped; pick one to edit."],
-          ["New JSON / New Python / Groups / Delete", "Create JSON or Python drafts, edit group membership, delete saved flows, or discard a draft."],
+          ["New JSON / New Python / Groups / Delete", "Create JSON or Python drafts; <strong>Groups</strong> (or the <strong>Flow groups</strong> tab) edits sidebar sections; delete saved flows or discard a draft."],
           ["Run card", "Loops, pause between loops, pause between flows in a group, headless, Start/Stop."],
           ["Start / Stop", "Run the selected flow. Step progress appears in the editor column."],
           ["Editor", "JSON: name, URL, options, steps (drag to reorder). Python: monospace source editor; flow name is read-only once saved."],

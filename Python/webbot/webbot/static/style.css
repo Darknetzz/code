@@ -61,6 +61,25 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.app-main-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.5rem 2rem 0.75rem;
+  max-width: var(--layout-max-width);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+.app-main-tabs .tab {
+  margin: 0;
+}
+
+/* Legacy layout helper (unused by default dashboard) */
 .tabs {
   display: flex;
   gap: 0.5rem;
@@ -603,15 +622,21 @@ main {
   font-size: 0.82rem;
 }
 
-.groups-dialog {
-  max-width: min(540px, 95vw);
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+.groups-panel-card .groups-panel-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
 }
 
-.groups-dialog-inner {
-  padding: 1rem 1.25rem;
+.groups-panel-card .groups-panel-intro {
+  margin: 0 0 1rem;
+}
+
+.groups-panel-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 1rem;
 }
 
 .groups-modal-row.card {
@@ -633,11 +658,8 @@ main {
   min-height: 6rem;
 }
 
-.groups-dialog-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 1rem;
+.groups-panel-actions .outline {
+  border-color: var(--border);
 }
 
 .scenario-item {

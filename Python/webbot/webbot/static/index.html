@@ -15,8 +15,31 @@
     <button type="button" id="btn-help" class="help-header-btn" aria-label="Help">Help</button>
   </header>
 
+  <nav class="app-main-tabs" role="tablist" aria-label="Main views">
+    <button
+      type="button"
+      role="tab"
+      id="tab-workspace"
+      class="tab active"
+      aria-selected="true"
+      aria-controls="panel-main"
+    >
+      Workspace
+    </button>
+    <button
+      type="button"
+      role="tab"
+      id="tab-groups"
+      class="tab"
+      aria-selected="false"
+      aria-controls="panel-groups"
+    >
+      Flow groups
+    </button>
+  </nav>
+
   <main>
-    <section id="panel-main" class="panel active">
+    <section id="panel-main" class="panel active" role="tabpanel" aria-labelledby="tab-workspace" aria-hidden="false">
       <div class="workspace-layout">
         <aside class="workspace-sidebar-column">
           <div class="card workspace-flows-card">
@@ -127,6 +150,21 @@
         <pre id="log-output"></pre>
       </div>
     </section>
+
+    <section id="panel-groups" class="panel" role="tabpanel" aria-labelledby="tab-groups" aria-hidden="true">
+      <div class="card groups-panel-card">
+        <h2 class="groups-panel-title">Flow groups</h2>
+        <p class="muted groups-panel-intro">
+          Organize flows into sections. In <strong>Workspace</strong>, use <strong>Run group</strong> on each section header to run flows in order.
+        </p>
+        <div id="groups-editor-body"></div>
+        <p id="groups-msg" class="muted"></p>
+        <div class="groups-panel-actions">
+          <button type="button" id="groups-back" class="outline">Back to workspace</button>
+          <button type="button" id="groups-save" class="primary">Save groups</button>
+        </div>
+      </div>
+    </section>
   </main>
 
   <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
@@ -144,19 +182,6 @@
           <button type="button" id="help-next">Next</button>
           <button type="button" id="help-close" class="primary">Close</button>
         </footer>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="groups-dialog" class="groups-dialog">
-    <div class="groups-dialog-inner">
-      <h2>Flow groups</h2>
-      <p class="muted">Organize flows into sections. Use <strong>Run group</strong> on each section to run flows in order.</p>
-      <div id="groups-editor-body"></div>
-      <p id="groups-msg" class="muted"></p>
-      <div class="groups-dialog-actions">
-        <button type="button" id="groups-cancel">Cancel</button>
-        <button type="button" id="groups-save" class="primary">Save groups</button>
       </div>
     </div>
   </dialog>

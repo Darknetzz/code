@@ -1810,6 +1810,18 @@ async function startRun(scenarioName) {
   }
 }
 
+function setMainTab(which) {
+  const isWorkspace = which === "workspace";
+  $("panel-main")?.classList.toggle("active", isWorkspace);
+  $("panel-groups")?.classList.toggle("active", !isWorkspace);
+  $("tab-workspace")?.classList.toggle("active", isWorkspace);
+  $("tab-groups")?.classList.toggle("active", !isWorkspace);
+  $("tab-workspace")?.setAttribute("aria-selected", isWorkspace ? "true" : "false");
+  $("tab-groups")?.setAttribute("aria-selected", !isWorkspace ? "true" : "false");
+  $("panel-main")?.setAttribute("aria-hidden", !isWorkspace ? "true" : "false");
+  $("panel-groups")?.setAttribute("aria-hidden", isWorkspace ? "true" : "false");
+}
+
 /** @type {Array<{id:string,label:string,scenario_names:string[]}>} */
 let groupsModalDraft = [];
 
@@ -1890,11 +1902,11 @@ function renderGroupsModalEditor() {
   body.appendChild(addBtn);
 }
 
-function openGroupsModal() {
+function openGroupsPanel() {
   $("groups-msg").textContent = "";
   groupsModalDraft = structuredClone(groupsData.groups || []);
   renderGroupsModalEditor();
-  $("groups-dialog")?.showModal();
+  setMainTab("groups");
 }
 
 async function saveGroupsModal() {
@@ -1905,8 +1917,8 @@ async function saveGroupsModal() {
   });
   await loadGroups();
   renderScenarioList("scenario-list", scenarioListOnSelect);
-  $("groups-dialog")?.close();
-  $("build-msg").textContent = "Groups saved";
+  $("groups-msg").textContent = "Groups saved.";
+  $("build-msg").textContent = "Groups saved.";
 }
 
 async function startRunGroup(groupId) {
@@ -1932,11 +1944,13 @@ async function startRunGroup(groupId) {
 
 $("btn-start").onclick = () => startRun();
 $("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
-$("btn-manage-groups")?.addEventListener("click", () => openGroupsModal());
+$("btn-manage-groups")?.addEventListener("click", () => openGroupsPanel());
+$("tab-workspace")?.addEventListener("click", () => setMainTab("workspace"));
+$("tab-groups")?.addEventListener("click", () => openGroupsPanel());
 $("groups-save")?.addEventListener("click", () =>
   saveGroupsModal().catch((e) => ($("groups-msg").textContent = e.message))
 );
-$("groups-cancel")?.addEventListener("click", () => $("groups-dialog")?.close());
+$("groups-back")?.addEventListener("click", () => setMainTab("workspace"));
 $("btn-add-step").onclick = () => {
   const last = builderSteps[builderSteps.length - 1];
   builderSteps.push(defaultStep(last?.action || "goto"));
