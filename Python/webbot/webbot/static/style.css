@@ -425,8 +425,11 @@ summary.workspace-dropdown-summary.success.outline:hover {
   position: absolute;
   z-index: 30;
   left: 0;
-  right: 0;
-  margin-top: 0.35rem;
+  top: calc(100% + 0.35rem);
+  margin-top: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 2rem));
   padding: 0.35rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -449,6 +452,7 @@ summary.workspace-dropdown-summary.success.outline:hover {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .workspace-dropdown-item:hover {
