@@ -202,6 +202,13 @@
                 <input type="checkbox" id="run-ignore-https-errors" />
                 Ignore HTTPS errors
               </label>
+              <label class="checkbox">
+                <input type="checkbox" id="run-keep-session-open" />
+                Keep session open when done
+              </label>
+              <p id="run-keep-session-hint" class="muted hint-below-field">
+                After the flow or group finishes successfully, leave the browser open until you press Stop.
+              </p>
               <p id="run-ignore-https-hint" class="muted hint-below-field">
                 Accepts invalid certs (e.g. self-signed). Does not fix servers with no TLS/SNI for this hostname (
                 <code>ERR_SSL_UNRECOGNIZED_NAME</code>). Insecure—use only when you trust the server.

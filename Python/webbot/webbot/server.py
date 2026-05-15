@@ -34,7 +34,7 @@ from webbot.models import (
 )
 from webbot.scenario_preview import get_scenario_preview
 from webbot.nodriver_browser import nodriver_available
-from webbot.runner import RunConfig, RunState, get_runner
+from webbot.runner import RunConfig, get_runner, run_state_blocks_start
 from webbot.scenario_store import (
     build_groups_response,
     delete_json_scenario,
@@ -339,7 +339,7 @@ def api_run_status() -> RunStatusResponse:
 async def api_start_run(req: RunRequest) -> dict:
     _ensure_runner_hooks()
     runner = get_runner()
-    if runner.status.state == RunState.running:
+    if run_state_blocks_start(runner.status.state):
         raise HTTPException(status_code=409, detail="A run is already in progress")
 
     if req.loops < 1:
@@ -358,6 +358,7 @@ async def api_start_run(req: RunRequest) -> dict:
         channel=req.channel,
         slow_mo=req.slow_mo,
         ignore_https_errors=req.ignore_https_errors,
+        keep_session_open=req.keep_session_open,
     )
 
     async def _watch_run() -> None:
@@ -378,7 +379,7 @@ async def api_start_run(req: RunRequest) -> dict:
 async def api_start_run_group(req: RunGroupRequest) -> dict:
     _ensure_runner_hooks()
     runner = get_runner()
-    if runner.status.state == RunState.running:
+    if run_state_blocks_start(runner.status.state):
         raise HTTPException(status_code=409, detail="A run is already in progress")
 
     if req.loops < 1:
@@ -404,6 +405,7 @@ async def api_start_run_group(req: RunGroupRequest) -> dict:
         channel=req.channel,
         slow_mo=req.slow_mo,
         ignore_https_errors=req.ignore_https_errors,
+        keep_session_open=req.keep_session_open,
     )
 
     async def _watch_run() -> None:

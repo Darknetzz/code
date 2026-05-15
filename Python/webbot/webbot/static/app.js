@@ -330,7 +330,7 @@ async function refreshRunStepProgressFromServer() {
   setRunStatus(st);
   applyRunStepProgress(st);
   updateRunButtons(st.state);
-  if (st.state !== "running") stopRunStatusPolling();
+  if (!runIsBusy(st.state)) stopRunStatusPolling();
   return st;
 }
 
@@ -394,9 +394,12 @@ function applyRunStepProgress(msg) {
 
   if (
     runStepProgress?.length &&
-    (msg.state === "completed" || msg.state === "failed" || msg.state === "stopped")
+    (msg.state === "completed" ||
+      msg.state === "holding_session" ||
+      msg.state === "failed" ||
+      msg.state === "stopped")
   ) {
-    if (msg.state === "completed") {
+    if (msg.state === "completed" || msg.state === "holding_session") {
       runStepProgress.forEach((s) => {
         s.status = "ok";
         s.error = null;
@@ -827,6 +830,11 @@ function getRunPlaywrightOptions() {
   return { channel, slow_mo: slowMo };
 }
 
+/** Runner is blocking new starts while executing or holding the browser open. */
+function runIsBusy(state) {
+  return state === "running" || state === "holding_session";
+}
+
 function renderScenarioList(containerId, onSelect) {
   const list = $(containerId);
   if (!list) return;
@@ -988,6 +996,7 @@ function setRunStatus(msg) {
   const labels = {
     idle: "Idle",
     running: "Running…",
+    holding_session: "Session open",
     completed: "Completed",
     failed: "Failed",
     stopped: "Stopped",
@@ -997,9 +1006,9 @@ function setRunStatus(msg) {
 }
 
 function updateRunButtons(state) {
-  const running = state === "running";
-  $("btn-start").disabled = running || !getSelectedScenario();
-  $("btn-stop").disabled = !running;
+  const busy = runIsBusy(state);
+  $("btn-start").disabled = busy || !getSelectedScenario();
+  $("btn-stop").disabled = !busy;
 }
 
 async function api(path, options = {}) {
@@ -2705,6 +2714,7 @@ async function startRun(scenarioName) {
     ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
     channel: pw.channel,
     slow_mo: pw.slow_mo,
+    keep_session_open: $("run-keep-session-open")?.checked ?? false,
   };
   $("log-output").textContent = "";
   await initRunStepProgress(scenario);
@@ -2966,6 +2976,7 @@ async function startRunGroup(groupId) {
     ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
     channel: pw.channel,
     slow_mo: pw.slow_mo,
+    keep_session_open: $("run-keep-session-open")?.checked ?? false,
   };
   $("log-output").textContent = "";
   await initRunStepProgress(`group:${groupId}`);
@@ -3029,7 +3040,7 @@ $("btn-test-run-python")?.addEventListener("click", async () => {
     const st = await api("/api/run/status");
     setRunStatus(st);
     updateRunButtons(st.state);
-    if (st.state === "running" && st.scenario) {
+    if (runIsBusy(st.state) && st.scenario) {
       await initRunStepProgress(st.scenario);
       applyRunStepProgress(st);
       startRunStatusPolling();

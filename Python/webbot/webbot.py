@@ -121,6 +121,11 @@ def run_scenario(
         "--ignore-https-errors",
         help="Accept invalid/mismatched TLS certificates (insecure; debugging only)",
     ),
+    keep_session_open: bool = typer.Option(
+        False,
+        "--keep-session-open",
+        help="After the workflow completes, keep the browser open until Stop (UI) or Ctrl+C (CLI)",
+    ),
 ):
     """Run a named click/type scenario with human-like behavior."""
     if loops < 1:
@@ -156,6 +161,7 @@ def run_scenario(
         channel=channel,
         slow_mo=slow_mo,
         ignore_https_errors=ignore_https_errors,
+        keep_session_open=keep_session_open,
     )
     try:
         asyncio.run(runner.run_once(config))

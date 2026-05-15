@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -18,9 +19,15 @@ from webbot.scenarios import get_scenario
 class RunState(str, Enum):
     idle = "idle"
     running = "running"
+    holding_session = "holding_session"
     stopped = "stopped"
     failed = "failed"
     completed = "completed"
+
+
+def run_state_blocks_start(state: RunState) -> bool:
+    """True while a workflow or a post-run held browser session is active."""
+    return state in (RunState.running, RunState.holding_session)
 
 
 @dataclass
@@ -34,6 +41,7 @@ class RunConfig:
     channel: str | None = "chrome"
     slow_mo: int = 0
     ignore_https_errors: bool = False
+    keep_session_open: bool = False
 
     def __post_init__(self) -> None:
         sc = (self.scenario or "").strip()
@@ -118,20 +126,23 @@ class Runner:
 
     async def run_once(self, config: RunConfig) -> None:
         async with self._lock:
-            if self._status.state == RunState.running:
+            if run_state_blocks_start(self._status.state):
                 raise RuntimeError("A run is already in progress")
         self._cancel.clear()
         await self._execute(config)
 
     async def start(self, config: RunConfig) -> None:
         async with self._lock:
-            if self._status.state == RunState.running:
+            if run_state_blocks_start(self._status.state):
                 raise RuntimeError("A run is already in progress")
             self._cancel.clear()
             self._task = asyncio.create_task(self._execute(config))
 
     async def stop(self) -> None:
         self._cancel.set()
+        if self._status.state == RunState.holding_session:
+            self._log("Closing browser session…")
+            return
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -224,6 +235,39 @@ class Runner:
                             return
                         except asyncio.TimeoutError:
                             pass
+
+                if self._cancel.is_set():
+                    self._status.state = RunState.stopped
+                    self._notify_status()
+                    return
+
+                if config.keep_session_open:
+                    if self._run_context:
+                        self._run_context.step_label = "Session open — press Stop to close"
+                    self._status.state = RunState.holding_session
+                    self._notify_status()
+                    self._log(
+                        "Workflow finished — browser session kept open (press Stop in the UI or "
+                        "Ctrl+C here to close)."
+                    )
+                    loop = asyncio.get_running_loop()
+
+                    def _sigint(_signum: int, _frame: object) -> None:
+                        loop.call_soon_threadsafe(self._cancel.set)
+
+                    old_sig: object | None
+                    try:
+                        old_sig = signal.signal(signal.SIGINT, _sigint)
+                    except ValueError:
+                        old_sig = None
+                    try:
+                        await self._cancel.wait()
+                    finally:
+                        if old_sig is not None:
+                            try:
+                                signal.signal(signal.SIGINT, old_sig)
+                            except ValueError:
+                                pass
 
             self._status.state = RunState.completed
             self._log(f"Run '{label}' completed")

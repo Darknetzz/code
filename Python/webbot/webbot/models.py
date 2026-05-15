@@ -216,6 +216,7 @@ class RunRequest(BaseModel):
     channel: str | None = "chrome"
     slow_mo: int = 0
     ignore_https_errors: bool = False
+    keep_session_open: bool = False
 
 
 class FlowGroup(BaseModel):
@@ -242,6 +243,7 @@ class RunGroupRequest(BaseModel):
     channel: str | None = "chrome"
     slow_mo: int = 0
     ignore_https_errors: bool = False
+    keep_session_open: bool = False
 
 
 class ScenarioStepPlanItem(BaseModel):

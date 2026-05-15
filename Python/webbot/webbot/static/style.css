@@ -1425,6 +1425,10 @@ button:disabled {
   color: var(--accent);
 }
 
+.status.holding_session {
+  color: #d29922;
+}
+
 .status.completed {
   color: var(--success);
 }
