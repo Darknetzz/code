@@ -90,29 +90,11 @@ function stepPreviewLabel(step) {
       return `click ${step.by || "?"} ${step.role || step.text || step.selector || step.data_value || step.test_id || ""}`.trim();
     case "submit_form":
       return `submit_form (${(step.method || "post").toUpperCase()}) ${(step.fields || []).length} field(s)`;
+    case "run_scenario":
+      return `run scenario: ${step.scenario || "?"}`;
     default:
       return step.action;
   }
-}
-
-function buildStepPlanFromDoc(doc) {
-  const items = [];
-  const steps = doc.steps || [];
-  const hasGoto = steps.some((s) => s.action === "goto");
-  let offset = 0;
-  if (doc.start_url && !hasGoto) {
-    items.push({ index: 1, label: `goto ${doc.start_url}`, status: "pending", error: null });
-    offset = 1;
-  }
-  steps.forEach((s, i) => {
-    items.push({
-      index: i + 1 + offset,
-      label: stepPreviewLabel(s),
-      status: "pending",
-      error: null,
-    });
-  });
-  return items;
 }
 
 function stepProgressMarker(status) {
@@ -360,6 +342,22 @@ function showJsonFlowEditor() {
   setFlowEditorMode(true);
 }
 
+function setFlowEditorMode(jsonEditable) {
+  const wrap = $("flow-editor-wrap");
+  if (wrap) {
+    wrap.classList.remove("hidden");
+    wrap.classList.toggle("flow-editor-readonly", jsonEditable === false);
+  }
+  const disable = jsonEditable === false;
+  wrap?.querySelectorAll("input, select, button").forEach((el) => {
+    if (el.id === "btn-save" || el.id === "btn-test-run" || el.id === "btn-add-step") {
+      el.disabled = disable;
+    } else if (!el.closest(".step-actions")) {
+      el.disabled = disable;
+    }
+  });
+}
+
 function updateDeleteFlowButton() {
   const btn = $("btn-delete-flow");
   if (!btn) return;
@@ -458,19 +456,6 @@ async function loadFlowIntoEditor(name) {
 
   setSelectedScenario(name, { skipPreview: true });
 
-  if (info.type === "python") {
-    try {
-      const preview = await fetchScenarioPreview(name);
-      cachedScenarioPreview = preview;
-      renderPythonFlowView(preview);
-      $("build-msg").textContent = "Python flow — view only. Edit source to change steps.";
-    } catch (e) {
-      $("build-msg").textContent = e.message;
-    }
-    updateDeleteFlowButton();
-    return;
-  }
-
   showJsonFlowEditor();
   try {
     const doc = await api(`/api/scenarios/${encodeURIComponent(name)}`);
@@ -490,8 +475,7 @@ async function deleteSelectedFlow() {
     return;
   }
   const name = selectedScenario;
-  const info = name ? getScenarioInfo(name) : null;
-  if (!info || info.type !== "json") return;
+  if (!name) return;
   if (!confirm(`Delete flow "${name}"? This cannot be undone.`)) return;
   await api(`/api/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" });
   await loadScenarios();
@@ -526,21 +510,22 @@ function buildScenarioListItem(s, onSelect) {
   btn.dataset.name = s.name;
   btn.setAttribute("role", "option");
 
-    const nameEl = document.createElement("span");
-    nameEl.className = "scenario-item-name";
-    if (typeof icon === "function") nameEl.appendChild(icon("list", "icon icon-scenario"));
-    const nameText = document.createElement("span");
-    nameText.className = "scenario-item-name-text";
-    nameText.textContent = s.displayName ?? s.name;
-    nameEl.appendChild(nameText);
+  const nameEl = document.createElement("span");
+  nameEl.className = "scenario-item-name";
+  if (typeof icon === "function") nameEl.appendChild(icon("list", "icon icon-scenario"));
+  const nameText = document.createElement("span");
+  nameText.className = "scenario-item-name-text";
+  nameText.textContent = s.displayName ?? s.name;
+  nameEl.appendChild(nameText);
 
   const typeEl = document.createElement("span");
-  typeEl.className = `scenario-item-type type-${s.type}`;
+  typeEl.className =
+    s.type === "draft" ? "scenario-item-type type-draft" : "scenario-item-type type-json";
   if (typeof icon === "function" && s.type !== "draft") {
-    typeEl.appendChild(icon(s.type === "python" ? "python" : "json", "icon icon-badge"));
+    typeEl.appendChild(icon("json", "icon icon-badge"));
   }
   const typeLabel = document.createElement("span");
-  typeLabel.textContent = s.type;
+  typeLabel.textContent = s.type === "draft" ? "draft" : "json";
   typeEl.appendChild(typeLabel);
 
   if (s.type === "draft") {
@@ -563,13 +548,24 @@ function buildScenarioListItem(s, onSelect) {
   return li;
 }
 
+async function loadGroups() {
+  groupsData = await api("/api/groups");
+}
+
 function renderScenarioList(containerId, onSelect) {
   const list = $(containerId);
   if (!list) return;
   list.innerHTML = "";
 
-  const items = listScenariosForUi();
-  if (items.length === 0) {
+  const draftRows = isDraftSelected() ? [getDraftListEntry()] : [];
+  const jsonFlows = scenarios.filter((s) => s.type === "json");
+
+  const showEmpty =
+    draftRows.length === 0 &&
+    jsonFlows.length === 0 &&
+    !(groupsData.groups && groupsData.groups.length);
+
+  if (showEmpty) {
     const empty = document.createElement("li");
     empty.className = "scenario-list-empty";
     empty.textContent = "No flows found";
@@ -577,9 +573,86 @@ function renderScenarioList(containerId, onSelect) {
     return;
   }
 
-  for (const s of items) {
-    list.appendChild(buildScenarioListItem(s, onSelect));
+  for (const d of draftRows) {
+    list.appendChild(buildScenarioListItem(d, onSelect));
   }
+
+  const assigned = new Set();
+  for (const g of groupsData.groups || []) {
+    const wrap = document.createElement("li");
+    wrap.className = "scenario-list-group-wrap";
+    const details = document.createElement("details");
+    details.className = "scenario-group-details";
+    details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.className = "scenario-group-summary";
+
+    const lab = document.createElement("span");
+    lab.className = "scenario-group-label";
+    lab.textContent = g.label || g.id;
+
+    const runGrp = document.createElement("button");
+    runGrp.type = "button";
+    runGrp.className = "scenario-group-run outline success";
+    runGrp.textContent = "Run group";
+    runGrp.title = `Run flows in “${g.label || g.id}” in order`;
+    runGrp.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startRunGroup(g.id).catch((err) => {
+        $("build-msg").textContent = err.message;
+      });
+    });
+
+    summary.appendChild(lab);
+    summary.appendChild(runGrp);
+    details.appendChild(summary);
+
+    const sub = document.createElement("ul");
+    sub.className = "scenario-group-flows";
+    let anyMember = false;
+    for (const nm of g.scenario_names || []) {
+      const flow = jsonFlows.find((x) => x.name === nm);
+      if (!flow) continue;
+      anyMember = true;
+      assigned.add(nm);
+      sub.appendChild(buildScenarioListItem(flow, onSelect));
+    }
+    if (!anyMember) {
+      const hint = document.createElement("li");
+      hint.className = "muted scenario-list-empty";
+      hint.style.listStyle = "none";
+      hint.textContent = "No flows in this group";
+      sub.appendChild(hint);
+    }
+    details.appendChild(sub);
+    wrap.appendChild(details);
+    list.appendChild(wrap);
+  }
+
+  const ungrouped = (groupsData.ungrouped || []).filter((nm) =>
+    jsonFlows.some((x) => x.name === nm)
+  );
+
+  if (ungrouped.length) {
+    const ugWrap = document.createElement("li");
+    ugWrap.className = "scenario-list-group-wrap";
+    const h = document.createElement("div");
+    h.className = "scenario-ungrouped-heading muted field-label";
+    h.textContent = "Ungrouped";
+    ugWrap.appendChild(h);
+    const ul = document.createElement("ul");
+    ul.className = "scenario-group-flows";
+    for (const nm of ungrouped) {
+      const flow = jsonFlows.find((x) => x.name === nm);
+      if (!flow || assigned.has(nm)) continue;
+      ul.appendChild(buildScenarioListItem(flow, onSelect));
+    }
+    ugWrap.appendChild(ul);
+    list.appendChild(ugWrap);
+  }
+
   syncScenarioListSelection();
 }
 
