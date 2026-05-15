@@ -237,8 +237,34 @@ function renderStepRow(step, index) {
   } else if (step.action === "delay") {
     fields.appendChild(fieldInput("min", step.min ?? 0.5, "number"));
     fields.appendChild(fieldInput("max", step.max ?? 1.2, "number"));
+    fields.appendChild(
+      fieldSelect("distribution", step.distribution || "uniform", [
+        "uniform",
+        "triangular",
+        "log_normal",
+      ])
+    );
+    fields.appendChild(fieldInput("long_pause_chance", step.long_pause_chance ?? 0, "number"));
+    fields.appendChild(fieldInput("long_pause_min", step.long_pause_min ?? 2, "number"));
+    fields.appendChild(fieldInput("long_pause_max", step.long_pause_max ?? 5, "number"));
   } else if (step.action === "scroll") {
     fields.appendChild(fieldInput("delta_y", step.delta_y ?? 300, "number"));
+    fields.appendChild(fieldInput("steps_min", step.steps_min ?? 3, "number"));
+    fields.appendChild(fieldInput("steps_max", step.steps_max ?? 8, "number"));
+    fields.appendChild(fieldInput("step_delay_min", step.step_delay_min ?? 0.06, "number"));
+    fields.appendChild(fieldInput("step_delay_max", step.step_delay_max ?? 0.32, "number"));
+    fields.appendChild(fieldCheckbox("overscroll", "overscroll", step.overscroll !== false));
+    fields.appendChild(
+      fieldInput("overscroll_ratio_min", step.overscroll_ratio_min ?? 0.06, "number")
+    );
+    fields.appendChild(
+      fieldInput("overscroll_ratio_max", step.overscroll_ratio_max ?? 0.16, "number")
+    );
+    fields.appendChild(fieldInput("pause_after_min", step.pause_after_min ?? 0.2, "number"));
+    fields.appendChild(fieldInput("pause_after_max", step.pause_after_max ?? 0.85, "number"));
+    fields.appendChild(
+      fieldCheckbox("variable_step_size", "variable step size", step.variable_step_size !== false)
+    );
   } else if (step.action === "click") {
     const by = document.createElement("select");
     ["role", "text", "css", "test_id"].forEach((v) => {
@@ -328,6 +354,31 @@ function fieldInput(name, value, type = "text") {
   return inp;
 }
 
+function fieldSelect(name, value, options) {
+  const sel = document.createElement("select");
+  sel.dataset.field = name;
+  options.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = v;
+    if (value === v) o.selected = true;
+    sel.appendChild(o);
+  });
+  return sel;
+}
+
+function fieldCheckbox(name, labelText, checked) {
+  const label = document.createElement("label");
+  label.className = "checkbox inline";
+  const inp = document.createElement("input");
+  inp.type = "checkbox";
+  inp.dataset.field = name;
+  inp.checked = !!checked;
+  label.appendChild(inp);
+  label.appendChild(document.createTextNode(" " + labelText));
+  return label;
+}
+
 function syncStepFromDom(index, row) {
   const prev = builderSteps[index];
   const action =
@@ -336,6 +387,10 @@ function syncStepFromDom(index, row) {
   row.querySelectorAll("[data-field]").forEach((el) => {
     const key = el.dataset.field;
     if (key === "action") return;
+    if (el.type === "checkbox") {
+      step[key] = el.checked;
+      return;
+    }
     let val = el.value;
     if (el.type === "number") val = parseFloat(val);
     if (val !== "" && val !== null && !Number.isNaN(val)) step[key] = val;

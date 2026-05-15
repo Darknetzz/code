@@ -81,3 +81,40 @@ Use **`fill`** for a single field, or **`submit_form`** to fill multiple fields 
 ```
 
 Set `"submit_by": "form"` and provide `form_selector` to call `form.submit()` instead of clicking a button (less human-like, but reliable).
+
+## Human-like timing and scrolling
+
+**Delay / wait** steps support a randomized duration between `min` and `max`:
+
+| Field | Purpose |
+|-------|---------|
+| `distribution` | `uniform` (default), `triangular` (often shorter), or `log_normal` (occasional long waits) |
+| `long_pause_chance` | 0–1 chance of an extra “got distracted” pause |
+| `long_pause_min` / `long_pause_max` | Range for that extra pause |
+
+**Scroll** steps support variable speed and overshoot:
+
+| Field | Purpose |
+|-------|---------|
+| `steps_min` / `steps_max` | Random number of wheel ticks (unless `steps` is set for a fixed count) |
+| `step_delay_min` / `step_delay_max` | Pause between each tick |
+| `variable_step_size` | Randomize how far each tick moves |
+| `overscroll` | Scroll slightly past the target, then scroll back |
+| `overscroll_ratio_min` / `overscroll_ratio_max` | Overshoot size as a fraction of total scroll |
+| `pause_after_min` / `pause_after_max` | Idle pause after scrolling |
+
+Example scroll step:
+
+```json
+{
+  "action": "scroll",
+  "delta_y": 400,
+  "steps_min": 4,
+  "steps_max": 10,
+  "step_delay_min": 0.05,
+  "step_delay_max": 0.4,
+  "overscroll": true,
+  "overscroll_ratio_min": 0.08,
+  "overscroll_ratio_max": 0.15
+}
+```

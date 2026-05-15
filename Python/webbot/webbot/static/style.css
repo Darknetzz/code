@@ -120,6 +120,12 @@ main {
   color: var(--text) !important;
 }
 
+.checkbox.inline {
+  margin-top: 0 !important;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
 .checkbox input {
   width: auto;
 }
