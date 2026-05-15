@@ -74,6 +74,14 @@ function connectWebSocket() {
   ws.onclose = () => setTimeout(connectWebSocket, 2000);
 }
 
+const STEP_TYPES = ["goto", "click", "delay", "scroll"];
+
+function changeStepType(index, newAction) {
+  if (builderSteps[index].action === newAction) return;
+  builderSteps[index] = defaultStep(newAction);
+  renderSteps();
+}
+
 function defaultStep(action) {
   switch (action) {
     case "goto":
@@ -94,10 +102,18 @@ function renderStepRow(step, index) {
   row.className = "step-row";
   row.dataset.index = index;
 
-  const type = document.createElement("span");
-  type.className = "step-type";
-  type.textContent = step.action;
-  row.appendChild(type);
+  const typeSelect = document.createElement("select");
+  typeSelect.className = "step-type-select";
+  typeSelect.dataset.field = "action";
+  STEP_TYPES.forEach((t) => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    if (step.action === t) o.selected = true;
+    typeSelect.appendChild(o);
+  });
+  typeSelect.addEventListener("change", () => changeStepType(index, typeSelect.value));
+  row.appendChild(typeSelect);
 
   const fields = document.createElement("div");
   fields.className = "step-fields";
@@ -159,12 +175,15 @@ function fieldInput(name, value, type = "text") {
 }
 
 function syncStepFromDom(index, row) {
-  const step = { ...builderSteps[index] };
+  const action =
+    row.querySelector('[data-field="action"]')?.value || builderSteps[index].action;
+  const step = { action };
   row.querySelectorAll("[data-field]").forEach((el) => {
     const key = el.dataset.field;
+    if (key === "action") return;
     let val = el.value;
     if (el.type === "number") val = parseFloat(val);
-    if (val !== "" && val !== null) step[key] = val;
+    if (val !== "" && val !== null && !Number.isNaN(val)) step[key] = val;
   });
   builderSteps[index] = step;
 }
@@ -250,7 +269,8 @@ document.querySelectorAll(".tab").forEach((tab) => {
 $("btn-start").onclick = () => startRun();
 $("btn-stop").onclick = () => api("/api/run/stop", { method: "POST" });
 $("btn-add-step").onclick = () => {
-  builderSteps.push(defaultStep($("add-step-type").value));
+  const last = builderSteps[builderSteps.length - 1];
+  builderSteps.push(defaultStep(last?.action || "goto"));
   renderSteps();
 };
 $("btn-save").onclick = () => saveScenario().catch((e) => ($("build-msg").textContent = e.message));

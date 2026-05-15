@@ -200,10 +200,14 @@ button:disabled {
   border: 1px solid var(--border);
 }
 
-.step-row .step-type {
+.step-type-select {
+  min-width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
   font-weight: 600;
-  min-width: 4rem;
-  padding-top: 0.35rem;
 }
 
 .step-fields {
