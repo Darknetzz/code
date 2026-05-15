@@ -37,19 +37,22 @@ pub fn print_repl_banner() -> io::Result<()> {
     Ok(())
 }
 
-/// Primary prompt for `rustyline` (ANSI when stdout is a TTY).
-pub fn repl_prompt(cwd: &Path) -> String {
+/// `(raw, styled)` for [`rustyline`](https://docs.rs/rustyline/latest/rustyline/prompt/trait.Prompt.html):
+/// width is derived from `raw` (no ANSI); the terminal shows `styled` when colors are on.
+pub fn repl_prompt_pair(cwd: &Path) -> (String, String) {
     let path = cwd.to_string_lossy();
-    if stdout_color() {
+    let raw = format!("dsh:{path}$ ");
+    let styled = if stdout_color() {
         format!(
-            "{}{} {} ",
+            "{}{}{} ",
             "dsh:".bold().bright_magenta(),
             path.as_ref().bright_cyan(),
             "$".bold().bright_green(),
         )
     } else {
-        format!("dsh:{path}$ ")
-    }
+        raw.clone()
+    };
+    (raw, styled)
 }
 
 pub fn writeln_shell_error(mut w: impl Write, err: &impl std::fmt::Display) -> io::Result<()> {
