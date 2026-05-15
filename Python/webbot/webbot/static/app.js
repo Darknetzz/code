@@ -1,5 +1,207 @@
 const $ = (id) => document.getElementById(id);
 
+const STORAGE_RUN_OPTIONS = "webbot.runOptions";
+const STORAGE_THEME = "webbot.theme";
+
+function formatApiDetail(detail) {
+  if (detail == null) return "Request failed";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((x) => {
+        if (typeof x === "object" && x !== null && "msg" in x) return String(x.msg);
+        return JSON.stringify(x);
+      })
+      .join("; ");
+  }
+  if (typeof detail === "object" && "msg" in detail) return String(detail.msg);
+  return String(detail);
+}
+
+let _toastSeq = 0;
+function showToast(message, variant = "error") {
+  const region = $("toast-region");
+  if (!region) return;
+  const el = document.createElement("div");
+  el.id = `toast-${++_toastSeq}`;
+  el.className = `toast toast-${variant}`;
+  el.setAttribute("role", "alert");
+  el.textContent = message;
+  region.appendChild(el);
+  const ms = variant === "error" ? 8000 : 4500;
+  setTimeout(() => el.remove(), ms);
+}
+
+function showError(message) {
+  showToast(message, "error");
+}
+
+function showSuccess(message) {
+  showToast(message, "success");
+}
+
+function showConfirmAsync(message, options = {}) {
+  const { title = "Confirm", danger = false } = options;
+  const dlg = $("confirm-dialog");
+  const titleEl = $("confirm-dialog-title");
+  const msgEl = $("confirm-dialog-message");
+  const okBtn = $("confirm-dialog-ok");
+  if (!dlg || !titleEl || !msgEl || !okBtn) return Promise.resolve(false);
+  titleEl.textContent = title;
+  msgEl.textContent = message;
+  okBtn.classList.toggle("danger", danger);
+  return new Promise((resolve) => {
+    const onClose = () => {
+      dlg.removeEventListener("close", onClose);
+      resolve(dlg.returnValue === "confirm");
+    };
+    dlg.addEventListener("close", onClose);
+    dlg.showModal();
+    okBtn.focus();
+  });
+}
+
+function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function uniqueScenarioName(baseStem) {
+  const base = String(baseStem || "flow").trim() || "flow";
+  let candidate = base;
+  let n = 2;
+  while (scenarios.some((s) => s.name === candidate)) {
+    candidate = `${base}_${n}`;
+    n += 1;
+  }
+  return candidate;
+}
+
+function normalizeImportedJsonDoc(raw) {
+  if (!raw || typeof raw !== "object") throw new Error("Invalid JSON flow: expected an object");
+  const name = String(raw.name ?? "").trim();
+  if (!name) throw new Error('Invalid JSON flow: missing "name"');
+  if (!Array.isArray(raw.steps)) throw new Error('Invalid JSON flow: missing "steps" array');
+  return {
+    name,
+    description: String(raw.description ?? ""),
+    start_url: String(raw.start_url ?? ""),
+    steps: raw.steps,
+    random_delay_between_steps: Boolean(raw.random_delay_between_steps),
+    between_steps_min: typeof raw.between_steps_min === "number" ? raw.between_steps_min : 0.3,
+    between_steps_max: typeof raw.between_steps_max === "number" ? raw.between_steps_max : 1.2,
+    between_steps_distribution:
+      raw.between_steps_distribution === "uniform" ||
+      raw.between_steps_distribution === "triangular" ||
+      raw.between_steps_distribution === "log_normal"
+        ? raw.between_steps_distribution
+        : "triangular",
+  };
+}
+
+function isHelpFilterShortcutsTarget(el) {
+  if (!el) return false;
+  if (el.id === "flow-list-filter") return true;
+  if (el.closest?.("#help-dialog")) return true;
+  if (el.closest?.("#confirm-dialog")) return true;
+  return false;
+}
+
+function syncCodeMirrorTheme() {
+  if (!pythonCodeMirror || typeof CodeMirror === "undefined") return;
+  const light = document.documentElement.getAttribute("data-theme") === "light";
+  pythonCodeMirror.setOption("theme", light ? "default" : "dracula");
+}
+
+function applyTheme(mode) {
+  const light = mode === "light";
+  if (light) document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  try {
+    localStorage.setItem(STORAGE_THEME, light ? "light" : "dark");
+  } catch (_) {}
+  syncCodeMirrorTheme();
+  const btn = $("btn-theme");
+  if (btn) btn.textContent = light ? "Dark" : "Light";
+}
+
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  applyTheme(isLight ? "dark" : "light");
+}
+
+function readRunOptionsFromForm() {
+  return {
+    loops: parseInt($("run-loops")?.value, 10) || 1,
+    pause_between_loops: parseFloat($("run-pause")?.value) || 0,
+    pause_between_flows: parseFloat($("run-pause-flows")?.value) || 0,
+    channel: $("run-channel")?.value?.trim() || "chrome",
+    slow_mo: Math.max(0, parseInt($("run-slow-mo")?.value, 10) || 0),
+    headless: $("run-headless")?.checked ?? false,
+    ignore_https_errors: $("run-ignore-https-errors")?.checked ?? false,
+  };
+}
+
+function applyRunOptionsToForm(o) {
+  if (!o || typeof o !== "object") return;
+  const loops = $("run-loops");
+  if (loops) loops.value = String(Math.max(1, o.loops ?? 1));
+  const pause = $("run-pause");
+  if (pause) pause.value = String(Math.max(0, o.pause_between_loops ?? 0));
+  const pauseFlows = $("run-pause-flows");
+  if (pauseFlows) pauseFlows.value = String(Math.max(0, o.pause_between_flows ?? 0));
+  const ch = $("run-channel");
+  if (ch && o.channel) ch.value = o.channel;
+  const sm = $("run-slow-mo");
+  if (sm) sm.value = String(Math.max(0, o.slow_mo ?? 0));
+  const head = $("run-headless");
+  if (head) head.checked = Boolean(o.headless);
+  const ign = $("run-ignore-https-errors");
+  if (ign) ign.checked = Boolean(o.ignore_https_errors);
+}
+
+function persistRunOptions() {
+  try {
+    localStorage.setItem(STORAGE_RUN_OPTIONS, JSON.stringify(readRunOptionsFromForm()));
+  } catch (_) {}
+}
+
+function loadPersistedRunOptions() {
+  try {
+    const raw = localStorage.getItem(STORAGE_RUN_OPTIONS);
+    if (!raw) return;
+    applyRunOptionsToForm(JSON.parse(raw));
+  } catch (_) {}
+}
+
+function wireRunOptionsPersistence() {
+  const ids = ["run-loops", "run-pause", "run-pause-flows", "run-channel", "run-slow-mo"];
+  for (const id of ids) {
+    const el = $(id);
+    if (!el) continue;
+    el.addEventListener("change", persistRunOptions);
+    el.addEventListener("input", persistRunOptions);
+  }
+  $("run-headless")?.addEventListener("change", persistRunOptions);
+  $("run-ignore-https-errors")?.addEventListener("change", persistRunOptions);
+}
+
+async function maybeConfirmDiscardForImport() {
+  const dirty =
+    selectedScenario &&
+    savedFlowBaseline !== null &&
+    captureCurrentFlowSnapshot() !== savedFlowBaseline;
+  if (!dirty) return true;
+  return showConfirmAsync("Discard unsaved changes and import a file?", { title: "Import flow" });
+}
+
+let importTargetKind = "json";
+
 /** Last-synced editor payload for the active flow (save/load); used to detect unsaved edits. */
 let savedFlowBaseline = null;
 
@@ -95,7 +297,7 @@ function initPythonCodeMirror() {
       version: 3,
       singleLineStringErrors: false,
     },
-    theme: "dracula",
+    theme: document.documentElement.getAttribute("data-theme") === "light" ? "default" : "dracula",
     lineNumbers: true,
     indentUnit: 4,
     tabSize: 4,
@@ -160,7 +362,7 @@ function onBuildNameDescInput() {
 }
 
 function scenarioListOnSelect(name) {
-  selectScenario(name);
+  void selectScenario(name).catch((e) => showError(e.message));
 }
 
 function escapeHtml(text) {
@@ -532,10 +734,10 @@ function clearFlowEditor() {
   renderSteps();
 }
 
-function newFlow() {
+async function newFlow() {
   draftIsPython = false;
   if (isDraftSelected()) {
-    if (!confirm("Discard current draft and start a new one?")) return;
+    if (!(await showConfirmAsync("Discard current draft and start a new one?"))) return;
     clearFlowEditor();
     $("build-msg").textContent = "Draft — enter a name and save.";
     syncDraftListLabel();
@@ -554,9 +756,9 @@ function newFlow() {
   commitSavedBaseline();
 }
 
-function newPythonFlow() {
+async function newPythonFlow() {
   if (isDraftSelected()) {
-    if (!confirm("Discard current draft and start a new Python draft?")) return;
+    if (!(await showConfirmAsync("Discard current draft and start a new Python draft?"))) return;
     draftIsPython = true;
     clearFlowEditor();
     $("build-name").value = "";
@@ -606,7 +808,7 @@ async function discardDraft() {
 async function selectScenario(name) {
   if (name === selectedScenario) return;
   const leavingDraft = isDraftSelected() && name !== DRAFT_SCENARIO_ID;
-  if (leavingDraft && !confirm("Discard unsaved draft?")) return;
+  if (leavingDraft && !(await showConfirmAsync("Discard unsaved draft?"))) return;
   if (selectedScenario !== name) clearRunStepProgress();
   setSelectedScenario(name, { skipPreview: true });
   if (leavingDraft) {
@@ -677,7 +879,7 @@ async function loadFlowIntoEditor(name) {
 
 async function deleteSelectedFlow() {
   if (isDraftSelected()) {
-    if (!confirm("Discard unsaved draft?")) return;
+    if (!(await showConfirmAsync("Discard unsaved draft?"))) return;
     await discardDraft();
     $("build-msg").textContent = "Draft discarded";
     $("build-msg-python").textContent = "";
@@ -685,7 +887,13 @@ async function deleteSelectedFlow() {
   }
   const name = selectedScenario;
   if (!name) return;
-  if (!confirm(`Delete flow "${name}"? This cannot be undone.`)) return;
+  if (
+    !(await showConfirmAsync(`Delete flow "${name}"? This cannot be undone.`, {
+      title: "Delete flow",
+      danger: true,
+    }))
+  )
+    return;
   await api(`/api/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" });
   await loadScenarios();
   if (scenarios.length) await selectScenario(scenarios[0].name);
@@ -731,10 +939,10 @@ function setSelectedScenario(name, options = {}) {
   if (!options.skipPreview && prev !== selectedScenario) clearRunStepProgress();
 }
 
-function createNewFlowFromToolbar() {
+async function createNewFlowFromToolbar() {
   const kind = $("build-flow-kind")?.value === "python" ? "python" : "json";
-  if (kind === "python") newPythonFlow();
-  else newFlow();
+  if (kind === "python") await newPythonFlow();
+  else await newFlow();
 }
 
 function buildScenarioListItem(s, onSelect) {
@@ -1021,8 +1229,12 @@ async function api(path, options = {}) {
     },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || res.statusText);
+    const body = await res.json().catch(() => ({}));
+    const detail = body.detail ?? res.statusText;
+    const msg = formatApiDetail(detail);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -1030,7 +1242,9 @@ async function api(path, options = {}) {
 
 async function loadHealth() {
   const h = await api("/api/health");
-  $("health").textContent = `v${h.version} · Playwright ${h.playwright ? "ok" : "missing"}`;
+  const parts = [`v${h.version}`, `Playwright ${h.playwright ? "ok" : "missing"}`];
+  if (h.nodriver) parts.push("Nodriver (CLI · open only)");
+  $("health").textContent = parts.join(" · ");
 }
 
 async function loadScenarios() {
@@ -1397,7 +1611,7 @@ function appendCollapsedWorkflowLabelTrigger(container, step) {
   };
 
   if (typeof makeIconButton === "function") {
-    const btn = makeIconButton("plus", "Add step label", reveal);
+    const btn = makeIconButton("tag", "Add step label", reveal);
     btn.classList.add("outline");
     container.appendChild(btn);
     return;
@@ -1406,7 +1620,7 @@ function appendCollapsedWorkflowLabelTrigger(container, step) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "outline";
-  btn.textContent = "+";
+  btn.textContent = "#";
   btn.title = "Add step label";
   btn.setAttribute("aria-label", "Add step label");
   btn.addEventListener("click", reveal);

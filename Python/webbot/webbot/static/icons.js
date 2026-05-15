@@ -11,6 +11,7 @@ const ICONS = {
   run: `<svg ${_SVG}><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
   builder: `<svg ${_SVG}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
   plus: `<svg ${_SVG}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  tag: `<svg ${_SVG}><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
   save: `<svg ${_SVG}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
   import: `<svg ${_SVG}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   test: `<svg ${_SVG}><path d="M14.4 14.4 9.6 9.6"/><path d="M18.6 5.4a9 9 0 1 1-13.2 13.2"/><path d="m9 15 1.5-4.5L15 9l-4.5 1.5L9 15z"/></svg>`,
