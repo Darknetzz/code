@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Literal
 
 from webbot.browser import get_app_config_dir
 from webbot.models import FlowGroup, GroupsDocument, GroupsResponse, ScenarioDocument
@@ -46,6 +47,59 @@ def json_scenario_path(name: str) -> Path:
     return get_user_scenarios_dir() / f"{name}.json"
 
 
+def python_scenario_path(name: str) -> Path:
+    return get_user_scenarios_dir() / f"{name}.py"
+
+
+def list_python_scenario_names() -> list[str]:
+    _seed_builtin_scenarios()
+    user_dir = get_user_scenarios_dir()
+    return sorted(p.stem for p in user_dir.glob("*.py"))
+
+
+def scenario_kind(name: str) -> Literal["json", "python"] | None:
+    """Which file backs this scenario stem. Raises if both ``.json`` and ``.py`` exist."""
+    jp = json_scenario_path(name).exists()
+    pp = python_scenario_path(name).exists()
+    if jp and pp:
+        raise ScenarioStoreConflict(
+            f"Scenario '{name}' has both {name}.json and {name}.py — delete or rename one."
+        )
+    if jp:
+        return "json"
+    if pp:
+        return "python"
+    return None
+
+
+def list_all_scenario_names() -> list[str]:
+    return sorted(set(list_json_scenario_names()) | set(list_python_scenario_names()))
+
+
+def load_python_source(name: str) -> str:
+    path = python_scenario_path(name)
+    if not path.exists():
+        raise FileNotFoundError(f"Python scenario not found: {name}")
+    return path.read_text(encoding="utf-8")
+
+
+def save_python_source(name: str, source: str) -> Path:
+    if json_scenario_path(name).exists():
+        raise ValueError(f"A JSON scenario '{name}.json' already exists — pick another name or delete it.")
+    compile(source, f"<scenario {name}>", "exec")
+    path = python_scenario_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8", newline="\n")
+    return path
+
+
+def delete_python_scenario(name: str) -> None:
+    path = python_scenario_path(name)
+    if not path.exists():
+        raise FileNotFoundError(f"Python scenario not found: {name}")
+    path.unlink()
+
+
 def load_json_scenario(name: str) -> ScenarioDocument:
     path = json_scenario_path(name)
     if not path.exists():
@@ -58,6 +112,10 @@ def load_json_scenario(name: str) -> ScenarioDocument:
 
 
 def save_json_scenario(doc: ScenarioDocument) -> Path:
+    if python_scenario_path(doc.name).exists():
+        raise ValueError(
+            f"A Python scenario '{doc.name}.py' already exists — pick another name or delete it."
+        )
     path = json_scenario_path(doc.name)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc.model_dump_json(indent=2), encoding="utf-8")
@@ -99,7 +157,7 @@ def build_groups_response() -> GroupsResponse:
         names = [n for n in g.scenario_names if n.strip()]
         groups.append(FlowGroup(id=g.id, label=g.label, scenario_names=names))
         seen.update(names)
-    ungrouped = sorted(n for n in list_json_scenario_names() if n not in seen)
+    ungrouped = sorted(n for n in list_all_scenario_names() if n not in seen)
     return GroupsResponse(groups=groups, ungrouped=ungrouped)
 
 
