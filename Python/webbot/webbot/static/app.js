@@ -1095,17 +1095,555 @@ function changeNestedBranchStepType(segments, newAction) {
 }
 
 function attachBranchStepScopedListeners(rowEl, segments) {
-  const syncThis = () => {
-    const st = getBranchStepBySegments(segments);
-    if (st?.action === "if_present") {
-      flushIfPresentSubtreeFromDom(segments);
-    }
-    syncBranchStepRowIntoModel(segments, rowEl);
-  };
+  const syncThis = () => syncBranchStepRowIntoModel(segments, rowEl);
   rowEl.querySelectorAll("input, select, textarea").forEach((inp) => {
     inp.addEventListener("change", syncThis);
     inp.addEventListener("input", syncThis);
   });
+}
+
+function renderFormFieldBranchRow(segments, fieldIndex, field) {
+  const wrap = document.createElement("div");
+  wrap.className = "form-field-row";
+
+  const locGrid = document.createElement("div");
+  locGrid.className = "form-field-row-inputs";
+
+  const addCol = (labelText, el, parent, helpId = null) => {
+    const col = document.createElement("div");
+    col.className = "field-labeled";
+    const labRow = document.createElement("div");
+    labRow.className = "label-row";
+    const lab = document.createElement("span");
+    lab.className = "field-label";
+    lab.textContent = labelText;
+    labRow.appendChild(lab);
+    col.appendChild(labRow);
+    col.appendChild(el);
+    parent.appendChild(col);
+  };
+
+  const renderFieldInputs = () => {
+    locGrid.innerHTML = "";
+    const normalized = normalizeLocatorFields(field);
+    Object.assign(field, normalized);
+    const by = field.by || "css";
+
+    const bySel = fieldSelect("by", by, LOCATOR_BY_OPTIONS);
+    bySel.addEventListener("change", () => {
+      field.by = bySel.value;
+      renderFieldInputs();
+    });
+    addCol("Find by", bySel, locGrid, "locator.by");
+
+    for (const [key, label, type, , helpId] of locatorFieldDefs(by)) {
+      const inp = fieldInput(key, field[key] || "", type);
+      inp.addEventListener("input", () => {
+        field[key] = inp.value;
+      });
+      addCol(label, inp, locGrid, helpId);
+    }
+
+    const valueInp = fieldInput("value", field.value || "");
+    valueInp.addEventListener("input", () => {
+      field.value = valueInp.value;
+    });
+    addCol("Value", valueInp, locGrid, "locator.value");
+  };
+
+  renderFieldInputs();
+  wrap.appendChild(locGrid);
+
+  const host = () => getBranchStepBySegments(segments);
+  const del =
+    typeof makeIconButton === "function"
+      ? makeIconButton(
+          "trash",
+          "Remove field",
+          (e) => {
+            e.stopPropagation();
+            const h = host();
+            if (h?.fields) h.fields.splice(fieldIndex, 1);
+            renderSteps();
+          },
+          { danger: true }
+        )
+      : (() => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "danger";
+          b.textContent = "×";
+          b.title = "Remove field";
+          b.onclick = (e) => {
+            e.stopPropagation();
+            const h = host();
+            if (h?.fields) h.fields.splice(fieldIndex, 1);
+            renderSteps();
+          };
+          return b;
+        })();
+  del.classList.add("btn-remove-field");
+  wrap.appendChild(del);
+  return wrap;
+}
+
+function targetStepForPlacement(placement) {
+  if (placement.type === "main") return builderSteps[placement.index];
+  return getBranchStepBySegments(placement.segments);
+}
+
+/**
+ * All step field UIs except if_present branch arms (handled separately).
+ * @param {{ type: "main", index: number } | { type: "branch", segments: (string|number)[] }} placement
+ */
+function appendStepFieldsNotIfPresent(fields, step, placement) {
+  const locCtx = placement.type === "main" ? placement.index : placement.segments;
+  const curName = $("build-name").value.trim();
+
+  if (step.action === "goto") {
+    fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.goto.url"));
+  } else if (step.action === "delay") {
+    fields.appendChild(
+      labeledField("min", "Min (s)", step.min ?? 0.5, "number", "Shortest random wait", "step.delay.min")
+    );
+    fields.appendChild(
+      labeledField("max", "Max (s)", step.max ?? 1.2, "number", "Longest random wait", "step.delay.max")
+    );
+    fields.appendChild(
+      labeledSelect(
+        "distribution",
+        "Random style",
+        step.distribution || "uniform",
+        ["uniform", "triangular", "log_normal"],
+        "How waits are picked between min and max",
+        "step.delay.distribution"
+      )
+    );
+    fields.appendChild(
+      collapsibleFieldGroup(
+        "Long pause (optional)",
+        [
+          labeledField(
+            "long_pause_chance",
+            "Chance (0–1)",
+            step.long_pause_chance ?? 0,
+            "number",
+            "Probability of an extra distraction pause",
+            "step.delay.long_pause"
+          ),
+          labeledField(
+            "long_pause_min",
+            "Pause min (s)",
+            step.long_pause_min ?? 2,
+            "number",
+            "",
+            "step.delay.long_pause"
+          ),
+          labeledField(
+            "long_pause_max",
+            "Pause max (s)",
+            step.long_pause_max ?? 5,
+            "number",
+            "",
+            "step.delay.long_pause"
+          ),
+        ],
+        { open: (step.long_pause_chance ?? 0) > 0 }
+      )
+    );
+  } else if (step.action === "scroll") {
+    fields.appendChild(
+      labeledField(
+        "delta_y",
+        "Pixels (delta Y)",
+        step.delta_y ?? 300,
+        "number",
+        "Positive = down, negative = up",
+        "step.scroll.delta_y"
+      )
+    );
+    fields.appendChild(
+      collapsibleFieldGroup(
+        "Wheel ticks",
+        [
+          labeledField(
+            "steps_min",
+            "Min ticks",
+            step.steps_min ?? 3,
+            "number",
+            "Fewest mouse-wheel steps",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "steps_max",
+            "Max ticks",
+            step.steps_max ?? 8,
+            "number",
+            "Most mouse-wheel steps",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "step_delay_min",
+            "Tick delay min (s)",
+            step.step_delay_min ?? 0.06,
+            "number",
+            "Pause between ticks (shortest)",
+            "step.scroll.ticks"
+          ),
+          labeledField(
+            "step_delay_max",
+            "Tick delay max (s)",
+            step.step_delay_max ?? 0.32,
+            "number",
+            "Pause between ticks (longest)",
+            "step.scroll.ticks"
+          ),
+        ],
+        { open: false }
+      )
+    );
+    fields.appendChild(
+      collapsibleFieldGroup(
+        "Overscroll",
+        [
+          fieldCheckbox(
+            "overscroll",
+            "Overscroll then correct",
+            step.overscroll !== false,
+            "Scroll slightly past target, then scroll back",
+            "step.scroll.overscroll"
+          ),
+          labeledField(
+            "overscroll_ratio_min",
+            "Overshoot min",
+            step.overscroll_ratio_min ?? 0.06,
+            "number",
+            "Fraction of total scroll (e.g. 0.1 = 10%)",
+            "step.scroll.overscroll"
+          ),
+          labeledField(
+            "overscroll_ratio_max",
+            "Overshoot max",
+            step.overscroll_ratio_max ?? 0.16,
+            "number",
+            "",
+            "step.scroll.overscroll"
+          ),
+        ],
+        { open: step.overscroll === false }
+      )
+    );
+    fields.appendChild(
+      collapsibleFieldGroup(
+        "After scroll",
+        [
+          labeledField(
+            "pause_after_min",
+            "Pause min (s)",
+            step.pause_after_min ?? 0.2,
+            "number",
+            "",
+            "step.scroll.after"
+          ),
+          labeledField(
+            "pause_after_max",
+            "Pause max (s)",
+            step.pause_after_max ?? 0.85,
+            "number",
+            "",
+            "step.scroll.after"
+          ),
+          fieldCheckbox(
+            "variable_step_size",
+            "Variable tick size",
+            step.variable_step_size !== false,
+            "Each wheel tick moves a random amount",
+            "step.scroll.after"
+          ),
+        ],
+        { open: false }
+      )
+    );
+  } else if (step.action === "click") {
+    if (!step.by) step.by = "role";
+    appendLocatorFields(fields, step, false, locCtx);
+  } else if (step.action === "fill") {
+    if (!step.by) step.by = "css";
+    appendLocatorFields(fields, step, true, locCtx);
+  } else if (step.action === "run_scenario") {
+    const opts = scenarios
+      .filter((s) => (s.type === "json" || s.type === "python") && s.name !== curName)
+      .map((s) => s.name);
+    fields.appendChild(
+      labeledSelect(
+        "scenario",
+        "Flow to run",
+        step.scenario || "",
+        opts,
+        "Runs another saved JSON or Python flow inline",
+        "step.run_scenario"
+      )
+    );
+    fields.appendChild(
+      fieldCheckbox(
+        "inherit_delays",
+        "Use parent random-between-step delays",
+        !!step.inherit_delays,
+        "Otherwise use the nested flow’s delay settings",
+        null
+      )
+    );
+    fields.appendChild(
+      fieldCheckbox(
+        "skip_start_url",
+        "Skip nested start URL goto",
+        step.skip_start_url !== false,
+        "Avoid duplicate navigation when composing flows",
+        null
+      )
+    );
+  } else if (step.action === "exit") {
+    fields.appendChild(
+      labeledField("message", "Log message (optional)", step.message || "", "text", "", "step.exit.message")
+    );
+  } else if (step.action === "submit_form") {
+    fields.appendChild(
+      labeledSelect(
+        "method",
+        "Form method",
+        step.method || "post",
+        ["get", "post"],
+        "",
+        "step.submit_form.method"
+      )
+    );
+    fields.appendChild(
+      labeledField(
+        "submit_name",
+        "Submit button name",
+        step.submit_name || "",
+        "text",
+        "",
+        "step.submit_form.submit"
+      )
+    );
+    fields.appendChild(
+      collapsibleFieldGroup(
+        "Selectors (optional)",
+        [
+          labeledField(
+            "form_selector",
+            "Form CSS selector",
+            step.form_selector || "",
+            "text",
+            "",
+            "step.submit_form.form_selector"
+          ),
+          labeledField(
+            "submit_selector",
+            "Submit CSS selector",
+            step.submit_selector || "",
+            "text",
+            "",
+            "step.submit_form.submit"
+          ),
+        ],
+        { open: !!(step.form_selector || step.submit_selector) }
+      )
+    );
+
+    const fieldsLabelRow = document.createElement("div");
+    fieldsLabelRow.className = "form-fields-label label-row";
+    const fieldsLabel = document.createElement("span");
+    fieldsLabel.className = "form-fields-label";
+    fieldsLabel.textContent = "Fields:";
+    fieldsLabelRow.appendChild(fieldsLabel);
+    fields.appendChild(fieldsLabelRow);
+
+    const fieldsWrap = document.createElement("div");
+    fieldsWrap.className = "form-fields-wrap";
+    (step.fields || []).forEach((f, fi) => {
+      if (placement.type === "main") {
+        fieldsWrap.appendChild(renderFormFieldRow(placement.index, fi, f));
+      } else {
+        fieldsWrap.appendChild(renderFormFieldBranchRow(placement.segments, fi, f));
+      }
+    });
+    fields.appendChild(fieldsWrap);
+
+    const addField = document.createElement("button");
+    addField.type = "button";
+    addField.className = "btn-add-field success outline";
+    addField.onclick = (e) => {
+      e.stopPropagation();
+      const hostStep = targetStepForPlacement(placement);
+      if (!hostStep.fields) hostStep.fields = [];
+      hostStep.fields.push({ by: "css", selector: "", value: "" });
+      renderSteps();
+    };
+    if (typeof enhanceButton === "function") {
+      enhanceButton(addField, "plus", { label: "Add field" });
+    } else {
+      addField.textContent = "+ field";
+    }
+    fields.appendChild(addField);
+  } else if (step.action === "if_present") {
+    if (!step.by) step.by = "role";
+    appendLocatorFields(fields, step, false, locCtx);
+    fields.appendChild(
+      labeledField(
+        "timeout_ms",
+        "Visible timeout (ms)",
+        step.timeout_ms ?? 3000,
+        "number",
+        "How long to wait for a visible match; 0 checks immediately",
+        "step.if_present.timeout"
+      )
+    );
+  }
+}
+
+/** @param nestingDepth nesting level of parent if_present (0 = arms under root step). */
+function renderBranchStepsSection(ifParentSegments, branchKey, branchTitle, nestingDepth) {
+  const wrap = document.createElement("div");
+  wrap.className = "nested-branch-arm";
+  const hdr = document.createElement("div");
+  hdr.className = "nested-branch-arm-header";
+  const lab = document.createElement("span");
+  lab.className = "field-label";
+  lab.textContent = branchTitle;
+  hdr.appendChild(lab);
+  wrap.appendChild(hdr);
+
+  const list = document.createElement("div");
+  list.className = "nested-branch-steps-list";
+  const host = getBranchStepBySegments(ifParentSegments);
+  const arr = (host && Array.isArray(host[branchKey]) ? host[branchKey] : []) || [];
+  arr.forEach((_st, ci) => {
+    list.appendChild(renderNestedBranchStepRow(childSegments(ifParentSegments, branchKey, ci), nestingDepth));
+  });
+  wrap.appendChild(list);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn-add-nested-step success outline";
+  addBtn.textContent = "Add step";
+  addBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    flushAllIfPresentDomState();
+    const p = getBranchStepBySegments(ifParentSegments);
+    if (!p || !Array.isArray(p[branchKey])) return;
+    p[branchKey].push(normalizeStep(defaultStep("goto")));
+    renderSteps();
+  });
+  wrap.appendChild(addBtn);
+  return wrap;
+}
+
+/** @param ifNestingDepth 1-based depth of branch steps relative to nearest root (1 = outer then/else). */
+function renderNestedBranchStepRow(segments, ifNestingDepth) {
+  const step = getBranchStepBySegments(segments);
+  const row = document.createElement("div");
+  row.className = "nested-branch-step";
+  row.dataset.branchSeg = branchSegmentsKey(segments);
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "nested-branch-toolbar";
+
+  const typeWrap = document.createElement("div");
+  typeWrap.className = "field-labeled nested-branch-type-wrap";
+  const typeLabRow = document.createElement("div");
+  typeLabRow.className = "label-row";
+  const typeLab = document.createElement("span");
+  typeLab.className = "field-label";
+  typeLab.textContent = "Step";
+  typeLabRow.appendChild(typeLab);
+  typeWrap.appendChild(typeLabRow);
+  const typeSelect = document.createElement("select");
+  typeSelect.className = "step-type-select nested-branch-action";
+  typeSelect.dataset.field = "action";
+  branchSegmentTypes(ifNestingDepth).forEach((t) => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    if (step?.action === t) o.selected = true;
+    typeSelect.appendChild(o);
+  });
+  typeSelect.addEventListener("change", () =>
+    changeNestedBranchStepType(segments, typeSelect.value)
+  );
+  typeWrap.appendChild(typeSelect);
+  toolbar.appendChild(typeWrap);
+
+  if (typeof makeIconButton === "function") {
+    toolbar.appendChild(
+      makeIconButton(
+        "trash",
+        "Remove step",
+        (e) => {
+          e.stopPropagation();
+          removeNestedBranchLeafStep(segments);
+        },
+        { danger: true }
+      )
+    );
+  } else {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger";
+    del.textContent = "×";
+    del.title = "Remove step";
+    del.onclick = (e) => {
+      e.stopPropagation();
+      removeNestedBranchLeafStep(segments);
+    };
+    toolbar.appendChild(del);
+  }
+  row.appendChild(toolbar);
+
+  const placement = /** @type {const} */ ({ type: "branch", segments });
+
+  const fields = document.createElement("div");
+  fields.className = "nested-branch-step-fields";
+
+  let armsEl = null;
+  if (!step || step.action === "if_present") {
+    appendStepFieldsNotIfPresent(fields, step || normalizeStep(defaultStep("if_present")), placement);
+    armsEl = document.createElement("div");
+    armsEl.className = "nested-branch-arms";
+    armsEl.appendChild(
+      renderBranchStepsSection(segments, "then_steps", "Then (if matched)", ifNestingDepth)
+    );
+    armsEl.appendChild(
+      renderBranchStepsSection(segments, "else_steps", "Else (not matched)", ifNestingDepth)
+    );
+  } else {
+    appendStepFieldsNotIfPresent(fields, step, placement);
+  }
+
+  row.appendChild(fields);
+  if (armsEl) row.appendChild(armsEl);
+  attachBranchStepScopedListeners(row, segments);
+  return row;
+}
+
+function removeNestedBranchLeafStep(segments) {
+  if (!segments || segments.length < 3) return;
+  flushAllIfPresentDomState();
+  const branchKey = segments[segments.length - 2];
+  const ix = Number(segments[segments.length - 1]);
+  let arr;
+  if (segments.length === 3) {
+    const rootIx = segments[0];
+    arr = builderSteps[rootIx]?.[branchKey];
+  } else {
+    const parentSeg = segments.slice(0, -2);
+    const parent = getBranchStepBySegments(parentSeg);
+    arr = parent?.[branchKey];
+  }
+  if (!Array.isArray(arr)) return;
+  arr.splice(ix, 1);
+  renderSteps();
 }
 
 function changeStepType(index, newAction) {
@@ -1483,311 +2021,21 @@ function renderStepRow(step, index) {
   const fields = document.createElement("div");
   fields.className = "step-fields";
 
-  if (step.action === "goto") {
-    fields.appendChild(labeledField("url", "URL", step.url || "", "url", "", "step.goto.url"));
-  } else if (step.action === "delay") {
-    fields.appendChild(
-      labeledField("min", "Min (s)", step.min ?? 0.5, "number", "Shortest random wait", "step.delay.min")
-    );
-    fields.appendChild(
-      labeledField("max", "Max (s)", step.max ?? 1.2, "number", "Longest random wait", "step.delay.max")
-    );
-    fields.appendChild(
-      labeledSelect(
-        "distribution",
-        "Random style",
-        step.distribution || "uniform",
-        ["uniform", "triangular", "log_normal"],
-        "How waits are picked between min and max",
-        "step.delay.distribution"
-      )
-    );
-    fields.appendChild(
-      collapsibleFieldGroup(
-        "Long pause (optional)",
-        [
-          labeledField(
-            "long_pause_chance",
-            "Chance (0–1)",
-            step.long_pause_chance ?? 0,
-            "number",
-            "Probability of an extra distraction pause",
-            "step.delay.long_pause"
-          ),
-          labeledField(
-            "long_pause_min",
-            "Pause min (s)",
-            step.long_pause_min ?? 2,
-            "number",
-            "",
-            "step.delay.long_pause"
-          ),
-          labeledField(
-            "long_pause_max",
-            "Pause max (s)",
-            step.long_pause_max ?? 5,
-            "number",
-            "",
-            "step.delay.long_pause"
-          ),
-        ],
-        { open: (step.long_pause_chance ?? 0) > 0 }
-      )
-    );
-  } else if (step.action === "scroll") {
-    fields.appendChild(
-      labeledField(
-        "delta_y",
-        "Pixels (delta Y)",
-        step.delta_y ?? 300,
-        "number",
-        "Positive = down, negative = up",
-        "step.scroll.delta_y"
-      )
-    );
-    fields.appendChild(
-      collapsibleFieldGroup(
-        "Wheel ticks",
-        [
-          labeledField(
-            "steps_min",
-            "Min ticks",
-            step.steps_min ?? 3,
-            "number",
-            "Fewest mouse-wheel steps",
-            "step.scroll.ticks"
-          ),
-          labeledField(
-            "steps_max",
-            "Max ticks",
-            step.steps_max ?? 8,
-            "number",
-            "Most mouse-wheel steps",
-            "step.scroll.ticks"
-          ),
-          labeledField(
-            "step_delay_min",
-            "Tick delay min (s)",
-            step.step_delay_min ?? 0.06,
-            "number",
-            "Pause between ticks (shortest)",
-            "step.scroll.ticks"
-          ),
-          labeledField(
-            "step_delay_max",
-            "Tick delay max (s)",
-            step.step_delay_max ?? 0.32,
-            "number",
-            "Pause between ticks (longest)",
-            "step.scroll.ticks"
-          ),
-        ],
-        { open: false }
-      )
-    );
-    fields.appendChild(
-      collapsibleFieldGroup(
-        "Overscroll",
-        [
-          fieldCheckbox(
-            "overscroll",
-            "Overscroll then correct",
-            step.overscroll !== false,
-            "Scroll slightly past target, then scroll back",
-            "step.scroll.overscroll"
-          ),
-          labeledField(
-            "overscroll_ratio_min",
-            "Overshoot min",
-            step.overscroll_ratio_min ?? 0.06,
-            "number",
-            "Fraction of total scroll (e.g. 0.1 = 10%)",
-            "step.scroll.overscroll"
-          ),
-          labeledField(
-            "overscroll_ratio_max",
-            "Overshoot max",
-            step.overscroll_ratio_max ?? 0.16,
-            "number",
-            "",
-            "step.scroll.overscroll"
-          ),
-        ],
-        { open: step.overscroll === false }
-      )
-    );
-    fields.appendChild(
-      collapsibleFieldGroup(
-        "After scroll",
-        [
-          labeledField(
-            "pause_after_min",
-            "Pause min (s)",
-            step.pause_after_min ?? 0.2,
-            "number",
-            "",
-            "step.scroll.after"
-          ),
-          labeledField(
-            "pause_after_max",
-            "Pause max (s)",
-            step.pause_after_max ?? 0.85,
-            "number",
-            "",
-            "step.scroll.after"
-          ),
-          fieldCheckbox(
-            "variable_step_size",
-            "Variable tick size",
-            step.variable_step_size !== false,
-            "Each wheel tick moves a random amount",
-            "step.scroll.after"
-          ),
-        ],
-        { open: false }
-      )
-    );
-  } else if (step.action === "click") {
-    if (!step.by) step.by = "role";
-    appendLocatorFields(fields, step, false, index);
-  } else if (step.action === "fill") {
-    if (!step.by) step.by = "css";
-    appendLocatorFields(fields, step, true, index);
-  } else if (step.action === "run_scenario") {
-    const cur = $("build-name").value.trim();
-    const opts = scenarios
-      .filter((s) => (s.type === "json" || s.type === "python") && s.name !== cur)
-      .map((s) => s.name);
-    fields.appendChild(
-      labeledSelect(
-        "scenario",
-        "Flow to run",
-        step.scenario || "",
-        opts,
-        "Runs another saved JSON or Python flow inline",
-        "step.run_scenario"
-      )
-    );
-    fields.appendChild(
-      fieldCheckbox(
-        "inherit_delays",
-        "Use parent random-between-step delays",
-        !!step.inherit_delays,
-        "Otherwise use the nested flow’s delay settings",
-        null
-      )
-    );
-    fields.appendChild(
-      fieldCheckbox(
-        "skip_start_url",
-        "Skip nested start URL goto",
-        step.skip_start_url !== false,
-        "Avoid duplicate navigation when composing flows",
-        null
-      )
-    );
-  } else if (step.action === "if_present") {
-    if (!step.by) step.by = "role";
-    appendLocatorFields(fields, step, false, index);
-    fields.appendChild(
-      labeledField(
-        "timeout_ms",
-        "Visible timeout (ms)",
-        step.timeout_ms ?? 3000,
-        "number",
-        "How long to wait for a visible match; 0 checks immediately",
-        "step.if_present.timeout"
-      )
-    );
-    fields.appendChild(
-      labeledJsonStepArray("then_steps", "Then steps (JSON array)", step.then_steps)
-    );
-    fields.appendChild(
-      labeledJsonStepArray("else_steps", "Else steps (JSON array)", step.else_steps)
-    );
-  } else if (step.action === "exit") {
-    fields.appendChild(
-      labeledField("message", "Log message (optional)", step.message || "", "text", "", "step.exit.message")
-    );
-  } else if (step.action === "submit_form") {
-    fields.appendChild(
-      labeledSelect(
-        "method",
-        "Form method",
-        step.method || "post",
-        ["get", "post"],
-        "",
-        "step.submit_form.method"
-      )
-    );
-    fields.appendChild(
-      labeledField(
-        "submit_name",
-        "Submit button name",
-        step.submit_name || "",
-        "text",
-        "",
-        "step.submit_form.submit"
-      )
-    );
-    fields.appendChild(
-      collapsibleFieldGroup(
-        "Selectors (optional)",
-        [
-          labeledField(
-            "form_selector",
-            "Form CSS selector",
-            step.form_selector || "",
-            "text",
-            "",
-            "step.submit_form.form_selector"
-          ),
-          labeledField(
-            "submit_selector",
-            "Submit CSS selector",
-            step.submit_selector || "",
-            "text",
-            "",
-            "step.submit_form.submit"
-          ),
-        ],
-        { open: !!(step.form_selector || step.submit_selector) }
-      )
-    );
+  const placementMain = /** @type {const} */ ({ type: "main", index });
+  let branchArmsRoot = null;
 
-    const fieldsLabelRow = document.createElement("div");
-    fieldsLabelRow.className = "form-fields-label label-row";
-    const fieldsLabel = document.createElement("span");
-    fieldsLabel.className = "form-fields-label";
-    fieldsLabel.textContent = "Fields:";
-    fieldsLabelRow.appendChild(fieldsLabel);
-    fields.appendChild(fieldsLabelRow);
-
-    const fieldsWrap = document.createElement("div");
-    fieldsWrap.className = "form-fields-wrap";
-    (step.fields || []).forEach((f, fi) => {
-      fieldsWrap.appendChild(renderFormFieldRow(index, fi, f));
-    });
-    fields.appendChild(fieldsWrap);
-
-    const addField = document.createElement("button");
-    addField.type = "button";
-    addField.className = "btn-add-field success outline";
-    addField.onclick = (e) => {
-      e.stopPropagation();
-      if (!builderSteps[index].fields) builderSteps[index].fields = [];
-      builderSteps[index].fields.push({ by: "css", selector: "", value: "" });
-      renderSteps();
-    };
-    if (typeof enhanceButton === "function") {
-      enhanceButton(addField, "plus", { label: "Add field" });
-    } else {
-      addField.textContent = "+ field";
-    }
-    fields.appendChild(addField);
+  if (step.action === "if_present") {
+    appendStepFieldsNotIfPresent(fields, step, placementMain);
+    branchArmsRoot = document.createElement("div");
+    branchArmsRoot.className = "nested-branch-arms nested-branch-arms-root";
+    branchArmsRoot.appendChild(renderBranchStepsSection([index], "then_steps", "Then (if matched)", 0));
+    branchArmsRoot.appendChild(renderBranchStepsSection([index], "else_steps", "Else (not matched)", 0));
+  } else {
+    appendStepFieldsNotIfPresent(fields, step, placementMain);
   }
 
   row.appendChild(fields);
+  if (branchArmsRoot) row.appendChild(branchArmsRoot);
 
   const actions = document.createElement("div");
   actions.className = "step-actions";
