@@ -26,12 +26,14 @@ pub fn print_repl_banner() -> io::Result<()> {
         writeln!(
             out,
             "{}",
-            "Use exit to quit; Ctrl+D to exit.".bright_yellow()
+            "To close this shell: run the `exit` command, or press Ctrl+D."
+                .bright_yellow()
         )?;
     } else {
+        writeln!(out, "Darkshell (dsh).")?;
         writeln!(
             out,
-            "Darkshell (dsh). Use exit to quit; Ctrl+D to exit."
+            "To close this shell: run the `exit` command, or press Ctrl+D."
         )?;
     }
     Ok(())
