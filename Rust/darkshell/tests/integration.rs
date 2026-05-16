@@ -1,5 +1,7 @@
 use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin;
 use predicates::str::contains;
+use std::process::{Command as StdCommand, Stdio};
 
 fn dsh() -> Command {
     Command::cargo_bin("dsh").expect("cargo_bin dsh")
@@ -54,4 +56,18 @@ fn missing_script_file_errors() {
         .assert()
         .failure()
         .stderr(contains("script file"));
+}
+
+#[test]
+fn repl_refuses_non_tty_stdin() {
+    let out = StdCommand::new(cargo_bin("dsh"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("spawn dsh");
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("standard input is not a terminal"),
+        "unexpected stderr: {stderr}"
+    );
 }

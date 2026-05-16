@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use is_terminal::IsTerminal;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -76,6 +77,17 @@ fn main() -> Result<()> {
             &mut std::io::stderr(),
         )?;
     } else {
+        // Embedded / IDE terminals often leave stdin as a pipe. Rustyline then blocks forever on
+        // the first read with no useful prompt — looks like a freeze. Require a real TTY stdin.
+        if !std::io::stdin().is_terminal() {
+            eprintln!("dsh: cannot start the interactive shell: standard input is not a terminal.");
+            eprintln!("dsh: run a script by passing a file path to this executable, for example:");
+            eprintln!("dsh:   .\\target\\release\\dsh.exe .\\script.dsh");
+            eprintln!("dsh: or:  cargo run -- .\\script.dsh");
+            eprintln!("dsh: if you already used a path but see this message, the path was not passed to this process (often a PowerShell function named `dsh` without `@args`).");
+            let _ = io::stderr().flush();
+            std::process::exit(1);
+        }
         repl::repl_loop(&mut st)?;
     }
 

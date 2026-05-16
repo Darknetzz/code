@@ -36,6 +36,7 @@ pub fn print_repl_banner() -> io::Result<()> {
             "To close this shell: run the `exit` command, or press Ctrl+D."
         )?;
     }
+    out.flush()?;
     Ok(())
 }
 

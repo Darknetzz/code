@@ -102,7 +102,7 @@ installs `dsh` from the crate manifest into Cargo’s bin directory (if you use 
 
 | Mode | Example |
 |------|---------|
-| **Interactive REPL** | `dsh` with no script path (always starts the REPL; does not read stdin as a script) |
+| **Interactive REPL** | `dsh` with no script path **and** a real terminal on stdin (embedded IDEs often fail this—use `dsh.exe .\\script.dsh` for scripts) |
 | **One command** | `dsh -c "echo hello"` |
 | **Script file** | `dsh script.dsh arg1 arg2` — first arg must exist as a regular file; `$0` is the script path, `$1`… are args |
 
@@ -115,6 +115,7 @@ CLI flags (from `dsh --help`):
 
 ## Interactive REPL
 
+- **Stdin must be a terminal** (TTY). Some IDE-integrated shells use a pipe for stdin; in that case `dsh` with no script exits with an error instead of hanging. Run scripts with an explicit path to the binary, e.g. `.\target\release\dsh.exe .\script.dsh`.
 - On a color-capable **TTY**, the banner and prompt use ANSI styling; **plain** output is used when stdout/stderr are redirected so scripts stay clean.
 - The prompt shows the current working directory (see `PWD` / `cd`).
 - **Leave the shell:** run the **`exit`** builtin, or press **Ctrl+D** (end-of-input) at the prompt.
