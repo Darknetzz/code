@@ -12,9 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from mafibot import __version__
 from mafibot.config import get_config_dir, get_profile_dir, get_profiles_dir
 from mafibot.config_store import (
+    create_profile,
+    delete_profile,
     get_credentials_status,
-    list_profile_names,
+    list_profiles_meta,
     load_profile_document,
+    rename_profile,
     save_credentials,
     save_profile_document,
 )
@@ -26,6 +29,9 @@ from mafibot.models import (
     GameStateResponse,
     HealthResponse,
     LoginRequest,
+    ProfileCreateRequest,
+    ProfileListItem,
+    ProfileRenameRequest,
     RunRequest,
     RunStatusResponse,
     SessionStatusResponse,
@@ -122,9 +128,17 @@ def api_health() -> HealthResponse:
     )
 
 
-@app.get("/api/profiles")
-def api_list_profiles() -> list[str]:
-    return list_profile_names()
+@app.get("/api/profiles", response_model=list[ProfileListItem])
+def api_list_profiles() -> list[ProfileListItem]:
+    return list_profiles_meta()
+
+
+@app.post("/api/profiles", response_model=BotProfileDocument)
+def api_create_profile(req: ProfileCreateRequest) -> BotProfileDocument:
+    try:
+        return create_profile(req.name, copy_from=req.copy_from)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/profiles/{name}", response_model=BotProfileDocument)
@@ -142,6 +156,23 @@ def api_put_profile(name: str, doc: BotProfileDocument) -> BotProfileDocument:
         return save_profile_document(doc)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/profiles/{name}/rename", response_model=BotProfileDocument)
+def api_rename_profile(name: str, req: ProfileRenameRequest) -> BotProfileDocument:
+    try:
+        return rename_profile(name, req.new_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/profiles/{name}")
+def api_delete_profile(name: str) -> dict:
+    try:
+        delete_profile(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "message": f"Deleted profile {name}"}
 
 
 @app.get("/api/credentials", response_model=CredentialsStatus)

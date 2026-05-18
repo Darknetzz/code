@@ -7,11 +7,16 @@ from unittest.mock import patch
 import pytest
 
 from mafibot.config_store import (
+    create_profile,
+    delete_profile,
     get_credentials_status,
     list_profile_names,
+    list_profiles_meta,
     load_profile_document,
+    rename_profile,
     save_credentials,
     save_profile_document,
+    user_profile_path,
 )
 from mafibot.models import BotProfileDocument, CredentialsUpdate
 
@@ -60,6 +65,32 @@ def test_credentials_write(isolated_config):
     assert "MAFIA_PASS=secret" in text
     st2 = get_credentials_status()
     assert st2.has_user and st2.has_password
+
+
+def test_create_and_delete_profile(isolated_config):
+    _cfg, prof = isolated_config
+    doc = create_profile("mine", copy_from="ranker")
+    assert doc.name == "mine"
+    assert user_profile_path("mine").is_file()
+    meta = {m.name: m for m in list_profiles_meta()}
+    assert meta["mine"].deletable and not meta["mine"].is_bundled
+    delete_profile("mine")
+    assert not user_profile_path("mine").is_file()
+
+
+def test_rename_profile(isolated_config):
+    create_profile("old", copy_from=None)
+    renamed = rename_profile("old", "new")
+    assert renamed.name == "new"
+    assert user_profile_path("new").is_file()
+    assert not user_profile_path("old").is_file()
+
+
+def test_delete_bundled_without_copy_fails(isolated_config):
+    import pytest
+
+    with pytest.raises(ValueError, match="delete"):
+        delete_profile("ranker")
 
 
 def test_credentials_merge_password_only(isolated_config):

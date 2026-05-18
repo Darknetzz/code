@@ -20,7 +20,8 @@ def test_health():
 def test_profiles_list():
     r = client.get("/api/profiles")
     assert r.status_code == 200
-    assert "ranker" in r.json()
+    names = [p["name"] for p in r.json()]
+    assert "ranker" in names
 
 
 def test_get_profile_ranker():

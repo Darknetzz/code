@@ -27,6 +27,7 @@ const ECONOMY_ACTION_IDS = new Set([
 let ws = null;
 let elapsedTimer = null;
 let lastStatus = null;
+let profileCatalog = [];
 
 function api(path, options = {}) {
   return fetch(path, {
@@ -121,17 +122,84 @@ async function loadHealth() {
   $("cfg-dir-hint").textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
 }
 
-async function loadProfiles() {
-  const names = await api("/api/profiles");
+function profileLabel(item) {
+  if (item.deletable) {
+    return item.is_bundled ? `${item.name} (customized)` : item.name;
+  }
+  return `${item.name} (built-in)`;
+}
+
+function currentProfileMeta() {
+  const name = $("cfg-profile-select").value;
+  return profileCatalog.find((p) => p.name === name) || null;
+}
+
+function updateProfileBadge() {
+  const meta = currentProfileMeta();
+  const badge = $("cfg-profile-badge");
+  const delBtn = $("btn-profile-delete");
+  if (!meta) {
+    badge.textContent = "—";
+    badge.className = "badge idle";
+    delBtn.disabled = true;
+    return;
+  }
+  $("cfg-profile-name").value = meta.name;
+  if (meta.deletable) {
+    badge.textContent = meta.is_bundled ? "customized" : "custom";
+    badge.className = "badge completed";
+    delBtn.disabled = false;
+  } else {
+    badge.textContent = "built-in";
+    badge.className = "badge idle";
+    delBtn.disabled = true;
+  }
+}
+
+async function loadProfiles(selectName = null) {
+  profileCatalog = await api("/api/profiles");
+  const keep = selectName || $("cfg-profile-select").value;
   for (const sel of [$("run-profile"), $("cfg-profile-select")]) {
     sel.innerHTML = "";
-    names.forEach((n) => {
+    profileCatalog.forEach((item) => {
       const opt = document.createElement("option");
-      opt.value = n;
-      opt.textContent = n;
+      opt.value = item.name;
+      opt.textContent = profileLabel(item);
       sel.appendChild(opt);
     });
   }
+  if (keep && profileCatalog.some((p) => p.name === keep)) {
+    $("cfg-profile-select").value = keep;
+    $("run-profile").value = keep;
+  }
+  updateProfileBadge();
+}
+
+function isValidProfileName(name) {
+  return /^[a-zA-Z0-9_-]+$/.test(name);
+}
+
+async function saveCurrentProfile() {
+  const selected = $("cfg-profile-select").value;
+  const targetName = $("cfg-profile-name").value.trim();
+  if (!isValidProfileName(targetName)) {
+    throw new Error("Name must use letters, numbers, underscore, or hyphen only.");
+  }
+  const payload = profilePayload();
+  payload.name = targetName;
+  if (targetName !== selected) {
+    await api(`/api/profiles/${encodeURIComponent(selected)}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ new_name: targetName }),
+    });
+  }
+  await api(`/api/profiles/${encodeURIComponent(targetName)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  await loadProfiles(targetName);
+  await loadProfileForm(targetName);
+  appendLog(`Profile saved: ${targetName}`);
 }
 
 function profileToEnabledActionOrder(doc) {
@@ -241,7 +309,7 @@ async function loadProfileForm(name) {
 }
 
 function profilePayload() {
-  const name = $("cfg-profile-select").value;
+  const name = $("cfg-profile-name").value.trim() || $("cfg-profile-select").value;
   const actionOrder = getEnabledActionOrderFromUI();
   const flags = actionFlagsFromOrder(actionOrder);
   return {
@@ -339,21 +407,79 @@ function setupActions() {
   });
 
   $("btn-save-profile").addEventListener("click", async () => {
-    const name = $("cfg-profile-select").value;
     try {
-      await api(`/api/profiles/${encodeURIComponent(name)}`, {
-        method: "PUT",
-        body: JSON.stringify(profilePayload()),
-      });
-      appendLog(`Profile saved: ${name}`);
-      await loadProfiles();
+      await saveCurrentProfile();
     } catch (e) {
       alert(e.message);
     }
   });
 
   $("cfg-profile-select").addEventListener("change", () => {
+    updateProfileBadge();
     loadProfileForm($("cfg-profile-select").value).catch((e) => alert(e.message));
+  });
+
+  $("btn-profile-new").addEventListener("click", async () => {
+    const name = prompt("New profile name (letters, numbers, _ -):");
+    if (!name) return;
+    const stem = name.trim();
+    if (!isValidProfileName(stem)) {
+      alert("Invalid profile name.");
+      return;
+    }
+    try {
+      await api("/api/profiles", {
+        method: "POST",
+        body: JSON.stringify({ name: stem, copy_from: $("cfg-profile-select").value }),
+      });
+      await loadProfiles(stem);
+      await loadProfileForm(stem);
+      appendLog(`Created profile: ${stem}`);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  $("btn-profile-duplicate").addEventListener("click", async () => {
+    const base = $("cfg-profile-select").value;
+    const suggested = `${base}_copy`;
+    const name = prompt(`Duplicate "${base}" as:`, suggested);
+    if (!name) return;
+    const stem = name.trim();
+    if (!isValidProfileName(stem)) {
+      alert("Invalid profile name.");
+      return;
+    }
+    try {
+      await api("/api/profiles", {
+        method: "POST",
+        body: JSON.stringify({ name: stem, copy_from: base }),
+      });
+      await loadProfiles(stem);
+      await loadProfileForm(stem);
+      appendLog(`Duplicated profile: ${stem}`);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  $("btn-profile-delete").addEventListener("click", async () => {
+    const meta = currentProfileMeta();
+    if (!meta?.deletable) return;
+    const msg = meta.is_bundled
+      ? `Remove your customized copy of "${meta.name}"? The built-in profile will remain.`
+      : `Delete profile "${meta.name}" permanently?`;
+    if (!confirm(msg)) return;
+    try {
+      await api(`/api/profiles/${encodeURIComponent(meta.name)}`, { method: "DELETE" });
+      const fallback =
+        profileCatalog.find((p) => p.name === "ranker")?.name || profileCatalog[0]?.name;
+      await loadProfiles(fallback);
+      if (fallback) await loadProfileForm(fallback);
+      appendLog(`Deleted profile: ${meta.name}`);
+    } catch (e) {
+      alert(e.message);
+    }
   });
 
   $("btn-save-creds").addEventListener("click", async () => {

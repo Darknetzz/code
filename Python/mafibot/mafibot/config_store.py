@@ -12,21 +12,106 @@ from mafibot.config import (
     get_profiles_dir,
     load_bot_profile,
 )
-from mafibot.models import BotProfileDocument, CredentialsStatus, CredentialsUpdate
+from mafibot.models import (
+    BotProfileDocument,
+    CredentialsStatus,
+    CredentialsUpdate,
+    ProfileListItem,
+)
 
 
 def _env_path() -> Path:
     return get_config_dir() / ".env"
 
 
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_profile_name(name: str) -> str:
+    stem = name.strip()
+    if not stem or not _PROFILE_NAME_RE.match(stem):
+        raise ValueError("Profile name must use letters, numbers, underscore, or hyphen only")
+    return stem
+
+
+def _bundled_names() -> set[str]:
+    base = bundled_profiles_dir()
+    if not base.is_dir():
+        return set()
+    return {p.stem for p in base.glob("*.json")}
+
+
+def _user_names() -> set[str]:
+    base = get_profiles_dir()
+    if not base.is_dir():
+        return set()
+    return {p.stem for p in base.glob("*.json")}
+
+
+def user_profile_path(name: str) -> Path:
+    return get_profiles_dir() / f"{validate_profile_name(name)}.json"
+
+
 def list_profile_names() -> list[str]:
-    names: set[str] = set()
-    for base in (bundled_profiles_dir(), get_profiles_dir()):
-        if not base.is_dir():
-            continue
-        for p in base.glob("*.json"):
-            names.add(p.stem)
-    return sorted(names)
+    return [item.name for item in list_profiles_meta()]
+
+
+def list_profiles_meta() -> list[ProfileListItem]:
+    bundled = _bundled_names()
+    user = _user_names()
+    items: list[ProfileListItem] = []
+    for name in sorted(bundled | user):
+        in_bundled = name in bundled
+        in_user = name in user
+        items.append(
+            ProfileListItem(
+                name=name,
+                is_bundled=in_bundled,
+                has_user_copy=in_user,
+                deletable=in_user,
+            )
+        )
+    return items
+
+
+def create_profile(name: str, *, copy_from: str | None = None) -> BotProfileDocument:
+    stem = validate_profile_name(name)
+    path = user_profile_path(stem)
+    if path.is_file():
+        raise ValueError(f"Profile already exists: {stem}")
+    if copy_from:
+        source = load_profile_document(copy_from.strip())
+        data = source.model_dump()
+        data["name"] = stem
+        doc = BotProfileDocument.model_validate(data)
+    else:
+        doc = BotProfileDocument(name=stem)
+    return save_profile_document(doc)
+
+
+def delete_profile(name: str) -> None:
+    stem = validate_profile_name(name)
+    path = user_profile_path(stem)
+    if not path.is_file():
+        raise ValueError("Only custom or overridden profiles can be deleted")
+    path.unlink()
+
+
+def rename_profile(old_name: str, new_name: str) -> BotProfileDocument:
+    old_stem = validate_profile_name(old_name)
+    new_stem = validate_profile_name(new_name)
+    if old_stem == new_stem:
+        return load_profile_document(old_stem)
+    new_path = user_profile_path(new_stem)
+    if new_path.is_file():
+        raise ValueError(f"Profile already exists: {new_stem}")
+    doc = load_profile_document(old_stem)
+    doc.name = new_stem
+    saved = save_profile_document(doc)
+    old_user = user_profile_path(old_stem)
+    if old_user.is_file() and old_stem != new_stem:
+        old_user.unlink()
+    return saved
 
 
 def load_profile_document(name: str) -> BotProfileDocument:
@@ -35,9 +120,7 @@ def load_profile_document(name: str) -> BotProfileDocument:
 
 
 def save_profile_document(doc: BotProfileDocument) -> BotProfileDocument:
-    stem = doc.name.strip()
-    if not stem or not re.match(r"^[a-zA-Z0-9_-]+$", stem):
-        raise ValueError("Invalid profile name")
+    stem = validate_profile_name(doc.name)
     dest = get_profiles_dir()
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{stem}.json"

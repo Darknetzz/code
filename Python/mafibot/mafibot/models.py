@@ -11,6 +11,22 @@ class BotProfileDocument(BotProfile):
     """Serializable bot profile (same fields as BotProfile)."""
 
 
+class ProfileListItem(BaseModel):
+    name: str
+    is_bundled: bool = False
+    has_user_copy: bool = False
+    deletable: bool = False
+
+
+class ProfileCreateRequest(BaseModel):
+    name: str
+    copy_from: str | None = None
+
+
+class ProfileRenameRequest(BaseModel):
+    new_name: str
+
+
 class GameStateResponse(BaseModel):
     logged_in: bool = False
     in_hotel: bool = False

@@ -261,6 +261,35 @@ button:disabled {
   display: none !important;
 }
 
+.profile-toolbar {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.profile-toolbar-row label {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.profile-toolbar-row select,
+.profile-toolbar-row input[type="text"] {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+}
+
+.profile-actions {
+  margin-top: 0.5rem;
+}
+
 .action-list-section {
   margin-top: 0.75rem;
 }

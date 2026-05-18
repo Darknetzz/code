@@ -78,11 +78,24 @@
     <section id="panel-config" class="tab-panel" role="tabpanel">
       <div class="card">
         <h2>Bot profile</h2>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-profile-select">Profile name</label>
+        <div class="profile-toolbar">
+          <div class="profile-toolbar-row">
+            <label for="cfg-profile-select">Profile</label>
             <select id="cfg-profile-select"></select>
+            <span id="cfg-profile-badge" class="badge idle">built-in</span>
           </div>
+          <div class="profile-toolbar-row">
+            <label for="cfg-profile-name">Name</label>
+            <input type="text" id="cfg-profile-name" pattern="[a-zA-Z0-9_-]+" autocomplete="off" />
+          </div>
+          <p class="tos-note">Built-in profiles are read-only until you save; that creates a personal copy. Delete removes only your copy.</p>
+          <div class="btn-row profile-actions">
+            <button type="button" id="btn-profile-new">New</button>
+            <button type="button" id="btn-profile-duplicate">Duplicate</button>
+            <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
+          </div>
+        </div>
+        <div class="grid-2">
           <div>
             <label for="cfg-build">Build</label>
             <select id="cfg-build">
