@@ -98,6 +98,22 @@ Session check → parse DOM (GameState) → brain picks action → human-like cl
 - **Navigation** — `ms.php` tabs first (e.g. Kriminalitet, Flyplass); sidebar for bedrifter/rederi; legacy `?side=` as fallback.
 - **Hotel** — If the page shows *Forlat hotell for å utføre*, the bot runs **leave_hotel** before crime or travel.
 - **Human pacing** — `human_click_paced()` enforces minimum gaps between clicks, reading pauses before each click, optional “thinking” delays, and disabled buttons are skipped.
+
+### How wait times are chosen
+
+All delays are **random floats in seconds** (via `random_wait_seconds()` / webbot’s `random.uniform` / `triangular` sampling)—never rounded to whole seconds before sleeping.
+
+| When | How long |
+|------|-----------|
+| Between clicks | `min_seconds_between_clicks` (profile, e.g. 3.0) + extra **0.15–0.9** s |
+| Before each click | **1.2–3.8** s reading + webbot Bezier move |
+| After tab change | `min_seconds_after_tab_change` + **0–4** s + navigation pause |
+| After one action (brain loop) | `cooldown_jitter` (**triangular**, e.g. 35–130 s) + `post_action_wait` (**8–25** s default) |
+| Nothing to do | `cooldown_jitter` + `nothing_todo_wait` (**45–180** s default) |
+| AFK idle break | **5.0–15.0** minutes as float × 60 (e.g. 7.38 min) |
+| Inside webbot | `human_delay` / `reading_pause` use triangular or uniform **float** samples |
+
+Tune in profile JSON (`cooldown_jitter_min_sec`, `post_action_wait_min_sec`, etc.—decimals allowed, e.g. `35.5`).
 - **Safety** — Stops on captcha, ban text, or logout; low health can trigger hotel; jail pauses the loop.
 - **Social** — Messages and family are rate-limited to reduce spam-rule risk.
 - **Combat** — Murder only when enabled in profile and aggression gates pass.

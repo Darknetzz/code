@@ -3,21 +3,67 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from playwright.async_api import Locator, Page
 
-from webbot.human import human_click, human_delay, human_scroll, idle_mouse_drift, reading_pause
+from webbot.human import (
+    DelayDistribution,
+    human_click,
+    human_delay,
+    human_scroll,
+    idle_mouse_drift,
+    reading_pause,
+)
+
+log = logging.getLogger("mafibot.timing")
 
 _last_click_at: float = 0.0
 
 
+def random_wait_seconds(
+    min_sec: float,
+    max_sec: float,
+    *,
+    distribution: DelayDistribution = "uniform",
+) -> float:
+    """Sample a wait duration in seconds (always a float, never rounded to int)."""
+    if max_sec <= min_sec:
+        return float(min_sec)
+    if distribution == "triangular":
+        mode = min_sec + (max_sec - min_sec) * random.uniform(0.25, 0.45)
+        return random.triangular(min_sec, max_sec, mode)
+    if distribution == "log_normal":
+        import math
+
+        mu = math.log(min_sec + (max_sec - min_sec) * 0.25)
+        return float(min(max_sec, max(min_sec, random.lognormvariate(mu, 0.45))))
+    return random.uniform(min_sec, max_sec)
+
+
+async def sleep_wait(
+    min_sec: float,
+    max_sec: float,
+    *,
+    distribution: DelayDistribution = "uniform",
+    label: str | None = None,
+) -> float:
+    """Sleep for a random float duration; return seconds slept."""
+    seconds = random_wait_seconds(min_sec, max_sec, distribution=distribution)
+    if label:
+        log.debug("sleep %s: %.2fs", label, seconds)
+    await asyncio.sleep(seconds)
+    return seconds
+
+
 @dataclass
 class HumanPolicy:
-    jitter_min_sec: int = 30
-    jitter_max_sec: int = 120
+    jitter_min_sec: float = 30.0
+    jitter_max_sec: float = 120.0
+    jitter_distribution: DelayDistribution = "triangular"
     long_pause_chance: float = 0.18
     scroll_before_click_chance: float = 0.4
     min_seconds_between_clicks: float = 2.8
@@ -27,10 +73,36 @@ class HumanPolicy:
     think_before_action_chance: float = 0.25
     think_pause_min: float = 4.0
     think_pause_max: float = 12.0
+    # Extra float waits after each brain cycle (added to jitter)
+    post_action_wait_min_sec: float = 8.0
+    post_action_wait_max_sec: float = 25.0
+    nothing_todo_wait_min_sec: float = 45.0
+    nothing_todo_wait_max_sec: float = 180.0
 
 
 def cooldown_jitter(policy: HumanPolicy) -> float:
-    return random.uniform(policy.jitter_min_sec, policy.jitter_max_sec)
+    return random_wait_seconds(
+        policy.jitter_min_sec,
+        policy.jitter_max_sec,
+        distribution=policy.jitter_distribution,
+    )
+
+
+def cycle_wait_after_action(policy: HumanPolicy) -> float:
+    """Total seconds to wait before the next brain cycle (float sum)."""
+    return cooldown_jitter(policy) + random_wait_seconds(
+        policy.post_action_wait_min_sec,
+        policy.post_action_wait_max_sec,
+        distribution="triangular",
+    )
+
+
+def cycle_wait_nothing_todo(policy: HumanPolicy) -> float:
+    return cooldown_jitter(policy) + random_wait_seconds(
+        policy.nothing_todo_wait_min_sec,
+        policy.nothing_todo_wait_max_sec,
+        distribution="triangular",
+    )
 
 
 async def _enforce_click_gap(policy: HumanPolicy) -> None:
@@ -38,7 +110,8 @@ async def _enforce_click_gap(policy: HumanPolicy) -> None:
     now = time.monotonic()
     gap = policy.min_seconds_between_clicks - (now - _last_click_at)
     if gap > 0:
-        await asyncio.sleep(gap + random.uniform(0.15, 0.9))
+        extra = random_wait_seconds(0.15, 0.9)
+        await asyncio.sleep(gap + extra)
     _last_click_at = time.monotonic()
 
 
@@ -83,7 +156,12 @@ async def after_navigation(page: Page, policy: HumanPolicy | None = None) -> Non
 
 async def after_tab_change(page: Page, policy: HumanPolicy | None = None) -> None:
     p = policy or HumanPolicy()
-    await reading_pause(p.min_seconds_after_tab_change, p.min_seconds_after_tab_change + 4.0)
+    tab_span = random_wait_seconds(0.0, 4.0, distribution="uniform")
+    await reading_pause(
+        p.min_seconds_after_tab_change,
+        p.min_seconds_after_tab_change + tab_span,
+        distribution="triangular",
+    )
     await after_navigation(page, p)
 
 
@@ -117,5 +195,12 @@ async def page_reading_pause(page: Page) -> None:
 async def maybe_scroll_page(page: Page, policy: HumanPolicy | None = None) -> None:
     p = policy or HumanPolicy()
     if random.random() < p.scroll_before_click_chance:
-        await human_scroll(page, delta_y=random.randint(80, 320))
+        delta = random_wait_seconds(80.0, 320.0)
+        await human_scroll(page, delta_y=int(delta))
         await human_delay(0.4, 1.2)
+
+
+def idle_break_seconds(idle_min_minutes: float, idle_max_minutes: float) -> float:
+    """AFK break length in seconds (float minutes → float seconds)."""
+    minutes = random_wait_seconds(idle_min_minutes, idle_max_minutes, distribution="triangular")
+    return minutes * 60.0

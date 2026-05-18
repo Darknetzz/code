@@ -11,7 +11,15 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import Action, ActionResult, action_by_name, all_actions
 from mafibot.config import BotProfile, in_play_window
-from mafibot.human_policy import HumanPolicy, between_actions, cooldown_jitter, page_reading_pause
+from mafibot.human_policy import (
+    HumanPolicy,
+    between_actions,
+    cycle_wait_after_action,
+    cycle_wait_nothing_todo,
+    idle_break_seconds,
+    page_reading_pause,
+    sleep_wait,
+)
 from mafibot.navigation import ensure_game_shell
 from mafibot.session import capture_failure
 from mafibot.state import GameState, ParseError, parse_game_state
@@ -39,6 +47,10 @@ def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
         jitter_max_sec=profile.cooldown_jitter_max_sec,
         min_seconds_between_clicks=profile.min_seconds_between_clicks,
         min_seconds_after_tab_change=profile.min_seconds_after_tab_change,
+        post_action_wait_min_sec=profile.post_action_wait_min_sec,
+        post_action_wait_max_sec=profile.post_action_wait_max_sec,
+        nothing_todo_wait_min_sec=profile.nothing_todo_wait_min_sec,
+        nothing_todo_wait_max_sec=profile.nothing_todo_wait_max_sec,
     )
 
 
@@ -155,9 +167,9 @@ async def run_session(
             continue
 
         if random.random() < profile.idle_chance:
-            idle_min = random.randint(profile.idle_min_minutes, profile.idle_max_minutes)
-            log.info("idle break %s min (human AFK)", idle_min)
-            await asyncio.sleep(idle_min * 60)
+            idle_sec = idle_break_seconds(profile.idle_min_minutes, profile.idle_max_minutes)
+            log.info("idle break %.2f min (human AFK)", idle_sec / 60.0)
+            await asyncio.sleep(idle_sec)
             continue
 
         try:
@@ -165,12 +177,12 @@ async def run_session(
         except Exception:
             log.exception("run_once failed")
             await capture_failure(page, "run_once")
-            await asyncio.sleep(random.uniform(25, 45))
+            await sleep_wait(25.0, 45.0, distribution="triangular", label="error_recovery")
             continue
 
         if result is None:
-            wait = cooldown_jitter(policy) + random.uniform(45, 180)
-            log.info("waiting %.0fs (cooldown / nothing to do)", wait)
+            wait = cycle_wait_nothing_todo(policy)
+            log.info("waiting %.2fs (cooldown / nothing to do)", wait)
             try:
                 await asyncio.wait_for(_cancel.wait(), timeout=wait)
                 break
@@ -178,7 +190,8 @@ async def run_session(
                 pass
             continue
 
-        wait = cooldown_jitter(policy) + random.uniform(8, 25)
+        wait = cycle_wait_after_action(policy)
+        log.info("waiting %.2fs before next action", wait)
         try:
             await asyncio.wait_for(_cancel.wait(), timeout=wait)
             break
@@ -196,4 +209,4 @@ async def run_forever(page: Page, profile: BotProfile | None = None, **kwargs) -
         await run_session(page, prof, **kwargs)
         if is_stop_requested():
             break
-        await asyncio.sleep(random.uniform(400, 1200))
+        await sleep_wait(400.0, 1200.0, distribution="triangular", label="between_sessions")

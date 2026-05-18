@@ -46,10 +46,14 @@ class BotProfile(BaseModel):
     play_window: PlayWindow = Field(default_factory=PlayWindow)
     max_session_minutes: int = 120
     idle_chance: float = 0.1
-    idle_min_minutes: int = 5
-    idle_max_minutes: int = 15
-    cooldown_jitter_min_sec: int = 30
-    cooldown_jitter_max_sec: int = 120
+    idle_min_minutes: float = 5.0
+    idle_max_minutes: float = 15.0
+    cooldown_jitter_min_sec: float = 30.0
+    cooldown_jitter_max_sec: float = 120.0
+    post_action_wait_min_sec: float = 8.0
+    post_action_wait_max_sec: float = 25.0
+    nothing_todo_wait_min_sec: float = 45.0
+    nothing_todo_wait_max_sec: float = 180.0
     min_seconds_between_clicks: float = 2.8
     min_seconds_after_tab_change: float = 3.5
 
