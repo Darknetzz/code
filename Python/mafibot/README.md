@@ -103,7 +103,7 @@ Three built-in play styles (JSON). Copy into your config `profiles/` folder to c
 
 | Profile | Focus | Combat |
 |---------|--------|--------|
-| `ranker` | Crime → travel → work → ship → drugs | Off |
+| `ranker` | Crime → business → ship → travel → drugs | Off |
 | `okonom` | Work → bank → crime → ship | Off |
 | `angriper` | Crime → murder → travel | On (high aggression) |
 

@@ -28,8 +28,6 @@ class _EconomyPageAction:
             return state.business_income_ready
         if self.logical == "ship":
             return state.ship_in_port or state.ship_ready
-        if self.logical == "work":
-            return state.work_ready
         return True
 
     async def run(
@@ -56,12 +54,6 @@ class _EconomyPageAction:
         if clicked or dry_run:
             return ActionResult(True, f"{self.logical} action submitted")
         return ActionResult(False, f"no button for {self.logical}")
-
-
-class WorkAction(_EconomyPageAction):
-    logical = "work"
-    labels = WORK_ACTION_LABELS + ("hent",)
-    use_sidebar = True
 
 
 class BusinessAction(_EconomyPageAction):

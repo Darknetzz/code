@@ -4,7 +4,6 @@ const $ = (id) => document.getElementById(id);
 const ACTION_CATALOG = [
   { id: "crime", label: "Crime (Kriminalitet)" },
   { id: "business", label: "Business (Mine bedrifter)" },
-  { id: "work", label: "Work" },
   { id: "ship", label: "Ship (Mitt rederi)" },
   { id: "travel", label: "Travel (Flyplass)" },
   { id: "drugs", label: "Drugs" },
@@ -17,7 +16,6 @@ const ACTION_CATALOG = [
 const ECONOMY_ACTION_IDS = new Set([
   "crime",
   "business",
-  "work",
   "ship",
   "travel",
   "drugs",

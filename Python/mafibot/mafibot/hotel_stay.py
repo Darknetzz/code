@@ -17,7 +17,6 @@ ACTIONS_REQUIRING_LEAVE: frozenset[str] = frozenset(
 ACTIONS_OK_IN_HOTEL: frozenset[str] = frozenset(
     {
         "business",
-        "work",
         "ship",
         "messages",
         "family",

@@ -101,6 +101,7 @@ def _ordered_action_names(profile: BotProfile) -> list[str]:
         order.append("murder")
     normalized: list[str] = []
     for n in order:
+        # Legacy profiles may still list "work" — same as business (Mine bedrifter).
         if n == "work":
             n = "business"
         if n not in normalized:

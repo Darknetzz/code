@@ -20,4 +20,4 @@ async def test_dry_run_picks_economy_order():
     profile = load_bot_profile("okonom")
     action, _ = await pick_next_action(state, profile, dry_run=True)
     assert action is not None
-    assert action.name in profile.economy_order or action.name in ("travel", "work", "bank")
+    assert action.name in profile.economy_order or action.name in ("travel", "business", "bank")
