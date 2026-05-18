@@ -39,6 +39,8 @@ pub struct PathmanApp {
     confirm_remove_index: Option<usize>,
     /// Confirm before running adjacent dedupe from the toolbar.
     show_confirm_dedupe: bool,
+    /// Confirm before discarding unsaved edits (reload from disk).
+    show_confirm_discard: bool,
     warn_missing: bool,
     /// Unix: show shell file path editor
     shell_path_edit: String,
@@ -332,6 +334,7 @@ impl PathmanApp {
             show_confirm_system: false,
             confirm_remove_index: None,
             show_confirm_dedupe: false,
+            show_confirm_discard: false,
             warn_missing: true,
             shell_path_edit,
             show_shell_settings: false,
@@ -350,7 +353,9 @@ impl PathmanApp {
     fn reload_from_store(&mut self) {
         self.confirm_remove_index = None;
         self.show_confirm_dedupe = false;
+        self.show_confirm_discard = false;
         self.show_duplicate_tool = false;
+        self.saved_feedback_until = None;
         self.duplicate_view_filter = None;
         self.list_search.clear();
         self.show_change_summary = false;
@@ -861,8 +866,8 @@ impl eframe::App for PathmanApp {
                     TopBarIcon::Reload,
                     true,
                     0.0,
-                    None,
-                    TopBarButtonEmphasis::None,
+                    Some("Reload from disk (keeps unsaved edits unless you discard first)."),
+                    TopBarButtonEmphasis::Info,
                 )
                 .clicked()
                 {
@@ -895,6 +900,19 @@ impl eframe::App for PathmanApp {
                 if do_save {
                     self.save();
                 }
+                if path_top_bar_button(
+                    ui,
+                    "Discard",
+                    TopBarIcon::Discard,
+                    self.dirty,
+                    0.0,
+                    Some("Discard all unsaved changes and reload from disk."),
+                    TopBarButtonEmphasis::Danger,
+                )
+                .clicked()
+                {
+                    self.show_confirm_discard = true;
+                }
                 let now = ctx.input(|i| i.time);
                 let show_saved_badge = !self.dirty
                     && self
@@ -920,7 +938,7 @@ impl eframe::App for PathmanApp {
                     true,
                     0.0,
                     None,
-                    TopBarButtonEmphasis::None,
+                    TopBarButtonEmphasis::Info,
                 )
                 .clicked()
                 {
@@ -934,7 +952,7 @@ impl eframe::App for PathmanApp {
                     true,
                     0.0,
                     None,
-                    TopBarButtonEmphasis::None,
+                    TopBarButtonEmphasis::Caution,
                 )
                 .clicked()
                 {
@@ -957,7 +975,7 @@ impl eframe::App for PathmanApp {
                     true,
                     0.0,
                     None,
-                    TopBarButtonEmphasis::None,
+                    TopBarButtonEmphasis::Secondary,
                 )
                 .clicked()
                 {
@@ -1230,6 +1248,41 @@ impl eframe::App for PathmanApp {
             }
             if run_dedupe || dedupe_cancel || !window_open {
                 self.show_confirm_dedupe = false;
+            }
+        }
+
+        if self.show_confirm_discard {
+            let mut window_open = true;
+            let mut discard_confirmed = false;
+            let mut discard_cancel = false;
+            egui::Window::new("Discard unsaved changes")
+                .collapsible(false)
+                .resizable(false)
+                .open(&mut window_open)
+                .show(ctx, |ui| {
+                    ui.label(
+                        "Reload from disk and drop all edits in this tab? This cannot be undone.",
+                    );
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            discard_cancel = true;
+                        }
+                        if ui
+                            .add(egui::Button::new("Discard").fill(egui::Color32::from_rgb(
+                                120, 42, 42,
+                            )))
+                            .clicked()
+                        {
+                            discard_confirmed = true;
+                        }
+                    });
+                });
+            if discard_confirmed {
+                self.reload_from_store();
+            }
+            if discard_confirmed || discard_cancel || !window_open {
+                self.show_confirm_discard = false;
             }
         }
 
@@ -1542,8 +1595,8 @@ impl eframe::App for PathmanApp {
                 let gap = ui.spacing().item_spacing.x;
 
                 if self.scope == Scope::Effective {
-                    // [^][v][mark][origin][text][open][X] → 7 widgets, 6 gaps.
-                    let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
+                    // [≡][^][v][mark][origin][text][open][X] → 8 widgets, 7 gaps.
+                    let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let (cross_keys_eff, cnt_m, cnt_u) =
@@ -1626,45 +1679,52 @@ impl eframe::App for PathmanApp {
                         let row_id = ui.id().with(("eff_row_drag", i));
                         let (_row_ir, dropped_payload) =
                             ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
-                                ui.dnd_drag_source(row_id, i, |ui| {
-                                    ui.vertical(|ui| {
-                                        ui.horizontal(|ui| {
-                                            if ui
-                                                .add_enabled_ui(can_up, |ui| {
-                                                    path_row_icon_button(
-                                                        ui,
-                                                        [ICON_BTN, ICON_BTN],
-                                                        PathRowIcon::MoveUp,
-                                                        if can_up {
-                                                            "Move up"
-                                                        } else {
-                                                            "Cannot cross machine / user boundary"
-                                                        },
-                                                    )
-                                                })
-                                                .inner
-                                                .clicked()
-                                            {
-                                                move_up = Some(i);
-                                            }
-                                            if ui
-                                                .add_enabled_ui(can_dn, |ui| {
-                                                    path_row_icon_button(
-                                                        ui,
-                                                        [ICON_BTN, ICON_BTN],
-                                                        PathRowIcon::MoveDown,
-                                                        if can_dn {
-                                                            "Move down"
-                                                        } else {
-                                                            "Cannot cross machine / user boundary"
-                                                        },
-                                                    )
-                                                })
-                                                .inner
-                                                .clicked()
-                                            {
-                                                move_dn = Some(i);
-                                            }
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.dnd_drag_source(row_id, i, |ui| {
+                                            path_row_icon_button(
+                                                ui,
+                                                [ICON_BTN, ICON_BTN],
+                                                PathRowIcon::DragHandle,
+                                                "Drag to reorder",
+                                            )
+                                        });
+                                        if ui
+                                            .add_enabled_ui(can_up, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveUp,
+                                                    if can_up {
+                                                        "Move up"
+                                                    } else {
+                                                        "Cannot cross machine / user boundary"
+                                                    },
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_up = Some(i);
+                                        }
+                                        if ui
+                                            .add_enabled_ui(can_dn, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveDown,
+                                                    if can_dn {
+                                                        "Move down"
+                                                    } else {
+                                                        "Cannot cross machine / user boundary"
+                                                    },
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_dn = Some(i);
+                                        }
 
                                         let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
@@ -1746,24 +1806,23 @@ impl eframe::App for PathmanApp {
                                         {
                                             self.request_remove_row(i);
                                         }
-                                        });
-
-                                        let row_text = self.effective_segments[i].1.clone();
-                                        if expanded != row_text {
-                                            ui.horizontal(|ui| {
-                                                ui.add_space(
-                                                    2.0 * ICON_BTN + 2.0 * gap + MARK_W + gap + ORIGIN_W + gap,
-                                                );
-                                                ui.label(
-                                                    egui::RichText::new(format!("→ {expanded}"))
-                                                        .small()
-                                                        .color(origin_color.gamma_multiply(0.75))
-                                                        .monospace(),
-                                                );
-                                            });
-                                        }
                                     });
-                                })
+
+                                    let row_text = self.effective_segments[i].1.clone();
+                                    if expanded != row_text {
+                                        ui.horizontal(|ui| {
+                                            ui.add_space(
+                                                3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
+                                            );
+                                            ui.label(
+                                                egui::RichText::new(format!("→ {expanded}"))
+                                                    .small()
+                                                    .color(origin_color.gamma_multiply(0.75))
+                                                    .monospace(),
+                                            );
+                                        });
+                                    }
+                                });
                             });
                         if let Some(from) = dropped_payload {
                             let from = *from;
@@ -1773,9 +1832,9 @@ impl eframe::App for PathmanApp {
                         }
                     }
                 } else {
-                    // [^][v][mark][Machine|User][text][open][X] — align with Effective scope layout.
+                    // [≡][^][v][mark][Machine|User][text][open][X] — align with Effective scope layout.
                     const ORIGIN_W: f32 = 56.0;
-                    let row_reserve = MARK_W + ORIGIN_W + 4.0 * ICON_BTN + 6.0 * gap;
+                    let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
                     let row_origin = match self.scope {
@@ -1851,37 +1910,44 @@ impl eframe::App for PathmanApp {
                         let row_id = ui.id().with(("scope_row_drag", i));
                         let (_row_ir, dropped_payload) =
                             ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
-                                ui.dnd_drag_source(row_id, i, |ui| {
-                                    ui.vertical(|ui| {
-                                        ui.horizontal(|ui| {
-                                            if ui
-                                                .add_enabled_ui(can_up, |ui| {
-                                                    path_row_icon_button(
-                                                        ui,
-                                                        [ICON_BTN, ICON_BTN],
-                                                        PathRowIcon::MoveUp,
-                                                        "Move up",
-                                                    )
-                                                })
-                                                .inner
-                                                .clicked()
-                                            {
-                                                move_up = Some(i);
-                                            }
-                                            if ui
-                                                .add_enabled_ui(can_dn, |ui| {
-                                                    path_row_icon_button(
-                                                        ui,
-                                                        [ICON_BTN, ICON_BTN],
-                                                        PathRowIcon::MoveDown,
-                                                        "Move down",
-                                                    )
-                                                })
-                                                .inner
-                                                .clicked()
-                                            {
-                                                move_dn = Some(i);
-                                            }
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.dnd_drag_source(row_id, i, |ui| {
+                                            path_row_icon_button(
+                                                ui,
+                                                [ICON_BTN, ICON_BTN],
+                                                PathRowIcon::DragHandle,
+                                                "Drag to reorder",
+                                            )
+                                        });
+                                        if ui
+                                            .add_enabled_ui(can_up, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveUp,
+                                                    "Move up",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_up = Some(i);
+                                        }
+                                        if ui
+                                            .add_enabled_ui(can_dn, |ui| {
+                                                path_row_icon_button(
+                                                    ui,
+                                                    [ICON_BTN, ICON_BTN],
+                                                    PathRowIcon::MoveDown,
+                                                    "Move down",
+                                                )
+                                            })
+                                            .inner
+                                            .clicked()
+                                        {
+                                            move_dn = Some(i);
+                                        }
 
                                         let mut mark_resp = ui.add_sized(
                                             [MARK_W, btn_h],
@@ -1961,23 +2027,22 @@ impl eframe::App for PathmanApp {
                                         {
                                             self.request_remove_row(i);
                                         }
-                                        });
-
-                                        if expanded != self.entries[i] {
-                                            ui.horizontal(|ui| {
-                                                ui.add_space(
-                                                    2.0 * ICON_BTN + 2.0 * gap + MARK_W + gap + ORIGIN_W + gap,
-                                                );
-                                                ui.label(
-                                                    egui::RichText::new(format!("→ {expanded}"))
-                                                        .small()
-                                                        .color(origin_color.gamma_multiply(0.75))
-                                                        .monospace(),
-                                                );
-                                            });
-                                        }
                                     });
-                                })
+
+                                    if expanded != self.entries[i] {
+                                        ui.horizontal(|ui| {
+                                            ui.add_space(
+                                                3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
+                                            );
+                                            ui.label(
+                                                egui::RichText::new(format!("→ {expanded}"))
+                                                    .small()
+                                                    .color(origin_color.gamma_multiply(0.75))
+                                                    .monospace(),
+                                            );
+                                        });
+                                    }
+                                });
                             });
                         if let Some(from) = dropped_payload {
                             let from = *from;

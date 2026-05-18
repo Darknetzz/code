@@ -231,6 +231,7 @@ pub fn path_add_origin_menu<R>(
 
 #[derive(Clone, Copy)]
 pub enum PathRowIcon {
+    DragHandle,
     MoveUp,
     MoveDown,
     OpenDirectory,
@@ -269,6 +270,23 @@ pub fn path_row_icon_button(
         let stroke = Stroke::new(line_width, stroke_color);
 
         match icon {
+            PathRowIcon::DragHandle => {
+                let cols = 2;
+                let rows = 3;
+                let gx = inner.width() * 0.22;
+                let gy = inner.height() * 0.18;
+                let dot_r = (inner.width().min(inner.height()) * 0.09).max(1.1);
+                let total_w = gx * (cols - 1) as f32;
+                let total_h = gy * (rows - 1) as f32;
+                let x0 = inner.center().x - total_w * 0.5;
+                let y0 = inner.center().y - total_h * 0.5;
+                for row in 0..rows {
+                    for col in 0..cols {
+                        let c = egui::pos2(x0 + col as f32 * gx, y0 + row as f32 * gy);
+                        painter.circle_filled(c, dot_r, stroke_color);
+                    }
+                }
+            }
             PathRowIcon::MoveUp => {
                 let top = egui::pos2(inner.center().x, inner.top());
                 let bl = egui::pos2(inner.left(), inner.bottom());
@@ -340,6 +358,7 @@ const TOP_BAR_ICON: f32 = 15.0;
 pub enum TopBarIcon {
     Reload,
     Save,
+    Discard,
     Changes,
     Dedupe,
     Duplicates,
@@ -384,6 +403,25 @@ fn paint_top_bar_icon(
                 let orth = egui::vec2(-dir.y, dir.x);
                 painter.line_segment([p2, p2 - dir * ah + orth * ah * 0.45], stroke);
                 painter.line_segment([p2, p2 - dir * ah - orth * ah * 0.45], stroke);
+            }
+        }
+        TopBarIcon::Discard => {
+            let c = inner.center();
+            let r = inner.width().min(inner.height()) * 0.38;
+            let steps = 14;
+            let start = 0.55 * std::f32::consts::PI;
+            let sweep = 1.35 * std::f32::consts::PI;
+            let mut pts = Vec::with_capacity(steps + 1);
+            for i in 0..=steps {
+                let t = start + sweep * (i as f32 / steps as f32);
+                pts.push(c + r * egui::vec2(t.cos(), t.sin()));
+            }
+            let head = pts.first().copied();
+            painter.add(egui::Shape::line(pts, stroke));
+            if let Some(p0) = head {
+                let ah = r * 0.42;
+                painter.line_segment([p0, p0 + egui::vec2(-ah * 0.85, -ah * 0.35)], stroke);
+                painter.line_segment([p0, p0 + egui::vec2(-ah * 0.35, ah * 0.85)], stroke);
             }
         }
         TopBarIcon::Save => {
@@ -565,6 +603,14 @@ pub enum TopBarButtonEmphasis {
     IdlePrimary,
     /// Warmer fill + stroke aligned with “Unsaved changes” (use when edits are pending).
     Unsaved,
+    /// Red tint for destructive actions (e.g. **Discard**).
+    Danger,
+    /// Cool blue tint (e.g. **Reload**, **Changes…**).
+    Info,
+    /// Amber tint (e.g. **Dedupe**).
+    Caution,
+    /// Purple tint (e.g. **Duplicates…**).
+    Secondary,
 }
 
 /// Icon + text button using normal widget interaction (disabled state uses [`Ui::add_enabled_ui`]).
@@ -607,6 +653,15 @@ pub fn path_top_bar_button(
             let painter = ui.painter_at(rect);
             let unsaved_orange = egui::Color32::from_rgb(255, 165, 70);
             let sel = ui.visuals().selection.bg_fill;
+            let accent = match emphasis {
+                TopBarButtonEmphasis::Danger => egui::Color32::from_rgb(220, 95, 95),
+                TopBarButtonEmphasis::Info => egui::Color32::from_rgb(100, 175, 240),
+                TopBarButtonEmphasis::Caution => egui::Color32::from_rgb(230, 175, 75),
+                TopBarButtonEmphasis::Secondary => egui::Color32::from_rgb(175, 140, 230),
+                TopBarButtonEmphasis::Unsaved if enabled => unsaved_orange,
+                TopBarButtonEmphasis::IdlePrimary => sel,
+                _ => egui::Color32::TRANSPARENT,
+            };
             let (weak_fill, hover_fill, stroke) = match emphasis {
                 TopBarButtonEmphasis::Unsaved if enabled => (
                     mix_srgb(visuals.weak_bg_fill, unsaved_orange, 0.32),
@@ -624,6 +679,22 @@ pub fn path_top_bar_button(
                         Stroke::new(
                             (visuals.bg_stroke.width + 0.5).min(2.2),
                             mix_srgb(visuals.bg_stroke.color, sel, 0.35),
+                        ),
+                    )
+                }
+                TopBarButtonEmphasis::Danger
+                | TopBarButtonEmphasis::Info
+                | TopBarButtonEmphasis::Caution
+                | TopBarButtonEmphasis::Secondary
+                    if enabled =>
+                {
+                    let t = 0.28;
+                    (
+                        mix_srgb(visuals.weak_bg_fill, accent, t),
+                        mix_srgb(visuals.bg_fill, accent, t * 0.9),
+                        Stroke::new(
+                            (visuals.bg_stroke.width + 0.75).min(2.5),
+                            mix_srgb(visuals.bg_stroke.color, accent, 0.5),
                         ),
                     )
                 }
