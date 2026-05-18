@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Literal
 
 DrugsPrefer = Literal["any", "buy", "sell"]
+CrimeKind = Literal["perform", "steal"]
+CrimePerformType = Literal["lett", "tung", "any"]
+CrimeStealTargetMode = Literal["random", "specific"]
 
 from pydantic import BaseModel, Field
 
@@ -90,7 +93,15 @@ class BotProfile(BaseModel):
     family_auto_accept: bool = True
     # Crime (optional overrides)
     crime_min_health_percent: int | None = None
-    crime_button_labels: list[str] = Field(default_factory=list)
+    crime_kind: CrimeKind = "perform"
+    crime_perform_type: CrimePerformType = "any"
+    crime_steal_what: str = "bil"
+    crime_steal_target_mode: CrimeStealTargetMode = "random"
+    crime_steal_username: str = ""
+    crime_button_labels: list[str] = Field(
+        default_factory=list,
+        description="Optional submit-button label override (comma-separated in UI)",
+    )
     # Travel
     travel_destinations: list[str] = Field(default_factory=list)
     # Drugs (buy/sell only in specific cities — requires travel)

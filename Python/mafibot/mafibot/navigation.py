@@ -143,6 +143,27 @@ async def _is_actionable(locator: Locator) -> bool:
     return True
 
 
+async def _click_first_actionable(
+    page: Page,
+    locator: Locator,
+    *,
+    policy: HumanPolicy | None = None,
+    dry_run: bool = False,
+) -> bool:
+    for i in range(await locator.count()):
+        target = locator.nth(i)
+        if not await _is_actionable(target):
+            continue
+        if dry_run:
+            return True
+        await maybe_think_pause(policy or HumanPolicy())
+        await maybe_scroll_page(page, policy)
+        await human_click_paced(page, target, policy)
+        await after_navigation(page, policy)
+        return True
+    return False
+
+
 async def click_button_matching(
     page: Page,
     labels: tuple[str, ...],
@@ -155,16 +176,43 @@ async def click_button_matching(
             loc = page.get_by_role(role, name=re.compile(label, re.I))
             if await loc.count() == 0:
                 continue
-            for i in range(await loc.count()):
-                target = loc.nth(i)
-                if not await _is_actionable(target):
-                    continue
-                if dry_run:
-                    return True
-                await maybe_think_pause(policy or HumanPolicy())
-                await maybe_scroll_page(page, policy)
-                await human_click_paced(page, target, policy)
-                await after_navigation(page, policy)
+            if await _click_first_actionable(
+                page, loc, policy=policy, dry_run=dry_run
+            ):
+                return True
+    return False
+
+
+async def click_option_matching(
+    page: Page,
+    labels: tuple[str, ...],
+    *,
+    policy: HumanPolicy | None = None,
+    dry_run: bool = False,
+) -> bool:
+    """Click buttons/links and labeled radio/checkbox options."""
+    if await click_button_matching(page, labels, policy=policy, dry_run=dry_run):
+        return True
+    for label in labels:
+        pattern = re.compile(label, re.I)
+        for getter in (
+            lambda p: page.get_by_label(pattern),
+            lambda p: page.get_by_text(pattern),
+        ):
+            loc = getter(page)
+            if await loc.count() == 0:
+                continue
+            if await _click_first_actionable(
+                page, loc, policy=policy, dry_run=dry_run
+            ):
+                return True
+        for role in ("radio", "checkbox"):
+            loc = page.get_by_role(role, name=pattern)
+            if await loc.count() == 0:
+                continue
+            if await _click_first_actionable(
+                page, loc, policy=policy, dry_run=dry_run
+            ):
                 return True
     return False
 
