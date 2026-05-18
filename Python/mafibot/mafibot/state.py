@@ -146,7 +146,17 @@ def _cooldown_ready(text: str, keyword: str) -> bool:
 
 
 def _detect_location(text: str) -> str | None:
-    for name in ("Kabul", "Oslo", "Mogadishu", "Kuala Lumpur", "Beirut", "Rio"):
+    for name in (
+        "Kabul",
+        "Oslo",
+        "Mogadishu",
+        "Kuala Lumpur",
+        "Beirut",
+        "Rio",
+        "New York",
+        "Detroit",
+        "Las Vegas",
+    ):
         if re.search(rf"\b{name}\b", text):
             return name
     return None

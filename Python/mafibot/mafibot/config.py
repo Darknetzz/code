@@ -93,8 +93,18 @@ class BotProfile(BaseModel):
     crime_button_labels: list[str] = Field(default_factory=list)
     # Travel
     travel_destinations: list[str] = Field(default_factory=list)
-    # Drugs
+    # Drugs (buy/sell only in specific cities — requires travel)
     drugs_prefer: DrugsPrefer = "any"
+    drugs_buy_city: str = "Kabul"
+    drugs_sell_cities: list[str] = Field(
+        default_factory=lambda: [
+            "New York",
+            "Oslo",
+            "Detroit",
+            "Rio",
+            "Las Vegas",
+        ]
+    )
     # Business / ship gating
     business_only_when_income_ready: bool = True
     ship_only_when_in_port: bool = True

@@ -196,13 +196,28 @@
           </details>
           <details id="action-options-drugs" class="action-options-panel hidden">
             <summary>Drugs</summary>
+            <p class="tos-note">Requires <strong>Travel</strong> enabled above Drugs in the list. Buy only in Kabul; sell only in listed cities.</p>
             <div>
               <label for="cfg-drugs-prefer">Prefer</label>
               <select id="cfg-drugs-prefer">
-                <option value="any">Buy or sell</option>
+                <option value="any">Buy or sell (by city)</option>
                 <option value="buy">Buy only</option>
                 <option value="sell">Sell only</option>
               </select>
+            </div>
+            <div class="grid-2">
+              <div>
+                <label for="cfg-drugs-buy-city">Buy city</label>
+                <input type="text" id="cfg-drugs-buy-city" value="Kabul" />
+              </div>
+              <div>
+                <label for="cfg-drugs-sell-cities">Sell cities (one per line)</label>
+                <textarea id="cfg-drugs-sell-cities" rows="4">New York
+Oslo
+Detroit
+Rio
+Las Vegas</textarea>
+              </div>
             </div>
           </details>
           <details id="action-options-bank" class="action-options-panel hidden">

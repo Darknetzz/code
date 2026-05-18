@@ -30,7 +30,7 @@ const ACTION_CATALOG = [
     id: "drugs",
     label: "Drugs",
     description:
-      "Opens the drugs page and buys/sells when controls are available. Must leave the hotel first.",
+      "Buy in Kabul, sell in New York/Oslo/Detroit/Rio/Las Vegas (configurable). Requires Travel enabled before Drugs in the list. Bot flies to the right city first.",
   },
   {
     id: "bank",
@@ -89,6 +89,14 @@ function loadActionOptionsFromDoc(doc) {
   $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
   $("cfg-travel-destinations").value = (doc.travel_destinations || []).join("\n");
   $("cfg-drugs-prefer").value = doc.drugs_prefer || "any";
+  $("cfg-drugs-buy-city").value = doc.drugs_buy_city || "Kabul";
+  $("cfg-drugs-sell-cities").value = (doc.drugs_sell_cities || [
+    "New York",
+    "Oslo",
+    "Detroit",
+    "Rio",
+    "Las Vegas",
+  ]).join("\n");
   $("cfg-bank-auto").checked = !!doc.bank_auto_balance;
   $("cfg-bank-keep").value = doc.bank_keep_cash_on_hand ?? 100000;
   $("cfg-bank-tolerance").value = doc.bank_balance_tolerance ?? 25000;
@@ -115,6 +123,11 @@ function appendActionOptionsToPayload(payload) {
     .map((s) => s.trim())
     .filter(Boolean);
   payload.drugs_prefer = $("cfg-drugs-prefer").value || "any";
+  payload.drugs_buy_city = $("cfg-drugs-buy-city").value.trim() || "Kabul";
+  payload.drugs_sell_cities = $("cfg-drugs-sell-cities").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
   payload.bank_auto_balance = $("cfg-bank-auto").checked;
   payload.bank_keep_cash_on_hand = parseInt($("cfg-bank-keep").value, 10) || 0;
   payload.bank_balance_tolerance = parseInt($("cfg-bank-tolerance").value, 10) || 0;
@@ -357,6 +370,21 @@ function isActionEnabledInUI(actionId) {
   return box && box.checked;
 }
 
+function ensureTravelForDrugs() {
+  const list = $("cfg-action-list");
+  const drugsLi = list.querySelector('.action-list-item[data-action="drugs"]');
+  const travelLi = list.querySelector('.action-list-item[data-action="travel"]');
+  if (!drugsLi || !travelLi) return;
+  const drugsOn = drugsLi.querySelector("[data-action-check]").checked;
+  const travelBox = travelLi.querySelector("[data-action-check]");
+  if (drugsOn && !travelBox.checked) {
+    travelBox.checked = true;
+  }
+  if (drugsOn && drugsLi.compareDocumentPosition(travelLi) & Node.DOCUMENT_POSITION_FOLLOWING) {
+    list.insertBefore(travelLi, drugsLi);
+  }
+}
+
 function updateActionOptionsVisibility() {
   let anyVisible = false;
   for (const [actionId, panelId] of Object.entries(ACTION_OPTION_PANELS)) {
@@ -409,6 +437,7 @@ function renderActionList(enabledOrder) {
     list.appendChild(li);
   }
   updateActionOptionsVisibility();
+  ensureTravelForDrugs();
 }
 
 function getEnabledActionOrderFromUI() {
@@ -430,6 +459,9 @@ function setupActionListHandlers() {
   $("cfg-action-list").addEventListener("change", (ev) => {
     if (ev.target.matches("[data-action-check]")) {
       updateActionOptionsVisibility();
+      if (ev.target.closest('[data-action="drugs"]')) {
+        ensureTravelForDrugs();
+      }
     }
   });
   $("cfg-action-list").addEventListener("click", (ev) => {

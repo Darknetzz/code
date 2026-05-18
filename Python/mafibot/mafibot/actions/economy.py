@@ -9,7 +9,11 @@ from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
 from mafibot.page_actions import bank_adjustment, read_page_balances, submit_bank_transfer
-from mafibot.profile_options import drugs_click_labels
+from mafibot.drugs_locations import (
+    drugs_click_labels_for_location,
+    drugs_enabled,
+    location_allows_drugs,
+)
 from mafibot.selectors import SHIP_ACTION_LABELS, WORK_ACTION_LABELS
 from mafibot.state import GameState
 
@@ -79,6 +83,15 @@ class DrugsAction(_EconomyPageAction):
     labels = ("kjøp", "selg", "narkotika")
     use_sidebar = True
 
+    async def can_run(self, state: GameState, profile: BotProfile) -> bool:
+        if state.needs_stop or state.in_jail:
+            return False
+        if not drugs_enabled(profile):
+            return False
+        if not location_allows_drugs(profile, state.location):
+            return False
+        return state.drugs_ready
+
     async def run(
         self,
         page: Page,
@@ -99,7 +112,14 @@ class DrugsAction(_EconomyPageAction):
             await goto_page(page, self.logical, policy=policy)
 
         await page_reading_pause(page)
-        labels = drugs_click_labels(profile)
+        from mafibot.state import parse_game_state
+
+        try:
+            after = await parse_game_state(page)
+            location = after.location or state.location
+        except Exception:
+            location = state.location
+        labels = drugs_click_labels_for_location(profile, location)
         clicked = await click_button_matching(page, labels, policy=policy, dry_run=dry_run)
         if clicked or dry_run:
             return ActionResult(True, f"drugs action submitted ({profile.drugs_prefer})")

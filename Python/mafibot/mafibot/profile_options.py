@@ -30,7 +30,11 @@ def crime_button_labels(profile: BotProfile) -> tuple[str, ...]:
     return ("utfør", "stjel", "begå", "gjør")
 
 
-def drugs_click_labels(profile: BotProfile) -> tuple[str, ...]:
+def drugs_click_labels(profile: BotProfile, location: str | None = None) -> tuple[str, ...]:
+    from mafibot.drugs_locations import drugs_click_labels_for_location
+
+    if location is not None:
+        return drugs_click_labels_for_location(profile, location)
     prefer = profile.drugs_prefer
     if prefer == "buy":
         return ("kjøp",)
