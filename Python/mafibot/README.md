@@ -184,5 +184,6 @@ Python/mafibot/
 
 ## Related
 
+- [WHATIF.md](WHATIF.md) — example session timeline, hotel behavior, rough timings
 - [Webbot README](../webbot/README.md) — underlying automation library
 - [Mafiaspillet help](http://hjelp.mafiaspillet.no/) — game mechanics reference
