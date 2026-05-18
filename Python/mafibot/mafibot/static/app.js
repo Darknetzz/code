@@ -306,7 +306,7 @@ function renderActionList(enabledOrder) {
         <input type="checkbox" data-action-check ${enabledSet.has(id) ? "checked" : ""} />
         <span>${meta.label}</span>
       </label>
-      <motion class="action-item-controls">
+      <div class="action-item-controls">
         <button type="button" class="action-help-btn" data-action-help="${id}" title="What does this do?" aria-label="Help: ${meta.label}">?</button>
         <div class="action-reorder">
           <button type="button" data-dir="up" title="Move up">↑</button>
