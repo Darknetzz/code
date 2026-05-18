@@ -155,6 +155,39 @@
           <label class="action-list-heading">Actions (priority top → bottom)</label>
           <p class="tos-note">Checked actions run in list order. Unchecked actions are skipped.</p>
           <ul id="cfg-action-list" class="action-list"></ul>
+        </motion>
+        <div class="action-options-section">
+          <h3 class="action-options-heading">Action options</h3>
+          <details class="action-options-panel" open>
+            <summary>Bank</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-bank-auto" />
+              <label for="cfg-bank-auto">Auto deposit/withdraw to keep wallet near target</label>
+            </div>
+            <div class="grid-2">
+              <div>
+                <label for="cfg-bank-keep">Keep cash on hand (Penger)</label>
+                <input type="number" id="cfg-bank-keep" min="0" step="1000" value="100000" />
+              </div>
+              <div>
+                <label for="cfg-bank-tolerance">Tolerance (kr)</label>
+                <input type="number" id="cfg-bank-tolerance" min="0" step="1000" value="25000" />
+              </div>
+            </div>
+            <p class="tos-note">When auto is off, bank only clicks generic innskudd/uttak. When on, bot transfers only if wallet is outside target ± tolerance.</p>
+          </details>
+          <details class="action-options-panel">
+            <summary>Murder</summary>
+            <div>
+              <label for="cfg-murder-targets">Target usernames (one per line)</label>
+              <textarea id="cfg-murder-targets" rows="3" placeholder="rival_player"></textarea>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-murder-rotate" />
+              <label for="cfg-murder-rotate">Rotate through targets each attempt</label>
+            </div>
+            <p class="tos-note">Murder will not run with an empty target list. Requires aggression ≥ 0.5 (use angriper profile or raise aggression).</p>
+          </details>
         </div>
         <p class="health-meta" id="cfg-dir-hint"></p>
         <div class="btn-row">

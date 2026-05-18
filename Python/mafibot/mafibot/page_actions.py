@@ -46,10 +46,10 @@ def bank_adjustment(
 
 async def _find_amount_input(page: Page) -> Locator | None:
     selectors = (
-        'input[name*="belop" i]',
-        'input[name*="beløp" i]',
-        'input[name*="amount" i]',
-        'input[name*="sum" i]',
+        'input[name*="belop"]',
+        'input[name*="beløp"]',
+        'input[name*="amount"]',
+        'input[name*="sum"]',
         'input[type="number"]',
         'input[type="text"]',
     )
@@ -86,12 +86,12 @@ async def submit_bank_transfer(
 
 
 MURDER_TARGET_INPUT_SELECTORS: tuple[str, ...] = (
-    'input[name*="spiller" i]',
-    'input[name*="offer" i]',
-    'input[name*="navn" i]',
-    'input[name*="target" i]',
-    'input[name*="motstander" i]',
-    'input[placeholder*="spiller" i]',
+    'input[name*="spiller"]',
+    'input[name*="offer"]',
+    'input[name*="navn"]',
+    'input[name*="target"]',
+    'input[name*="motstander"]',
+    'input[placeholder*="spiller"]',
     'input[type="text"]',
 )
 
