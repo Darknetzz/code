@@ -7,6 +7,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -36,6 +37,15 @@ def run_state_blocks_start(state: RunnerState) -> bool:
 
 
 @dataclass
+class ActiveCooldownSnapshot:
+    id: str
+    label: str
+    ready_at: str | None = None
+    remaining_sec: float | None = None
+    raw: str = ""
+
+
+@dataclass
 class GameStateSnapshot:
     logged_in: bool = False
     in_hotel: bool = False
@@ -45,9 +55,27 @@ class GameStateSnapshot:
     location: str | None = None
     crime_ready: bool = False
     player_name: str | None = None
+    active_cooldowns: list[ActiveCooldownSnapshot] = field(default_factory=list)
 
     @classmethod
     def from_game_state(cls, state: Any) -> GameStateSnapshot:
+        now = datetime.now()
+        cooldowns: list[ActiveCooldownSnapshot] = []
+        for cd in getattr(state, "active_cooldowns", ()) or ():
+            ready_at = cd.ready_at
+            ready_iso = ready_at.isoformat(timespec="seconds") if ready_at else None
+            remaining: float | None = None
+            if ready_at is not None:
+                remaining = max(0.0, (ready_at - now).total_seconds())
+            cooldowns.append(
+                ActiveCooldownSnapshot(
+                    id=cd.id,
+                    label=cd.label,
+                    ready_at=ready_iso,
+                    remaining_sec=remaining,
+                    raw=cd.raw,
+                )
+            )
         return cls(
             logged_in=state.logged_in,
             in_hotel=state.in_hotel,
@@ -56,6 +84,7 @@ class GameStateSnapshot:
             health_percent=state.health_percent,
             location=state.location,
             crime_ready=state.crime_ready,
+            active_cooldowns=cooldowns,
         )
 
 

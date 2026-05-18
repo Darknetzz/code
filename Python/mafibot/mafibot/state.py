@@ -60,6 +60,27 @@ class CooldownInfo:
 
 
 @dataclass
+class ActionCooldown:
+    """A named game action that is currently on cooldown (not ready)."""
+
+    id: str
+    label: str
+    ready_at: datetime | None = None
+    raw: str = ""
+
+
+# id, display label, Norwegian page keyword
+_ACTION_COOLDOWN_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("crime", "Crime", "kriminalitet"),
+    ("travel", "Travel", "flyplass"),
+    ("business", "Business", "bedrift"),
+    ("ship", "Ship", "rederi"),
+    ("drugs", "Drugs", "narkotika"),
+    ("murder", "Murder", "skyt"),
+)
+
+
+@dataclass
 class GameState:
     logged_in: bool = False
     on_login_page: bool = False
@@ -89,6 +110,7 @@ class GameState:
     drugs_ready: bool = True
     murder_ready: bool = True
     cooldowns: list[CooldownInfo] = field(default_factory=list)
+    active_cooldowns: list[ActionCooldown] = field(default_factory=list)
     page_text_sample: str = ""
     parsed_at: datetime = field(default_factory=datetime.now)
 
@@ -123,11 +145,39 @@ def _timer_to_seconds(h: int, m: int, s: int = 0) -> int:
     return h * 3600 + m * 60 + s
 
 
-def _cooldown_ready(text: str, keyword: str) -> bool:
+def _cooldown_block(text: str, keyword: str) -> str:
     lines = [ln for ln in text.splitlines() if keyword.lower() in ln.lower()]
     if not lines:
+        return ""
+    return "\n".join(lines)
+
+
+def _duration_from_cooldown_match(raw: str, amount: int) -> int:
+    lower = raw.lower()
+    if re.search(r"\bsek(?:und)?", lower):
+        return amount
+    if re.search(r"\btimer?\b|\bt\b", lower):
+        return amount * 3600
+    return amount * 60
+
+
+def _estimate_ready_at(text: str) -> tuple[datetime | None, str]:
+    m = TIMER_PATTERN.search(text)
+    if m:
+        h, mi, s = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+        return datetime.now() + timedelta(seconds=_timer_to_seconds(h, mi, s)), m.group(0)
+    m = COOLDOWN_PATTERN.search(text)
+    if m:
+        raw = m.group(0)
+        amount = int(m.group(1))
+        return datetime.now() + timedelta(seconds=_duration_from_cooldown_match(raw, amount)), raw
+    return None, ""
+
+
+def _cooldown_ready(text: str, keyword: str) -> bool:
+    block = _cooldown_block(text, keyword)
+    if not block:
         return True
-    block = "\n".join(lines)
     if re.search(r"klar!|kan\s+hentes|står\s+i\s+havn", block, re.I):
         return True
     if COOLDOWN_PATTERN.search(block):
@@ -137,12 +187,41 @@ def _cooldown_ready(text: str, keyword: str) -> bool:
     if re.search(r"må\s+vente|vente\s+\d|ikke\s+mulig|for\s+tidlig|på\s+oppdrag", block, re.I):
         return False
     # Heading-only line (e.g. "Kriminalitet") — look at full page for wait messages
+    lines = [ln for ln in text.splitlines() if keyword.lower() in ln.lower()]
     if len(lines) == 1 and len(lines[0].strip()) < 24:
         if re.search(rf"må\s+vente[^.\n]*{re.escape(keyword)}", text, re.I):
             return False
         if re.search(r"vente\s+\d+[^.\n]*(?:min|minutt)", text, re.I) and keyword.lower() in text.lower():
             return False
     return True
+
+
+def _action_is_on_cooldown(state: GameState, action_id: str) -> bool:
+    return {
+        "crime": not state.crime_ready,
+        "travel": not state.travel_ready,
+        "business": not state.work_ready,
+        "ship": not state.ship_ready,
+        "drugs": not state.drugs_ready,
+        "murder": not state.murder_ready,
+    }.get(action_id, False)
+
+
+def collect_active_cooldowns(state: GameState, text: str) -> list[ActionCooldown]:
+    """Return only actions that are not ready (on cooldown)."""
+    active: list[ActionCooldown] = []
+    for action_id, label, keyword in _ACTION_COOLDOWN_SPECS:
+        if not _action_is_on_cooldown(state, action_id):
+            continue
+        block = _cooldown_block(text, keyword)
+        hint = block or text
+        ready_at, raw = _estimate_ready_at(hint)
+        if action_id == "crime" and state.in_jail:
+            label = "Crime (jail)"
+        active.append(
+            ActionCooldown(id=action_id, label=label, ready_at=ready_at, raw=raw)
+        )
+    return active
 
 
 def _detect_location(text: str) -> str | None:
@@ -228,6 +307,8 @@ async def parse_game_state(page: Page) -> GameState:
         h, mi, s = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
         ready = datetime.now() + timedelta(seconds=_timer_to_seconds(h, mi, s))
         state.cooldowns.append(CooldownInfo(name="timer", ready_at=ready, raw=m.group(0)))
+
+    state.active_cooldowns = collect_active_cooldowns(state, text)
 
     if state.on_login_page:
         state.logged_in = False

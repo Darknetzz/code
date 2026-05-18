@@ -69,6 +69,16 @@ async def test_crime_cooldown():
     state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
     assert state.logged_in
     assert not state.crime_ready
+    assert len(state.active_cooldowns) == 1
+    assert state.active_cooldowns[0].id == "crime"
+    assert state.active_cooldowns[0].ready_at is not None
+
+
+@pytest.mark.asyncio
+async def test_active_cooldowns_empty_when_all_ready():
+    html = (FIXTURES / "logged_in.html").read_text(encoding="utf-8")
+    state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
+    assert state.active_cooldowns == []
 
 
 @pytest.mark.asyncio

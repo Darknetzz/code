@@ -166,11 +166,57 @@
                 <input type="number" id="cfg-crime-min-health" min="0" max="100" placeholder="profile default" />
               </div>
               <div>
-                <label for="cfg-crime-buttons">Button labels (comma-separated)</label>
-                <input type="text" id="cfg-crime-buttons" placeholder="utfør, stjel" />
+                <label for="cfg-crime-kind">Action on Kriminalitet tab</label>
+                <select id="cfg-crime-kind">
+                  <option value="perform">Perform crime (Utfør)</option>
+                  <option value="steal">Steal (Stjel)</option>
+                </select>
               </div>
             </div>
-            <p class="tos-note">Leave health blank to use profile min health. Empty buttons = build defaults.</p>
+            <div id="cfg-crime-perform-panel">
+              <label for="cfg-crime-perform-type">Crime type (perform)</label>
+              <select id="cfg-crime-perform-type">
+                <option value="any">Any / game default</option>
+                <option value="lett">Light (lett / enkel)</option>
+                <option value="tung">Heavy (tung)</option>
+              </select>
+            </div>
+            <div id="cfg-crime-steal-panel" class="hidden">
+              <div class="grid-2">
+                <div>
+                  <label for="cfg-crime-steal-what-preset">What to steal</label>
+                  <select id="cfg-crime-steal-what-preset">
+                    <option value="bil">Car (bil)</option>
+                    <option value="våpen">Weapon (våpen)</option>
+                    <option value="penger">Money (penger)</option>
+                    <option value="poeng">Points (poeng)</option>
+                    <option value="custom">Other (custom label)</option>
+                  </select>
+                </div>
+                <div id="cfg-crime-steal-what-custom-wrap" class="hidden">
+                  <label for="cfg-crime-steal-what-custom">Custom steal target label</label>
+                  <input type="text" id="cfg-crime-steal-what-custom" placeholder="e.g. smykker" />
+                </div>
+              </div>
+              <div class="grid-2">
+                <div>
+                  <label for="cfg-crime-steal-target">Steal from</label>
+                  <select id="cfg-crime-steal-target">
+                    <option value="random">Random player</option>
+                    <option value="specific">Specific username</option>
+                  </select>
+                </div>
+                <div id="cfg-crime-steal-username-wrap" class="hidden">
+                  <label for="cfg-crime-steal-username">Username</label>
+                  <input type="text" id="cfg-crime-steal-username" placeholder="rival_player" autocomplete="off" />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label for="cfg-crime-buttons">Submit button labels override (comma-separated, optional)</label>
+              <input type="text" id="cfg-crime-buttons" placeholder="utfør, begå" />
+            </div>
+            <p class="tos-note">Leave health blank to use profile min health. Steal with “specific user” requires a username or crime will not run.</p>
           </details>
           <details id="action-options-business" class="action-options-panel hidden">
             <summary>Business</summary>

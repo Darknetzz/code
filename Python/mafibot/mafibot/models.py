@@ -27,6 +27,14 @@ class ProfileRenameRequest(BaseModel):
     new_name: str
 
 
+class ActiveCooldownResponse(BaseModel):
+    id: str
+    label: str
+    ready_at: str | None = None
+    remaining_sec: float | None = None
+    raw: str = ""
+
+
 class GameStateResponse(BaseModel):
     logged_in: bool = False
     in_hotel: bool = False
@@ -36,6 +44,7 @@ class GameStateResponse(BaseModel):
     location: str | None = None
     crime_ready: bool = False
     player_name: str | None = None
+    active_cooldowns: list[ActiveCooldownResponse] = Field(default_factory=list)
 
 
 class CredentialsUpdate(BaseModel):

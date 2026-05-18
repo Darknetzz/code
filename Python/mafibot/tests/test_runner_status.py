@@ -6,6 +6,8 @@ import asyncio
 
 import pytest
 
+from datetime import datetime, timedelta
+
 from mafibot.models import RunStatusResponse
 from mafibot.runner import (
     MafibotRunner,
@@ -13,6 +15,7 @@ from mafibot.runner import (
     RunnerState,
     run_state_blocks_start,
 )
+from mafibot.state import ActionCooldown, GameState
 from mafibot.server import _status_response
 
 
@@ -39,6 +42,24 @@ def test_status_serialization():
     assert data.profile == "ranker"
     assert data.dry_run is True
     assert data.last_action == "crime"
+
+
+def test_status_includes_active_cooldowns():
+    from mafibot.runner import GameStateSnapshot
+
+    ready_at = datetime.now() + timedelta(minutes=5)
+    snap = GameStateSnapshot.from_game_state(
+        GameState(
+            crime_ready=False,
+            active_cooldowns=[
+                ActionCooldown(id="crime", label="Crime", ready_at=ready_at, raw="5 min")
+            ],
+        )
+    )
+    assert len(snap.active_cooldowns) == 1
+    assert snap.active_cooldowns[0].id == "crime"
+    assert snap.active_cooldowns[0].remaining_sec is not None
+    assert snap.active_cooldowns[0].remaining_sec > 0
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""Crime tab — Utfør / Stjel (only when not blocked by hotel)."""
+"""Crime tab — Utfør (perform) or Stjel (steal), only when not blocked by hotel."""
 
 from __future__ import annotations
 
@@ -6,9 +6,10 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
+from mafibot.crime_flow import run_crime_flow
 from mafibot.human_policy import HumanPolicy, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_page
-from mafibot.profile_options import crime_button_labels, crime_min_health_percent
+from mafibot.navigation import goto_page
+from mafibot.profile_options import crime_min_health_percent, crime_steal_target_mode, crime_steal_username
 from mafibot.state import GameState
 
 
@@ -21,6 +22,9 @@ class CrimeAction:
         min_hp = crime_min_health_percent(profile)
         if state.health_percent is not None and state.health_percent < min_hp:
             return False
+        if profile.crime_kind == "steal" and crime_steal_target_mode(profile) == "specific":
+            if not crime_steal_username(profile):
+                return False
         return state.crime_ready
 
     async def run(
@@ -33,13 +37,18 @@ class CrimeAction:
         dry_run: bool = False,
     ) -> ActionResult:
         if dry_run:
-            return ActionResult(True, "dry-run: would run crime")
+            kind = profile.crime_kind
+            extra = ""
+            if kind == "steal":
+                extra = f" steal={profile.crime_steal_what} target={profile.crime_steal_target_mode}"
+            elif profile.crime_perform_type != "any":
+                extra = f" perform={profile.crime_perform_type}"
+            return ActionResult(True, f"dry-run: would run crime ({kind}{extra})")
 
         await goto_page(page, "crime", policy=policy)
         await page_reading_pause(page)
 
-        labels = crime_button_labels(profile)
-        clicked = await click_button_matching(page, labels, policy=policy, dry_run=dry_run)
-        if clicked:
-            return ActionResult(True, "crime submitted")
-        return ActionResult(False, "crime buttons disabled or not found (in hotel?)")
+        ok, detail = await run_crime_flow(page, profile, policy=policy, dry_run=dry_run)
+        if ok:
+            return ActionResult(True, detail)
+        return ActionResult(False, detail)

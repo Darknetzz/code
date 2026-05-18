@@ -183,6 +183,48 @@ async def click_button_matching(
     return False
 
 
+async def click_destination_matching(
+    page: Page,
+    names: list[str],
+    *,
+    policy: HumanPolicy | None = None,
+    dry_run: bool = False,
+) -> str | None:
+    """Click a visible link/button/option matching one of *names* (e.g. harbor or city)."""
+    if not names:
+        return None
+    for name in names:
+        pattern = re.compile(re.escape(name), re.I)
+        for role in ("link", "button", "radio"):
+            loc = page.get_by_role(role, name=pattern)
+            if await loc.count() == 0:
+                continue
+            if await _click_first_actionable(
+                page, loc, policy=policy, dry_run=dry_run
+            ):
+                return name
+        loc = page.get_by_text(pattern)
+        if await loc.count() > 0 and await _click_first_actionable(
+            page, loc, policy=policy, dry_run=dry_run
+        ):
+            return name
+        select = page.locator("select")
+        for i in range(await select.count()):
+            box = select.nth(i)
+            if not await box.is_visible():
+                continue
+            option = box.locator("option", has_text=pattern)
+            if await option.count() == 0:
+                continue
+            if dry_run:
+                return name
+            await maybe_think_pause(policy or HumanPolicy())
+            await box.select_option(label=re.compile(re.escape(name), re.I))
+            await after_navigation(page, policy)
+            return name
+    return None
+
+
 async def click_option_matching(
     page: Page,
     labels: tuple[str, ...],

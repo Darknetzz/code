@@ -6,7 +6,7 @@ const ACTION_CATALOG = [
     id: "crime",
     label: "Crime (Kriminalitet)",
     description:
-      "Opens the Kriminalitet tab and runs a crime when the cooldown is ready. Leaves the hotel first (crime is blocked in hotel), then returns to hotel after.",
+      "Opens Kriminalitet when cooldown is ready. Configure perform (Utfør, lett/tung) or steal (Stjel, what to steal, random vs named player). Leaves hotel first, then returns after.",
   },
   {
     id: "business",
@@ -78,13 +78,58 @@ function effectiveInterval(doc, field, fallbackField = "social_interval_minutes"
   return fb && fb > 0 ? fb : 45;
 }
 
+const CRIME_STEAL_PRESETS = ["bil", "våpen", "penger", "poeng"];
+
+function updateCrimeOptionsPanels() {
+  const kind = $("cfg-crime-kind").value;
+  $("cfg-crime-perform-panel").classList.toggle("hidden", kind !== "perform");
+  $("cfg-crime-steal-panel").classList.toggle("hidden", kind !== "steal");
+  const stealPreset = $("cfg-crime-steal-what-preset").value;
+  $("cfg-crime-steal-what-custom-wrap").classList.toggle(
+    "hidden",
+    stealPreset !== "custom"
+  );
+  const stealTarget = $("cfg-crime-steal-target").value;
+  $("cfg-crime-steal-username-wrap").classList.toggle(
+    "hidden",
+    stealTarget !== "specific"
+  );
+}
+
+function crimeStealWhatFromUi() {
+  const preset = $("cfg-crime-steal-what-preset").value;
+  if (preset === "custom") {
+    return $("cfg-crime-steal-what-custom").value.trim() || "bil";
+  }
+  return preset;
+}
+
+function loadCrimeStealWhatToUi(what) {
+  const w = (what || "bil").trim().toLowerCase();
+  const presetEl = $("cfg-crime-steal-what-preset");
+  const normalized = CRIME_STEAL_PRESETS.find((p) => p.toLowerCase() === w);
+  if (normalized) {
+    presetEl.value = normalized;
+    $("cfg-crime-steal-what-custom").value = "";
+  } else {
+    presetEl.value = "custom";
+    $("cfg-crime-steal-what-custom").value = what || "";
+  }
+}
+
 function loadActionOptionsFromDoc(doc) {
   const crimeHp = $("cfg-crime-min-health");
   crimeHp.value =
     doc.crime_min_health_percent != null && doc.crime_min_health_percent !== ""
       ? doc.crime_min_health_percent
       : "";
+  $("cfg-crime-kind").value = doc.crime_kind || "perform";
+  $("cfg-crime-perform-type").value = doc.crime_perform_type || "any";
+  loadCrimeStealWhatToUi(doc.crime_steal_what || "bil");
+  $("cfg-crime-steal-target").value = doc.crime_steal_target_mode || "random";
+  $("cfg-crime-steal-username").value = doc.crime_steal_username || "";
   $("cfg-crime-buttons").value = (doc.crime_button_labels || []).join(", ");
+  updateCrimeOptionsPanels();
   $("cfg-business-income-only").checked = doc.business_only_when_income_ready !== false;
   $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
   $("cfg-travel-destinations").value = (doc.travel_destinations || []).join("\n");
@@ -112,6 +157,11 @@ function loadActionOptionsFromDoc(doc) {
 function appendActionOptionsToPayload(payload) {
   const crimeHpRaw = $("cfg-crime-min-health").value.trim();
   payload.crime_min_health_percent = crimeHpRaw ? parseInt(crimeHpRaw, 10) : null;
+  payload.crime_kind = $("cfg-crime-kind").value || "perform";
+  payload.crime_perform_type = $("cfg-crime-perform-type").value || "any";
+  payload.crime_steal_what = crimeStealWhatFromUi();
+  payload.crime_steal_target_mode = $("cfg-crime-steal-target").value || "random";
+  payload.crime_steal_username = $("cfg-crime-steal-username").value.trim();
   payload.crime_button_labels = $("cfg-crime-buttons").value
     .split(",")
     .map((s) => s.trim())
@@ -186,6 +236,51 @@ function formatElapsed(sec) {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
+function formatCooldownRemaining(sec) {
+  if (sec == null || Number.isNaN(sec) || sec <= 0) return "—";
+  const s = Math.ceil(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function renderActiveCooldowns(cooldowns) {
+  const list = $("st-cooldowns");
+  list.replaceChildren();
+  const active = (cooldowns || []).filter((cd) => cd && cd.id);
+  if (!active.length) {
+    const li = document.createElement("li");
+    li.className = "cooldown-empty muted";
+    li.textContent = "None";
+    list.appendChild(li);
+    return;
+  }
+  for (const cd of active) {
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.className = "cooldown-label";
+    label.textContent = cd.label || cd.id;
+    const eta = document.createElement("span");
+    eta.className = "cooldown-eta";
+    eta.dataset.readyAt = cd.ready_at || "";
+    eta.textContent = formatCooldownRemaining(cd.remaining_sec);
+    li.append(label, eta);
+    list.appendChild(li);
+  }
+}
+
+function tickCooldownCountdowns() {
+  const now = Date.now();
+  $("st-cooldowns").querySelectorAll(".cooldown-eta[data-ready-at]").forEach((el) => {
+    const readyAt = el.dataset.readyAt;
+    if (!readyAt) return;
+    const remaining = (new Date(readyAt).getTime() - now) / 1000;
+    el.textContent = formatCooldownRemaining(remaining);
+  });
+}
+
 function appendLog(message) {
   const el = $("log-output");
   const line = document.createElement("p");
@@ -212,6 +307,7 @@ function applyStatus(st) {
   $("st-health").textContent = g.health_percent != null ? `${g.health_percent}%` : "—";
   $("st-location").textContent = g.location || "—";
   $("st-crime").textContent = g.crime_ready ? "yes" : "no";
+  renderActiveCooldowns(g.active_cooldowns);
   $("st-action").textContent = st.last_action || "—";
   $("st-message").textContent = st.last_message || "—";
   const errEl = $("st-error");
@@ -453,6 +549,15 @@ function moveActionItem(li, direction) {
   } else if (direction === "down" && li.nextElementSibling) {
     list.insertBefore(li.nextElementSibling, li);
   }
+}
+
+function setupCrimeOptionsHandlers() {
+  ["cfg-crime-kind", "cfg-crime-steal-what-preset", "cfg-crime-steal-target"].forEach(
+    (id) => {
+      const el = $(id);
+      if (el) el.addEventListener("change", updateCrimeOptionsPanels);
+    }
+  );
 }
 
 function setupActionListHandlers() {
@@ -721,6 +826,7 @@ function setupActions() {
 
 async function init() {
   setupTabs();
+  setupCrimeOptionsHandlers();
   setupActionListHandlers();
   setupActions();
   connectWs();
@@ -732,6 +838,7 @@ async function init() {
   const st = await api("/api/run/status");
   applyStatus(st);
   setInterval(() => {
+    tickCooldownCountdowns();
     if (lastStatus?.elapsed_sec != null && ["running", "login", "discover"].includes(lastStatus.state)) {
       applyStatus({ ...lastStatus, elapsed_sec: (lastStatus.elapsed_sec || 0) + 1 });
     }

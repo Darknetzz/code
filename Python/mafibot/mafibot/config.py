@@ -119,6 +119,16 @@ class BotProfile(BaseModel):
     # Business / ship gating
     business_only_when_income_ready: bool = True
     ship_only_when_in_port: bool = True
+    # Ship: where to send skip (Mitt rederi) — routes keyed by current city/port
+    ship_destinations: list[str] = Field(
+        default_factory=list,
+        description="Fallback destinations when no ship_routes entry matches location",
+    )
+    ship_routes: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Origin city/port → ordered destination harbors",
+    )
+    ship_rotate_destinations: bool = False
 
 
 def get_config_dir() -> Path:

@@ -10,7 +10,7 @@ from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.drugs_locations import drugs_destination_needed, drugs_enabled
 from mafibot.human_policy import HumanPolicy, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_page
+from mafibot.navigation import click_button_matching, click_destination_matching, goto_page
 from mafibot.selectors import TRAVEL_ACTION_LABELS
 from mafibot.state import GameState
 
