@@ -18,7 +18,7 @@ const ACTION_CATALOG = [
     id: "ship",
     label: "Ship (Mitt rederi)",
     description:
-      "Opens Mitt rederi in the sidebar and handles ship actions (send, depart) when the ship is ready or in port. Can run in the hotel.",
+      "Opens Mitt rederi and sends the ship when ready. Configure routes per current port (destinations vary by location) or fallback harbors. Can run in the hotel.",
   },
   {
     id: "travel",
@@ -70,6 +70,36 @@ const ACTION_OPTION_PANELS = {
   family: "action-options-family",
   murder: "action-options-murder",
 };
+
+function formatShipRoutes(routes) {
+  if (!routes || typeof routes !== "object") return "";
+  return Object.keys(routes)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((origin) => {
+      const dests = routes[origin];
+      return `${origin}: ${(Array.isArray(dests) ? dests : []).join(", ")}`;
+    })
+    .join("\n");
+}
+
+function parseShipRoutes(text) {
+  const routes = {};
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const sep = trimmed.includes(":") ? ":" : trimmed.includes("->") ? "->" : null;
+    if (!sep) continue;
+    const idx = trimmed.indexOf(sep);
+    const origin = trimmed.slice(0, idx).trim();
+    const destPart = trimmed.slice(idx + sep.length).trim();
+    const dests = destPart
+      .split(/[,|]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (origin && dests.length) routes[origin] = dests;
+  }
+  return routes;
+}
 
 function effectiveInterval(doc, field, fallbackField = "social_interval_minutes") {
   const v = doc[field];
@@ -132,6 +162,9 @@ function loadActionOptionsFromDoc(doc) {
   updateCrimeOptionsPanels();
   $("cfg-business-income-only").checked = doc.business_only_when_income_ready !== false;
   $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
+  $("cfg-ship-routes").value = formatShipRoutes(doc.ship_routes || {});
+  $("cfg-ship-destinations").value = (doc.ship_destinations || []).join("\n");
+  $("cfg-ship-rotate").checked = !!doc.ship_rotate_destinations;
   $("cfg-travel-destinations").value = (doc.travel_destinations || []).join("\n");
   $("cfg-drugs-prefer").value = doc.drugs_prefer || "any";
   $("cfg-drugs-buy-city").value = doc.drugs_buy_city || "Kabul";
@@ -168,6 +201,12 @@ function appendActionOptionsToPayload(payload) {
     .filter(Boolean);
   payload.business_only_when_income_ready = $("cfg-business-income-only").checked;
   payload.ship_only_when_in_port = $("cfg-ship-in-port").checked;
+  payload.ship_routes = parseShipRoutes($("cfg-ship-routes").value);
+  payload.ship_destinations = $("cfg-ship-destinations").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  payload.ship_rotate_destinations = $("cfg-ship-rotate").checked;
   payload.travel_destinations = $("cfg-travel-destinations").value
     .split("\n")
     .map((s) => s.trim())

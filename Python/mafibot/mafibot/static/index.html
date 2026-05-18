@@ -66,6 +66,10 @@
           <div><dt>Last action</dt><dd id="st-action">—</dd></div>
           <div><dt>Message</dt><dd id="st-message">—</dd></div>
         </dl>
+        <h3 class="subsection-title">Active cooldowns</h3>
+        <ul id="st-cooldowns" class="cooldown-list" aria-live="polite">
+          <li class="cooldown-empty muted">None</li>
+        </ul>
         <p id="st-error" class="hidden" style="color: var(--danger);"></p>
       </div>
 
@@ -231,6 +235,19 @@
               <input type="checkbox" id="cfg-ship-in-port" checked />
               <label for="cfg-ship-in-port">Only when ship in port / ready</label>
             </div>
+            <div>
+              <label for="cfg-ship-routes">Routes by current location (one per line)</label>
+              <textarea id="cfg-ship-routes" rows="4" placeholder="Kabul: Oslo, New York&#10;Oslo: Kabul"></textarea>
+            </div>
+            <div>
+              <label for="cfg-ship-destinations">Fallback destinations (one per line)</label>
+              <textarea id="cfg-ship-destinations" rows="2" placeholder="Oslo"></textarea>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-ship-rotate" />
+              <label for="cfg-ship-rotate">Rotate through destinations for each port</label>
+            </div>
+            <p class="tos-note">Routes match your current city (header). Use when harbors differ per port. Empty routes + empty fallback = first send button on page.</p>
           </details>
           <details id="action-options-travel" class="action-options-panel hidden">
             <summary>Travel</summary>

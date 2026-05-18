@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
@@ -35,27 +33,6 @@ class TravelAction:
             return True
         return state.travel_ready
 
-    async def _click_destination(
-        self, page: Page, destinations: list[str], policy: HumanPolicy
-    ) -> str | None:
-        if not destinations:
-            return None
-        from webbot.human import human_click
-
-        for city in destinations:
-            link = page.get_by_role("link", name=re.compile(re.escape(city), re.I))
-            if await link.count() == 0:
-                link = page.get_by_text(re.compile(re.escape(city), re.I))
-            if await link.count() == 0:
-                continue
-            target = link.first
-            if not await target.is_visible():
-                continue
-            await human_click(page, target)
-            await page_reading_pause(page)
-            return city
-        return None
-
     async def run(
         self,
         page: Page,
@@ -77,7 +54,9 @@ class TravelAction:
         await page_reading_pause(page)
 
         if destinations:
-            picked = await self._click_destination(page, destinations, policy)
+            picked = await click_destination_matching(
+                page, destinations, policy=policy, dry_run=dry_run
+            )
             if picked:
                 clicked = await click_button_matching(
                     page, TRAVEL_ACTION_LABELS, policy=policy, dry_run=dry_run

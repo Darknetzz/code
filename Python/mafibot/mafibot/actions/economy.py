@@ -7,7 +7,13 @@ from playwright.async_api import Page
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
+from mafibot.navigation import (
+    click_button_matching,
+    click_destination_matching,
+    goto_page,
+    goto_sidebar,
+)
+from mafibot.ship_routes import pick_ship_destinations, ship_send_configured
 from mafibot.page_actions import bank_adjustment, read_page_balances, submit_bank_transfer
 from mafibot.drugs_locations import (
     drugs_click_labels_for_location,
@@ -76,6 +82,72 @@ class ShipAction(_EconomyPageAction):
     logical = "ship"
     labels = SHIP_ACTION_LABELS
     use_sidebar = True
+
+    async def run(
+        self,
+        page: Page,
+        state: GameState,
+        profile: BotProfile,
+        policy: HumanPolicy,
+        *,
+        dry_run: bool = False,
+    ) -> ActionResult:
+        destinations = pick_ship_destinations(profile, state.location)
+        if dry_run:
+            dest = ", ".join(destinations) or "any"
+            from_loc = state.location or "unknown"
+            return ActionResult(
+                True,
+                f"dry-run: would send ship from {from_loc} → ({dest})",
+            )
+
+        if self.use_sidebar:
+            ok = await goto_sidebar(page, self.logical, policy=policy, dry_run=dry_run)
+        else:
+            ok = await goto_page(page, self.logical, policy=policy, dry_run=dry_run)
+        if not ok and not dry_run:
+            await goto_page(page, self.logical, policy=policy)
+
+        await page_reading_pause(page)
+
+        from mafibot.state import parse_game_state
+
+        try:
+            after = await parse_game_state(page)
+            location = after.location or state.location
+        except Exception:
+            location = state.location
+        destinations = pick_ship_destinations(profile, location)
+
+        if destinations:
+            picked = await click_destination_matching(
+                page, destinations, policy=policy, dry_run=dry_run
+            )
+            if not picked:
+                return ActionResult(
+                    False,
+                    f"ship: destination not on page (from {location or '?'}: {', '.join(destinations)})",
+                )
+            await page_reading_pause(page)
+            clicked = await click_button_matching(
+                page, self.labels, policy=policy, dry_run=dry_run
+            )
+            if clicked:
+                return ActionResult(True, f"ship sent → {picked} (from {location or '?'})")
+            return ActionResult(False, f"ship: picked {picked} but no send button")
+
+        if ship_send_configured(profile):
+            return ActionResult(
+                False,
+                f"ship: no route for location {location or '?'} (configure ship_routes or ship_destinations)",
+            )
+
+        clicked = await click_button_matching(
+            page, self.labels, policy=policy, dry_run=dry_run
+        )
+        if clicked:
+            return ActionResult(True, "ship action submitted")
+        return ActionResult(False, "no button for ship")
 
 
 class DrugsAction(_EconomyPageAction):
