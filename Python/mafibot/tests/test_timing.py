@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mafibot.human_policy import (
     HumanPolicy,
     cycle_wait_after_action,
     cycle_wait_nothing_todo,
     idle_break_seconds,
+    pause_before_book_hotel,
     random_wait_seconds,
 )
 
@@ -25,6 +28,17 @@ def test_cycle_waits_are_floats():
     n = cycle_wait_nothing_todo(p)
     assert isinstance(a, float) and isinstance(n, float)
     assert n > a
+
+
+@pytest.mark.asyncio
+async def test_pause_before_book_hotel_respects_max():
+    import time
+
+    t0 = time.monotonic()
+    slept = await pause_before_book_hotel(2.0)
+    elapsed = time.monotonic() - t0
+    assert slept <= 2.05
+    assert elapsed <= 2.1
 
 
 def test_idle_break_float_minutes():

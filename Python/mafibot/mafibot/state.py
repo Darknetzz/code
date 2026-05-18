@@ -180,11 +180,7 @@ async def parse_game_state(page: Page) -> GameState:
     if unread_m:
         state.unread_messages = int(unread_m.group(1))
 
-    state.crime_ready = (
-        not state.must_leave_hotel
-        and _cooldown_ready(text, "kriminalitet")
-        and not state.in_jail
-    )
+    state.crime_ready = _cooldown_ready(text, "kriminalitet") and not state.in_jail
     state.travel_ready = _cooldown_ready(text, "flyplass") or bool(KLAR_TAB_PATTERN.search(text))
     state.work_ready = state.business_income_ready or _cooldown_ready(text, "bedrift")
     state.ship_ready = state.ship_in_port or _cooldown_ready(text, "rederi")

@@ -6,14 +6,9 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
-from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
+from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
-from mafibot.selectors import (
-    DRUGS_ACTION_LABELS,
-    HOTEL_BOOK_LABELS,
-    SHIP_ACTION_LABELS,
-    WORK_ACTION_LABELS,
-)
+from mafibot.selectors import DRUGS_ACTION_LABELS, SHIP_ACTION_LABELS, WORK_ACTION_LABELS
 from mafibot.state import GameState
 
 
@@ -28,8 +23,6 @@ class _EconomyPageAction:
 
     async def can_run(self, state: GameState, profile: BotProfile) -> bool:
         if state.needs_stop or state.in_jail:
-            return False
-        if state.must_leave_hotel and self.logical in ("crime", "drugs", "murder"):
             return False
         if self.logical == "business":
             return state.business_income_ready
@@ -60,7 +53,6 @@ class _EconomyPageAction:
 
         await page_reading_pause(page)
         clicked = await click_button_matching(page, self.labels, policy=policy, dry_run=dry_run)
-        await between_actions(page, policy)
         if clicked or dry_run:
             return ActionResult(True, f"{self.logical} action submitted")
         return ActionResult(False, f"no button for {self.logical}")
@@ -76,16 +68,6 @@ class BusinessAction(_EconomyPageAction):
     logical = "business"
     labels = WORK_ACTION_LABELS + ("hent", "inntekt")
     use_sidebar = True
-
-
-class HotelAction(_EconomyPageAction):
-    logical = "hotel"
-    labels = HOTEL_BOOK_LABELS
-
-    async def can_run(self, state: GameState, profile: BotProfile) -> bool:
-        if state.needs_stop or state.in_jail:
-            return False
-        return state.low_health or state.in_hospital
 
 
 class ShipAction(_EconomyPageAction):

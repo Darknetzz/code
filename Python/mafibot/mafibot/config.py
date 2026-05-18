@@ -29,15 +29,23 @@ class BotProfile(BaseModel):
     aggression: float = Field(default=0.3, ge=0.0, le=1.0)
     economy_order: list[str] = Field(
         default_factory=lambda: [
-            "leave_hotel",
             "crime",
             "business",
             "ship",
             "travel",
             "drugs",
             "bank",
-            "hotel",
         ]
+    )
+    stay_in_hotel: bool = True
+    book_hotel_before_action: bool = True
+    book_hotel_after_every_action: bool = True
+    book_hotel_when_idle: bool = True
+    max_seconds_before_book_hotel: float = Field(
+        default=2.0,
+        ge=0.0,
+        le=10.0,
+        description="Max delay between gameplay action and book-hotel step",
     )
     social_interval_minutes: int = 45
     social_enabled: bool = True

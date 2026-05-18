@@ -1,4 +1,4 @@
-"""Action protocol and registry."""
+"""Action protocol and registry (gameplay actions only — hotel via brain wrapper)."""
 
 from __future__ import annotations
 
@@ -39,20 +39,11 @@ class Action(Protocol):
 def all_actions() -> list[Action]:
     from mafibot.actions.combat import MurderAction
     from mafibot.actions.crime import CrimeAction
-    from mafibot.actions.economy import (
-        BankAction,
-        BusinessAction,
-        DrugsAction,
-        HotelAction,
-        ShipAction,
-        WorkAction,
-    )
-    from mafibot.actions.hotel_leave import LeaveHotelAction
+    from mafibot.actions.economy import BankAction, BusinessAction, DrugsAction, ShipAction, WorkAction
     from mafibot.actions.social import FamilyAction, MessagesAction
     from mafibot.actions.travel import TravelAction
 
     return [
-        LeaveHotelAction(),
         CrimeAction(),
         BusinessAction(),
         WorkAction(),
@@ -60,7 +51,6 @@ def all_actions() -> list[Action]:
         ShipAction(),
         DrugsAction(),
         BankAction(),
-        HotelAction(),
         MessagesAction(),
         FamilyAction(),
         MurderAction(),

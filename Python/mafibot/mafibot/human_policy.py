@@ -165,6 +165,29 @@ async def after_tab_change(page: Page, policy: HumanPolicy | None = None) -> Non
     await after_navigation(page, p)
 
 
+async def pause_before_book_hotel(max_seconds: float = 2.0) -> float:
+    """Short gap after gameplay action, before booking hotel (capped)."""
+    if max_seconds <= 0:
+        return 0.0
+    seconds = random_wait_seconds(0.05, max_seconds, distribution="uniform")
+    await asyncio.sleep(seconds)
+    return seconds
+
+
+def hotel_transition_policy(base: HumanPolicy) -> HumanPolicy:
+    """Faster clicks for leave/book steps; still human-like."""
+    return HumanPolicy(
+        jitter_min_sec=base.jitter_min_sec,
+        jitter_max_sec=base.jitter_max_sec,
+        min_seconds_between_clicks=min(1.2, base.min_seconds_between_clicks),
+        min_seconds_after_tab_change=min(1.5, base.min_seconds_after_tab_change),
+        pre_click_pause_min=0.4,
+        pre_click_pause_max=1.2,
+        think_before_action_chance=0.05,
+        long_pause_chance=0.05,
+    )
+
+
 async def between_actions(page: Page, policy: HumanPolicy | None = None) -> None:
     p = policy or HumanPolicy()
     await idle_mouse_drift(page)

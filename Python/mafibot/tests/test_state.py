@@ -8,7 +8,7 @@ import pytest
 
 from mafibot.brain import pick_next_action
 from mafibot.config import BotProfile, load_bot_profile
-from mafibot.config import in_play_window
+from mafibot.hotel_stay import action_requires_leave_hotel
 from mafibot.navigation import extract_side_from_href
 from mafibot.state import parse_from_html
 
@@ -37,25 +37,30 @@ async def test_logged_in_parses_stats():
 
 
 @pytest.mark.asyncio
-async def test_ms_hotel_blocks_crime():
+async def test_ms_hotel_in_hotel_crime_still_ready_for_scheduler():
     html = (FIXTURES / "ms_logged_in.html").read_text(encoding="utf-8")
     state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
     assert state.in_hotel
     assert state.must_leave_hotel
-    assert not state.crime_ready
+    assert state.crime_ready  # cooldown ok; brain leaves hotel before crime
     assert state.business_income_ready
     assert state.ship_in_port
 
 
 @pytest.mark.asyncio
-async def test_pick_leave_hotel_first():
+async def test_pick_business_while_in_hotel_before_crime_if_both_ready():
     html = (FIXTURES / "ms_logged_in.html").read_text(encoding="utf-8")
     state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
-    profile = load_bot_profile("ranker")
+    profile = load_bot_profile("okonom")
     action, reason = await pick_next_action(state, profile)
     assert action is not None
-    assert action.name == "leave_hotel"
-    assert "hotel" in reason.lower()
+    assert action.name == "business"
+
+
+@pytest.mark.asyncio
+async def test_crime_requires_leave():
+    assert action_requires_leave_hotel("crime")
+    assert not action_requires_leave_hotel("business")
 
 
 @pytest.mark.asyncio
@@ -81,7 +86,8 @@ def test_extract_side():
     assert extract_side_from_href("/index.php?side=reise&x=1") == "reise"
 
 
-def test_bot_profile_human_pacing_defaults():
-    p = BotProfile()
-    assert p.min_seconds_between_clicks >= 2.5
-    assert p.cooldown_jitter_min_sec >= 30
+def test_bot_profile_hotel_stay_defaults():
+    p = load_bot_profile("ranker")
+    assert p.stay_in_hotel is True
+    assert p.book_hotel_after_every_action is True
+    assert "leave_hotel" not in p.economy_order

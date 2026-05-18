@@ -96,7 +96,7 @@ Session check → parse DOM (GameState) → brain picks action → human-like cl
 ```
 
 - **Navigation** — `ms.php` tabs first (e.g. Kriminalitet, Flyplass); sidebar for bedrifter/rederi; legacy `?side=` as fallback.
-- **Hotel** — If the page shows *Forlat hotell for å utføre*, the bot runs **leave_hotel** before crime or travel.
+- **Hotel-first (default)** — **Book** before each action, **leave** only for crime/travel/drugs/murder/bank, **book again** within **`max_seconds_before_book_hotel`** (default **2 s**) after each action. Long waits happen only *between* cycles. See [WHATIF.md](WHATIF.md).
 - **Human pacing** — `human_click_paced()` enforces minimum gaps between clicks, reading pauses before each click, optional “thinking” delays, and disabled buttons are skipped.
 
 ### How wait times are chosen

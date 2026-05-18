@@ -9,7 +9,7 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
-from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
+from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page
 from mafibot.selectors import MESSAGE_REPLY_LABELS
 from mafibot.state import GameState
@@ -80,7 +80,6 @@ class MessagesAction:
         _last_messages_at = datetime.now()
         if replied:
             _messages_this_hour += 1
-        await between_actions(page, policy)
         return ActionResult(replied or state.unread_messages == 0, "messages checked")
 
 
@@ -114,9 +113,7 @@ class FamilyAction:
 
             await human_click(page, accept.first)
             _last_family_at = datetime.now()
-            await between_actions(page, policy)
             return ActionResult(True, "family invite handled")
 
         _last_family_at = datetime.now()
-        await between_actions(page, policy)
         return ActionResult(True, "family page visited")

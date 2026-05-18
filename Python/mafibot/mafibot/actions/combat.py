@@ -9,7 +9,7 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
-from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
+from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page
 from mafibot.selectors import MURDER_ACTION_LABELS
 from mafibot.state import GameState
@@ -51,7 +51,6 @@ class MurderAction:
             return ActionResult(True, "murder page opened; skipped (aggression gate)")
 
         clicked = await click_button_matching(page, MURDER_ACTION_LABELS, policy=policy)
-        await between_actions(page, policy)
         if clicked:
             return ActionResult(True, "murder action submitted")
         return ActionResult(False, "no murder control found")
