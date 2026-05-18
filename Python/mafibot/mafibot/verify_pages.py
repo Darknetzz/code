@@ -81,24 +81,24 @@ def _crime_requirements() -> list[tuple[str, tuple[str, ...]]]:
             labels = (opt.label, *opt.patterns)
             reqs.append((f"crime:{section.id}:{opt.id}", labels))
         reqs.append((f"crime:{section.id}:submit", section.submit_labels))
-    reqs.append(
-        (
-            "crime:stjel:random_target",
-            ("tilfeldig bruker", "tilfeldig spiller", "stjel fra en tilfeldig"),
-        )
-    )
+    return reqs
+
+
+def _nav_requirements(logical: str) -> list[tuple[str, tuple[str, ...]]]:
+    reqs: list[tuple[str, tuple[str, ...]]] = []
+    tab = GAME_TABS.get(logical)
+    if tab:
+        reqs.append((f"nav:tab:{logical}", (tab,)))
+    patterns = SIDEBAR_LINKS.get(logical) or NAV_LINKS.get(logical, ())
+    if patterns:
+        reqs.append((f"nav:sidebar:{logical}", patterns))
     return reqs
 
 
 def _requirements_for(logical: str) -> list[tuple[str, tuple[str, ...]]]:
     if logical == "crime":
         return _crime_requirements()
-    tab = GAME_TABS.get(logical)
-    reqs: list[tuple[str, tuple[str, ...]]] = []
-    if tab:
-        reqs.append((f"nav:tab:{logical}", (tab,)))
-    for pattern in SIDEBAR_LINKS.get(logical, NAV_LINKS.get(logical, ())):
-        reqs.append((f"nav:sidebar:{logical}", (pattern,)))
+    reqs = _nav_requirements(logical)
     if logical == "travel":
         reqs.append(("travel:submit", TRAVEL_ACTION_LABELS))
     elif logical == "hotel":
@@ -116,8 +116,9 @@ def _requirements_for(logical: str) -> list[tuple[str, tuple[str, ...]]]:
     elif logical == "hospital":
         reqs.append(("hospital:action", HOSPITAL_ACTION_LABELS))
     elif logical == "messages":
-        reqs.append(("messages:open", ("les", "åpne", "innboks")))
-        reqs.append(("messages:reply", MESSAGE_REPLY_LABELS))
+        reqs.append(("messages:open", ("les", "åpne", "innboks", "meldinger")))
+        # Reply controls appear on an opened message, not the inbox list.
+        reqs.append(("messages:reply", MESSAGE_REPLY_LABELS + ("svar på",)))
     elif logical == "family":
         reqs.append(("family:accept", ("godta", "aksepter")))
     elif logical == "murder":

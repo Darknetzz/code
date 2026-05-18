@@ -42,7 +42,10 @@ async def goto_tab(
     await ensure_game_shell(page, policy)
     label = tab_label_for(logical)
     if not label:
-        return await goto_side(page, logical, policy=policy, dry_run=dry_run)
+        if await _try_sidebar(page, logical, policy=policy, dry_run=dry_run):
+            return True
+        await goto_side(page, logical, policy=policy, dry_run=dry_run)
+        return True
 
     tab = page.get_by_role("link", name=re.compile(rf"^{re.escape(label)}", re.I))
     if await tab.count() == 0:
@@ -124,8 +127,11 @@ async def goto_side(
     prefer_link: bool = True,
     dry_run: bool = False,
 ) -> None:
-    if prefer_link and "ms.php" in page.url.lower():
+    if prefer_link and "ms.php" in page.url.lower() and tab_label_for(logical):
         if await goto_tab(page, logical, policy=policy, dry_run=dry_run):
+            return
+    if prefer_link and "ms.php" in page.url.lower():
+        if await _try_sidebar(page, logical, policy=policy, dry_run=dry_run):
             return
     side = side_for(logical)
     await page.goto(f"{BASE_URL}?side={side}", wait_until="domcontentloaded")

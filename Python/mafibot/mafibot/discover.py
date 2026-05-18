@@ -21,6 +21,7 @@ from mafibot.navigation import (
 )
 from mafibot.selectors import DEFAULT_SIDES, save_pages_map
 from mafibot.discover_diff import find_previous_discovery_run, write_discovery_report
+from mafibot.page_capture import capture_page_html
 from mafibot.state import parse_game_state
 
 console = Console()
@@ -98,7 +99,7 @@ async def run_discovery(
             safe = logical.replace("/", "_")
             html_path = run_dir / f"{safe}.html"
             png_path = run_dir / f"{safe}.png"
-            html_path.write_text(await page.content(), encoding="utf-8")
+            html_path.write_text(await capture_page_html(page), encoding="utf-8")
             await page.screenshot(path=str(png_path), full_page=True)
             manifest.append(
                 {
@@ -145,7 +146,7 @@ async def run_discovery(
             state = await parse_game_state(page)
             safe = logical.replace("/", "_")
             html_path = run_dir / f"{safe}.html"
-            html_path.write_text(await page.content(), encoding="utf-8")
+            html_path.write_text(await capture_page_html(page), encoding="utf-8")
             await page.screenshot(path=str(run_dir / f"{safe}.png"), full_page=True)
             manifest.append(
                 {
