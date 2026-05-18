@@ -1,3 +1,2738 @@
+<!DOCTYPE html><html class="hydrated"><head><style data-styles="">ion-icon{visibility:hidden}.hydrated{visibility:inherit}</style>
+	<title>Mafiaspillet.no</title>
+    	    <link rel="icon" type="image/png" href="img/favicon2.png">
+    	<link rel="stylesheet" type="text/css" href="css/jquery.gritter.css?r=100">
+	
+	<link href="css/main.css?r=474900929" rel="stylesheet" charset="utf-8">
+	<link href="css/farger.css?v=634" rel="stylesheet" charset="utf-8">
+	<script>
+		var inception=false;		
+	</script>
+
+	
+
+
+        <!-- Include Editor style. -->
+    <link href="https://cdn.jsdelivr.net/npm/froala-editor@3.0.5/css/froala_editor.pkgd.min.css" rel="stylesheet" type="text/css">
+    <link href="https://cdn.jsdelivr.net/npm/froala-editor@3.0.5/css/themes/dark.min.css" rel="stylesheet" type="text/css">
+
+    <style>
+        .dark-theme.fr-toolbar {
+            border: 1px solid #444444;
+            background: #242424;
+            color: #cccccc;
+            -webkit-border-radius: 0px 0px 0 0 !important;
+        }
+        .dark-theme.fr-box.fr-basic .fr-wrapper {
+            border: none;
+        }
+
+                    .dark-theme.fr-toolbar {
+                border: 0px solid #444444;
+                background: transparent;
+            }
+
+            .dark-theme.fr-toolbar .fr-newline {
+                background: white;
+            }
+            .dark-theme.fr-box.fr-basic .fr-element{
+                padding-top: 1px;
+
+            }
+                .chat-bottom-wrapper{
+            border-top: 1px solid gray;
+        }
+
+
+    </style>
+
+    <!-- Include JS file. -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/froala-editor@3.0.5/js/froala_editor.pkgd.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/froala-editor@3.0.5/js/plugins/image.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/froala-editor@3.0.5/js/plugins/link.min.js"></script>
+    <script type="text/javascript" src="https://mafiaspillet.no/js/froala-language-nb.js"></script>
+
+
+
+
+<!--<script src="https://mafiaspillet.no/js/froala.js?r=634"></script>-->
+<script>
+
+
+
+
+    function init_froala_editor(editor_id, save_url, callback_function, min_height, placeholder, theme){
+        if(typeof(min_height) == "undefined"){
+            min_height = 80;
+        }
+        console.log("init froala, " + editor_id + ", " + placeholder, "min height: " + min_height);
+
+        if(typeof(placeholder) == "undefined"){
+            placeholder = "Skriv her ...";
+        }
+
+        if(typeof(theme) == "undefined"){
+            theme = "default";
+        }
+
+        toolbar = ['bold', 'italic', 'textColor', 'emoticons', 'insertImage', 'insertLink', 'formatOL', 'formatUL'];
+
+        if(app){
+            toolbar = ['insertImage'];
+        }
+
+        var editor = new FroalaEditor(editor_id,
+            {
+                requestWithCORS: false, // Viktig for appen!
+                key: "GPD2tA2B3C3C2B1D1sGXh1WWTDSGXYOUKc1KINLe1OC1c1D-17D2E2F2C1E4G1C4B8D7C6==",
+                pastePlain: true,
+                linkAlwaysBlank: true,
+                theme: theme,
+                language: "nb",
+                quickInsertTags: [],
+                //toolbarInline: true,
+                //charCounterCount: false,
+                toolbarVisibleWithoutSelection: true,
+                toolbarButtons: toolbar,
+                charCounterCount: false,
+                toolbarBottom: false,
+                emoticonsUseImage: false,
+                attribution: false,
+                heightMin: min_height,
+                heightMax: 300,
+                // Set the save param.
+                saveParam: 'content',
+                placeholderText: placeholder,
+                // Set the save URL.
+                saveURL: domain + save_url,
+                //saveURL: domain + "api_test.php?module_action=" + plugin_id + "&action=send_chatmelding_froala&content=" + encodeURI(editors[editor_id].html.get()) + "&sted=" + chatterom_type + "&id=" + chatterom_detaljer + "&ttoken=" + ttoken + "&signatur='[]'" + api_extra,
+                saveInterval: 100000000000000,
+
+                // HTTP request type.
+                saveMethod: 'POST',
+
+                // Additional save params.
+                saveParams: {},
+
+                // Set the image upload parameter.
+                imageUploadParam: 'file',
+
+                // Set the image upload URL.
+                imageUploadURL: domain + '/api/bildeopplaster.php?' + api_extra,
+
+                // Additional upload params.
+                imageUploadParams: {id: 'editor'},
+
+                // Set request type.
+                imageUploadMethod: 'POST',
+
+                // Set max image size to 5MB.
+                imageMaxSize: 15 * 1024 * 1024,
+
+                // Allow to upload PNG and JPG.
+                imageAllowedTypes: ['jpeg', 'jpg', 'png', 'gif'],
+
+
+                events: {
+                    'save.before': function () {
+                        // Before save request is made.
+                        console.log("Saving");
+                    },
+
+                    'save.after': function (data) {
+                        // After successfully save request.
+
+                    },
+
+                    'save.error': function () {
+                        // Do something here.
+                    },
+
+                    'keydown': function (keydownEvent){
+
+
+                    },
+                    'image.beforeUpload': function (images) {
+                        // Return false if you want to stop the image upload.
+                    },
+                    'image.uploaded': function (response) {
+                        // Image was uploaded to the server.
+                        console.log("Uploaded: " + response);
+                    },
+                    'image.inserted': function ($img, response) {
+                        // Image was inserted in the editor.
+                    },
+                    'image.replaced': function ($img, response) {
+                        // Image was replaced in the editor.
+                    },
+                    'image.error': function (error, response) {
+                        // Bad link.
+                        if (error.code == 1) {  }
+
+                        // No link in upload response.
+                        else if (error.code == 2) {  }
+
+                        // Error during image upload.
+                        else if (error.code == 3) {  }
+
+                        // Parsing response failed.
+                        else if (error.code == 4) {  }
+
+                        // Image too text-large.
+                        else if (error.code == 5) {  }
+
+                        // Invalid image type.
+                        else if (error.code == 6) {  }
+
+                        // Image can be uploaded only to same domain in IE 8 and IE 9.
+                        else if (error.code == 7) {  }
+
+                        // Response contains the original server response to the request if available.
+                    }
+                }
+            },
+            function () {
+                if(typeof(callback_function) == "function") {
+                    callback_function();
+                }
+            });
+        return editor;
+    }
+</script>
+	<script>
+		function scale_chatroom_height(){
+			
+		}
+	</script>
+
+    <!--
+    <script type="text/javascript">
+        (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "48gz3a54so");
+    </script>
+    -->
+
+	<!-- Ionic icons -->
+    <!--<script src="https://cdn.jsdelivr.net/npm/ionicons/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://cdn.jsdelivr.net/npm/ionicons/dist/ionicons/ionicons.js"></script>
+    -->
+	<script src="https://unpkg.com/ionicons@6.0.1/dist/ionicons.js"></script><script type="module" src="https://unpkg.com/ionicons@6.0.1/dist/ionicons/ionicons.esm.js" data-stencil-namespace="ionicons"></script><script nomodule="" src="https://unpkg.com/ionicons@6.0.1/dist/ionicons/ionicons.js" data-stencil-namespace="ionicons"></script>
+	<link href="css/ionicons.css?r=314338617" rel="stylesheet" charset="utf-8">
+
+	
+	<!-- Ionsound -->
+	<script src="js/ion.sound.min.js"></script>
+	<script>
+		ion.sound({
+			sounds: [
+				{ name: "door_bell"	},
+				{ name: "button_tiny"	},
+				{ name: "water_droplet_3", volume: 0.1	},
+				{
+					name: "button_click_on"
+				},
+				{
+					name: "water_droplet"
+				},
+				{
+					name: "water_droplet2"
+				},
+				{
+					name: "notify_sound",
+					volume: 0.2
+				},
+				{
+					name: "alert_sound",
+					volume: 0.3,
+					preload: false
+				},
+				{ name: "snap" },
+				{ name: "button_push" },
+				{ name: "glass" },
+				{ name: "bell_ring" }
+			],
+			volume: 1.0,
+			path: "sounds/",
+			preload: true
+		});
+	</script>
+		
+	<style>
+		#fyrverkeri {
+			position: absolute;
+			top: 0px;
+		}
+	</style>
+	<style id="farger-css">
+	/* tema 4888 */
+:root {
+    --farge-positiv: #3e7600;
+    --farge-negativ: #8b0000;
+    --farge-viktig: #fc5130;
+    --farge-ekstra-1: #00aaff;
+    --farge-ekstra-2: #cf00ff;
+    --farge-ekstra-3: #e93a3a;
+    --farge-ekstra-4: #00fdff;
+    --farge-ekstra-5: #c6dd19;
+    --farge-ekstra-6: #c97100;
+    --farge-ekstra-7: #00ff5c;
+    --farge-ekstra-8: #65814d;
+    --background-pic: url("https://mafiaspillet.no/img/bgrbilder/murbakgrunn3.jpg?r?=5");
+    --background-color: #000000;
+    --transparent-overlay-color: #07101c;
+    --transparency: 80%;
+    --header-pic-large: url("https://mafiaspillet.no/img/temaer/header_neon16.png");
+    --header-pic-small: url("https://mafiaspillet.no/img/temaer/header_neon16_liten.png");
+    --header-text-username: #7798ab;
+    --header-text-header: #7798ab;
+    --header-text-info: #9b9b9b;
+    --right-side-menu-pic: none;
+    --right-side-menu-color: #000000;
+    --left-side-menu-pic: none;
+    --left-side-menu-color: #000000;
+    --farge-innholdsbokser: #4b4343;
+    --farge-ramme-innholdsbokser: #0c1318;
+    --farge-advarselboks-ramme: #5c1717;
+    --transparens-innholdsbokser: 27%;
+    --farge-knapper: #0e1d2a;
+    --farge-ramme-knapper: #474747;
+    --farge-tekst-knapper: #cccccc;
+    --farge-knapper-mouseover: #0e1d2a;
+    --farge-kontrast: #477998;
+    --farge-drapsknapp: #3e7600;
+    --farge-hotellknapp-ikke-hotell: #550000;
+    --farge-hotellknapp-i-hotell: #3e7600;
+    --farge-ramme-knapp-i-hotell: #474747;
+    --farge-meny: #07101c;
+    --farge-meny-hover: #1e2226;
+    --farge-strek-meny-markert: #2d5c7a;
+    --drap-vellykket-tekst: #468847;
+    --drap-vellykket-bakgrunn: #dff0d8;
+    --drap-mislykket-tekst: #b94a48;
+    --drap-mislykket-bakgrunn: #f2dede;
+    --drap-hit-tekst: #c09853;
+    --drap-hit-bakgrunn: #303030;
+    --background-final: url("https://mafiaspillet.no/img/bgrbilder/murbakgrunn3.jpg?r?=5") fixed;
+    --right-side-menu-final: none;
+    --left-side-menu-final: none;
+}
+	</style>
+	
+    <style>
+        .btn, .btn-large {
+            color: black;
+        }
+        .btn:hover{
+            color: black;
+        }
+    </style>
+
+	<script src="https://cdn.ravenjs.com/3.19.1/raven.min.js" crossorigin="anonymous"></script>
+	<script>
+		Raven.config('https://ab4fc2a40c314a8f923442c933fc639b@sentry.io/233481').install();
+	</script>
+	
+	<script>
+	</script>
+	
+	<script>
+		var domain = "//mafiaspillet.no/";
+		var app = false;
+		var api_extra = "";
+		var post_token = '11bbbd33291333a235aebb1a0add347b';
+		var time_diff = 1779135189 -  Math.round(+new Date()/1000);
+		
+		var plugin_id = "main";
+		var ttoken = '16c23d8cafd72494e19effb5515672b8';
+		var output_id = 0;
+		
+		function inIframe(){ return true; }
+
+		function sett_time_diff(){
+			$.get("https://mafiaspillet.no/time.php", function(tid){
+				var time_diff = parseInt(tid - Math.round(+new Date()/1000));
+				console.log("Time diff: " + time_diff);
+			});
+		}
+		function logg_app(){
+
+        }
+		
+	</script>
+	
+	
+	
+	<script>
+    var rankInfo = JSON.parse('[{"ranknavn":"Ingen","nummer":"1","ovre_grense":"125"},{"ranknavn":"Kriminell","nummer":"2","ovre_grense":"500"},{"ranknavn":"Associate","nummer":"3","ovre_grense":"2000"},{"ranknavn":"Amico","nummer":"4","ovre_grense":"4000"},{"ranknavn":"Button","nummer":"5","ovre_grense":"8000"},{"ranknavn":"Sgarrista","nummer":"6","ovre_grense":"14000"},{"ranknavn":"Caporegime","nummer":"7","ovre_grense":"22000"},{"ranknavn":"Enforcer","nummer":"8","ovre_grense":"32000"},{"ranknavn":"Capo","nummer":"9","ovre_grense":"47500"},{"ranknavn":"Contabile","nummer":"10","ovre_grense":"70000"},{"ranknavn":"Capo Bastone","nummer":"11","ovre_grense":"92500"},{"ranknavn":"Consigliere","nummer":"12","ovre_grense":"115000"},{"ranknavn":"Boss","nummer":"13","ovre_grense":"140000"},{"ranknavn":"Gudfar","nummer":"14","ovre_grense":"190000"},{"ranknavn":"Capo Crimini","nummer":"15","ovre_grense":"300000"},{"ranknavn":"Capo de tutti Capi","nummer":"16","ovre_grense":"214748364700"}]');
+    var rankPoints = 118105;
+    var currentRank = 'Boss';
+</script>
+
+<script src="js/pusher-8.js"></script><script>
+/* Alt som har med notifications, invitasjoner og lignende i hovedfanen ms.php
+ *
+ *
+ */
+
+function nytt_supportsvar(){
+    $("#ny_support").html("NY!")
+}
+
+function har_lest_alle_support(){
+    $("#ny_support").html("")
+}
+
+// Kalles når man blir skutt på
+function background_blood(){
+	
+			$("#game-container").addClass("background_blood");
+			$("#game-container").addClass("background_blood_border");
+			
+			setTimeout(function(){
+				$("#game-container").removeClass("background_blood");
+				$("#game-container").removeClass("background_blood_border");
+			}, 1000);
+}
+	
+function background_blood_orange(){
+	
+			$("#game-container").addClass("background_blood_orange");
+			
+			setTimeout(function(){
+				$("#game-container").removeClass("background_blood_orange");
+			}, 1000);
+
+}
+	
+	
+
+String.prototype.capitalize = function() {
+    return this.charAt(0).toUpperCase() + this.slice(1);
+};
+function notific_html(data, type){
+	var row = data;
+	
+	if(type == "notifications"){
+		return "<div class='notific_row " + data.sak_id + "'>" + 
+			"<img src='" + row.bilde + "' border='0' class='notific_image'>" + 
+			"<p style='overflow:hidden; margin-top: 0px;'>" + row.tekst + " <br> <i>" + row.tid + "</i></p></div>";
+	}
+	else if(type == "inbox"){
+		return "<div class='image_row' onclick=\"self.frames['hovedinnhold'].location.href = 'innboks.php?p=messages&seeMessage=" + row.id + "'; chatbarelement_toggle('inbox');\">" + 
+		"<img src='" + row.otherUser_image + "' class='notific_image message_image'><p style='overflow:hidden; margin-top: 0px;'><b>" + row.from + ":</b>" +
+		"<br>" + row.message.substring(0,60) + "...</p></div>";
+	}
+	else if(type == "invitations"){
+		
+		var accept_text = "Godta!";
+		if(row.overskrift == "bilde"){
+			accept_text = "Godta BILDE!";
+		}
+		
+		return "<div class='notific_row'>" + 
+		"<img src='" + row.image + "' class='invitation_image'>" +
+		"<form method='POST' action='invitasjoner_godta.php' target='invitasjoner_iframe' name='form_invitajoner'>" + 
+		"<p style='overflow: hidden; margin-top: 0px;' id='invitasjon_" + row.id + "'><b>" + row.overskrift.capitalize() + "</b><span style='color: #666666;'> - " + row.tid + "</span><br>" + 
+		"" + row.tekst + "<br><br> " + 
+		"<span id='invitasjon_" + row.id + "_knapper'>" +
+			"<input type='submit' class='btn' name='godta' value='" +  accept_text + "' style='color: black;'>&nbsp;&nbsp;<input type='submit' class='btn' name='avslo' value='Avsl&aring;!' style='color: black;'>" +
+			"<input type='hidden' name='id' value='" + row.id + "'>" +
+		"</span></p></form>" +
+		"</div>";	
+	}
+}
+
+
+function set_number(type, nummer){
+	var div = $("#ulest_nummer_" + type);
+	if(nummer < 1){
+		div.hide();
+	}
+	else{
+		div.html(nummer).fadeIn();
+	}
+	
+}
+
+function set_numbers(){
+	
+	$.get("userUpdate_r5.php?hent_antall=alle", {}, function(data){
+		
+		/*
+		jqcc.cometchat.setAlert("varsler3795", data[0]);
+		jqcc.cometchat.setAlert("meldinger5864", data[1]);
+		jqcc.cometchat.setAlert("invitasjoner4828", data[2]);
+		*/
+		set_number("varsler", data[0]);
+		set_number("meldinger", data[1]);
+		set_number("invitasjoner", data[2]);
+		
+		if(parseInt(data[0]) > 0 || parseInt(data[1]) > 0 || parseInt(data[2]) > 0){
+			var sum = parseInt(data[0]) + parseInt(data[1]) + parseInt(data[2]);
+			if(sum > 0){
+				document.title = "(" + sum + ") Mafiaspillet.no";
+			}
+			else{
+				document.title = "Mafiaspillet.no";
+			}
+		}
+		else{
+			document.title = "Mafiaspillet.no";
+		}
+		
+		
+		$("#loading_message").html("Henter antall varsler/meldinger/invitasjoner");
+		loaded++;
+		
+	}, "json");
+}
+function show_popup(overskrift, tekst, bilde){
+		
+		var unique_id = $.gritter.add({
+			// (string | mandatory) the heading of the notification
+			title: overskrift,
+			// (string | mandatory) the text inside the notification
+			text: tekst,
+			// (string | optional) the image to display on the left
+			image: bilde,
+			// (bool | optional) if you want it to fade out on its own or just sit there
+			sticky: false, 
+			// (int | optional) the time you want it to be alive for before fading out
+			time: '10000',
+			// (string | optional) the class name you want to apply to that specific message
+			class_name: 'my-sticky-class' 
+		});
+
+	
+}
+
+
+
+var pusher = null;
+
+
+function init_pusher(callback){
+	
+	$("#loading_message").html("Laster pusher");
+	try{
+		//pusher = new Pusher('7cdfa697d37910656e45', { authEndpoint: 'pusher/auth_user.php' });
+         pusher = new Pusher('1', {
+              httpHost: window.location.hostname,
+              httpPort: 80,
+              httpPath: '/soketi',
+              wsHost: window.location.hostname,
+              wsPort: 80,
+              wsPath: '/soketi',
+              wssHost: window.location.hostname,
+              wssPort: 443,
+              wssPath: '/soketi',
+              forceTLS: true,
+              encrypted: true,
+              disableStats: true,
+              enabledTransports: ['ws', 'wss'],
+              cluster: 'hello',
+              authEndpoint: 'pusher/auth_user3.php',
+            }); 		
+	}
+	catch(err){
+		console.error("Pusher error: " + err);
+		if (pusher == undefined){
+			location.href = 'ms.php'; //setTimeout("init_pusher()", 1000);
+		}
+		else{
+		}
+		return;
+    }
+    
+    $("#loading_message").html("Lastet pusher");
+
+    
+    loaded++;    
+	callback();
+    
+}
+
+function getPusher(){
+	return pusher;
+}
+
+
+function marker_som_varslet(type){
+	$.post("userUpdate_r5.php?marker_som_varslet=" + type, function(res){
+	});
+}
+
+function init_notifications(type){
+	//console.info("init_" + type);
+	
+	var popup_name = "cometchat_trayicon_varsler3795_popup";
+	var all_link = "varslinger.php";
+	var alert_name = "varsler";
+	var antall = 4;
+	if(type == "inbox"){
+		popup_name = "cometchat_trayicon_meldinger5864_popup";
+		all_link = "innboks.php";
+		alert_name = "meldinger";
+	}
+	else if(type == "invitations"){
+		popup_name = "cometchat_trayicon_invitasjoner4828_popup";
+		all_link = "invitasjoner.php";
+		alert_name = "invitasjoner";
+		antall = 3;
+	}
+	
+	
+	// Hacky greier for å injecte cometchat
+	//$("#" + popup_name).find(".cometchat_traycontent").html("<div id='" + type + "_table'></div><div style='cursor: pointer; text-align: center; padding: 6px; background-color: #eeeeee' onClick=\"self.frames['hovedinnhold'].location.href = '" + all_link + "';\" onmouseover=\"this.style.background='#DDEEF4';\" onmouseout=\"this.style.background='#eeeeee';\">Se alle</div>");
+	var seAlleBg = '#eeeeee';
+	var seAlleHover = '#DDEEF4';
+	$("#" + alert_name + "_boks").find(".boks_body").html("<div id='" + type + "_table'></div><div style='cursor: pointer; text-align: center; padding: 6px; background-color: " + seAlleBg + "' onClick=\"self.frames['hovedinnhold'].location.href = '" + all_link + "'; chatbarelement_toggle('" + type + "');\" onmouseover=\"this.style.background='" + seAlleHover + "';\" onmouseout=\"this.style.background='" + seAlleBg + "';\">Se alle</div>");
+	
+	if(type == "invitations"){
+		$("#invitasjoner_boks").find(".boks_body").append("<iframe src='invitasjoner_godta.php' width='0' height='0' style='visibility: hidden' border='0' name='invitasjoner_iframe'>");
+	}
+	
+	getNotifications(3, type);
+
+	// Listen for notifications
+
+	var channel = pusher.subscribe('private-ms-14134');
+	
+	channel.bind(type, function(data) {
+		if(data.overskrift == "Drapsforsøk" && userinfo.ikke_blink_drapsforsok != "1"){
+			if(data.tekst.includes("denne byen")){
+				background_blood();
+			}
+			else{
+				background_blood_orange();
+			}
+		}
+		else if(data.overskrift == "Support"){
+		    nytt_supportsvar();
+        }
+
+		
+		// Remove last div 
+		// Insert at the beginning
+		
+		// Hvis dette er en meldingt til innboksen, og chatten er oppe, ignorer
+		if(type == "inbox"){
+			var chatid = data.sted + "-" + data.steddetaljer;
+			if($("#chatterom_" + chatid).hasClass("chatbarelement_aktiv")){
+				//console.log("chatten er aktiv, ignorer chat_"+ chatid + "");
+				return;
+			}
+			else{
+				//console.log("Chatten er ikke åpen, ikke ignorer  ignorer chat_"+ chatid + "");
+			}
+			
+			// Sjekk også om chatten er åpen i iframen
+			if($("iframe[name='hovedinnhold']").contents().find("div").find("#chatarea_" + chatid).length > 0){
+				//console.log("Chatten er åpen i iframe, ignorer varsel");
+				return;
+			}
+			else{
+				
+				var iframe = $("iframe[name='hovedinnhold']");
+				if (iframe != null){
+					if(iframe.contents().get(0).location.href.search("innboks") > 0){
+						return;
+					}
+				}
+				else{
+				}
+				
+				//console.log("Ikke åpen i ifram");
+			}
+		}
+		
+		
+		// Remove similar notification if exists
+		if(type == "notifications" && data.sak_id != ""){
+			//console.log("sak_id: " + data.sak_id);
+			var similar = $("." + data.sak_id);
+			if(similar.length > 0){
+				$("." + data.sak_id).fadeOut().remove();
+			}
+		}
+		
+		
+		// Count number of items first
+		var cnt = $('#' + type + '_table div').length;
+		if(cnt >= 3){
+			$('#' + type + '_table div:last').fadeOut().remove();
+			
+		}
+		
+		$('#' + type + '_table').prepend($(notific_html(data, type)).fadeIn(100));
+		
+		// Set tallet for antall
+		// Ikke sett tallet hvis boksen er åpen
+		if($("#" + alert_name + "_boks").is(":hidden")){
+			set_number(alert_name, data.nye);
+		}
+		else{
+			// Marker som varslet
+			marker_som_varslet(type);
+		}
+		
+		document.title = "(" + data.nye + ") Mafiaspillet.no";
+		
+		
+		// Legg på litt styling for å vise at dette er et nytt element
+		var elem = $('#' + type + '_table div:first');
+		$(elem).addClass('active active_' + type);
+		// Hvis popupen er åpen, fjern stylingen etter litt tid
+		if($("#" + popup_name).hasClass("cometchat_tabopen")){
+			// Open
+			setTimeout("$('.active_" + type +"').removeClass('active');", 2000);
+		}
+		
+		var popup = false;
+				
+		
+		// Vis som popup?
+		//console.info("T: " + type + ", " + data.popup);
+		if(type == "notifications" || type == "invitations"){
+
+			if(data.popup == "1" || popup){
+				//console.info("SKal vise popup");
+				if(type == "notifications"){
+					var bilde = data.bilde;
+				}
+				else{
+					var bilde = data.image;	
+				}
+				
+				show_popup(data.overskrift, data.tekst, bilde);
+			}
+			
+			// Vis som desktop notification?
+			if(data.desktop == "1"){
+				desktop_notification(data.id, data.tekst, bilde);
+			}
+				
+		}
+		
+		
+	});
+	
+	
+	
+	
+	channel.bind('pusher:subscription_error', function(status) {
+		console.error("ERROR: " + JSON.stringify(status));
+	});
+	
+	
+	
+}
+
+
+function init_massemeldinger(){
+	
+
+	// Listen for notifications
+	
+
+	
+	var channel = pusher.subscribe('massemelding-ms');
+	
+	channel.bind("massemelding", function(data) {
+		//console.info('Massemelding!');
+		
+		$.post("phpfiles/getData.php", {type: "massemelding"}, function(rows){
+			//console.info("get data massemeldinger");
+		});
+	});	
+
+
+}
+
+function getNotifications(n, type){
+	//console.info('Laster inn notifications i '  + type);
+	
+	
+	$.post("phpfiles/getData.php", {type: type}, function(rows){
+		
+	  	$("#" + type + "_table").children().remove('div'); //Clear the list first
+	  	
+	    var html_out = "";
+	    var i = 0;
+	    
+	    for (var row in rows) {
+			if(rows.hasOwnProperty(row)) {
+				//console.log("row: " + rows[row]);
+				html_out += notific_html(rows[row], type);
+				if (++i >= n) {
+					break;
+				}
+			}
+	    }
+	    
+	    if (i < 1){
+			html_out += "<a class='item'></a>";
+		}
+			
+		html_out += "";
+		
+		$("#" + type + "_table").html(html_out);
+	  },
+	  "json" 
+	);
+	
+}
+
+
+
+
+
+</script>
+	<script src="js/jquery.js"></script>
+
+	
+    <script language="javascript" type="text/javascript" src="js/hack_detection.js?r=635264773"></script>
+
+    <script src="js/events.js?r=117439308" charset="utf-8"></script>
+	<script src="js/perform.js?r=855812957" charset="utf-8"></script>
+	<script src="js/signature_tracking.js?r=106404285" charset="utf-8"></script>
+	<script src="js/game_loop.js?r=207917784" charset="utf-8"></script>
+	<script src="js/waiting_times.js?r=343697896" charset="utf-8"></script>
+	<script src="js/check_login.js?r=1" charset="utf-8"></script>
+	<script src="js/load_right_menu2.js?r=255827474" charset="utf-8"></script>
+	<script src="js/okonomi.js?r=796525148" charset="utf-8"></script>
+	<script src="js/drep_venstre_meny.js?r=784891449" charset="utf-8"></script>
+	<script src="js/overvaking.js?r=546809158" charset="utf-8"></script>
+    <script src="js/ping.js?r=468961568" charset="utf-8"></script>
+    <script language="javascript" type="text/javascript" src="tellned14.js?r=1"></script>
+	<script type="text/javascript" src="js/desktop_notification.js?r=1"></script>
+	<script type="text/javascript" src="js/jquery.gritter.js"></script>
+	
+	<link href="css/bootstrap-toggle.min.css?r=466760283" rel="stylesheet">
+	<script src="js/bootstrap-toggle.min.js?r=69311101"></script>
+	
+	
+	
+	<script>
+var forumstream_max = 1;
+forumstream_max = 3;
+function clickLink(event, url) {
+    var a = document.createElement("a");
+    a.href = url;
+    //console.log("Clicklink: " + url);
+    //Simulating Ctrl+click does not work in Firefox or IE
+    var isFF = !!window.sidebar;
+    var isIE = !!window.ActiveXObject;
+    var isIENew = document.body.style.msTouchAction !== undefined;
+
+    if(url == "logout"){
+        Ismell(url);
+    }
+    else{
+        if(event.button == 2 || event.button == 1 || event.ctrlKey || event.metaKey || url == "admin__--__.php" || url == "vervekonk.php" || url == "julekalender2013.php"){
+            if(!isFF && !isIE && !isIENew){
+                if(document.createEvent) {
+                    if(event.target !== a) {
+                        var evt = document.createEvent("MouseEvents");
+                        evt.initMouseEvent("click", true, true, window,
+                            0, 0, 0, 0, 0, true, false, false, true, 0, null);
+                        var allowDefault = a.dispatchEvent(evt);
+                    }
+                }
+            }
+            else window.open(url);
+        }
+        else parent.hovedinnhold.location.href = url;
+    }
+}
+
+function strip_tags_test(str) {
+    str = str.toString();
+    return str.replace(/<\/?[^>]+>/gi, '');
+}
+
+function post_html(data){
+	if(data.kommentar > 0){
+		var l = 'game.php?p=forum&kategori=' + data.kategori + '&trod=' + data.id + '&notific=ja&innlegg=' + data.kommentar + '&test2';
+	}
+	else{
+		var l = 'game.php?p=forum&kategori=' + data.kategori + '&trod=' + data.id + '&notific=ja&innlegg=' + data.orig_nummer + '&test';
+	}
+	
+	var strippet = strip_tags_test(data.melding);
+	
+    return '<div class="forumstream-post"  onclick="loadPage(this, event);" data-url="'+l+'">' +
+        '<div class="forumstream-post-img-container"><img src="' + data.image + '" /></div>' +
+        '<p><span class="forumtekst">' + strippet.substring(0, 50) + '</span></p></div>';
+}
+
+var current_popular_event = null;
+var current_popular_thread = null;
+var current = "thread";
+
+function init_popular(){
+    $.post("api/forumstream.php?hent=viktig_hendelse" + api_extra, {}, function(data){
+        current_popular_event = data;
+
+        $.post("api/forumstream.php?hent=viktig_trod" + api_extra, {}, function(data){
+            current_popular_thread = data;
+            update_popular();
+        }, "json");
+    }, "json");
+}
+
+var inited = false;
+
+function init_forumstream(){
+	
+	
+    inited = true;
+    init_popular();
+
+    $.post("phpfiles/userUpdate.php?type=forumstream_init&max=" + forumstream_max, {}, function(rows){
+		$("#loading_message").html("Laster forumstreamen");
+        for (i in rows){
+            //console.info("Row");
+            row = rows[i];
+            var html = post_html(row);
+            $("#forumstream").prepend(html);
+            loaded++;
+        }
+    }, "json");
+    init_forumstream_pusher();
+}
+
+function init_forumstream_pusher(){
+    var channel = pusher.subscribe('forum-ms');
+
+    channel.bind("innlegg", function(data) {
+        add_to_forumstream(data);
+    });
+
+    channel.bind("popular", function(data) {
+        current_popular_event = data;
+    });
+
+    channel.bind("popular_thread", function(data) {
+        current_popular_thread = data;
+    });
+}
+
+function update_popular(){
+    var object;
+    if (current == "thread" && current_popular_event[3] > Math.round(+new Date()/1000) - 60*15) {
+        // Show event
+        current = "event";
+        object = current_popular_event;
+    }
+    else{
+        current = "thread";
+        object = current_popular_thread;
+    }
+
+    if(object[1] == false) return;
+
+    var out = '<div class="forumstream-post" onclick="loadPage(this, event);" data-url="'+object[2]+'">' +
+        '<div class="forumstream-post-img-container"><img src="' + object[0] + '" /></div>' +
+        '<p><span class="forumtekst">' + object[1] + '</span></p></div>';
+
+    $("#forumstream_popular").html(out);
+
+    setTimeout("update_popular()", 15000);
+}
+
+function add_to_forumstream(object){
+    // Sjekk om kategorien er tillatt av brukeren
+    console.log("Legger til i forumstream");
+    var except = '';;
+
+    if (except.indexOf(object.kategori) > -1) return;
+
+    // Fade out det første innlegget
+    var first = "#forumstream div:first";
+    var last = "#forumstream div:nth-child(2)";
+
+    var elem = $(first);
+    var fade = { opacity: 0, transition: 'opacity 0.5s' };
+    elem.css(fade).slideUp(5, function(){
+        elem.remove();
+        $("#forumstream").append($(post_html(object)).hide().fadeIn(300));
+
+    });
+
+    // Sjekk om det er flere enn maks antall innlegg i streamen
+    var cnt = $('#forumstream div.forumstream-post').length;
+    //console.log("Antall: " + cnt);
+    var ant = forumstream_max;
+    //console.log("max: " + ant);
+    if(cnt >= ant){
+
+        for(var k = 0; k < cnt - ant + 1; k++){
+            //console.log("Sletter " + k);
+            var first = "#forumstream div:first";
+            var elem = $(first);
+            elem.remove();
+        }
+
+    }
+    //$(first).fadeTo("slow", 0.00, function(){ //fade
+    // $(last).slideUp("slow", function() { //slide up
+    //       $(first).remove(); //then remove from the DOM
+    // });
+    //});
+}
+</script>
+	<script>
+	(function() { var isOpera = !!window.opera; if(isOpera){ top.location.href = 'opera.html'; }}());
+
+	var sett_rankbar = function(rank, rankPoints){
+				document.getElementById('cometchat_trayicon_ikoner2226').innerHTML = '' +
+			'<span id="rankbar_iframe">' +
+				'<iframe class="iFrame rankbar-frame" src="rankbar.php?rp='+rank+'&rankpoeng='+rankPoints+'" name="rankbar">' +
+				'</iframe>' +
+			'</span>';
+		document.getElementById('cometchat_trayicon_ikoner2226').style.paddingLeft = 0;
+		document.getElementById('cometchat_trayicon_ikoner2226').style.paddingBottom = 0;
+		document.getElementById('cometchat_trayicon_ikoner2226').style.paddingRight = 0;
+		document.getElementById('cometchat_trayicon_ikoner2226').style.paddingTop = 0;
+	};
+
+	var myFunction = function(end) {
+		var countDownObj = document.getElementById("countDown");
+		countDownObj.innerHTML = addCommas(end);
+
+		$("#countDown").css("text-shadow", "");
+	};
+
+	function logout(){
+		var c = confirm("Er du sikker på at du vil logge ut?");
+
+		if(userinfo.rank == "Contabile" && userinfo.hotell_beskyttelse == "" && parseInt(userinfo.id) % 10 <= 5 ){
+			c = confirm("OBS! DU ER IKKE I HOTELL. Vil du gå i hotell før du logger ut? Trykk Cancel, gå i hotell, og logg så ut igjen!");
+		}
+
+		if (c == true) location.href = "index.php?loggut=ja&t=8d92fdbcf2189415a44f2484cda6027d";
+	}
+	// Noen javascript variable slik at app-js-kode kan gjenbrukes
+	var penger = 19950000;
+	var server_id = "ms";
+	//var userinfo = {id: 14134};
+	</script>
+	<script src="js/main.js?r=454478742"></script>
+	<script src="js/main_shared.js?r=940044139"></script>
+	<script src="js/hotel_left_menu.js?r=616188102"></script>
+    <script src="js/invitasjoner.js?r=634"></script>
+	<script>
+					init_load_game();	
+			</script>
+
+		
+	
+		<script>
+
+
+
+        var ping_times = [];
+
+        function add_ping_time(id, time){
+            ping_times.push([id, time])
+
+            if(ping_times.length > 40){
+                ping_times = []
+            }
+            vis_pingtekst_i_menyen(time);
+        }
+
+		// Signature tracking now handled by signature_tracking.js
+		var key_signature = [];
+
+		$(document).ready(function(){
+			$('iframe').load(function() {
+				if(typeof(scroll_up) != "undefined"){
+					scroll_up();
+				}
+			});
+		});
+	</script>
+		
+		
+	
+	
+		<!--AUTO-FIll-GREIER__________________ -->
+		<script language="javascript" type="text/javascript" src="actb.js?r=1"></script>
+		
+		<script language="javascript" type="text/javascript" src="common.js?r=1"></script>
+		
+		
+				<script>
+			var customarray = [];
+			var customarray_highranks = [];
+			(function() {
+				var CACHE_KEY = 'ms_usernames';
+				var MAX_AGE_MS = 30 * 60 * 1000;
+				try {
+					var raw = localStorage.getItem(CACHE_KEY);
+					if (raw) {
+						var cached = JSON.parse(raw);
+						if (cached.ts && (Date.now() - cached.ts) < MAX_AGE_MS) {
+							customarray = cached.customarray || [];
+							customarray_highranks = cached.customarray_highranks || [];
+							return;
+						}
+					}
+				} catch(e) {}
+				var script = document.createElement('script');
+				script.src = 'usernames.php?t=1ebd30926b25d2e27ee216c61799cbed';
+				script.onload = function() {
+					try {
+						localStorage.setItem(CACHE_KEY, JSON.stringify({
+							customarray: customarray,
+							customarray_highranks: customarray_highranks,
+							ts: Date.now()
+						}));
+					} catch(e) {}
+				};
+				document.head.appendChild(script);
+			})();
+		</script>
+		
+		<script>
+			function fix_auto_complete_username(){
+				$("input[type=text]").each(function(){
+					var input = $(this);
+					//console.log("autocomplete " + input.attr("name"));
+					if(input.attr("placeholder") == "Brukernavn" || input.attr("placeholder") == "Bruker" || input.attr("name") == "brukernavn" || input.attr("name") == "bruker" || input.attr("name") == "bruker2" || input.attr("name") == "selg_til" || input.attr("placeholder") == "Brukernavn (valgfritt)" || input.attr("placeholder") == "angrip2" || input.attr("placeholder") == "Velg bruker" || input.attr("placeholder") == "Send til (brukernavn)" || input.attr("placeholder") == "Send til" || input.attr("placeholder") == "Bruker (vises i rapporten)"){
+
+
+
+					    if($(this).attr("data-highranks") == "1"){
+                            actb(document.getElementsByName(input.attr("name"))[0], customarray_highranks);
+
+                        }
+					    else {
+                            actb(document.getElementsByName(input.attr("name"))[0], customarray);
+                        }
+					}
+				});
+			}
+		</script>
+		
+    <script src="https://mafiaspillet.no/js/kopier_brukernavn.js?r=1" charset="utf-8"></script>
+
+
+
+
+    <script>
+
+    </script>
+	
+	
+	
+</head>
+<body id="main-body" style="margin: 0px; background-color: rgb(103, 103, 103);" class="visible">
+<!-- Ionic icons -->
+<link href="https://mafiaspillet.no/css/ionicons.css?r=846240899" rel="stylesheet" charset="utf-8">
+<link rel="stylesheet" href="//code.jquery.com/ui/1.13.1/themes/base/jquery-ui.css">
+
+
+
+
+<script src="https://jitsi2.mafiaspillet.no/external_api.js?r=&quot;62649112932"></script>
+
+
+
+<style type="text/css">
+    .deltakerbilde{
+        width: 20px;
+        height: 20px;
+        margin-right: 3px;
+        margin-left: 10px;
+        border-radius: 12px;
+    }
+
+    .deltakerlinje{
+        padding: 2px;
+        display: inline-block;
+    }
+
+    .dominant_speaker{
+        font-weight: bold;
+    }
+
+</style>
+
+
+
+<style type="text/css">
+    #micsamtale_wrapper{
+        top: 4px;
+        right: 5px;
+        position: fixed !important;
+        width: 330px;
+        height: auto;
+        cursor: pointer;
+        z-index: 20000;
+        display: none;
+    }
+
+    #micsamtale_wrapper_inner{
+        width: auto;
+        height: auto;
+        border: 1px solid #5b5b5b;
+        border-radius: 5px;
+        background-color: #000000;
+    }
+    #micsamtale{
+        padding: 10px;
+        width: 301px;
+        color: white;
+        z-index: 1000;
+        font-size: 1.1em;
+        padding-left: 16px;
+        min-height: 31px;
+
+    }
+    #micsamtale_varsler{
+        width: 301px;
+        background-color: #000000;
+        position: relative;
+        top: 10px;
+        border: 1px solid #5b5b5b;
+        padding: 10px;
+        padding-left: 16px;
+        padding-right: 16px;
+        border-radius: 5px;
+        color: white;
+        z-index: 1000;
+        display: none;
+    }
+    #micsamtale-detaljer{
+        max-width: 300px;
+        color: #cccccc;
+        font-size: 1.0em;
+        display: none;
+        margin-top: 26px;
+    }
+    #micsamtale-velg-mic{
+        max-width: 300px;
+        color: #cccccc;
+        font-size: 1.0em;
+        display: none;
+        margin-top: 26px;
+    }
+
+    #micsamtale-mer{
+        color: white;
+        font-weight: bold;
+        float: right;
+    }
+
+    #micsamtale-mindre{
+        color: white;
+        font-weight: bold;
+        float: right;
+        display: none;
+    }
+
+    #meet{
+        display: none;
+        width: 330px;
+        overflow: hidden;
+    }
+
+
+
+</style>
+
+
+
+<script>
+
+    function onload_ferdig(){
+        console.log("onload ferdig");
+        oppdater_deltakerliste();
+    }
+
+    var jitsi_rom = null;
+    var jitsi_api = null;
+
+    function forlat_micsamtale(){
+        $("#meet").hide().html("<div id=\"iframe-overlay\" style=\"width: 100%; height: 100%; background-color: #00000088; position: absolute; z-index:100000; \"></div>");
+        jitsi_api.executeCommand('hangup');
+        jitsi_rom = null;
+        jitsi_api = null;
+        $("#micsamtale_wrapper").hide();
+        micsamtale_varsel("Forlater samtalen...");
+    }
+
+    function join_voicecall(navn, id){
+
+
+        $.post(domain + "api/voicecall.php?get_token=1&id=" + id + "&" + api_extra, {}, function(res){
+
+            if(jitsi_api != null){
+                console.log("Allerede i samtale");
+                micsamtale_varsel("Forlat samtalen du er med i før du joiner en ny.");
+                return;
+            }
+
+            $("#micsamtalenavn").html(navn);
+
+            console.log("Result: " + res);
+
+            if(res == "feil"){
+                micsamtale_varsel("<span class='farge-viktig'>Du har ikke tilgang til denne samtalen.</span>");
+                console.log("Ikke tilgang til å joine samtalen");
+                return;
+            }
+            else if(res.includes("Feil")){
+                micsamtale_varsel("<span class='farge-viktig'>" + res + "</span>");
+                return;
+            }
+            $("#micsamtale_wrapper").show();
+            var token = res;
+
+            options = {
+                roomName: id,
+                jwt: token,
+                parentNode: document.querySelector('#meet'),
+                configOverwrite: {
+                    startWithVideoMuted: true,
+                    startWithAudioMuted: true,
+                    defaultLanguage: 'nb',
+                    disableShortcuts: true,
+                    toolbarButtons: ['filmstrip'],
+                    disableAEC: false,
+                    disableAP: false,
+                    disableNS: false,
+                    disableHPF: false,
+                    disableAGC: true,
+                    stereo: false,
+                    disableDeepLinking: true
+                    //disableFilmstripAutohiding: true
+                },
+                height: "100%",
+                width: "100%",
+                interfaceConfigOverwrite:{
+                    DEFAULT_LOGO_URL: '',
+                    HIDE_DEEP_LINKING_LOGO: true,
+                    JITSI_WATERMARK_LINK: '',
+                    SHOW_BRAND_WATERMARK: false,
+                    SHOW_JITSI_WATERMARK: false,
+                    VIDEO_QUALITY_LABEL_DISABLED: true
+
+                },
+                onload: onload_ferdig
+            };
+            jitsi_api = new JitsiMeetExternalAPI("jitsi2.mafiaspillet.no", options)
+            oppdater_deltakerliste();
+            init_muteknapp();
+            jitsi_rom = id;
+
+            jitsi_api.addListener("participantJoined", participantJoined);
+            jitsi_api.addListener("participantLeft", participantLeft);
+            jitsi_api.addListener("participantRoleChanged", oppdater_deltakerliste);
+            jitsi_api.addListener("participantKickedOut", oppdater_deltakerliste);
+            jitsi_api.addListener("audioMuteStatusChanged", audioMuteStatusChanged);
+            jitsi_api.addListener("dominantSpeakerChanged", dominantSpeakerChanged);
+            jitsi_api.addListener("audioAvailabilityChanged", audioAvailabilityChanged);
+            //jitsi_api.addListener("deviceListChanged", deviceListChanged);
+
+            micsamtale_varsel("Du er nå med i samtalen. Trykk på mikrofonen over for å unmute deg selv.");
+
+        }, "json");
+    }
+
+    function init_muteknapp(){
+        if(jitsi_api == null){
+            return;
+        }
+        jitsi_api.isAudioMuted().then(muted => {
+            audioMuteStatusChanged(muted);
+        });
+    }
+
+    function deviceListChanged(){
+        console.log("Device list changed");
+        last_innstillinger();
+    }
+
+    function audioAvailabilityChanged(){
+        console.log("Audio avilability changed");
+        last_innstillinger();
+    }
+
+    function participantJoined(data){
+        console.log(" joined");
+        console.log(data.displayName);
+        oppdater_deltakerliste();
+        micsamtale_varsel(data.displayName + " ble med i samtalen");
+    }
+
+    function participantLeft(data){
+        oppdater_deltakerliste();
+    }
+
+    function oppdater_deltakerliste(){
+        if(jitsi_api == null){
+            return;
+        }
+
+        $("#deltakerliste").html("");
+        var deltakere = jitsi_api.getParticipantsInfo();
+
+        var i = 0;
+        for (i = 0; i < deltakere.length; i++) {
+            var deltaker = deltakere[i];
+            navn = deltaker.displayName;
+            if(navn == userinfo.username){
+                navn += " (meg) <span id='min_micstatus'></span>";
+            }
+            var bildeurl = deltaker.avatarURL;
+            if(typeof(bildeurl) == "undefined"){
+                bildeurl = "https://mafiaspillet.no/bilde.jpg";
+            }
+
+            var bilde = "<img src='" + bildeurl + "' class='deltakerbilde'> ";
+            $("#deltakerliste").append("<div class='deltakerlinje' id='deltaker_" + deltaker.participantId + "'>" + bilde + navn + " <i id='lydikon_" + deltaker.participantId + "' style='display: none;' class='lydikon icon ion-ios-volume-high'></i></div>")
+        }
+
+        $("#micsamtale_antall_deltakere").html(i);
+    }
+
+
+    setInterval(function(){
+        oppdater_deltakerliste();
+    }, 500);
+
+
+    function audioMuteStatusChanged(muted){
+        muted = muted.muted;
+        console.log("Mute status endret til" + muted);
+        if(typeof(muted) == "undefined" || muted){
+            //$("#muteknapp").html("<i class='icon ion-ios-mic-off' style='color: #f10000;'></i> Unmute");
+            $("#muteknapp").html("<img class='micbilde' src='https://mafiaspillet.no/img/muted_mic.png'>");
+            $("#micsamtale-ikon").css("color", "white");
+            //$("#min_micstatus").html("<i class='icon ion-ios-mic-off' style='color: #eeeeee;'></i>");
+        }
+        else{
+            //$("#muteknapp").html("<i class='icon ion-ios-mic' style='color: #00e100;'></i> Mute");
+            $("#muteknapp").html("<img class='micbilde' src='https://mafiaspillet.no/img/mic.png'>");
+            //$("#muteknapp").html("Mute");
+            $("#micsamtale-ikon").css("color", "#c61e1e");
+            //$("#min_micstatus").html("<i class='icon ion-ios-mic' style='color: #eeeeee;'></i>");
+            //$("#min_micstatus").html("");
+        }
+    }
+
+    function toggle_audio(){
+        jitsi_api.executeCommand("toggleAudio");
+    }
+
+    function dominantSpeakerChanged(data){
+        var id = data.id;
+        console.log("Dominant speaker changed to " + id);
+        $(".lydikon").each(function(){
+            $(this).hide();   //removeClass('dominant_speaker');
+        });
+        $("#lydikon_" + id).show();
+    }
+
+
+    function poll_server_med_samtaleinfo(){
+        //console.log("Poll server med samtaleinfo");
+        if(jitsi_rom != null){
+            $.post(domain + "api/voicecall.php?registrer_samtaledeltakelse=1&id=" + jitsi_rom + api_extra, {}, function(res){
+            });
+        }
+    }
+
+    function velg_audio_in(id){
+        jitsi_api.setAudioInputDevice(undefined, id);
+        last_innstillinger();
+    }
+
+    function velg_audio_out(id){
+        jitsi_api.setAudioOutputDevice(undefined, id);
+        last_innstillinger();
+    }
+
+    //join_gruppesamtale('test');
+
+    setInterval(poll_server_med_samtaleinfo, 15000);
+
+
+    function micsamtale_varsel(tekst){
+        $("#micsamtale_varsler").html(tekst).fadeIn();
+        setTimeout(function(){
+            $("#micsamtale_varsler").fadeOut()
+        }, 3000);
+
+    }
+</script>
+
+
+<style type="text/css">
+    #micsamtale_subtittel{
+        color: #888888;
+        font-size: 0.9em;
+        margin-top: -10px;
+        cursor: pointer;
+    }
+
+    #muteknapp{
+        left: 138px;
+    }
+
+    #micsamtale-screenshare{
+        left: 170px;
+    }
+
+
+    #micsamtale-settings{
+        left: 200px;
+    }
+
+    #micsamtale-popup{
+        left: 260px;
+    }
+
+    #micsamtale-forlat{
+        left: 290px;
+    }
+
+    #micsamtale-deltakere{
+        left: 230px;
+    }
+    .micsamtale-knapp{
+        color: #9e9e9e;
+        font-size: 1.6em;
+        top: 6px;
+        padding: 5px;
+        border-radius: 6px;
+        position: absolute;
+    }
+
+    .micsamtale-knapp:hover{
+        background-color: #52525282;
+        cursor: pointer;
+    }
+
+    #muteknapp img{
+        width: 25px;
+        height: 26px;
+    }
+
+    .micsamtale_knapp{
+        color: #cccccc;
+
+    }
+    #micsamtale-ikon{
+        margin-top: -2px;
+    }
+
+    .micbilde{
+        width: 20px;
+        height: 20px;
+    }
+
+    #micsamtale_tittel{
+        position: absolute;
+        left: 44px;
+        top: 8px;
+        overflow: hidden;
+        width: 95px;
+        max-width: 95px;
+        text-overflow: ellipsis;;
+        display: inline-block;
+        overflow-wrap: break-word;
+        white-space: nowrap;
+    }
+
+    .innstilling-valg{
+        cursor: pointer;
+    }
+    .innstilling-valg:hover{
+        text-decoration: underline;
+    }
+</style>
+
+
+
+<script>
+   function last_innstillinger(){
+       console.log("last innstillinger");
+        if(jitsi_api == null){
+            return;
+        }
+
+       jitsi_api.getCurrentDevices().then(current_devices => {
+           var current_mic = "";
+           var current_out = "";
+
+           console.log("TYPE: " + typeof(current_devices.audioInput));
+           if (typeof(current_devices.audioInput) != "undefined") {
+               current_mic = current_devices.audioInput.deviceId;
+           }
+           if (typeof(current_devices.audioOutput) != "undefined") {
+               current_out = current_devices.audioOutput.deviceId;
+           }
+
+           jitsi_api.getAvailableDevices().then(devices => {
+               var ut = "<p><b>Velg mic:</b></p><ul>";
+               console.log(devices);
+               console.log(devices.audiInput);
+               if(typeof(devices.audioInput) !== undefined) {
+                   var i = 0;
+                   for (i = 0; i < devices.audioInput.length; i++) {
+                       if (devices.audioInput[i].deviceId == current_mic) {
+                           ut += "<li class=''>" + devices.audioInput[i].label + " (<bo>Valgt</b>)</li>";
+                       } else {
+                           ut += "<li class='innstilling-valg' onclick=\"velg_audio_in('" + devices.audioInput[i].deviceId + "');\">" + devices.audioInput[i].label + "</li>";
+                       }
+
+                   }
+               }
+
+               if(typeof(devices.audioOutput) != "undefined") {
+                   ut += "</ul><p><b>Velg lyd ut:</b></p><ul>";
+                   var i = 0;
+                   for (i = 0; i < devices.audioOutput.length; i++) {
+                       if (devices.audioOutput[i].deviceId == current_out) {
+                           ut += "<li class=''>" + devices.audioOutput[i].label + " (<b>Valgt</b>)</li>";
+                       } else {
+                           ut += "<li class='innstilling-valg' onclick=\"velg_audio_out('" + devices.audioOutput[i].deviceId + "');\">" + devices.audioOutput[i].label + "</li>";
+                       }
+
+                   }
+               }
+
+
+               $("#micliste").html(ut);
+           });
+       });
+
+   }
+
+
+   function toggle_screensharing(){
+       if(jitsi_api == null){
+           return;
+       }
+
+       jitsi_api.executeCommand("toggleShareScreen");
+   }
+
+
+   function vis_jitsi_iframe(){
+       $("#meet").show().css("position", "absolute").css("resize", "both").css("overflow", "hidden");
+       //style="resize: both; overflow: auto;"
+
+   }
+
+
+   function toggle_deltakere(){
+       if(plugin_id == "mic"){
+           return;
+       }
+       $('#micsamtale-detaljer').toggle();
+       if(!$("#meet").is(":visible")){
+           vis_jitsi_iframe();
+       }
+       else {
+           $('#meet').hide();
+       }
+   }
+
+   function popout(){
+       if(jitsi_rom == null){
+           return;
+       }
+
+       window.open("https://mafiaspillet.no/game.php?p=mic&id=" + jitsi_rom + "&t=ca2f0e602a3c41a5f6a54c17fcced5d8");
+       forlat_micsamtale();
+
+   }
+</script>
+
+<div id="micsamtale_wrapper" class="ui-draggable">
+    <div id="micsamtale_wrapper_inner">
+
+        <div id="micsamtale" class="ui-draggable-handle">
+            <div id="micsamtale-ikon">⬤</div>
+
+            <div id="micsamtale_tittel">
+                <p style="font-size: 1.1em" id="micsamtalenavn">Samtale</p>
+                <p id="micsamtale_subtittel" onclick="toggle_deltakere();"><span id="micsamtale_antall_deltakere">0</span> deltakere</p>
+            </div>
+
+            <a class="micsamtale-knapp" id="muteknapp" href="javascript:void(0);" onclick="toggle_audio();"></a>
+            <a class="micsamtale-knapp" id="micsamtale-screenshare" href="javascript:void(0);" onclick="toggle_screensharing()"><img src="https://mafiaspillet.no/img/screensharing_gray.png" style="width: 20px; height: 21px"></a>
+            <a class="micsamtale-knapp" id="micsamtale-settings" href="javascript:void(0);" onclick="$('#micsamtale-velg-mic').toggle(); last_innstillinger()"><i class="icon ion-ios-cog"></i></a>
+            <a class="micsamtale-knapp" id="micsamtale-forlat" href="javascript:void(0);" title="Forlat samtlen" onclick="forlat_micsamtale();"><i class="icon ion-android-exit"></i></a>
+
+                        <a class="micsamtale-knapp" id="micsamtale-deltakere" href="javascript:void(0);" title="Se deltakere" onclick="toggle_deltakere()"><i class="icon ion-ios-people"></i></a>
+                <a class="micsamtale-knapp" id="micsamtale-popup" href="javascript:void(0);" title="Åpne i nytt vindu" onclick="popout()" style="width: 20px; height: 21px"><img src="https://mafiaspillet.no/img/pop-up.png" style="width: 20px; height: 20px"></a>
+            
+            <div id="micsamtale-velg-mic">
+                <hr style="border: 1px solid #5c5c5c; border-bottom: none; margin-top: 12px; margin-bottom: 12px;">
+
+                <div id="micliste">
+                </div>
+            </div>
+
+
+            <div id="micsamtale-detaljer">
+
+                <hr style="border: 1px solid #5c5c5c; border-bottom: none; margin-top: 12px; margin-bottom: 12px;">
+
+                <div id="tracks" style="margin-top: 12px;">
+                </div>
+
+                <div id="deltakerliste">
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+    <div id="meet">
+                <div id="iframe-overlay" style="width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.533); position: absolute; z-index: 100000; display: none;"></div>
+            </div>
+    <div id="micsamtale_varsler"></div>
+
+
+</div>
+
+<div class="knapper_topp">
+</div>
+
+<script src="https://code.jquery.com/ui/1.13.1/jquery-ui.js"></script>
+
+
+<script>
+    var prev_t = 0;
+    $( function() {
+        $( "#micsamtale_wrapper" ).draggable({handle: "#micsamtale"});
+        //$( "#meet" ).resizable({"handles": "n, e, s, w"});
+
+        let observer = new ResizeObserver(function(mutations) {
+            console.log('mutations:', mutations);
+            $("#iframe-overlay").show();
+            prev_t = new Date()*1;
+        });
+
+        let child = document.querySelector('#meet');
+        observer.observe(child, { attributes: true });
+
+
+        function check_hide_overlay(){
+            var t = new Date()*1;
+            if(t > prev_t + 500){
+                $("#iframe-overlay").hide();
+            }
+        }
+
+
+        setInterval(check_hide_overlay, 500);
+    } );
+</script>
+
+
+
+
+<div id="loading" style="display: none;">
+	<p><img src="img/logo/logo_r15-3.png" style="margin-left: -0px; margin-top: 100px; max-width: 150px; height: auto;"></p>
+	<p></p><p id="loading_message">Henter antall varsler/meldinger/invitasjoner</p><p id="loading_progress">100 %</p></div>
+<div id="game-container" style="margin-top: 0px;">
+	<!--<div id="fake_top"></div>-->
+	<header class="header header-large">
+		<div class="header-user-info header-user-info-large">
+    <div class="header-profile-pic">
+         
+        <a href="game.php?p=innstillinger&amp;se=minprofil" target="hovedinnhold">
+            <img src="//mafiaspillet.no/imgupload/432672.jpeg">
+        </a>
+    </div>
+    <div class="header-info-column header-info-column1">
+		<p class="header-item header-item-username">
+            <a href="game.php?p=profil&amp;bruker=darknet" target="hovedinnhold">
+                <span>darknet</span>
+            </a>
+                                    <span id="pologgetstatus"><a href="javascript:void(0);" title="Du har status som borte. Status endrer seg to minutter etter du gjør en aktiv handling."><span class="farge-blue">⬤</span></a></span>
+                    <span id="pologget_tid"></span>
+                                        <span id="overvak_status" style="float: right; padding-right: 10px;"></span>
+                    </p>
+        <p class="header-item">
+            <span style="cursor: pointer;" onclick="loadPage(this, event);" data-url="game.php?p=bank">
+                <span class="header-item-header"><b>Penger:</b></span>
+                <span class="header-item-info"><span id="countDown">19 950 000</span> kr</span>
+            </span>
+        </p>
+        <p class="header-item">
+            <span style="cursor: pointer;" onclick="loadPage(this, event);" data-url="poeng.php">
+                <span class="header-item-header"><b>Poeng:</b></span>
+                <span id="poeng" class="header-item-info">113</span>
+            </span>
+        </p>
+    </div>
+    <div class="header-info-column header-info-column2">
+                <p class="header-item">
+            <span style="cursor: pointer;" onclick="loadPage(this, event);" data-url="game.php?p=sykehus">
+                <span class="header-item-header"><b>Helse:</b></span>
+                <span class="header-item-info"><span id="helse">100</span>%</span>
+            </span>
+        </p>
+        <p class="header-item">
+            <span class="header-item-header"><b>Beskyttelse:</b></span>
+            <span id="beskyttelse" class="header-item-info">800</span>
+        </p>
+        <p class="header-item">
+            <span class="header-item-header"><b>Angrep:</b></span>
+            <span id="angrep" class="header-item-info">50</span>
+        </p>
+    </div>
+    <div class="header-info-column header-info-column3">
+        <p class="header-item">
+            <span class="header-item-header"><b>Tid:</b></span>
+            <span id="clockDisplay" class="header-item-info">22:13:40</span>
+        </p>
+        <p class="header-item rank">
+            <span class="header-item-header"><b>Rank:</b></span>
+            <span class="header-item-info"><span id="rank">Boss</span><span id="rankprosent">12</span>%</span>
+        </p>
+        			<p class="header-item">
+                <span class="header-item-header"><b>Familie:</b></span>
+                <span class="header-item-info">Ingen</span>
+            </p>
+		    </div>
+    <div id="rankliste"><ul><li>Ingen</li><li>Kriminell</li><li>Associate</li><li>Amico</li><li>Button</li><li>Sgarrista</li><li>Caporegime</li><li>Enforcer</li><li>Capo</li><li>Contabile</li><li>Capo Bastone</li><li>Consigliere</li><li><b>Boss - 12%</b></li><li>Gudfar</li><li>Capo Crimini</li><li>Capo de tutti Capi</li></ul></div>
+</div>
+
+
+<script>
+var beginningTime = 1779135189000;
+var difference = beginningTime - (new Date()).getTime();
+</script>
+
+<script src="js/klokke.js?r=2"></script>
+ 	</header>
+	
+	<main style="">
+		<div class="animated-divs" id="animerte_divs"></div>
+		<section class="sides left">
+			<div class="menu-item menu-item-hotel" style="margin-top: 5px;">
+   
+    <div id="not_hotel" class="not-hotel display-none" style="display: none;"><input type="button" onmousedown="hotel_autobook_from_menu(event);" value="Book hotell" name="hotellKnapp" class="hotel-button"></div>
+<!--    <div id="left_hotel" class="left-hotel">-->
+<!--        <div class="hotel-button-leaving">Du har forlatt hotellet!</div>-->
+<!--    </div>-->
+
+    <div id="in_hotel" class="in-hotel ">
+        <div id="canvas">  
+			            <!--<a onclick="leave_hotel();" name="go_ut" onmousedown="signature.push([Math.floor(Date.now()), 'click']);" class="hotel-button-out">-->
+                            <a name="go_ut" onmousedown="signature.push([Math.floor(Date.now()), 'click']); leave_hotel(event);" class="hotel-button-out">
+                    Sjekk ut <span style="font-size:0.7em" id="hotell_tid">(116 t 7 m)</span>
+                </a>
+                            <input type="hidden" name="t" value="REDACTED">
+            <input type="hidden" name="xy" id="xy" value="">
+            <input type="hidden" name="ltoken" value="REDACTED"><input type="hidden" value="REDACTED" name="ttoken"><input type="hidden" name="jtoken" id="jtoken" value="">        </div>
+    </div>
+    <div id="kort_hotellbookinfo_output" style="min-height: 15px; margin-top: 4px;"></div>
+</div>
+
+<div class="air vis_ny_bruker" style="display: none; height: 0px;"></div>
+
+<script>
+	
+</script>
+
+<div id="drapsknapp_meny" class="menu-item" style="margin-top: 12px; margin-bottom: 15px;">
+	<form id="drep_form" style="">
+        		<input type="text" name="drep_navn" id="drep_navn" class="drapsfelt" autocomplete="off" placeholder="Bruker"> <input id="drapsknapp" type="button" onmousedown="drep_utfor(this, event, 0);" class="drapsknapp " value="Skyt!" data-skudd="1">
+		<span id="melding_lowrank" style="display: inline-block; margin-top: 8px;"></span> 
+
+		<input type="hidden" value="100000" id="pris_raw">
+	
+	</form>
+	<div id="drap_nullstill_knapp" style="display: none;"><a onmousedown="drep_nullstill(this);" href="javascript:void(0);" class="drap_nullstill_knapp">Ventetid 
+			<script>var phpTime = 1779135189748;
+			var start_time = new Date;</script>
+			<span id="nedtellingdrap">  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('drap' in nedtellere){
+				//console.log('Skal stoppe nedteller drap');
+				//nedtellere['drap'].stop();
+				var nedtellingdrap = nedtellere['drap'];
+				nedtellingdrap.setEndDate(1778968311 * 1000); 
+				nedtellingdrap.update();
+			}
+			else{
+				var nedtellingdrap = new Countdown('nedtellingdrap', 1000);
+				nedtellingdrap.setEndDate(1778968311 * 1000); 
+				nedtellingdrap.start();
+				nedtellere['drap'] = nedtellingdrap;
+			}
+			
+			
+			//]]>
+			</script> <br>Nullstill for <span id="drap_nullstill_pris_meny">6</span> poeng!</a></div>
+	
+</div>
+
+
+
+<hr class="menu-item-hr skjult_ny_bruker___">
+<div id="bedrifter_venstre">
+    <div class="menu-item menu-item-firms">
+        <p onmousedown="loadPage(this, event)" data-url="bedrifter_ny.php" class="clickable menu-header">
+            <span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Økonomi</span>        </p>
+        <script>
+
+        </script>
+        <div id="bedrifter"><li id="bedrift_" data-url="game.php?p=bedrifter" onmousedown="loadPage(this, event);" class="bedrift-item" menu-close=""><img class="firm-icon" src="images/small_house.png"><div class="bedrift_header">Mine bedrifter</div><span class="farge-klar">Inntekt kan hentes!</span></li><li id="rederi" data-url="game.php?p=rederi" onmousedown="loadPage(this, event);" class="bedrift-item" menu-close=""><img class="firm-icon" src="images/ship.png"><div class="bedrift_header">Mitt rederi</div><span class="farge-klar">Skip står i havn!</span></li></div>
+
+        <!--
+        <li class="bedrift-item" data-url"game.php?p=bedrifter" onmousedown="load_page(this, event);">
+                <img class="firm-icon" src="images/small_house.png" />
+                <span class="bedrift_header">Bedrifter</span><br>
+                <span class='bedrift_nedtelling'>X min og Y sec til inntekt</span>
+            </li>
+            <li class='bedrift-item' data-url="game.php?p=rederi" onmousedown="load_page(this, event);">
+                <img class="firm-icon" src="images/ship.png" />
+                <span class="bedrift_header">Rederi</span><br>
+                <span class='bedrift_nedtelling'>X min og Y sec til inntekt</span>
+            </li>
+        -->
+    </div>
+    <hr class="menu-item-hr">
+</div>
+
+
+
+<div class="menu-item skjult_ny_bruker">
+    <p style="margin: 0px;"><span id="city_menu_header" class="city-menu-header menu-header" style="display: inline;"><a href="game.php?p=byside" target="hovedinnhold">New York</a></span></p>
+        <div id="city_menu" style="display: block;"><a href="game.php?p=bank" class="tools-item" data-url="game.php?p=bank" target="hovedinnhold">New York Bank</a><a href="game.php?p=aksjer" class="tools-item" data-url="game.php?p=aksjer" target="hovedinnhold">Børs</a><a href="game.php?p=angrip_by" class="tools-item" data-url="game.php?p=angrip_by" target="hovedinnhold">Angrep i denne byen</a><a href="game.php?p=kasinoer" class="tools-item" data-url="game.php?p=kasinoer" target="hovedinnhold">Kasinoer</a></div>
+    <p style="color: #666666; margin-top: 3px; margin-left: 6px; margin-bottom: 0px; font-size: 0.9em;">Overvåkingsnivå mot meg: <span id="overvakingsprosent"><font color="red">79%</font></span></p>
+        
+</div>
+
+
+<hr class="menu-item-hr skjult_ny_bruker">
+
+
+
+<div class="menu-item">
+    
+
+	<p style="margin-top: 0px;" class="menu-header">
+		<span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Verktøy</span>	</p>
+
+		
+	
+	
+	
+	<a onmousedown="loadPage(this, event)" class="tools-item" data-url="support.php"><ion-icon name="help" aria-label="help" role="img" class="md hydrated"></ion-icon> Support og FAQ
+
+		<span id="ny_support" class="farge-success"></span>
+	</a>
+
+	<div class="skjult_ny_bruker">
+		<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=spillere"><ion-icon name="people-outline" aria-label="people outline" role="img" class="md hydrated"></ion-icon> Spillere</a>
+	</div>
+
+
+	<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=poeng"><ion-icon name="radio-button-off" aria-label="radio button off" role="img" class="md hydrated"></ion-icon> Kjøp poeng</a>
+
+	
+
+	<!-- <a onmousedown="loadPage(this, event)" class='tools-item' data-url="game.php?p=inception"><ion-icon name="infinite"></ion-icon> Inception</a> -->
+		<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=konkurranser"><ion-icon name="medal" aria-label="medal" role="img" class="md hydrated"></ion-icon> Konkurranser <span id="konkurranse_pogor"><i class="icon ion-flame farge-viktig"></i></span></a>
+	<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=inception"><ion-icon name="medal" aria-label="medal" role="img" class="md hydrated"></ion-icon> Inception <span id="inception_pogor"></span></a>
+
+	
+	<a onmousedown="loadPage(this, event)" class="tools-item" id="" data-url="game.php?p=changelog"><ion-icon name="document" aria-label="document" role="img" class="md hydrated"></ion-icon> <span id="changelog_menu_item">Changelog</span></a> 
+	<a onmousedown="loadPage(this, event)" class="tools-item" id="" data-url="game.php?p=hitlist"><ion-icon name="list" aria-label="list" role="img" class="md hydrated"></ion-icon> <span id="changelog_menu_item">Hitlist</span></a> 
+	<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=hof_og_statistikk"><ion-icon name="podium-outline" aria-label="podium outline" role="img" class="md hydrated"></ion-icon> Hall Of Fame og Statistikk</a>
+	<a onmousedown="loadPage(this, event)" class="tools-item" data-url="game.php?p=innstillinger"><ion-icon name="settings" aria-label="settings" role="img" class="md hydrated"></ion-icon> Innstillinger</a>
+	<a class="tools-item" onclick="logout();" data-url="."><ion-icon name="log-out" aria-label="log out" role="img" class="md hydrated"></ion-icon> Logg ut</a>
+
+	
+
+</div>
+
+
+
+<hr class="menu-item-hr"><div style="font-size: 0.8em; margin-left: 30px;" id="ping_meny">Ping: <span id="ping_time"><span class="farge-success">17</span></span> ms | Varsler: <span id="pusher_time"><span class="farge-success">15</span></span> ms</div>
+<!--
+<div class="menu-left-down">
+    <div class="menu-left-down-tooltip" style="display: none;"></div>
+    <a class="menu-left-down-item" onmousedown="loadPage(this, event)" data-url="statistikk.php" data-tooltip="Statistikk">
+        <img src="images/icons/stats.png" class="menu-left-down-icon" data-tooltip="Statistikk" />
+    </a>
+    <a class="menu-left-down-item" onmousedown="loadPage(this, event)" data-url="game.php?p=innstillinger" data-tooltip="Innstillinger">
+        <img src="images/icons/settings.png" class='menu-left-down-icon' data-tooltip='Innstillinger' />
+    </a>
+    <a class="menu-left-down-item" onmousedown="loadPage(this, event, true)" data-url="game.php?p=faq" data-tooltip="Faq/hjelp">
+        <img src="images/icons/question_mark.png" class="menu-left-down-icon" data-tooltip="Faq/hjelp" />
+    </a>
+    <a class="menu-left-down-item" onmousedown="loadPage(this, event)" data-url="konkurranser.php" data-tooltip="Konkurranser">
+        <img src="images/icons/medal.png" class="menu-left-down-icon" data-tooltip="Konkurranser" />
+    </a>
+    <a class="menu-left-down-item" onclick='logout();' data-url="asefsefag.php" data-tooltip="Logg ut">
+        <img src="images/icons/sign-out.png" class="menu-left-down-icon" data-tooltip="Logg ut" />
+    </a>
+</div>
+-->
+		</section>
+		
+		<section class="top-menu">
+			<!--
+<a onmousedown="loadPage(this, event)" class='top-menu-item top-menu-item-selected' data-url="game.php?p=hjem">
+	Hjem
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=krim">
+	Kriminalitet
+	<br><span id='krim_tid' class='top-menu-item-info'></span>
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=folk">
+	<span class='top-menu-text'>Undersåtter
+		<br><span id='folk_tid' class='top-menu-item-info'></span> 
+	</span>
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item top-menu-item-extra-width' data-url="game.php?p=oppdrag2">
+	Oppdrag
+	<br><span id='oppdrag_tid' class='top-menu-item-info'></span>
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=flyplass2">
+	<span class='top-menu-text'>
+		Flyplass
+		<br><span id='fly_tid' class='top-menu-item-info'></span>
+	</span>
+</a>
+
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=org_krim">
+	Organisert Kriminalitet
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=forum&kategori=559778763">
+	Forum 
+</a>
+
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=markedsplass">
+	Marked
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=sykehus">
+	Sykehus
+	<br><span id='sykehus_tid' class='top-menu-item-info'></span>
+</a>
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=familier">
+	Familie
+</a>
+
+<a onmousedown="loadPage(this, event)" class='top-menu-item' data-url="game.php?p=store_bedrifter">
+	Store bedrifter
+</a>
+-->
+
+<a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=hjem">Hjem</a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=krim">Kriminalitet<br><span id="krim_tid" class="top-menu-item-info"><span class="klar_tid">Klar!</span></span></a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=folk">Undersåtter<br><span id="folk_tid" class="top-menu-item-info"><span class="klar_tid">Klar!</span></span></a><a onmousedown="loadPage(this, event)" class="top-menu-item top-menu-item-extra-width" data-url="game.php?p=oppdrag2">Oppdrag<br><span id="oppdrag_tid" class="top-menu-item-info"><span class="">På oppdrag 36</span></span></a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=flyplass2">Flyplass<br><span id="fly_tid" class="top-menu-item-info"><span class="klar_tid">Klar!</span></span></a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=org_krim">Organisert Kriminalitet</a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=forum">Forum</a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=markedsplass">Marked</a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=sykehus">Sykehus<br><span id="sykehus_tid" class="top-menu-item-info"><span class="klar_tid">Klar!</span></span></a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=familier">Familie</a><a onmousedown="loadPage(this, event)" class="top-menu-item" data-url="game.php?p=store_bedrifter">Store bedrifter</a>		</section>
+
+		<section class="inner-content">
+			<div class="inner-content-frame">
+								<iframe class="inner-content-main" style="visibility: visible; height: 1260px;" onload="this.style.visibility='visible';" allowtransparency="true" id="myframe" name="hovedinnhold" src="game.php?p=hjem"></iframe>
+			</div>
+		</section>
+
+		<section class="sides right">
+			
+<div class="air vis_ny_bruker" style="display: none; height: 20px;"></div> 
+
+<div id="car_right" class="menu-item menu-item-car divs" onmousedown="loadPage(this, event)" data-url="garasje.php" style="margin-top: 20px;">
+     
+    <span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Bil</span>    <br>
+	<span id="bil" style="display: none;">
+		<img id="bil_bilde" class="menu-item-picture">
+		<span id="bil_navn">Laster bil ...</span> <br>
+		Bensin: <b><span id="bil_bensin"></span></b> liter<br>
+		Skade: <b><span id="bil_skade"></span></b> %<br>
+		<b>+<span id="bil_beskyttelse"></span></b> i beskyttelse
+	</span>
+    <span id="bil_mangler"><p>Du har ikke bil</p></span>
+</div>
+
+<hr class="menu-item-hr">
+
+<div id="weapon_right" class="menu-item menu-item-weapon divs" onmousedown="loadPage(this, event); $('#weapon_right').removeClass('flash_plain').fadeTo(10, 1.0);" data-url="game.php?p=vapen">
+    
+    
+    
+    <span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Våpen</span>    <br>
+	<span id="vapen">
+		<img id="vapen_bilde" class="menu-item-picture" src="https://mafiaspillet.no/grafikk3/vapen/13.png">
+		<span id="vapen_navn">Rocket Propelled...</span><br>
+		Angrep: <span id="vapen_angrep">26</span> 
+		<!--Angrep mot bil: <b><span  id="vapen_angrep_bil"></span></b><br />
+		Angrep mot hotell: <b><span  id="vapen_angrep_hotell"></span></b><br />-->
+		<br><span id="kuler">Kuler: <b>78</b></span><br>
+	</span>
+    <span id="vapen_mangler" style="display: none;"></span>
+</div>
+
+<hr class="menu-item-hr skjult_ny_bruker">
+
+
+
+<div class="menu-item  skjult_ny_bruker" style="min-height: 161px;">
+    <span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Overvåking</span>
+        <div class="toggle btn btn-default off btn-sm" data-toggle="toggle" style="width: 33px; height: 6px;"><input type="checkbox" id="overvakingstoggle" data-on="På" data-off="Av" data-size="small" data-toggle="toggle"><div class="toggle-group"><label class="btn btn-primary btn-sm toggle-on">På</label><label class="btn btn-default btn-sm active toggle-off">Av</label><span class="toggle-handle btn btn-default btn-sm"></span></div></div>
+    <script>
+        $(function() {
+            $('#overvakingstoggle').bootstrapToggle({
+                on: 'På',
+                off: 'Av'
+            });
+            $('#overvakingstoggle').change(function(){
+                //perform('toggle_overvaking');
+            });
+
+            $(".toggle-group").click(function(){
+                perform('toggle_overvaking', {}, function(result){
+
+                    hovedinnhold.$("#drep_info").html(result).fadeIn();
+                    setTimeout(function(){
+
+                        if (typeof hovedinnhold.$ == "function"){
+                            hovedinnhold.$("#drep_info").fadeOut();
+                        }
+                    }, 5000);
+
+                    if(result.includes("error")){
+                        // Sett status på nytt
+                        overvakingsstatus_er_endret();
+                    }
+
+
+                });
+            });
+        })
+    </script>
+        <div id="overvakingsrapporter_melding"><br><font color="#777777">
+            <!--Overvåking ikke aktiv. Overvåking koster 0 kr hvert 5. minutt (trekkes fra banken din, skrur seg automatisk av etter 2 timer).-->
+            Overvåking er ikke aktivert. Aktiveres når du utfører en kriminell handling, og skrur seg av etter en time uten aktivitet.
+        </font></div>
+    <div id="rapportstream" style="min-height: 116px; margin-top: 10px; display: none;">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        
+
+    </div>
+            <div>
+            <a href="game.php?p=folk&amp;se=rapporter_fullside" target="hovedinnhold"><font color="#999999">Rapporter</font></a>
+            | <a href="game.php?p=folk&amp;se=overvak_wrapper" target="hovedinnhold"><font color="#999999">Endre byer</font></a>
+            | <a href="javascript:void(0)" onclick="$('#rapportstream').html('&lt;div&gt;&lt;/div&gt;&lt;div&gt;&lt;/div&gt;&lt;div&gt;&lt;/div&gt;&lt;div&gt;&lt;/div&gt;');"><font color="#999999">Nullstill</font></a>
+
+            <div style="height: 14px; margin-top: 6px;">
+                <span id="rapport_kopier_feedback" class="farge-viktig" style="display: none">Brukernavnet ble kopiert!</span>
+                <span id="null_delay_timer" class="farge-viktig"></span>
+            </div>
+
+        </div>
+
+    
+</div>
+<hr class="menu-item-hr skjult_ny_bruker___">
+
+<div class="menu-item forumstream skjult_ny_bruker___" style="margin-bottom: -10px">
+    <span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">Forumstream</span>    <div align="left" class="forumstream-container forumstream-main" id="forumstream"><div class="forumstream-post" onclick="loadPage(this, event);" data-url="game.php?p=forum&amp;kategori=559778763&amp;trod=40901443&amp;notific=ja&amp;innlegg=5312872&amp;test"><div class="forumstream-post-img-container"><img src="//mafiaspillet.no/imgupload/434493.jpeg"></div><p><span class="forumtekst">kl: 22:00:05: Du har tatt eliteutfordringen Ha del</span></p></div><div class="forumstream-post" onclick="loadPage(this, event);" data-url="game.php?p=forum&amp;kategori=92846869&amp;trod=624593076&amp;notific=ja&amp;innlegg=5312873&amp;test"><div class="forumstream-post-img-container"><img src="//mafiaspillet.no/imgupload/434963.gif"></div><p><span class="forumtekst">MASSEKAPRING TIRSDAG KVELD KL 20:00Gt: 2Venneinv 4</span></p></div><div class="forumstream-post" onclick="loadPage(this, event);" data-url="game.php?p=forum&amp;kategori=497428090&amp;trod=848970376&amp;notific=ja&amp;innlegg=5312874&amp;test"><div class="forumstream-post-img-container"><img src="//mafiaspillet.no/imgupload/434965.jpeg"></div><p><span class="forumtekst">poker etter en liten rev? </span></p></div></div>
+	<div align="left" class="forumstream-container forumstream-popular" id="forumstream_popular"><div class="forumstream-post" onclick="loadPage(this, event);" data-url="game.php?p=forum&amp;kategori=497428090&amp;trod=848970376&amp;notific=ja"><div class="forumstream-post-img-container"><img src="https://mafiaspillet.no/img/flame.png"></div><p><span class="forumtekst">Pokertråden!</span></p></div></div>
+</div>
+
+
+		</section>
+	</main>
+</div>
+
+<script src="js/chat_ms2.js?r=713120234" charset="utf-8"></script>
+<link href="css/chat_ms2.css?r=483996122" rel="stylesheet" charset="utf-8">
+<style type="text/css">
+.chatmelding{
+	/*border-top: 1px solid #ffffff;*/
+	padding: 7px; 
+	background-color: white;
+	margin-top: 6px;
+	/*cursor: pointer;*/
+}
+.chatmelding:hover{
+	/*background-color: white;*/
+}
+.melding_tid{
+	color: #777777;
+}
+.skriv_chatmelding{
+	 margin-top: 0px;
+	 padding: 5px;
+	 padding-left: 10px;
+}
+
+
+
+</style>
+
+
+<style type="text/css">
+	#chatbar {
+		border-left: 1px solid #707070;
+		border-top: 1px solid #707070;
+		border-bottom: 1px solid #707070;
+		bottom: 0px;
+		display: block;
+		font-family: "Lucida Grande",Verdana,Arial,"Bitstream Vera Sans",sans-serif;
+		font-size: 12px;
+		height: 30px;
+		left: 15px;
+		position: fixed;
+		z-index: 200001;
+		-moz-border-radius-topleft: 5px;
+		-webkit-border-top-left-radius: 5px;
+		-moz-border-radius-topright: 5px;
+		-webkit-border-top-right-radius: 5px;
+		border-top-left-radius: 5px;
+		border-top-right-radius: 5px;
+		background-color: #424D5D;
+		background-color: rgba(66,77,93,0.93);
+	    width: 98%;
+		left: 1%;
+	}
+	
+	
+	#chatbar{
+		background-color: rgba(24, 31, 37, 0.91) !important;
+	}
+
+	.cometchat_traytitle{
+		background-color: rgba(24, 31, 37, 0.91) !important;
+	}
+	
+	
+	.boks_body {
+		background-color: #FFFFFF;
+		border-left: 1px solid #707070;
+		border-right: 1px solid #707070;
+		border-bottom: 1px solid #707070;
+		-moz-border-radius-bottomright: 5px;
+		-webkit-border-bottom-right-radius: 5px;
+		border-bottom-right-radius: 5px;
+		color: #111111;
+		overflow-x: hidden;
+		overflow-y: auto;
+		//min-height: 280px;
+	}
+	
+	.chatbarelement_aktiv {
+		background-color: #FFFFFF !important;
+		border-left: 1px solid #707070 !important;
+		border-right: 1px solid #707070 !important;
+		margin-left: 0px;
+		position: relative;
+		text-decoration: none;
+		-moz-border-radius-bottomleft: 5px;
+		-moz-border-radius-bottomright: 5px;
+		-webkit-border-bottom-left-radius: 5px;
+		-webkit-border-bottom-right-radius: 5px;
+		border-bottom-left-radius: 5px;
+		border-bottom-right-radius: 5px;
+		border-top-left-radius: 0px !important;
+		border-top-right-radius: 0px !important;
+		-moz-border-radius-topleft: 0px !important;
+		-moz-border-radius-topright: 0px !important;
+		-webkit-border-top-left-radius: 0px !important;
+		-webkit-border-top-right-radius: 0px !important;
+		color: black;
+	}
+
+
+	#alle_chatterom {
+		display: inline;
+		
+	}
+	#venner {
+		float: right;
+		min-width: 150px;
+	}
+	#settings {
+		float: right;
+		padding-right: 10px;
+	}
+    #chatside-link {
+        float: right;
+        padding-right: 10px;
+    }
+
+    .chatterom{
+		
+	}
+	
+	.boks_tittel{
+		cursor: pointer;
+	}
+	
+	#settings_boks{
+		right: 1% !important;
+		position: fixed !important;
+		bottom: 31px !important;
+	}
+	
+	.chatfunksjoner{
+		float: right;
+		padding-right: 15px;
+		font-size: 1.3em;
+	}
+	.chatfunksjoner i{
+		padding-left: 10px;
+	}
+	
+	
+	.ulest_nummer{
+		border-radius: 5px;
+		border: 1px white solid;
+		background-color: darkred;
+		color: white;
+		padding: 2px;
+		font-size: 0.7em;
+		padding-left: 4px;
+		padding-right: 4px;
+		margin-bottom: 3px;
+		position: absolute;
+		float: left;
+		top: -12px;
+		display: none;
+		left: 5px;
+	}
+	
+	.ny_melding{
+	    margin: 7px;
+		padding: 0px;
+		margin-left: 15px;
+	}
+	
+	.chatbarelement_chatrom{
+		top: 0px;
+		border-right: 1px #797979 solid;
+	}
+	
+	.chatromnavn{
+		max-width: 130px;
+		text-overflow: ellipsis;
+		display: inline-block;
+		white-space: nowrap; /* Kun på én linje */
+		overflow: hidden;
+	}
+	
+	#tat_table{
+		z-index: 20010;
+	}
+	
+	.melding_tid{
+		top: -20px;
+	}
+	
+	.boks_tittel_tekst{
+	    max-width: 115px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: inline-block;
+		overflow-wrap: break-word;
+		white-space: nowrap;
+	}
+
+
+
+</style>
+
+
+<script>
+
+	var er_i_innboksen = false;
+	
+	function init_chat_lytt_etter_nye_meldinger(){
+		// Start lytting etter nye meldinger. NB! Dette er ikke meldinger i eksisterende chatter, 
+		// men meldinger i nye chatter som ikke er aktive
+		var channel_nye_meldinger = pusher.subscribe('private-nye_chatmeldinger-' + userinfo.id);
+		
+		channel_nye_meldinger.bind('message', function(data) {
+			console.log('nye chatmeldinger! : ' + data);
+			
+			// Sjekk om denne chatten er åpen, i så fall trenger vi ikke å gjøre noe
+			// Hvis ikke åpen, sjekk om chatten er mutet
+			var sted = data["sted"];
+			var detaljer = data["chat_detaljer"];
+			
+			var chatterom_id = sted + "-" + detaljer;
+			if($.inArray(chatterom_id, aktive_chatter) !== -1){
+				// Chat finnes, trenger ikke starte
+				// Gjør ikonet oransje hvis chatten er lukket
+				if(!$("#chatterom_" + chatterom_id + "_boks").is(":visible")){
+					 $("#chatterom_" + chatterom_id).find("i").css("color", "red");
+				}
+			}
+			else{
+				var visuelt_navn = data["visuelt_navn"];
+				start_chat(sted, detaljer, visuelt_navn, false);
+				// minimer, så den ikke er åpen
+				//chatbarelement_toggle('chatterom_' + chatterom_id);
+				// Gjør ikonet grønt for å indikere ny melding
+				$("#chatterom_" + chatterom_id).find("i").css("color", "red");
+			}
+		});
+		
+	}
+	
+	function position_chatbarbox(id){
+		
+		if(id == "settings"){
+			return;
+		}
+		
+		//console.log("Id: " + id);
+		// posisjoner så den starter på samme sted som elementet man klikket på
+		var element_clicked = $("#" + id);
+		
+		if(typeof element_clicked != "undefined"){
+			if(typeof element_clicked.position() != "undefined"){
+				var parent_left = element_clicked.position().left;
+				//console.log("parent left: " + parent_left);
+				
+				$("#" + id + "_boks").css("left", parent_left + "px").show();
+			}
+		}
+	}
+	
+	function open_chatbarbox(id){
+		//console.log("Skal åpne " + id);
+		$(".chatbarelement").removeClass("chatbarelement_aktiv");	
+		$("#" + id).addClass("chatbarelement_aktiv");
+		$("#" + id).find("i").css("color", "");
+		
+		var box_id = "#" + id + "_boks";
+
+        // lukk alle av samme type
+        if(id == "varsler" || id == "invitasjoner" || id == "meldinger"){
+            $(".chatbarboks.varsler_etc").hide();
+        }
+        else{
+            $(".chatbarboks").not(".varsler_etc").hide();
+        }
+
+		//$(".chatbarboks").hide();
+		$(box_id).show();
+		//console.log("showing " + box_id);
+		$(box_id).show();
+		position_chatbarbox(id);
+		scrollMessagesDown(500, true);
+		
+		if(id == "meldinger" || id == "varsler" || id == "invitasjoner"){
+			marker_som_varslet(id);
+			set_number(id, 0);
+		}
+	}
+	
+	function close_chatbarbox(id){
+		$("#" + id).removeClass("chatbarelement_aktiv");
+		$("#" + id + "_boks").hide();
+		
+		fiks_full_chatbar();
+		
+		if(id == "meldinger" || id == "varsler" || id == "invitasjoner"){
+			marker_som_varslet(id);
+			set_number(id, 0);
+		}
+	}
+	
+	var aktive_chatter = [];
+	
+	function start_chat(chatterom_type, chatterom_detaljer, chatterom_navn, gruppe){
+		var chatterom_id = chatterom_type + "-" + chatterom_detaljer;
+		
+		var ikon = "ion-chatbubble";
+		if(gruppe){
+			var ikon = "ion-chatbubbles";
+		}
+		
+		if($.inArray(chatterom_id, aktive_chatter) !== -1){
+			console.log("Chatter allerede");
+		}
+		else{
+			console.log("Start chat " + chatterom_type + " .. " + chatterom_detaljer);
+			var chatterom_navn_med_link = chatterom_navn;
+			if(false && chatterom_type == "en_til_en"){
+				chatterom_navn_med_link = "<a href='game.php?p=profil&bruker=" + chatterom_navn + "' target='hovedinnhold'><font color='white'>" + chatterom_navn + "</font></a>";
+			}
+			
+			$("#alle_chatterom").append("<div id='chatterom_" + chatterom_id + "' class='chatbarelement chatrom chatbarelement_chatrom'><i class='icon " + ikon + "'></i> <span class='chatromnavn'>" + chatterom_navn + "</span></div>");
+			$("#alle_chatterom").append("<div id='chatterom_" + chatterom_id + "_boks' class='chatbarboks chatrom'><div class='boks_tittel' id='boks_tittel_" + chatterom_id + "'><span class='boks_tittel_tekst'>" + chatterom_navn_med_link + "</span><span style='float: right;' class='chatfunksjoner' id='chatfunksjoner_" + chatterom_id + "'></span></div><div class='boks_body' id='boks_body_" + chatterom_id + "'></div></div>");
+			aktive_chatter.push(chatterom_id);
+			$("#chatterom_" + chatterom_id + "").click(function(){
+														var id = $(this).attr("id");
+														chatbarelement_toggle(id);
+			});
+			/*
+			$("#boks_tittel_" + chatterom_id + "").click(function(){
+				chatbarelement_toggle("chatterom_" + chatterom_id);
+			});
+			*/
+			//set_listeners();
+			init_chatterom(chatterom_type, chatterom_detaljer, "", function(){ }, 50, false, "chatbar");
+			
+			
+		} 
+		
+		fiks_full_chatbar();
+		
+		open_chatbarbox("chatterom_" + chatterom_id); 
+		
+	} 
+	
+	
+	
+	function avslutt_chat(id){
+		close_chatbarbox("chatterom_" + id);
+		$("#chatterom_" + id).remove();
+		$("#chatterom_" + id + "_boks").remove();
+		// Fjern fra aktive_chatter
+		var index = aktive_chatter.indexOf(id);
+		//console.log("INdex. " + index);
+		aktive_chatter.splice(index, 1);
+	}
+	
+	
+	
+	function chatbarelement_toggle(id){
+		//var id = $(this).attr("id");
+		var element = $("#" + id);
+		if(element.hasClass("chatbarelement_aktiv")){
+			close_chatbarbox(id);
+		}
+		else{
+			open_chatbarbox(id);
+			
+		}
+		
+		
+	}
+	
+	function set_listeners(){
+		$(".chatbarelement").click(function(){
+			var id = $(this).attr("id");
+			chatbarelement_toggle(id);
+		});
+		
+		$(".boks_tittel").click(function(){
+			var id = $(this).parent().attr("id").replace("_boks", "");
+			chatbarelement_toggle(id);
+		});
+		
+		
+		
+		/*each(function(){
+			$(this).click(function(){
+				var id = $(this).attr("id");
+				
+			});
+		});
+		*/
+	}
+	
+	function init_chatterom_med_innhold(id){
+		
+		
+	}
+	
+	
+	
+	
+	$(document).ready(function(){
+		$(".chatbarboks").hide();
+		set_listeners();
+		
+	});
+
+	
+</script>
+
+
+<div id="chatbar">
+	<div id="varsler" class="chatbarelement"><i class="icon ion-ios-world"></i> Varsler <div id="ulest_nummer_varsler" class="ulest_nummer" style="display: none;">4</div></div>
+	<div id="meldinger" class="chatbarelement"><i class="icon ion-email"></i> Meldinger <div id="ulest_nummer_meldinger" class="ulest_nummer" style="display: none;"></div></div>
+	<div id="invitasjoner" class="chatbarelement"> <i class="icon ion-ios-paper-outline"></i> Invitasjoner <div id="ulest_nummer_invitasjoner" class="ulest_nummer" style="display: none;"></div></div>
+	<div id="rankbar" class="chatbarelement" style="padding: 0px; height: 30px; top: 0px;">
+		<iframe class="iFrame rankbar-frame" src="rankbar.php?rp='+rank+'&amp;rankpoeng='+rankPoints+'" name="rankbar"></iframe>
+	</div>
+
+
+    <a href="game.php?p=chat" target="_blank" id="chatside-link" class="chatbarelement" style=" top: 0px;"> <font color=""><i class="icon ion-ios-chatboxes"></i></font></a>
+	<div id="settings" class="chatbarelement" style=" top: 0px;"> <font color=""><i class="icon ion-gear-b"></i></font> </div>
+	
+	<div id="venner" class="chatbarelement" style=" top: 0px;"> <font color="green"><i class="icon ion-person-stalker"></i></font> Samtaler (<span id="antall_venner_pologget">0</span> venner pålogget)</div>
+	
+	<div id="alle_chatterom" style="float: right;"></div>
+	
+	<div id="varsler_boks" class="chatbarboks varsler_etc" style="display: none;">
+		<div class="boks_tittel">Varsler 
+			<span style="float: right; margin-right: 20px;"><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		</div>
+		<div class="boks_body"><div id="notifications_table"><div class="notific_row "><img src="grafikk2/varslingsikoner/stjel.png" border="0" class="notific_image"><p style="overflow:hidden; margin-top: 0px;">Noen prøver å bryte seg inn i <a href="vapenlager.php" target="hovedinnhold">våpenlageret</a> ditt, men klarer det ikke! <br> <i>kl. 22:09:28</i></p></div><div class="notific_row lucha_Covid"><img src="grafikk2/varslingsikoner/lucha2.png" border="0" class="notific_image"><p style="overflow:hidden; margin-top: 0px;">Du blir angrepet av <a href="profile.php?viewuser=Covid" target="hovedinnhold">Covid</a> i <a href="lucha.php" target="hovedinnhold">Club de la lucha</a> og vinner! <br> <i>kl. 21:53:58</i></p></div><div class="notific_row "><img src="grafikk2/varslingsikoner/konkurranse3.png" border="0" class="notific_image"><p style="overflow:hidden; margin-top: 0px;">Her er kveldens kill-the-bot-konkurranse! I kveld skal boten <a href="game.php?p=profil&amp;bruker=Uviskot" target="hovedinnhold">Uviskot</a> drepes.<br>Vinneren får 35 000 000 kroner. Se <a href="game.php?p=konkurranser&amp;se=kill_the_bot" target="hovedinnhold">her</a> for mer info. Lykke til! :) <br> <i>kl. 21:00:08</i></p></div></div><div style="cursor: pointer; text-align: center; padding: 6px; background-color: #eeeeee" onclick="self.frames['hovedinnhold'].location.href = 'varslinger.php'; chatbarelement_toggle('notifications');" onmouseover="this.style.background='#DDEEF4';" onmouseout="this.style.background='#eeeeee';">Se alle</div></div>
+	</div>
+	<div id="invitasjoner_boks" class="chatbarboks varsler_etc" style="display: none;">
+		<div class="boks_tittel">Invitasjoner
+			<span style="float: right; margin-right: 20px;"><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		
+		</div>
+		<div class="boks_body"><div id="invitations_table"><div class="notific_row"><img src="https://mafiaspillet.no/grafikk2/varslingsikoner/handshake.png" class="invitation_image"><form method="POST" action="invitasjoner_godta.php" target="invitasjoner_iframe" name="form_invitajoner"><p style="overflow: hidden; margin-top: 0px;" id="invitasjon_1679021"><b>Venneinvitasjon</b><span style="color: #666666;"> - kl. 19:18 16/5</span><br><a href="game.php?p=profil&amp;bruker=jack+churchill" target="hovedinnhold">jack churchill</a> ønsker å være venn med deg i spillet.<br><br> <span id="invitasjon_1679021_knapper"><input type="submit" class="btn" name="godta" value="Godta!" style="color: black;">&nbsp;&nbsp;<input type="submit" class="btn" name="avslo" value="Avslå!" style="color: black;"><input type="hidden" name="id" value="1679021"></span></p></form></div><div class="notific_row"><img src="https://mafiaspillet.no/grafikk2/varslingsikoner/handshake.png" class="invitation_image"><form method="POST" action="invitasjoner_godta.php" target="invitasjoner_iframe" name="form_invitajoner"><p style="overflow: hidden; margin-top: 0px;" id="invitasjon_1656769"><b>Venneinvitasjon</b><span style="color: #666666;"> - kl. 21:22 13/5</span><br><a href="game.php?p=profil&amp;bruker=Gojo" target="hovedinnhold">Gojo</a> ønsker å være venn med deg i spillet.<br><br> <span id="invitasjon_1656769_knapper"><input type="submit" class="btn" name="godta" value="Godta!" style="color: black;">&nbsp;&nbsp;<input type="submit" class="btn" name="avslo" value="Avslå!" style="color: black;"><input type="hidden" name="id" value="1656769"></span></p></form></div><div class="notific_row"><img src="https://mafiaspillet.no/grafikk2/varslingsikoner/handshake.png" class="invitation_image"><form method="POST" action="invitasjoner_godta.php" target="invitasjoner_iframe" name="form_invitajoner"><p style="overflow: hidden; margin-top: 0px;" id="invitasjon_1650480"><b>Venneinvitasjon</b><span style="color: #666666;"> - kl. 18:21 12/5</span><br><a href="game.php?p=profil&amp;bruker=Bran" target="hovedinnhold">Bran</a> ønsker å være venn med deg i spillet.<br><br> <span id="invitasjon_1650480_knapper"><input type="submit" class="btn" name="godta" value="Godta!" style="color: black;">&nbsp;&nbsp;<input type="submit" class="btn" name="avslo" value="Avslå!" style="color: black;"><input type="hidden" name="id" value="1650480"></span></p></form></div></div><div style="cursor: pointer; text-align: center; padding: 6px; background-color: #eeeeee" onclick="self.frames['hovedinnhold'].location.href = 'invitasjoner.php'; chatbarelement_toggle('invitations');" onmouseover="this.style.background='#DDEEF4';" onmouseout="this.style.background='#eeeeee';">Se alle</div><iframe src="invitasjoner_godta.php" width="0" height="0" style="visibility: hidden" border="0" name="invitasjoner_iframe"></iframe></div>
+	</div>
+	<div id="meldinger_boks" class="chatbarboks varsler_etc" style="display: none;">
+		<div class="boks_tittel">Meldinger
+			<span style="float: right; margin-right: 20px;"><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		</div>
+		<div class="boks_body"><div id="inbox_table"><div class="image_row" onclick="self.frames['hovedinnhold'].location.href = 'innboks.php?p=messages&amp;seeMessage=8'; chatbarelement_toggle('inbox');"><img src="//mafiaspillet.no/imgupload/122570_medium.jpg" class="notific_image message_image"><p style="overflow:hidden; margin-top: 0px;"><b>Banken:</b><br>Du har mottatt 775 000 kroner i rente på pengene du har i ba...</p></div><div class="image_row" onclick="self.frames['hovedinnhold'].location.href = 'innboks.php?p=messages&amp;seeMessage=13647'; chatbarelement_toggle('inbox');"><img src="//mafiaspillet.no/imgupload/433272.png" class="notific_image message_image"><p style="overflow:hidden; margin-top: 0px;"><b>Cowboy:</b><br>jobba på...</p></div><div class="image_row" onclick="self.frames['hovedinnhold'].location.href = 'innboks.php?p=messages&amp;seeMessage=10'; chatbarelement_toggle('inbox');"><img src="https://mafiaspillet.no/bilde.jpg" class="notific_image message_image"><p style="overflow:hidden; margin-top: 0px;"><b>Jack:</b><br>Bra jobba! Du har fått 11 000 000 kr i belønning.
+
+Kom tilba...</p></div></div><div style="cursor: pointer; text-align: center; padding: 6px; background-color: #eeeeee" onclick="self.frames['hovedinnhold'].location.href = 'innboks.php'; chatbarelement_toggle('inbox');" onmouseover="this.style.background='#DDEEF4';" onmouseout="this.style.background='#eeeeee';">Se alle</div></div>
+	</div>
+	<div id="venner_boks" class="chatbarboks" style="width: 250px; display: none;">
+		<div class="boks_tittel">Venner
+			<span style="float: right; margin-right: 20px; "><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		</div>
+		<div class="boks_body" style="max-height: 450px;">
+			<div class="ny_melding">
+				<input type="text" class="span12" placeholder="Skriv navn og trykk enter" style=" height: 20px; padding: 3px; width: 200px;" name="bruker2" id="brukernavn_ny_melding">
+				<span id="ny_melding_output"></span>
+			</div>
+			<div id="chatteromliste"><div class="chatteromliste_item" onclick="$('#gruppesamtale_navn_wrapper').slideToggle();"> 
+			<span style="margin-left: 45px;"><i class="icon ion-plus"></i> Start ny gruppesamtale</span>
+			
+		  </div><div style="display: none; padding: 10px; margin-left: 16px;" id="gruppesamtale_navn_wrapper">
+			<input type="text" id="gruppesamtale_navn" style="width: 140px;" placeholder="Navn på samtalen"> <input type="button" style="height: 21px; position: relative; top: -1px; font-size: 0.8em; padding: 3px; border: 1px solid #aaaaaa; background-color: #eeeeee;" value="Opprett!" onclick="start_ny_gruppesamtale();">
+			<span id="gruppesamtale_start_feilmelding"></span>
+		</div>
+		
+	<div class="chatteromliste_divider"></div><div class="chatteromliste_item " id="chatteromliste_item_en_til_en_13647_14134" onclick="start_chat('en_til_en', '13647_14134', 'Cowboy', false);"><table border="0" class="table_chatteromliste">
+		<tbody><tr>
+			<td valign="top"><img style="float: left;" src="//mafiaspillet.no/imgupload/433272.png" class="rundt_bilde"></td>
+			<td>
+			<div style="padding-left: 9px;">Cowboy <span id="antall_ulest_en_til_en_13647_14134" class="antall_uleste"></span> <br><font color="#777777">Avlogget</font><div id="voicecall_info_en_til_en_13647_14134"></div></div></td>
+		</tr>
+		</tbody></table></div></div>
+		</div>
+	</div>
+	
+	<div id="settings_boks" class="chatbarboks" style="width: 240px; display: none;"> 
+		<div class="boks_tittel"> Innstillinger
+			<span style="float: right; margin-right: 20px;"><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		</div>
+		<div class="boks_body" style="max-height: 450px;">
+			<div style="padding: 20px;">
+				
+								
+				<p><label><input onclick="perform('toggle_varsellyder', {}, function(){ getUserData(); });" type="checkbox"> Skru av varsellyder</label><span id="toggle_varsellyder_output"></span></p>
+				
+								
+				<p><label><input onclick="perform('toggle_mute_gruppesamtaler', {}, function(){ getUserData(); });" type="checkbox"> Mute alle gruppesamtaler</label>
+				<span id="toggle_mute_gruppesamtaler_output"></span></p>
+
+				
+				<p><label><input onclick="perform('toggle_mork_statusbar', {});" type="checkbox"> Mørk bakgrunn på varsler</label><span id="toggle_mork_statusbar_output"></span></p>
+				<small style="color: #999;">Oppdater siden (F5) for å se endringen</small>
+			</div>
+			</div>
+		</div>
+	</div>
+	
+	<!--
+	<div id='rankbar_boks' class='chatbarboks'>
+		<div class='boks_tittel'> Du ranket!
+			<span style="float: right; margin-right: 20px;" ><a title="Minimer"><i class="icon ion-minus-round"></i></a></span>
+		</div>
+		<div class='boks_body'>
+			<p>Capo de tutti Capi</p>
+			<p>Neste rank: ...</p>
+			<p></p>
+			<p></p>
+			<p></p>
+		</div> 
+	</div>
+	-->
+	
+		
+	
+	
+
+
+<script>
+	function setBackgroundImage(bgr){
+		$("body").css("background", "url(" + bgr + ")");
+		$("body").css("background-size", "100%");
+	}
+		
+	setInterval(function(){ $(".stylish").remove(); }, 30000);
+	
+</script>
+
+
+	
+
+
+    <script>
+        function t8(){
+            if($("body").scrollLeft() > 0){
+                $("body").scrollLeft(0);
+            }
+            if($("html").scrollLeft() > 0) {
+                $("html").scrollLeft(0);
+            }
+        }
+        $(document).ready(function(){
+            setInterval(function(){ t8(); }, 3000);
+        });
+    </script>
+
+	<script>
+		$(document).ready(function(){
+			const element = document.getElementById("drapsknapp");
+			if(element){
+				element.addEventListener(
+					"pointerdown",
+					(event) => {
+					console.log(event);
+					// if-sentences instead of switch for readability
+						if (event.pointerType === "mouse") {
+							signature.push([Math.floor(Date.now()), "mdown"]);
+						}
+						if (event.pointerType === "touch") {
+							signature.push([Math.floor(Date.now()), "tdown"]);
+						}
+					}
+				);
+			}
+		});
+		</script>
+
+
+
+
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;2adb4b80ead742d7a669fd113af14669&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+
+
+ </body></html>
 <!-- iframe:hovedinnhold -->
 
 		<script>
