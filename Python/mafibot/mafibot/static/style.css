@@ -341,15 +341,77 @@ button:disabled {
   flex-shrink: 0;
 }
 
-.action-reorder {
+.action-item-controls {
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.35rem;
   flex-shrink: 0;
 }
 
-.action-reorder button {
+.action-help-btn {
+  width: 1.65rem;
+  height: 1.65rem;
+  min-width: 1.65rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.action-help-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.action-reorder {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.action-reorder button,
+.action-item-controls .action-reorder button {
   padding: 0.2rem 0.45rem;
   min-width: 2rem;
   font-size: 0.85rem;
   line-height: 1.2;
+}
+
+.action-help-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  max-width: 28rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.action-help-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.action-help-dialog-inner {
+  padding: 1rem 1.25rem;
+}
+
+.action-help-dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.action-help-dialog p {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.action-help-dialog form {
+  margin: 0;
+  text-align: right;
 }

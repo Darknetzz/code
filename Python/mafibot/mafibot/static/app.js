@@ -2,15 +2,60 @@ const $ = (id) => document.getElementById(id);
 
 /** All gameplay actions the brain can schedule (hotel handled separately). */
 const ACTION_CATALOG = [
-  { id: "crime", label: "Crime (Kriminalitet)" },
-  { id: "business", label: "Business (Mine bedrifter)" },
-  { id: "ship", label: "Ship (Mitt rederi)" },
-  { id: "travel", label: "Travel (Flyplass)" },
-  { id: "drugs", label: "Drugs" },
-  { id: "bank", label: "Bank" },
-  { id: "messages", label: "Messages" },
-  { id: "family", label: "Family" },
-  { id: "murder", label: "Murder (combat)" },
+  {
+    id: "crime",
+    label: "Crime (Kriminalitet)",
+    description:
+      "Opens the Kriminalitet tab and runs a crime when the cooldown is ready. Leaves the hotel first (crime is blocked in hotel), then returns to hotel after.",
+  },
+  {
+    id: "business",
+    label: "Business (Mine bedrifter)",
+    description:
+      "Opens Mine bedrifter in the sidebar and clicks income/work buttons (hent, inntekt) when business income is ready. Can run while still in the hotel.",
+  },
+  {
+    id: "ship",
+    label: "Ship (Mitt rederi)",
+    description:
+      "Opens Mitt rederi in the sidebar and handles ship actions (send, depart) when the ship is ready or in port. Can run in the hotel.",
+  },
+  {
+    id: "travel",
+    label: "Travel (Flyplass)",
+    description:
+      "Opens Flyplass and starts travel when available. Must leave the hotel first, then re-books afterward.",
+  },
+  {
+    id: "drugs",
+    label: "Drugs",
+    description:
+      "Opens the drugs page and buys/sells when controls are available. Must leave the hotel first.",
+  },
+  {
+    id: "bank",
+    label: "Bank",
+    description:
+      "Opens the bank page and uses deposit/withdraw/transfer controls. Only scheduled if bank is in your enabled list. Must leave the hotel first.",
+  },
+  {
+    id: "messages",
+    label: "Messages",
+    description:
+      "Opens Meldinger, may open inbox threads, and tries to reply. Runs when you have unread messages or after social_interval_minutes (default 45). Max 8 replies per hour. Stays in hotel.",
+  },
+  {
+    id: "family",
+    label: "Family",
+    description:
+      "Opens Familie on a timer (social_interval_minutes). Accepts invites (Godta/Aksepter) if shown; otherwise just visits the page. Stays in hotel.",
+  },
+  {
+    id: "murder",
+    label: "Murder (combat)",
+    description:
+      "Opens murder/skyt when combat is enabled, aggression ≥ 0.5, health is OK, and cooldown is ready. Often opens the page but skips the kill unless aggression is high (≥ 0.85). Must leave the hotel. High ban risk.",
+  },
 ];
 
 const ECONOMY_ACTION_IDS = new Set([
@@ -219,6 +264,19 @@ function profileToEnabledActionOrder(doc) {
   return order;
 }
 
+function showActionHelp(actionId) {
+  const meta = ACTION_CATALOG.find((a) => a.id === actionId);
+  if (!meta) return;
+  $("action-help-title").textContent = meta.label;
+  $("action-help-body").textContent = meta.description;
+  const dialog = $("action-help-dialog");
+  if (typeof dialog.showModal === "function") {
+    dialog.showModal();
+  } else {
+    alert(`${meta.label}\n\n${meta.description}`);
+  }
+}
+
 function renderActionList(enabledOrder) {
   const list = $("cfg-action-list");
   list.innerHTML = "";
@@ -248,9 +306,12 @@ function renderActionList(enabledOrder) {
         <input type="checkbox" data-action-check ${enabledSet.has(id) ? "checked" : ""} />
         <span>${meta.label}</span>
       </label>
-      <div class="action-reorder">
-        <button type="button" data-dir="up" title="Move up">↑</button>
-        <button type="button" data-dir="down" title="Move down">↓</button>
+      <motion class="action-item-controls">
+        <button type="button" class="action-help-btn" data-action-help="${id}" title="What does this do?" aria-label="Help: ${meta.label}">?</button>
+        <div class="action-reorder">
+          <button type="button" data-dir="up" title="Move up">↑</button>
+          <button type="button" data-dir="down" title="Move down">↓</button>
+        </div>
       </div>
     `;
     list.appendChild(li);
@@ -274,6 +335,12 @@ function moveActionItem(li, direction) {
 
 function setupActionListHandlers() {
   $("cfg-action-list").addEventListener("click", (ev) => {
+    const helpBtn = ev.target.closest("[data-action-help]");
+    if (helpBtn) {
+      ev.preventDefault();
+      showActionHelp(helpBtn.dataset.actionHelp);
+      return;
+    }
     const btn = ev.target.closest("button[data-dir]");
     if (!btn) return;
     const li = btn.closest(".action-list-item");
