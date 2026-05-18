@@ -70,8 +70,23 @@ def _text_contains(html: str, needle: str) -> bool:
     return needle.lower() in html.lower()
 
 
-def _any_contains(html: str, needles: tuple[str, ...]) -> bool:
+def _word_contains(html: str, word: str) -> bool:
+    return bool(re.search(rf"\b{re.escape(word)}\b", html, re.I))
+
+
+def _any_contains(html: str, needles: tuple[str, ...], *, whole_word: bool = False) -> bool:
+    if whole_word:
+        return any(_word_contains(html, n) for n in needles)
     return any(_text_contains(html, n) for n in needles)
+
+
+# Rank-gated / legacy crimes — not present on every account snapshot.
+OPTIONAL_CRIME_CHECKS: frozenset[str] = frozenset(
+    {
+        "crime:enkel:gate",
+        "crime:enkel:butikk",
+    }
+)
 
 
 def _crime_requirements() -> list[tuple[str, tuple[str, ...]]]:
@@ -89,9 +104,12 @@ def _nav_requirements(logical: str) -> list[tuple[str, tuple[str, ...]]]:
     tab = GAME_TABS.get(logical)
     if tab:
         reqs.append((f"nav:tab:{logical}", (tab,)))
-    patterns = SIDEBAR_LINKS.get(logical) or NAV_LINKS.get(logical, ())
-    if patterns:
-        reqs.append((f"nav:sidebar:{logical}", patterns))
+    if logical == "drugs":
+        reqs.append((f"nav:frame:{logical}", DRUGS_ACTION_LABELS + ("hasj", "kokain")))
+    else:
+        patterns = SIDEBAR_LINKS.get(logical) or NAV_LINKS.get(logical, ())
+        if patterns:
+            reqs.append((f"nav:sidebar:{logical}", patterns))
     return reqs
 
 
@@ -109,7 +127,7 @@ def _requirements_for(logical: str) -> list[tuple[str, tuple[str, ...]]]:
     elif logical == "ship":
         reqs.append(("ship:action", SHIP_ACTION_LABELS))
     elif logical == "drugs":
-        reqs.append(("drugs:action", DRUGS_ACTION_LABELS))
+        reqs.append(("drugs:action", DRUGS_ACTION_LABELS + ("hasj", "kokain")))
     elif logical == "bank":
         reqs.append(("bank:deposit", ("innskudd", "sett inn")))
         reqs.append(("bank:withdraw", ("uttak", "ta ut")))
@@ -134,9 +152,27 @@ def _requirements_for(logical: str) -> list[tuple[str, tuple[str, ...]]]:
 
 def audit_html(logical: str, html: str) -> PageAudit:
     audit = PageAudit(logical=logical, html_path=None)
+    optional_checks = {
+        "messages:reply",
+        *OPTIONAL_CRIME_CHECKS,
+    }
     for check_id, needles in _requirements_for(logical):
-        if _any_contains(html, needles):
+        whole_word = check_id.startswith("drugs:")
+        if _any_contains(html, needles, whole_word=whole_word):
             audit.results.append(CheckResult(check_id, "PASS"))
+        elif check_id == "hotel:book" and _any_contains(
+            html, HOTEL_LEAVE_LABELS + ("i hotell", "sjekk ut")
+        ):
+            audit.results.append(
+                CheckResult(check_id, "SKIP", "already checked into hotel")
+            )
+        elif check_id in optional_checks:
+            reason = (
+                "rank-gated crime option not on page"
+                if check_id in OPTIONAL_CRIME_CHECKS
+                else "not on message detail view"
+            )
+            audit.results.append(CheckResult(check_id, "SKIP", reason))
         else:
             audit.results.append(
                 CheckResult(

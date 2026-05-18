@@ -29,9 +29,19 @@ ENKEL_SECTION = CrimeSection(
     title="Enkel kriminalitet",
     submit_labels=("utfør",),
     options=(
-        CrimeOption("gate", "Ran tilfeldig person på gata", ("tilfeldig person", "ran tilfeldig")),
-        CrimeOption("butikk", "Nask fra en butikk", ("nask", "butikk")),
+        CrimeOption(
+            "automat",
+            "Bryt opp en spilleautomat",
+            ("spilleautomat", "bryt opp"),
+        ),
         CrimeOption("kiosk", "Ran en kiosk", ("kiosk",)),
+        # Legacy / rank-gated crimes still seen on some accounts
+        CrimeOption(
+            "gate",
+            "Ran tilfeldig person på gata",
+            ("tilfeldig person", "ran tilfeldig", "person på gata"),
+        ),
+        CrimeOption("butikk", "Nask fra en butikk", ("nask", "butikk")),
     ),
 )
 

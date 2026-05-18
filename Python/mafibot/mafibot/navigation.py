@@ -8,6 +8,15 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from playwright.async_api import Locator, Page
 
 from mafibot.config import BASE_URL, GAME_URL
+
+# In-game iframe routes (game.php?p=…) for sidebar-only features.
+FRAME_PAGE_ROUTES: dict[str, str] = {
+    "business": "bedrifter",
+    "ship": "rederi",
+    "bank": "bank",
+    "drugs": "narkotika",
+    "murder": "drap",
+}
 from webbot.human import reading_pause
 
 from mafibot.human_policy import (
@@ -76,6 +85,41 @@ async def goto_sidebar(
     return await _try_sidebar(page, logical, policy=policy, dry_run=dry_run)
 
 
+async def goto_frame_route(
+    page: Page,
+    logical: str,
+    *,
+    policy: HumanPolicy | None = None,
+    dry_run: bool = False,
+) -> bool:
+    """Open game.php?p=… in the hovedinnhold iframe (ms.php shell)."""
+    route = FRAME_PAGE_ROUTES.get(logical)
+    if not route:
+        return False
+    await ensure_game_shell(page, policy)
+    data_url = f"game.php?p={route}"
+    link = page.locator(f'[data-url="{data_url}"]')
+    if await link.count() == 0:
+        link = page.locator(f'a[href*="{data_url}"]')
+    if await link.count() > 0:
+        target = link.first
+        if await target.is_visible():
+            if dry_run:
+                return True
+            await maybe_think_pause(policy or HumanPolicy())
+            await human_click_paced(page, target, policy)
+            await after_navigation(page, policy)
+            return True
+    frame = page.frame(name="hovedinnhold")
+    if frame is None:
+        return False
+    if dry_run:
+        return True
+    await frame.goto(f"{BASE_URL}game.php?p={route}", wait_until="domcontentloaded")
+    await after_navigation(page, policy)
+    return True
+
+
 async def _try_sidebar(
     page: Page,
     logical: str,
@@ -83,6 +127,8 @@ async def _try_sidebar(
     policy: HumanPolicy | None = None,
     dry_run: bool = False,
 ) -> bool:
+    if await goto_frame_route(page, logical, policy=policy, dry_run=dry_run):
+        return True
     patterns = SIDEBAR_LINKS.get(logical, NAV_LINKS.get(logical, ()))
     for pattern in patterns:
         link = page.get_by_role("link", name=re.compile(pattern, re.I))

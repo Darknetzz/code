@@ -44,7 +44,7 @@ def test_rotate_crime_sections():
 def test_pick_option_ids_empty_means_all():
     profile = BotProfile(crime_actions=["enkel"], crime_enkel_choices=[])
     ids = pick_option_ids(profile, "enkel")
-    assert ids == ["gate", "butikk", "kiosk"]
+    assert ids == ["automat", "kiosk", "gate", "butikk"]
 
 
 @pytest.mark.asyncio

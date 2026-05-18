@@ -1,0 +1,1216 @@
+<!-- iframe:hovedinnhold -->
+
+		<script>
+	
+		if(!inIframe()){
+			$("body").css("background-color", "black");
+			//document.getElementById("page-id").style.background-color = "black";
+		}
+	</script>
+			
+	<div style="width: 100%; max-width: 860px; margin-left: auto; margin-right: auto; min-height: 400px;">
+				<div id="hotell_booking_info" style="display: none;"></div>
+		<div id="drep_info" style="display: none;"></div>
+		<div id="drep_nullstill_melding" style="display: none;"></div>
+		
+				
+				
+			
+		<script>
+	$(document).ready(function(){
+		$("form").each(function(){
+			//console.log("Adding token");
+			$(this).append("<input type='hidden' value='78070ac430d881cc1c3403d16f7a26b9' name='ttoken'><input type='hidden' name='jtoken' id='jtoken' value=''>");
+		});
+	});
+</script>
+
+
+
+
+
+
+<link rel="stylesheet" href="https://mafiaspillet.no/css/powerange.css" type="text/css">
+<script language="JavaScript" src="https://mafiaspillet.no/slider.js"></script>
+<script src="https://mafiaspillet.no/js/bootstrap-rowlink.js"></script>
+<script src="https://mafiaspillet.no/js/powerange.min.js"></script>
+
+<script>
+    // hack to force pusher to try to reconnect with websockets and not fallback when connection is lost
+    pusher.connection.strategy.transports.wss.transport.manager.livesLeft = 1000000000;
+</script>
+<!-- High charts -->
+
+
+<script>
+    if(false && typeof(HighCharts) == "undefined"){
+        $.getScript("https://code.highcharts.com/highcharts.js", function() {
+            $.getScript("https://cdnjs.cloudflare.com/ajax/libs/highcharts/5.0.14/js/themes/dark-unica.js");
+        });
+    }
+</script>
+
+<!--<script type="text/javascript" src="https://code.highcharts.com/highcharts.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/5.0.14/js/themes/dark-unica.js"></script>
+-->
+
+<script>
+    $(document).ready(function(){
+		$("#html").css("touch-action",  "manipulation");
+		
+	});
+</script>
+
+
+
+
+	
+<div class="module loaded" id="bursdagsgave">
+
+</div>
+
+
+<script>
+    $(document).ready(function(){
+        resize_parent();
+    });
+</script>
+
+
+<div class="row-fluid">
+    
+    <div class="span12">
+        <div class="tabbable" style="margin-bottom: -1px;">
+        <ul class="nav nav-tabs" style="margin-bottom: 1px;">
+    <li class="active"><a class="no-link" href="?p=hjem&amp;se=forsiden">Oversikt</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=drap">Drap</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=skills">Skills</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=spesialisering">Spesialisering</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=utfordringer">Utfordringer</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=items">Stresskofferter</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=spillerrating">Min rating</a></li><li class=""><a class="no-link" href="?p=hjem&amp;se=handlingslogg">Handlingslogg</a></li>
+        </ul>
+    </div>
+    </div>
+    </div>
+    
+    <style>
+    input[type='submit'], input[type=button]
+    {
+       -webkit-appearance: none;
+       -moz-appearance: none;
+       appearance: none;  
+    }
+    </style>
+    
+    <div>
+<script>
+     if (!document.getElementById('menu_module_drep')) {                                                                                                                                                                                                                                                          
+      var flyplassItem = document.getElementById('menu_module_flyplass2');                                                                                                                                                                                                                                     
+      if (flyplassItem) {                                                                                                                                                                                                                                                                                      
+          var drepItem = document.createElement('ons-list-item');                                                                                                                                                                                                                                              
+          drepItem.id = 'menu_module_drep';                                                                                                                                                                                                                                                                    
+          drepItem.className = 'menu-item';                                                                                                                                                                                                                                                                    
+          drepItem.onclick = function() { menu_click('module_drep_gammel'); };
+          drepItem.innerHTML = "Drep <span class='meny_tid' id='drep_tid'></span>";                                                                                                                                                                                                                            
+          flyplassItem.parentNode.insertBefore(drepItem, flyplassItem.nextSibling);                                                                                                                                                                                                                            
+      }                                                                                                                                                                                                                                                                                                        
+  }
+</script>
+
+
+<div class="alert alert-info" id="hjemsidevarsel_125442" style="min-height: 50px;">
+			<p><img src="https://mafiaspillet.no/img/hjemsidevarsler/info_lys.png" style="max-height: 30px; width: auto; padding: 10px; float: left; padding-top: 5px; padding-bottom: 40px;">
+				<b>Info</b>
+			</p>
+			<p>
+
+			Et nytt konkurranseprogram <a href="game.php?p=konkurranser&amp;se=konkurranseprogram" target="hovedinnhold">for denne uken</a> er klart!</p><p><a onclick="perform('slett_hjmesidevarsel', {id: 125442}, function(res){ $('#hjemsidevarsel_125442').fadeOut(50);});" class="btn btn-small">Fjern denne meldingen</a></p>
+		</div><div class="alert alert-info" id="hjemsidevarsel_135343" style="min-height: 50px;">
+			<p><img src="https://mafiaspillet.no/img/hjemsidevarsler/info_lys.png" style="max-height: 30px; width: auto; padding: 10px; float: left; padding-top: 5px; padding-bottom: 40px;">
+				<b>Info</b>
+			</p>
+			<p>
+
+			Et nytt konkurranseprogram <a href="game.php?p=konkurranser&amp;se=konkurranseprogram" target="hovedinnhold">for denne uken</a> er klart!</p><p><a onclick="perform('slett_hjmesidevarsel', {id: 135343}, function(res){ $('#hjemsidevarsel_135343').fadeOut(50);});" class="btn btn-small">Fjern denne meldingen</a></p>
+		</div><div class="alert alert-info" id="hjemsidevarsel_148239" style="min-height: 50px;">
+			<p><img src="https://mafiaspillet.no/img/hjemsidevarsler/info_lys.png" style="max-height: 30px; width: auto; padding: 10px; float: left; padding-top: 5px; padding-bottom: 40px;">
+				<b>Info</b>
+			</p>
+			<p>
+
+			Et nytt konkurranseprogram <a href="game.php?p=konkurranser&amp;se=konkurranseprogram" target="hovedinnhold">for denne uken</a> er klart!</p><p><a onclick="perform('slett_hjmesidevarsel', {id: 148239}, function(res){ $('#hjemsidevarsel_148239').fadeOut(50);});" class="btn btn-small">Fjern denne meldingen</a></p>
+		</div><div class="alert alert-info" id="hjemsidevarsel_158657" style="min-height: 50px;">
+			<p><img src="https://mafiaspillet.no/img/hjemsidevarsler/info_lys.png" style="max-height: 30px; width: auto; padding: 10px; float: left; padding-top: 5px; padding-bottom: 40px;">
+				<b>Info</b>
+			</p>
+			<p>
+
+			Et nytt konkurranseprogram <a href="game.php?p=konkurranser&amp;se=konkurranseprogram" target="hovedinnhold">for denne uken</a> er klart!</p><p><a onclick="perform('slett_hjmesidevarsel', {id: 158657}, function(res){ $('#hjemsidevarsel_158657').fadeOut(50);});" class="btn btn-small">Fjern denne meldingen</a></p>
+		</div>
+
+
+
+
+
+<div class="row-fluid">
+	<div class="span12">
+		<div class="well" style="border-top: 0px;">
+			<div class="app-padding">
+                									<div style="display: inline;" id="hjem_hotellstatus"><span class="text-success">I hotell (+800)</span></div>					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+					<b>Helse:</b> <a href="game.php?p=sykehus"><font class="darkgreen">100</font> (<font class="darkgreen">Perfekt!</font>)</a>
+					
+					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+					<a href="?p=hjem&amp;se=spesialisering">Angriper (nivå 0)</a>					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+					<b>Beskyttelse:</b> 800					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+					<b>Angrep:</b> 50					&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+					<b><i class="icon  icon-cog"></i> <a href="game.php?p=hjemside_velg_oppsett">Endre</a></b>
+							</div>
+		</div>
+	</div>
+</div>
+
+
+
+
+
+<div class="row-fluid">
+					<div class="span7"><div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="hjem_ratingoversikt"><!--<div class="well"><h3>Din rating:</h3><span>Midlertidig deaktivert</span></div>-->
+<div class="well">
+	<h3>Din rating: <span style="font-size: 1.2em;">22.2</span></h3>
+
+	<div class="app-padding">
+		
+				<div class="rating_element">
+					<img src="https://mafiaspillet.no/images/icons_rating/aktivitet.png" style="background-color: white; width: 32px; height: 32px; border: 1px solid darkgreen; padding: 4px; margin-right: 10px; float: left;">
+					<p><b>+ 0</b>  for daglig aktivitet<br><span class="rating_tilleggstekst">20 vellykkede krim minst 3 av de 4 siste dagene gir +10 </span></p>
+				</div>
+			
+				<div class="rating_element">
+					<img src="https://mafiaspillet.no/images/icons_rating/dagens_oppdrag.png" style="background-color: white; width: 32px; height: 32px; border: 1px solid darkgreen; padding: 4px; margin-right: 10px; float: left;">
+					<p><b>+ 0</b>  for dagens oppdrag<br><span class="rating_tilleggstekst">Vellykket dagens oppdrag minst 3 av de siste 5 dagene gir +10 </span></p>
+				</div>
+			
+				<div class="rating_element">
+					<img src="https://mafiaspillet.no/images/icons_rating/rank.png" style="background-color: white; width: 32px; height: 32px; border: 1px solid darkgreen; padding: 4px; margin-right: 10px; float: left;">
+					<p><b>+ 13</b>  for ranken din<br><span class="rating_tilleggstekst">Boss 12.42 %. Høyere rank gir mer rating. </span></p>
+				</div>
+			
+				<div class="rating_element">
+					<img src="https://mafiaspillet.no/images/icons_rating/annet.png" style="background-color: white; width: 32px; height: 32px; border: 1px solid darkgreen; padding: 4px; margin-right: 10px; float: left;">
+					<p><b>+ 9.2</b>  for drap, kapring, club de la lucha osv.<br><span class="rating_tilleggstekst"> </span></p>
+				</div>
+			
+		<p></p>
+		<p>Totalt: <span style="font-size: 1.4em;">22.2</span> (228. plass i spillet)</p>
+	</div>
+</div></div>
+					</div>
+				</div>
+			<div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="spillhendelser">
+	<script type="text/javascript" src="highslide/highslide/highslide-with-html.js"></script>
+	<link rel="stylesheet" type="text/css" href="highslide/highslide/highslide.css">
+	<script type="text/javascript">
+		hs.graphicsDir = 'highslide/highslide/graphics/';
+		hs.wrapperClassName = 'wide-border';
+		hs.outlineType = 'rounded-white';
+		
+
+	</script>
+	
+ 
+
+
+<div class="well" style="max-height: 300px; overflow-y: auto;"> 
+	<div class="">
+	<h3>Siste hendelser</h3>
+	<script language="javascript">
+		function showForum(id) {
+			if (document.getElementById(id).style['display'] == ''){
+				 document.getElementById(id).style['display']='none';
+			}
+			else{
+				document.getElementById(id).style['display']='';
+			}
+		}
+		
+		function tommelOpp(id){
+			var number = document.getElementById('likes_opp' + id).innerHTML;
+			var newNumber = parseFloat(number) + 1;
+			
+			$.get("hendelser_like.php?t=o&id=" + id, function(data){					
+				if(data == "true"){
+					document.getElementById('likes_opp' + id).innerHTML = newNumber;
+				}
+			});
+		}					
+		function tommelNed(id){
+			var number = document.getElementById('likes_ned' + id).innerHTML;
+			var newNumber = parseFloat(number) + 1;
+			
+			$.get("hendelser_like.php?t=n&id=" + id, function(data){					
+				if(data == "true"){
+					document.getElementById('likes_ned' + id).innerHTML = newNumber;
+				}
+			});
+		}
+		</script>
+		
+		
+		<table border="0" class="table table-striped" width="100%"><tbody><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:51 i dag</font><br><a href="game.php?p=profil&amp;bruker=Covid">Covid</a> starter <b>kasinoet superflaks</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_1">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_1">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9296" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9296');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9296" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_1' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9296">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9296" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9296');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9296" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_1' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9296">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/rank.png" class="profilbilde2"></td><td valign="top"><b>Rank</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:32 i dag</font><br><a href="game.php?p=profil&amp;bruker=Aaron">Aaron</a> går opp i rank og er nå Gudfar.<br><div class="highslide-html-content" id="brukere_likes_opp_2">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"><a href="game.php?p=profil&amp;bruker=Adel Taarabt">Adel Taarabt</a></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_2">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9295" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9295');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9295" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_2' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9295">1</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9295" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9295');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9295" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_2' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9295">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/hitlist.png" class="profilbilde2"></td><td valign="top"><b>Hitlist</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:30 i dag</font><br>Quavo har fått en <a href="game.php?p=hitlist" target="hovedinnhold">hitlist bounty på seg</a> på 750 000 000 kroner.<br><div class="highslide-html-content" id="brukere_likes_opp_3">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_3">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9294" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9294');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9294" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_3' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9294">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9294" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9294');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9294" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_3' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9294">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/drap2.png" class="profilbilde2"></td><td valign="top"><b>Drap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:23 i dag</font><br><a href="game.php?p=profil&amp;bruker=Northlending">Northlending</a> blir skutt og drept i London.<br><div class="highslide-html-content" id="brukere_likes_opp_4">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_4">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9293" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9293');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9293" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_4' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9293">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9293" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9293');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9293" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_4' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9293">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="game.php?p=forum&amp;kategori=685073211&amp;trod=30899345" title="Gå til forumtråd"><img src="https://mafiaspillet.no/grafikk3/forum-hjem.png" alt="forum" style="padding-top: 3px;" border="0"></a></td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:23 i dag</font><br><i>[Anonym bruker]</i> skyter og dreper  5 undersåtter eid av <a href="profile.php?viewuser=Northlending" target="hovedinnhold">Northlending</a>: <a title="Rank: Contabile" href="profile.php?viewuser=Tycedadu">Tycedadu</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Jiwytyse">Jiwytyse</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Vecajite">Vecajite</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Nicevolu">Nicevolu</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Liwyvuge">Liwyvuge</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_5">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_5">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9292" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9292');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9292" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_5' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9292">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9292" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9292');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9292" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_5' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9292">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:22 i dag</font><br>Undersåtten <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Rokarvuk">Rokarvuk</a>, som er eid av <a href="profile.php?viewuser=MementoMori" target="hovedinnhold">MementoMori</a>, blir skutt og drept av <a href="profile.php?viewuser=Quavo" target="hovedinnhold">Quavo</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_6">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_6">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9291" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9291');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9291" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_6' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9291">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9291" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9291');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9291" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_6' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9291">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/drap2.png" class="profilbilde2"></td><td valign="top"><b>Drap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:22 i dag</font><br><a href="game.php?p=profil&amp;bruker=MementoMori">MementoMori</a> blir skutt og drept i New York.<br><div class="highslide-html-content" id="brukere_likes_opp_7">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_7">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9290" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9290');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9290" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_7' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9290">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9290" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9290');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9290" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_7' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9290">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="game.php?p=forum&amp;kategori=685073211&amp;trod=387505576" title="Gå til forumtråd"><img src="https://mafiaspillet.no/grafikk3/forum-hjem.png" alt="forum" style="padding-top: 3px;" border="0"></a></td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:22 i dag</font><br><a href="profile.php?viewuser=Quavo" target="hovedinnhold">Quavo</a> skyter og dreper  4 undersåtter eid av <a href="profile.php?viewuser=MementoMori" target="hovedinnhold">MementoMori</a>: <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Sasesked">Sasesked</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Nusesvem">Nusesvem</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Rosartin">Rosartin</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Radesvuc">Radesvuc</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_8">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_8">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9289" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9289');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9289" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_8' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9289">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9289" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9289');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9289" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_8' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9289">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/ekteskap5.png" class="profilbilde2"></td><td valign="top"><b>Ekteskap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:21 i dag</font><br><a href="profile.php?viewuser=Ego" target="hovedinnhold">Ego</a> og <a href="profile.php?viewuser=Yeezus" target="hovedinnhold">Yeezus</a> gifter seg.<br><div class="highslide-html-content" id="brukere_likes_opp_9">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_9">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9288" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9288');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9288" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_9' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9288">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9288" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9288');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9288" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_9' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9288">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/konkurranse3.png" class="profilbilde2"></td><td valign="top"><b>Konkurranse</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 21:00 i dag</font><br><a href="game.php?p=profil&amp;bruker=Viktor Blodkant">Viktor Blodkant</a> vinner <a href="kill_the_bot.php">kill-the-bot-konkurransen</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_10">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_10">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9287" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9287');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9287" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_10' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9287">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9287" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9287');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9287" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_10' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9287">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:58 i dag</font><br><i>[Anonym bruker]</i> skyter og dreper  4 undersåtter eid av <a href="profile.php?viewuser=Fury" target="hovedinnhold">Fury</a>: <a title="Rank: Gudfar" href="profile.php?viewuser=Mebestut">Mebestut</a>, <a title="Rank: Consigliere" href="profile.php?viewuser=Racarvom">Racarvom</a>, <a title="Rank: Gudfar" href="profile.php?viewuser=Mekerver">Mekerver</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Pabankoc">Pabankoc</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_11">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_11">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9286" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9286');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9286" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_11' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9286">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9286" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9286');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9286" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_11' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9286">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:53 i dag</font><br><a href="game.php?p=profil&amp;bruker=Jabba The Hutt">Jabba The Hutt</a> starter <b>kasinoet spillemaskin</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_12">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_12">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9285" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9285');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9285" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_12' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9285">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9285" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9285');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9285" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_12' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9285">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:51 i dag</font><br><a href="profile.php?viewuser=Kokken" target="hovedinnhold">Kokken</a> skyter og dreper  2 undersåtter eid av <a href="profile.php?viewuser=Bikkas" target="hovedinnhold">Bikkas</a>: <a title="Rank: Capo Crimini" href="profile.php?viewuser=Vasyhuke">Vasyhuke</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Zepuxiwe">Zepuxiwe</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_13">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_13">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9284" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9284');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9284" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_13' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9284">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9284" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9284');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9284" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_13' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9284">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/drap2.png" class="profilbilde2"></td><td valign="top"><b>Drap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:51 i dag</font><br><a href="game.php?p=profil&amp;bruker=Bikkas">Bikkas</a> blir skutt og drept i London.<br><div class="highslide-html-content" id="brukere_likes_opp_14">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_14">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9283" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9283');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9283" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_14' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9283">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9283" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9283');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9283" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_14' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9283">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="game.php?p=forum&amp;kategori=685073211&amp;trod=346323055" title="Gå til forumtråd"><img src="https://mafiaspillet.no/grafikk3/forum-hjem.png" alt="forum" style="padding-top: 3px;" border="0"></a></td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:51 i dag</font><br><a href="profile.php?viewuser=Kokken" target="hovedinnhold">Kokken</a> skyter og dreper  3 undersåtter eid av <a href="profile.php?viewuser=Bikkas" target="hovedinnhold">Bikkas</a>: <a title="Rank: Gudfar" href="profile.php?viewuser=Jibewipo">Jibewipo</a>, <a title="Rank: Gudfar" href="profile.php?viewuser=Negyzida">Negyzida</a>, <a title="Rank: Capo Crimini" href="profile.php?viewuser=Girecapa">Girecapa</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_15">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_15">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9282" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9282');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9282" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_15' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9282">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9282" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9282');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9282" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_15' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9282">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/eliten.png?r=1" class="profilbilde2"></td><td valign="top"><b>Eliten</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:45 i dag</font><br><a href="profile.php?viewuser=Harry">Harry</a> er nå i eliten.<br><div class="highslide-html-content" id="brukere_likes_opp_16">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_16">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9281" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9281');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9281" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_16' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9281">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9281" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9281');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9281" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_16' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9281">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:40 i dag</font><br><a href="game.php?p=profil&amp;bruker=Looty">Looty</a> starter <b>kasinoet spillemaskin</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_17">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_17">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9280" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9280');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9280" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_17' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9280">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9280" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9280');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9280" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_17' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9280">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:22 i dag</font><br><i>[Anonym bruker]</i> skyter og dreper  3 undersåtter eid av <a href="profile.php?viewuser=Storm" target="hovedinnhold">Storm</a>: <a title="Rank: Boss" href="profile.php?viewuser=Guduzapo">Guduzapo</a>, <a title="Rank: Capo Bastone" href="profile.php?viewuser=Cebinulu">Cebinulu</a>, <a title="Rank: Capo Bastone" href="profile.php?viewuser=Retuzore">Retuzore</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_18">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_18">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9279" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9279');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9279" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_18' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9279">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9279" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9279');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9279" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_18' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9279">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:17 i dag</font><br><a href="profile.php?viewuser=Areczo" target="hovedinnhold">Areczo</a> skyter og dreper  3 undersåtter eid av <a href="profile.php?viewuser=Jabba+The+Hutt" target="hovedinnhold">Jabba The Hutt</a>: <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Nezarisu">Nezarisu</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Navisvek">Navisvek</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Tefisudi">Tefisudi</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_19">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_19">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9278" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9278');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9278" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_19' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9278">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9278" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9278');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9278" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_19' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9278">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/krig2.png" class="profilbilde2"></td><td valign="top"><b>Familiekrig</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:17 i dag</font><br><a href="game.php?p=profil&amp;bruker=Reservant Garde">Reservant Garde</a> har erklært krig mot <a href="game.php?p=profil&amp;bruker=Bama">Bama</a><br><div class="highslide-html-content" id="brukere_likes_opp_20">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_20">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9277" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9277');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9277" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_20' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9277">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9277" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9277');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9277" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_20' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9277">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="game.php?p=forum&amp;kategori=559778763&amp;trod=561162786" title="Gå til forumtråd"><img src="https://mafiaspillet.no/grafikk3/forum-hjem.png" alt="forum" style="padding-top: 3px;" border="0"></a></td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:16 i dag</font><br>Undersåtten <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Vajewuxo">Vajewuxo</a>, som er eid av <a href="profile.php?viewuser=pus" target="hovedinnhold">pus</a>, blir skutt og drept av <a href="profile.php?viewuser=Quavo" target="hovedinnhold">Quavo</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_21">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_21">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9276" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9276');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9276" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_21' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9276">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9276" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9276');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9276" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_21' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9276">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/drap2.png" class="profilbilde2"></td><td valign="top"><b>Drap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:16 i dag</font><br><a href="game.php?p=profil&amp;bruker=pus">pus</a> blir skutt og drept i Mogadishu.<br><div class="highslide-html-content" id="brukere_likes_opp_22">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_22">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9275" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9275');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9275" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_22' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9275">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9275" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9275');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9275" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_22' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9275">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="game.php?p=forum&amp;kategori=685073211&amp;trod=600423420" title="Gå til forumtråd"><img src="https://mafiaspillet.no/grafikk3/forum-hjem.png" alt="forum" style="padding-top: 3px;" border="0"></a></td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:16 i dag</font><br><a href="profile.php?viewuser=Quavo" target="hovedinnhold">Quavo</a> skyter og dreper  4 undersåtter eid av <a href="profile.php?viewuser=pus" target="hovedinnhold">pus</a>: <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Sucesked">Sucesked</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Tudeskev">Tudeskev</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Nefixopa">Nefixopa</a>, <a title="Rank: Capo de tutti Capi" href="profile.php?viewuser=Lizodosi">Lizodosi</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_23">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_23">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9274" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9274');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9274" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_23' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9274">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9274" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9274');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9274" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_23' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9274">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/familie13.png" class="profilbilde2"></td><td valign="top"><b>Familie</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 20:02 i dag</font><br>Blood Cave ligger på 1. plass og de fire medlemmene med høyest rating får 20 000 000 kroner hver i døgnet i belønning. De som fikk var: undefined, Looty, Bonnie Tyler, Kalopsia<br><div class="highslide-html-content" id="brukere_likes_opp_24">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_24">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9273" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9273');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9273" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_24' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9273">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9273" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9273');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9273" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_24' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9273">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/krig2.png" class="profilbilde2"></td><td valign="top"><b>Familiekrig</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 19:37 i dag</font><br>Krigen mellom <a href="game.php?p=profil&amp;bruker=Bama" target="hovedinnhold">Bama</a> og <a href="game.php?p=profil&amp;bruker=The+underdogs" target="hovedinnhold">The underdogs</a> er ferdig fordi  den er mer enn 10 dager gammel. Resultat: The underdogs vant<br><div class="highslide-html-content" id="brukere_likes_opp_25">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"><a href="game.php?p=profil&amp;bruker=Cayde 6">Cayde 6</a>, <a href="game.php?p=profil&amp;bruker=TorePaSporet">TorePaSporet</a></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_25">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9272" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9272');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9272" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_25' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9272">2</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9272" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9272');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9272" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_25' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9272">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/penger.png" class="profilbilde2"></td><td valign="top"><b>Lotteri</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 19:30 i dag</font><br><a href="game.php?p=profil&amp;bruker=Covid">Covid</a> vinner i <a href="lotteri.php">lotteriet</a>, og får en premie på hele 6 860 500 000 kroner.<br><div class="highslide-html-content" id="brukere_likes_opp_26">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_26">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9271" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9271');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9271" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_26' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9271">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9271" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9271');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9271" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_26' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9271">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/rank.png" class="profilbilde2"></td><td valign="top"><b>Rank</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 19:08 i dag</font><br><a href="game.php?p=profil&amp;bruker=Spaghetti">Spaghetti</a> går opp i rank og er nå Gudfar.<br><div class="highslide-html-content" id="brukere_likes_opp_27">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_27">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9270" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9270');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9270" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_27' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9270">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9270" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9270');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9270" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_27' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9270">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/drap2.png" class="profilbilde2"></td><td valign="top"><b>Drap</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 18:47 i dag</font><br><a href="game.php?p=profil&amp;bruker=Dfbot140">Dfbot140</a> blir skutt og drept i Oslo.<br><div class="highslide-html-content" id="brukere_likes_opp_28">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_28">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9269" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9269');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9269" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_28' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9269">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9269" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9269');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9269" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_28' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9269">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 18:15 i dag</font><br><a href="game.php?p=profil&amp;bruker=Strider">Strider</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_29">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_29">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9268" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9268');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9268" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_29' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9268">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9268" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9268');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9268" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_29' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9268">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/undersottdrap9.png" class="profilbilde2"></td><td valign="top"><b>Undersåtter drept</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 18:14 i dag</font><br><a href="profile.php?viewuser=Fog" target="hovedinnhold">Fog</a> skyter og dreper  3 undersåtter eid av <a href="profile.php?viewuser=Parabellum" target="hovedinnhold">Parabellum</a>: <a title="Rank: Gudfar" href="profile.php?viewuser=Jadapana">Jadapana</a>, <a title="Rank: Gudfar" href="profile.php?viewuser=Pakepugo">Pakepugo</a>, <a title="Rank: Gudfar" href="profile.php?viewuser=Tanykyze">Tanykyze</a>.<br><div class="highslide-html-content" id="brukere_likes_opp_30">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_30">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"><a href="game.php?p=profil&amp;bruker=Parabellum">Parabellum</a></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9267" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9267');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9267" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_30' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9267">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9267" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9267');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9267" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_30' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9267">1</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 18:00 i dag</font><br><a href="game.php?p=profil&amp;bruker=Covid">Covid</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_31">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_31">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9266" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9266');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9266" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_31' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9266">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9266" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9266');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9266" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_31' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9266">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:57 i dag</font><br><a href="game.php?p=profil&amp;bruker=Quavo">Quavo</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_32">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_32">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9265" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9265');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9265" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_32' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9265">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9265" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9265');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9265" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_32' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9265">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:57 i dag</font><br><a href="game.php?p=profil&amp;bruker=Ping">Ping</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_33">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_33">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9264" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9264');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9264" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_33' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9264">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9264" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9264');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9264" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_33' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9264">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:57 i dag</font><br><a href="game.php?p=profil&amp;bruker=Covid">Covid</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_34">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_34">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9263" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9263');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9263" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_34' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9263">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9263" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9263');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9263" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_34' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9263">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:53 i dag</font><br><a href="game.php?p=profil&amp;bruker=Ping">Ping</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_35">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_35">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9262" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9262');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9262" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_35' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9262">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9262" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9262');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9262" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_35' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9262">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:48 i dag</font><br><a href="game.php?p=profil&amp;bruker=Ping">Ping</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_36">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_36">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9261" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9261');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9261" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_36' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9261">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9261" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9261');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9261" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_36' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9261">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:47 i dag</font><br><a href="game.php?p=profil&amp;bruker=klikk klakk">klikk klakk</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_37">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_37">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9260" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9260');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9260" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_37' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9260">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9260" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9260');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9260" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_37' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9260">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:43 i dag</font><br><a href="game.php?p=profil&amp;bruker=Ping">Ping</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_38">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_38">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9259" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9259');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9259" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_38' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9259">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9259" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9259');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9259" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_38' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9259">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:40 i dag</font><br><a href="game.php?p=profil&amp;bruker=klikk klakk">klikk klakk</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_39">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_39">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9258" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9258');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9258" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_39' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9258">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9258" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9258');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9258" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_39' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9258">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr><tr style="background-color: transparent;"><td valign="top" width="75" '=""><img src="https://www.mafiaspillet.no/grafikk2/varslingsikoner/industry.png" class="profilbilde2"></td><td valign="top"><b>Stor bedrift</b>&nbsp;&nbsp;<font color="#555555">-&nbsp;kl 17:38 i dag</font><br><a href="game.php?p=profil&amp;bruker=Lecce">Lecce</a> starter <b>kasinoet timing</b>.<br><div class="highslide-html-content" id="brukere_likes_opp_40">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><div class="highslide-html-content" id="brukere_likes_ned_40">
+			<div class="highslide-header"><ul><li class="highslide-move"><a href="#" onclick="return false">Flytt</a></li>
+				<li class="highslide-close"><a href="#" onclick="return hs.close(this)">Lukk</a></li></ul>
+			</div>
+			<div class="highslide-body"></div>
+			<div class="highslide-footer"><div><span class="highslide-resize" title="Resize"><span></span></span></div></div>
+		</div><table border="0" bgcolor="transparent" style=""><tbody><tr style="background-color: transparent; border: none 0px;"><td style="background-color: transparent; border: none 0px;">&nbsp;<a href="javascript:void(0)" data-hendelse="9257" data-type="opp" class="hendelse-like-btn" onclick="tommelOpp('9257');" title="Klikk dersom du liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/plussenknapp_light.png" alt="+1" name="plussenknapp9257" style="padding-bottom: 8px;" border="0"></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a class="no-link" onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_opp_40' } )" href="javascript:void(0)"><font color="darkgreen" style="font-size: 14;"><b><span id="likes_opp9257">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;<a href="javascript:void(0)" data-hendelse="9257" data-type="ned" class="hendelse-like-btn" onclick="tommelNed('9257');" title="Klikk dersom du ikke liker hendelsen!"><img src="https://mafiaspillet.no/grafikk3/minusenknapp_light.png" alt="-1" name="minusenknapp9257" style="padding-top: 6px;" border="0"></a>&nbsp;</td><td style="background-color: transparent; border: none 0px;">&nbsp;<a onclick="return hs.htmlExpand(this, { contentId: 'brukere_likes_ned_40' } )" href="javascript:void(0)" class="no-link"><font color="darkred" style="font-size: 14;"><b><span id="likes_ned9257">0</span></b></font></a></td><td style="background-color: transparent; border: none 0px;">&nbsp;&nbsp;</td></tr></tbody></table></td></tr></tbody></table><script>
+				var userLikedHendelser = [];
+				$(document).ready(function(){
+					userLikedHendelser.forEach(function(id){
+						$('.hendelse-like-btn[data-hendelse="' + id + '"]').each(function(){
+							$(this).removeAttr('onclick').css('opacity', '0.5').css('cursor', 'default');
+						});
+					});
+				});
+			</script>		
+				<a href="game.php?p=spillhendelser">Se alle hendelser denne runden.</a>
+				<br><br>
+	</div>
+</div>
+</div>
+					</div>
+				</div>
+			<div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="hjem_forumet_oversikt"><div class="well" style="height: 170px; overflow-y: hidden;">
+	<h4>Aktuelt i forumet</h4>
+		<table class="table" style="background-color: transparent;">
+		<tbody><tr style="background-color: transparent;">
+			<td>
+	                <ul class="nav nav-pills nav-stacked" id="stream">
+                    <li><a href="game.php?p=forum&amp;kategori=497428090&amp;trod=848970376&amp;notific=ja"><img src="https://mafiaspillet.no/bilde.jpg" style="width: 25px; height: 25px; padding-right: 5px;"> <font color="">Pokertråden!</font></a></li><li><a href="game.php?p=forum&amp;kategori=559778763&amp;trod=40901443&amp;notific=ja"><img src="https://mafiaspillet.no/bilde.jpg" style="width: 25px; height: 25px; padding-right: 5px;"> <font color="">Utfordringer!</font></a></li><li><a href="game.php?p=forum&amp;kategori=559778763&amp;trod=190681974&amp;notific=ja"><img src="//mafiaspillet.no/imgupload/325847_big.jpg" style="width: 25px; height: 25px; padding-right: 5px;"> <font color="">Konkurranseprogram 9.3.20...</font></a></li>                </ul>
+				</td>
+        </tr>
+	</tbody></table>
+	 
+</div></div>
+					</div>
+				</div>
+				</div>
+					<div class="span5"><div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="aktivitet_dag">
+<div class="well">
+	<div class="row-fluid">
+	
+		
+		<div class=""><h3>Aktivitet i dag</h3><div style="display: inline; float: right; margin-right: 0px; margin-top: -47px; margin-bottom: -30px; z-index: 100;">
+					<a href="javascript:void(0);" onclick="perform('vis_kort_progress_hjem', {valg: 1}, function(){ load_module('aktivitet_dag'); });">Vis mindre <i class="icon-chevron-up"></i></a></div>
+	<div class="progress progress-striped progress-info active " style=" " data-original-title="" title=""><div class="bar " style="width: 0%; "></div></div>
+				<b><span style="font-size: 1.4em">0</span> / 20 vellykkede <a href="game.php?p=krim">krim/stjel</a></b><br>
+				<i>Gjennomfør 20 vellykkede krim/stjel for å få en bonus!</i>
+				</div><div class=""><h3>Totalt</h3>
+	<div class="progress progress-striped progress-success  " style=" " data-original-title="" title=""><div class="bar " style="width: 100%; "></div></div>
+			<b><span style="font-size: 1.4em">4</span> / 4 aktive krimmedager totalt</b><br>
+			<i>Du får neste store bonus på 4 dager</i>
+			</div>		
+	
+	
+	
+	
+</div>
+</div>
+
+
+
+<div class="well">
+    <h3>Ukebonus</h3>
+    <p>Ukens krav er: <b>7 drap av Dfbot1-140</b>.</p><p>Kravet må oppnås i løpet av en uke som går fra mandag til søndag. Belønning gis når du har oppnådd kravet.</p>            <p>
+            
+	</p><div class="progress progress-striped progress-info active " style=" " data-toggle="tooltip" title="" data-original-title="0/7"><div class="bar " style="width: 0%; "></div></div>            <p></p>
+            <hr><h4>Global ukebonus</h4><p>Ukens krav er: <b>15 000 seier i Club de la Lucha (der man angriper selv)</b>.</p><p>
+	</p><div class="progress progress-striped progress-info active " style=" " data-toggle="tooltip" title="" data-original-title="1 234/15 000"><div class="bar " style="width: 8.2266666666667%; "></div></div><p></p><p><a class="btn btn-small" href="game.php?p=konkurranser&amp;se=global_ukebonus">Se detaljer</a></p></div>
+
+
+
+
+</div>
+					</div>
+				</div>
+			<div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="hjem_dagens_oppdrag">
+<div class="well">
+	<h3>Dagens oppdrag</h3>
+	 <span style="float: right; margin-top: -41px; display: inline; position: relative;">
+						<a href="javascript:void(0);" onclick="perform('vis_kort_dagens_oppdrag_hjem', {valg: 1}, function(){ load_module('hjem_dagens_oppdrag'); });"><font style="font-size: 1.0em;">Vis mindre <i class="icon-chevron-up"></i></font></a></span>	<span id="start_dagens_aktivitetsoppdrag_output"></span>
+	
+					<p>Dagens oppdrag kan tas hver dag og gir deg økt spillerrating. Du får et oppdrag tilpasset ditt nivå. Du får penger om du klarer oppdraget.<!-- Vanlig dagens oppdrag gir deg 
+		12 mill kroner og vanskelig dagens oppdrag gir deg 6 mill kroner.--> Vanskelig tar litt mer tid å gjennomføre.</p>
+				<p><input type="button" class="btn btn-success" onclick="perform('start_dagens_aktivitetsoppdrag', {vansk: 0}, function(){ load_module('hjem_dagens_oppdrag'); });" value="Start dagens oppdrag!"></p>
+
+
+		<p><a href="game.php?p=dagens_oppdrag_oversikt">Oversikt over oppdrag du har tatt</a></p>		
+	</div></div>
+					</div>
+				</div>
+			<div class="row-fluid">
+					<div class="span12">
+				<div class="module loaded" id="hjem_ventetider"><div class="well">
+	<h3>Ventetider</h3>
+	<p><b>Undersåtter:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_0"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_0' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_0');
+				//nedtellere['hjem_ventetid_0'].stop();
+				var nedtellinghjem_ventetid_0 = nedtellere['hjem_ventetid_0'];
+				nedtellinghjem_ventetid_0.setEndDate(0 * 1000); 
+				nedtellinghjem_ventetid_0.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_0 = new Countdown('nedtellinghjem_ventetid_0', 1000);
+				nedtellinghjem_ventetid_0.setEndDate(0 * 1000); 
+				nedtellinghjem_ventetid_0.start();
+				nedtellere['hjem_ventetid_0'] = nedtellinghjem_ventetid_0;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Enkel krim:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_1"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_1' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_1');
+				//nedtellere['hjem_ventetid_1'].stop();
+				var nedtellinghjem_ventetid_1 = nedtellere['hjem_ventetid_1'];
+				nedtellinghjem_ventetid_1.setEndDate(1778955633 * 1000); 
+				nedtellinghjem_ventetid_1.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_1 = new Countdown('nedtellinghjem_ventetid_1', 1000);
+				nedtellinghjem_ventetid_1.setEndDate(1778955633 * 1000); 
+				nedtellinghjem_ventetid_1.start();
+				nedtellere['hjem_ventetid_1'] = nedtellinghjem_ventetid_1;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Tung krim:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_2"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_2' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_2');
+				//nedtellere['hjem_ventetid_2'].stop();
+				var nedtellinghjem_ventetid_2 = nedtellere['hjem_ventetid_2'];
+				nedtellinghjem_ventetid_2.setEndDate(1778966701 * 1000); 
+				nedtellinghjem_ventetid_2.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_2 = new Countdown('nedtellinghjem_ventetid_2', 1000);
+				nedtellinghjem_ventetid_2.setEndDate(1778966701 * 1000); 
+				nedtellinghjem_ventetid_2.start();
+				nedtellere['hjem_ventetid_2'] = nedtellinghjem_ventetid_2;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Stjel:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_3"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_3' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_3');
+				//nedtellere['hjem_ventetid_3'].stop();
+				var nedtellinghjem_ventetid_3 = nedtellere['hjem_ventetid_3'];
+				nedtellinghjem_ventetid_3.setEndDate(1778966814 * 1000); 
+				nedtellinghjem_ventetid_3.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_3 = new Countdown('nedtellinghjem_ventetid_3', 1000);
+				nedtellinghjem_ventetid_3.setEndDate(1778966814 * 1000); 
+				nedtellinghjem_ventetid_3.start();
+				nedtellere['hjem_ventetid_3'] = nedtellinghjem_ventetid_3;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Fly:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_4"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_4' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_4');
+				//nedtellere['hjem_ventetid_4'].stop();
+				var nedtellinghjem_ventetid_4 = nedtellere['hjem_ventetid_4'];
+				nedtellinghjem_ventetid_4.setEndDate(1778952241 * 1000); 
+				nedtellinghjem_ventetid_4.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_4 = new Countdown('nedtellinghjem_ventetid_4', 1000);
+				nedtellinghjem_ventetid_4.setEndDate(1778952241 * 1000); 
+				nedtellinghjem_ventetid_4.start();
+				nedtellere['hjem_ventetid_4'] = nedtellinghjem_ventetid_4;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Drap:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_5"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_5' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_5');
+				//nedtellere['hjem_ventetid_5'].stop();
+				var nedtellinghjem_ventetid_5 = nedtellere['hjem_ventetid_5'];
+				nedtellinghjem_ventetid_5.setEndDate(1778968311 * 1000); 
+				nedtellinghjem_ventetid_5.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_5 = new Countdown('nedtellinghjem_ventetid_5', 1000);
+				nedtellinghjem_ventetid_5.setEndDate(1778968311 * 1000); 
+				nedtellinghjem_ventetid_5.start();
+				nedtellere['hjem_ventetid_5'] = nedtellinghjem_ventetid_5;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Club de la Lucha:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_6"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_6' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_6');
+				//nedtellere['hjem_ventetid_6'].stop();
+				var nedtellinghjem_ventetid_6 = nedtellere['hjem_ventetid_6'];
+				nedtellinghjem_ventetid_6.setEndDate(1777440735 * 1000); 
+				nedtellinghjem_ventetid_6.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_6 = new Countdown('nedtellinghjem_ventetid_6', 1000);
+				nedtellinghjem_ventetid_6.setEndDate(1777440735 * 1000); 
+				nedtellinghjem_ventetid_6.start();
+				nedtellere['hjem_ventetid_6'] = nedtellinghjem_ventetid_6;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Org. krim:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_7"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_7' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_7');
+				//nedtellere['hjem_ventetid_7'].stop();
+				var nedtellinghjem_ventetid_7 = nedtellere['hjem_ventetid_7'];
+				nedtellinghjem_ventetid_7.setEndDate(1778966198 * 1000); 
+				nedtellinghjem_ventetid_7.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_7 = new Countdown('nedtellinghjem_ventetid_7', 1000);
+				nedtellinghjem_ventetid_7.setEndDate(1778966198 * 1000); 
+				nedtellinghjem_ventetid_7.start();
+				nedtellere['hjem_ventetid_7'] = nedtellinghjem_ventetid_7;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Kapring:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_8"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_8' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_8');
+				//nedtellere['hjem_ventetid_8'].stop();
+				var nedtellinghjem_ventetid_8 = nedtellere['hjem_ventetid_8'];
+				nedtellinghjem_ventetid_8.setEndDate(86400 * 1000); 
+				nedtellinghjem_ventetid_8.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_8 = new Countdown('nedtellinghjem_ventetid_8', 1000);
+				nedtellinghjem_ventetid_8.setEndDate(86400 * 1000); 
+				nedtellinghjem_ventetid_8.start();
+				nedtellere['hjem_ventetid_8'] = nedtellinghjem_ventetid_8;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Hyener:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_9"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_9' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_9');
+				//nedtellere['hjem_ventetid_9'].stop();
+				var nedtellinghjem_ventetid_9 = nedtellere['hjem_ventetid_9'];
+				nedtellinghjem_ventetid_9.setEndDate(1800 * 1000); 
+				nedtellinghjem_ventetid_9.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_9 = new Countdown('nedtellinghjem_ventetid_9', 1000);
+				nedtellinghjem_ventetid_9.setEndDate(1800 * 1000); 
+				nedtellinghjem_ventetid_9.start();
+				nedtellere['hjem_ventetid_9'] = nedtellinghjem_ventetid_9;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Kidnapping:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_10"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_10' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_10');
+				//nedtellere['hjem_ventetid_10'].stop();
+				var nedtellinghjem_ventetid_10 = nedtellere['hjem_ventetid_10'];
+				nedtellinghjem_ventetid_10.setEndDate(18000 * 1000); 
+				nedtellinghjem_ventetid_10.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_10 = new Countdown('nedtellinghjem_ventetid_10', 1000);
+				nedtellinghjem_ventetid_10.setEndDate(18000 * 1000); 
+				nedtellinghjem_ventetid_10.start();
+				nedtellere['hjem_ventetid_10'] = nedtellinghjem_ventetid_10;
+			}
+			
+			
+			//]]>
+			</script></p><p><b>Angrip by:</b>
+			<script>var phpTime = 1779135153026;
+			var start_time = new Date;</script>
+			<span id="nedtellinghjem_ventetid_11"> 0 t.,  0 min. og  0 sek</span><script type="text/javascript">
+			//<![CDATA[
+			
+			//  ..
+			if(typeof nedtellere == 'undefined'){
+				var nedtellere = {};
+			}
+			
+			if('hjem_ventetid_11' in nedtellere){
+				//console.log('Skal stoppe nedteller hjem_ventetid_11');
+				//nedtellere['hjem_ventetid_11'].stop();
+				var nedtellinghjem_ventetid_11 = nedtellere['hjem_ventetid_11'];
+				nedtellinghjem_ventetid_11.setEndDate(21600 * 1000); 
+				nedtellinghjem_ventetid_11.update();
+			}
+			else{
+				var nedtellinghjem_ventetid_11 = new Countdown('nedtellinghjem_ventetid_11', 1000);
+				nedtellinghjem_ventetid_11.setEndDate(21600 * 1000); 
+				nedtellinghjem_ventetid_11.start();
+				nedtellere['hjem_ventetid_11'] = nedtellinghjem_ventetid_11;
+			}
+			
+			
+			//]]>
+			</script></p></div>
+</div>
+					</div>
+				</div>
+			</div></div>
+
+
+				
+
+<div class="row-fluid">
+	
+</div>
+</div>
+
+<script>
+    $(document).ready(function(){
+        setTimeout(function(){ resize_parent(); }, 2000);
+
+    });
+</script>
+
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+			</div>
+	
+	<script>
+		$(document).ready(function(){
+			resize_parent();
+			setTimeout(function(){ resize_parent();}, 500);
+			
+		});
+	</script>
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;2adb4b80ead742d7a669fd113af14669&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+
+
+
+
+
+
+<div class="highslide-container" style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; position: absolute; left: 0px; top: 0px; width: 100%; z-index: 1001; direction: ltr;"><a class="highslide-loading" title="" href="javascript:;" style="position: absolute; top: -9999px; opacity: 0.75; z-index: 1;">Laster...</a><div style="display: none;"></div><table cellspacing="0" style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; visibility: hidden; position: absolute; border-collapse: collapse; width: 0px;"><tbody style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px;"><tr style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; height: auto;"><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) 0px 0px; height: 20px; width: 20px;"></td><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) 0px -40px; height: 20px; width: 20px;"></td><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) -20px 0px; height: 20px; width: 20px;"></td></tr><tr style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; height: auto;"><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) 0px -80px; height: 20px; width: 20px;"></td><td class="rounded-white highslide-outline" style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; position: relative;"></td><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) -20px -80px; height: 20px; width: 20px;"></td></tr><tr style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; height: auto;"><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) 0px -20px; height: 20px; width: 20px;"></td><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) 0px -60px; height: 20px; width: 20px;"></td><td style="padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; margin: 0px; line-height: 0; font-size: 0px; background: url(&quot;https://mafiaspillet.no/highslide/highslide/graphics/outlines/rounded-white.png&quot;) -20px -20px; height: 20px; width: 20px;"></td></tr></tbody></table></div>
+<!-- iframe:rankbar -->
+
+
+	<div id="Rankbar" style="width: 19px;"></div>
+	<div id="Layer2"></div>
+	<div class="style1" id="Layer3">
+	<span title="118105 rankpoeng" id="rankprosent" style="color: rgb(0, 0, 0); display: inline;">12.42 %</span></div>
+
+
+
+	<!--<div id="hjem"><a href='hjem.php' target='hovedinnhold'><img style='padding-left: 9px; padding-top: 3px;' src='grafikk2/ikoner_nederst/hjem2.png' border='0'></a></div>-->
+
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;2adb4b80ead742d7a669fd113af14669&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+
+
+
+<!-- iframe:invitasjoner_iframe -->

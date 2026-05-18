@@ -174,9 +174,10 @@ const CRIME_SECTIONS = [
 
 const CRIME_OPTIONS = {
   enkel: [
+    { id: "automat", label: "Bryt opp en spilleautomat" },
+    { id: "kiosk", label: "Ran en kiosk" },
     { id: "gate", label: "Ran tilfeldig person på gata" },
     { id: "butikk", label: "Nask fra en butikk" },
-    { id: "kiosk", label: "Ran en kiosk" },
   ],
   tung: [
     { id: "pengetransport", label: "Ran en pengetransport" },

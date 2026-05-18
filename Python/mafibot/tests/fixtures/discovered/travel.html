@@ -1,0 +1,348 @@
+<!-- iframe:hovedinnhold -->
+
+		<script>
+	
+		if(!inIframe()){
+			$("body").css("background-color", "black");
+			//document.getElementById("page-id").style.background-color = "black";
+		}
+	</script>
+			
+	<div style="width: 100%; max-width: 860px; margin-left: auto; margin-right: auto; min-height: 400px;">
+				<div id="hotell_booking_info" style="display: none;"></div>
+		<div id="drep_info" style="display: none;"></div>
+		<div id="drep_nullstill_melding" style="display: none;"></div>
+		
+				
+				
+			
+		<script>
+	$(document).ready(function(){
+		$("form").each(function(){
+			//console.log("Adding token");
+			$(this).append("<input type='hidden' value='e8e52b4a73a2f521fe4483aa77ddac10' name='ttoken'><input type='hidden' name='jtoken' id='jtoken' value=''>");
+		});
+	});
+</script>
+
+
+
+
+
+
+<p><span style="font-family: TrajanPro; font-size: 1.4em; letter-spacing: 1.2px; color: #eeeeee;">New York John F Kennedy, flyplass</span></p>
+
+
+<!--<p>Klikk på byen du vil reise til!</p>-->
+
+<div class="alert alert-info infoboks"><img src="https://mafiaspillet.no/img/weed_icon_lys.png" style="max-height: 30px; width: auto; padding: 5px;"> Du har <b>330</b> gram cannabis og <b>330</b> gram opium på deg. </div>
+<div class="row-fluid" style="height: 550px;">
+	
+
+
+<style type="text/css">
+	.kart{
+		position: absolute;
+		width: 830px;
+		height: 550px;
+		background-image: url('images/world_map_dark.png');
+		background-repeat: no-repeat; 
+	}
+	
+	.pin{
+		width: 24px;
+		position: relative;
+		height: 36px;
+	}
+	.pin_big{
+		width: 30px;
+		height: 45px;
+		cursor: pointer;
+		top: -9px;
+		left: -3px;
+		z-index: 1000;
+	}
+	
+	.text_big{	
+		font-weight: bold;
+		cursor: pointer;
+		z-index: 1000;
+		font-size: 1.5em !important;
+	}
+	
+	.city{
+		position: absolute;
+	}
+	
+	.city_name{
+		color: #f5f5f5;
+		font-size: 1.1em;
+		text-shadow: 1px 1px #000000;
+		width: 110px;
+	}
+	
+	.flyboks {
+		position: absolute;
+		top: 280px;
+		left: 425px;
+		width: 335px;
+		height: 192px;
+		background-color: rgba(13,13,13, 0.9);
+		border: 1px solid #666666;
+		border-radius: 5px;
+		display: none;
+		padding: 20px;
+	}
+	
+</style>
+
+
+<script>
+	function mousein(i){
+		$("#pin_" + i).addClass('pin_big');
+		$("#text_" + i).addClass('text_big');
+	}
+	function mouseout(i){
+		$("#pin_" + i).removeClass('pin_big');
+		$("#text_" + i).removeClass('text_big');
+	}
+	
+	function vis_flyboks(i){
+		$("#flyboks").show();
+		$('.flyboks').hide(); $('#flyinfo_' + i).show();		//$("#flyboks").html($("#flyinfo_" + i).val());
+		if(!app && inIframe()){
+            $("input[type=button]").mousedown(function(e){
+                var l = e.pageX;
+                var t = e.pageY;
+                if(l < 400 || t < 400){
+                    $.get("api.php?logg_fly=1&d=" + t + "," + l, function(){ } );
+                }
+            });
+        }
+	}
+		
+		
+</script>
+
+<div id="fly_output"></div>
+<div class="kart">	
+	
+	<script>
+	var byer = [];
+	</script><div class="city" style="left: 563px; top: 155px">
+				<img id="pin_0" src="images/pin4.png" class="pin" onmouseover="mousein(0);" onmouseout="mouseout(0);" onmousedown="vis_flyboks(0);" style="">
+				<span id="text_0" style="position: absolute; left: 27px; top: 10px;" class="city_name" onmouseover="mousein(0);" onmouseout="mouseout(0);" onmousedown="vis_flyboks(0);">Kabul</span>
+			 </div>
+			<div id="flyinfo_0" style="display: none;" class="flyboks"><h3>Fly til Kabul</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_6 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_6 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_6" id="knapp_fly_2_6" onclick="fly('Kabul', 0, event);"><span id="knapp_tekst_fly_2_6" class="knapp_utfor_tekst">Fly til Kabul</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_6" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_6" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_6');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_6" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_6').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_6_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_6_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_6_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_6_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_6"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Fury" title="">Fury</a><br>Flyplassen i Kabul eid av: <a href="game.php?p=profil&amp;bruker=Krieg" title=""><span class="farge-blue">Krieg</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 407px; top: 108px">
+				<img id="pin_1" src="images/pin4.png" class="pin" onmouseover="mousein(1);" onmouseout="mouseout(1);" onmousedown="vis_flyboks(1);" style="">
+				<span id="text_1" style="position: absolute; left: 19px; top: 18px;" class="city_name" onmouseover="mousein(1);" onmouseout="mouseout(1);" onmousedown="vis_flyboks(1);">London</span>
+			 </div>
+			<div id="flyinfo_1" style="display: none;" class="flyboks"><h3>Fly til London</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_7 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_7 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_7" id="knapp_fly_2_7" onclick="fly('London', 0, event);"><span id="knapp_tekst_fly_2_7" class="knapp_utfor_tekst">Fly til London</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_7" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_7" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_7');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_7" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_7').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_7_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_7_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_7_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_7_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_7"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Fury" title="">Fury</a><br>Flyplassen i London eid av: <a href="game.php?p=profil&amp;bruker=Kalopsia" title=""><span class="farge-success">Kalopsia</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 431px; top: 76px">
+				<img id="pin_2" src="images/pin4.png" class="pin" onmouseover="mousein(2);" onmouseout="mouseout(2);" onmousedown="vis_flyboks(2);" style="">
+				<span id="text_2" style="position: absolute; left: 27px; top: 10px;" class="city_name" onmouseover="mousein(2);" onmouseout="mouseout(2);" onmousedown="vis_flyboks(2);">Oslo</span>
+			 </div>
+			<div id="flyinfo_2" style="display: none;" class="flyboks"><h3>Fly til Oslo</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_8 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_8 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_8" id="knapp_fly_2_8" onclick="fly('Oslo', 0, event);"><span id="knapp_tekst_fly_2_8" class="knapp_utfor_tekst">Fly til Oslo</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_8" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_8" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_8');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_8" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_8').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_8_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_8_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_8_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_8_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_8"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Ninja" title="">Ninja</a><br>Flyplassen i Oslo eid av: <a href="game.php?p=profil&amp;bruker=undefined" title=""><span class="farge-success">undefined</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 198px; top: 132px">
+				<img id="pin_3" src="images/pin7.png" class="pin" style="margin-top: 12px;">
+				<span id="text_3" style="position: absolute; left: 27px; top: 10px;" class="city_name">New York</span>
+			 </div>
+			<div class="city" style="left: 166px; top: 104px">
+				<img id="pin_4" src="images/pin4.png" class="pin" onmouseover="mousein(4);" onmouseout="mouseout(4);" onmousedown="vis_flyboks(4);" style="">
+				<span id="text_4" style="position: absolute; left: 25px; top: 0px;" class="city_name" onmouseover="mousein(4);" onmouseout="mouseout(4);" onmousedown="vis_flyboks(4);">Detroit</span>
+			 </div>
+			<div id="flyinfo_4" style="display: none;" class="flyboks"><h3>Fly til Detroit</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_3 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_3 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_3" id="knapp_fly_2_3" onclick="fly('Detroit', 0, event);"><span id="knapp_tekst_fly_2_3" class="knapp_utfor_tekst">Fly til Detroit</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_3" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_3" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_3');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_3" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_3').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_3_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_3_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_3_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_3_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_3"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Nerith" title=""><span class="farge-success">Nerith</span></a><br>Flyplassen i Detroit eid av: <a href="game.php?p=profil&amp;bruker=Chaozz" title=""><span class="farge-success">Chaozz</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 110px; top: 143px">
+				<img id="pin_5" src="images/pin4.png" class="pin" onmouseover="mousein(5);" onmouseout="mouseout(5);" onmousedown="vis_flyboks(5);" style="">
+				<span id="text_5" style="position: absolute; left: 27px; top: 10px;" class="city_name" onmouseover="mousein(5);" onmouseout="mouseout(5);" onmousedown="vis_flyboks(5);">Las Vegas</span>
+			 </div>
+			<div id="flyinfo_5" style="display: none;" class="flyboks"><h3>Fly til Las Vegas</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_1 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_1 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_1" id="knapp_fly_2_1" onclick="fly('Las Vegas', 0, event);"><span id="knapp_tekst_fly_2_1" class="knapp_utfor_tekst">Fly til Las Vegas</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_1" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_1" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_1');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_1" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_1').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_1_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_1_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_1_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_1_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_1"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Paimon" title=""><span class="farge-success">Paimon</span></a><br>Flyplassen i Las Vegas eid av: <a href="game.php?p=profil&amp;bruker=Untamed" title=""><span class="farge-success">Untamed</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 629px; top: 242px">
+				<img id="pin_6" src="images/pin4.png" class="pin" onmouseover="mousein(6);" onmouseout="mouseout(6);" onmousedown="vis_flyboks(6);" style="">
+				<span id="text_6" style="position: absolute; left: 27px; top: 10px;" class="city_name" onmouseover="mousein(6);" onmouseout="mouseout(6);" onmousedown="vis_flyboks(6);">Kuala Lumpur</span>
+			 </div>
+			<div id="flyinfo_6" style="display: none;" class="flyboks"><h3>Fly til Kuala Lumpur</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_5 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_5 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_5" id="knapp_fly_2_5" onclick="fly('Kuala Lumpur', 0, event);"><span id="knapp_tekst_fly_2_5" class="knapp_utfor_tekst">Fly til Kuala Lumpur</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_5" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_5" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_5');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_5" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_5').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_5_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_5_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_5_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_5_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_5"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Bente" title=""><span class="farge-success">Bente</span></a><br>Flyplassen i Kuala Lumpur eid av: <a href="game.php?p=profil&amp;bruker=Professor" title=""><span class="farge-blue">Professor</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 510px; top: 240px">
+				<img id="pin_7" src="images/pin4.png" class="pin" onmouseover="mousein(7);" onmouseout="mouseout(7);" onmousedown="vis_flyboks(7);" style="">
+				<span id="text_7" style="position: absolute; left: 19px; top: 18px;" class="city_name" onmouseover="mousein(7);" onmouseout="mouseout(7);" onmousedown="vis_flyboks(7);">Mogadishu</span>
+			 </div>
+			<div id="flyinfo_7" style="display: none;" class="flyboks"><h3>Fly til Mogadishu</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_9 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_9 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_9" id="knapp_fly_2_9" onclick="fly('Mogadishu', 0, event);"><span id="knapp_tekst_fly_2_9" class="knapp_utfor_tekst">Fly til Mogadishu</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_9" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_9" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_9');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_9" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_9').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_9_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_9_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_9_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_9_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_9"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Elfhild" title=""><span class="farge-success">Elfhild</span></a><br>Flyplassen i Mogadishu eid av: <a href="game.php?p=profil&amp;bruker=Bjart Ulf" title=""><span class="farge-blue">Bjart Ulf</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div><div class="city" style="left: 263px; top: 309px">
+				<img id="pin_8" src="images/pin4.png" class="pin" onmouseover="mousein(8);" onmouseout="mouseout(8);" onmousedown="vis_flyboks(8);" style="">
+				<span id="text_8" style="position: absolute; left: 27px; top: 10px;" class="city_name" onmouseover="mousein(8);" onmouseout="mouseout(8);" onmousedown="vis_flyboks(8);">Rio de Janeiro</span>
+			 </div>
+			<div id="flyinfo_8" style="display: none;" class="flyboks"><h3>Fly til Rio de Janeiro</h3><div class="knapp_wrapper  knapp-bred"><script>
+        var bedrift_type_fly_2_4 = '';
+        </script><script>
+        var hent_relevant_bedrift_fly_2_4 = function(){ return ''; };
+        </script><div class="btn  knapp_ikke_tilgjengelig_hotell knapp_i_hotell knapp " name="knapp_fly_2_4" id="knapp_fly_2_4" onclick="fly('Rio de Janeiro', 0, event);"><span id="knapp_tekst_fly_2_4" class="knapp_utfor_tekst">Fly til Rio de Janeiro</span><span style="font-size: 0.8em; margin-top: -5px;" id="knapp_hotelltekst_fly_2_4" class="knapp_hotelltekst knapptekst_ikke_tilgjengelig_hotell knapp_tekst_i_hotell">Forlat hotell for å utføre</span></div><div class="knapp_ekstra" id="knapp_ekstra_fly_2_4" onclick="knapp_ekstra_valg_klikk(event, 'fly_2_4');"> <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </div><div class="knapp_ekstra_valg" id="knapp_ekstra_valg_fly_2_4" style="display: none;" onclick="$('#knapp_ekstra_valg_fly_2_4').hide()"><div class="knapp_ekstra_valg_element" id="knapp_fly_2_4_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_4_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_4_ekstra_valg_Array">Laster ...</div><div class="knapp_ekstra_valg_element" id="knapp_fly_2_4_ekstra_valg_Array">Laster ...</div></div></div><span id="knapp_output_fly_2_4"></span>
+                        <p>Pris: 35 000 kr. 
+                         <br>By eid av: <a href="game.php?p=profil&amp;bruker=Ronald Reagan" title=""><span class="farge-success">Ronald Reagan</span></a><br>Flyplassen i Rio de Janeiro eid av: <a href="game.php?p=profil&amp;bruker=Lecce" title=""><span class="farge-blue">Lecce</span></a> <br>(rapportdelay: 0 sekunder)</p>
+                        <p></p>
+                        </div>
+	
+		<div id="flyboks" class="flyboks">
+		
+	</div>
+	
+
+</div>
+
+
+
+<div class="row-fluid" style="position: absolute; top: 650px; max-width: 830px;">
+	
+	
+</div>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+
+
+    <script>
+        $(document).ready(function(){
+
+
+        });
+    </script>
+
+</div>
+
+<div class="row-fluid" style="min-height: 300px;">
+	<div class="alert alert-info">
+                <p>Flyplassen er eid av <a href="game.php?p=profil&amp;bruker=Harry" title=""><span class="farge-success">Harry</span></a> (rapportdelay: 0 sekunder). Eier kan se når du flyr til/fra flyplassen.</p><p>Du har 10 gratis nullstillinger av fly hver dag, og har brukt <b>0</b>.
+			</p></div><span id="forklaring_7154388"><div class="alert alert-info"><p>Du får ikke ventetid etter neste flytur. Bare annenhver flytur gir ventetid. Du får heller ikke ventetid på neste flytur om det har gått lenger tid enn vanlig ventetid siden forrige gang du fløy. [<a href="javascript:void(0);" title="Ikke vis denne igjen" onclick="fjern_forklaring();" class="">X</a>]</p></div></span><script>
+	function fjern_forklaring(){
+		
+		$.get(domain + 'phpfiles/getData.php?type=fjern_forklaring&id=ikke_ventetid_neste_flytur&' + api_extra, function(data){
+			$('#forklaring_7154388').fadeOut(500);
+		});
+	}
+	</script>	
+
+
+	
+		</div>
+
+
+
+
+
+<!--
+<div id='map'>
+
+
+	<div id='oslo' class='Bynavn'>Oslo</div>
+
+</div>
+-->
+			</div>
+	
+	<script>
+		$(document).ready(function(){
+			resize_parent();
+			setTimeout(function(){ resize_parent();}, 500);
+			
+		});
+	</script>
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;2adb4b80ead742d7a669fd113af14669&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<!-- iframe:rankbar -->
+
+
+	<div id="Rankbar" style="width: 19px;"></div>
+	<div id="Layer2"></div>
+	<div class="style1" id="Layer3">
+	<span title="118105 rankpoeng" id="rankprosent" style="color: rgb(0, 0, 0); display: inline;">12.42 %</span></div>
+
+
+
+	<!--<div id="hjem"><a href='hjem.php' target='hovedinnhold'><img style='padding-left: 9px; padding-top: 3px;' src='grafikk2/ikoner_nederst/hjem2.png' border='0'></a></div>-->
+
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;2adb4b80ead742d7a669fd113af14669&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+
+
+
+<!-- iframe:invitasjoner_iframe -->
