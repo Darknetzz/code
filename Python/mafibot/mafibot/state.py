@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from playwright.async_api import Page
 
+from mafibot.game_cities import GAME_CITIES
 from mafibot.selectors import (
     BAN_PATTERN,
     BUSINESS_INCOME_PATTERN,
@@ -225,17 +226,7 @@ def collect_active_cooldowns(state: GameState, text: str) -> list[ActionCooldown
 
 
 def _detect_location(text: str) -> str | None:
-    for name in (
-        "Kabul",
-        "Oslo",
-        "Mogadishu",
-        "Kuala Lumpur",
-        "Beirut",
-        "Rio",
-        "New York",
-        "Detroit",
-        "Las Vegas",
-    ):
+    for name in (*GAME_CITIES, "Beirut"):
         if re.search(rf"\b{name}\b", text):
             return name
     return None

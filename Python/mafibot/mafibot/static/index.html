@@ -252,10 +252,10 @@
           <details id="action-options-travel" class="action-options-panel hidden">
             <summary>Travel</summary>
             <div>
-              <label for="cfg-travel-destinations">Preferred cities (one per line)</label>
-              <textarea id="cfg-travel-destinations" rows="2" placeholder="Kabul"></textarea>
+              <span class="field-label" id="cfg-travel-label">Preferred destinations</span>
+              <div id="cfg-travel-destinations-list" class="city-checkbox-list" role="group" aria-labelledby="cfg-travel-label"></div>
             </div>
-            <p class="tos-note">Empty = first available flight. With cities, selects destination first.</p>
+            <p class="tos-note">None checked = first available flight. Checked cities are tried in map order.</p>
           </details>
           <details id="action-options-drugs" class="action-options-panel hidden">
             <summary>Drugs</summary>

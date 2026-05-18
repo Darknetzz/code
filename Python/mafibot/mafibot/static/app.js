@@ -71,6 +71,57 @@ const ACTION_OPTION_PANELS = {
   murder: "action-options-murder",
 };
 
+/** World-map cities — values must match Flyplass / in-game labels. */
+const GAME_CITIES = [
+  { value: "Las Vegas", label: "Las Vegas" },
+  { value: "Detroit", label: "Detroit" },
+  { value: "New York", label: "New York" },
+  { value: "Rio", label: "Rio de Janeiro" },
+  { value: "London", label: "London" },
+  { value: "Oslo", label: "Oslo" },
+  { value: "Mogadishu", label: "Mogadishu" },
+  { value: "Kabul", label: "Kabul" },
+  { value: "Kuala Lumpur", label: "Kuala Lumpur" },
+];
+
+const travelCityInputs = new Map();
+let travelCityListBuilt = false;
+
+function ensureTravelCityList() {
+  const container = $("cfg-travel-destinations-list");
+  if (!container || travelCityListBuilt) return;
+  travelCityListBuilt = true;
+  for (const city of GAME_CITIES) {
+    const slug = city.value.replace(/\s+/g, "-").toLowerCase();
+    const id = `cfg-travel-city-${slug}`;
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = city.value;
+    input.id = id;
+    travelCityInputs.set(city.value, input);
+    label.htmlFor = id;
+    label.appendChild(input);
+    label.append(document.createTextNode(city.label));
+    container.appendChild(label);
+  }
+}
+
+function loadTravelDestinationsFromDoc(selected) {
+  ensureTravelCityList();
+  const want = new Set((selected || []).map((s) => String(s).trim()).filter(Boolean));
+  for (const [value, input] of travelCityInputs) {
+    input.checked = want.has(value);
+  }
+}
+
+function getTravelDestinationsFromUi() {
+  ensureTravelCityList();
+  return GAME_CITIES.filter((c) => travelCityInputs.get(c.value)?.checked).map(
+    (c) => c.value
+  );
+}
+
 function formatShipRoutes(routes) {
   if (!routes || typeof routes !== "object") return "";
   return Object.keys(routes)
@@ -165,7 +216,7 @@ function loadActionOptionsFromDoc(doc) {
   $("cfg-ship-routes").value = formatShipRoutes(doc.ship_routes || {});
   $("cfg-ship-destinations").value = (doc.ship_destinations || []).join("\n");
   $("cfg-ship-rotate").checked = !!doc.ship_rotate_destinations;
-  $("cfg-travel-destinations").value = (doc.travel_destinations || []).join("\n");
+  loadTravelDestinationsFromDoc(doc.travel_destinations);
   $("cfg-drugs-prefer").value = doc.drugs_prefer || "any";
   $("cfg-drugs-buy-city").value = doc.drugs_buy_city || "Kabul";
   $("cfg-drugs-sell-cities").value = (doc.drugs_sell_cities || [
@@ -207,10 +258,7 @@ function appendActionOptionsToPayload(payload) {
     .map((s) => s.trim())
     .filter(Boolean);
   payload.ship_rotate_destinations = $("cfg-ship-rotate").checked;
-  payload.travel_destinations = $("cfg-travel-destinations").value
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  payload.travel_destinations = getTravelDestinationsFromUi();
   payload.drugs_prefer = $("cfg-drugs-prefer").value || "any";
   payload.drugs_buy_city = $("cfg-drugs-buy-city").value.trim() || "Kabul";
   payload.drugs_sell_cities = $("cfg-drugs-sell-cities").value
@@ -865,6 +913,7 @@ function setupActions() {
 
 async function init() {
   setupTabs();
+  ensureTravelCityList();
   setupCrimeOptionsHandlers();
   setupActionListHandlers();
   setupActions();
