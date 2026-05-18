@@ -468,11 +468,7 @@ async function loadProfileForm(name) {
   $("cfg-jitter-max").value = doc.cooldown_jitter_max_sec ?? 120;
   $("cfg-click-min").value = doc.min_seconds_between_clicks ?? 2.8;
   $("cfg-tab-wait").value = doc.min_seconds_after_tab_change ?? 3.5;
-  $("cfg-bank-auto").checked = !!doc.bank_auto_balance;
-  $("cfg-bank-keep").value = doc.bank_keep_cash_on_hand ?? 100000;
-  $("cfg-bank-tolerance").value = doc.bank_balance_tolerance ?? 25000;
-  $("cfg-murder-targets").value = (doc.murder_targets || []).join("\n");
-  $("cfg-murder-rotate").checked = !!doc.murder_rotate_targets;
+  loadActionOptionsFromDoc(doc);
   renderActionList(profileToEnabledActionOrder(doc));
 }
 
@@ -480,7 +476,7 @@ function profilePayload() {
   const name = $("cfg-profile-name").value.trim() || $("cfg-profile-select").value;
   const actionOrder = getEnabledActionOrderFromUI();
   const flags = actionFlagsFromOrder(actionOrder);
-  return {
+  const base = {
     name,
     build: $("cfg-build").value,
     stay_in_hotel: $("cfg-stay-in-hotel").checked,
@@ -496,15 +492,8 @@ function profilePayload() {
     economy_order: flags.economy_order,
     social_enabled: flags.social_enabled,
     combat_enabled: flags.combat_enabled,
-    bank_auto_balance: $("cfg-bank-auto").checked,
-    bank_keep_cash_on_hand: parseInt($("cfg-bank-keep").value, 10) || 0,
-    bank_balance_tolerance: parseInt($("cfg-bank-tolerance").value, 10) || 0,
-    murder_targets: $("cfg-murder-targets").value
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    murder_rotate_targets: $("cfg-murder-rotate").checked,
   };
+  return appendActionOptionsToPayload(base);
 }
 
 async function loadCredentialsStatus() {
