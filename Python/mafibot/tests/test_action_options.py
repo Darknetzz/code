@@ -52,6 +52,21 @@ async def test_murder_requires_targets():
     assert await MurderAction().can_run(state, profile) is False
 
 
+@pytest.mark.asyncio
+async def test_messages_only_when_unread():
+    profile = BotProfile(
+        social_enabled=True,
+        messages_only_when_unread=True,
+        messages_interval_minutes=60,
+    )
+    state = GameState(unread_messages=0)
+    from mafibot.actions.social import MessagesAction
+
+    assert await MessagesAction().can_run(state, profile) is False
+    state.unread_messages = 2
+    assert await MessagesAction().can_run(state, profile) is True
+
+
 def test_pick_murder_target_rotate():
     profile = BotProfile(
         murder_targets=["alice", "bob"],
