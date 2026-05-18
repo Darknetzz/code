@@ -1,0 +1,110 @@
+"""Paths, bot profiles, and runtime settings."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import time
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+BASE_URL = "https://mafiaspillet.no/"
+DEFAULT_PROFILE_NAME = "ranker"
+
+BuildStyle = Literal["ranker", "okonom", "angriper"]
+
+
+class PlayWindow(BaseModel):
+    start_hour: int = 8
+    end_hour: int = 23
+
+
+class BotProfile(BaseModel):
+    name: str = DEFAULT_PROFILE_NAME
+    build: BuildStyle = "ranker"
+    aggression: float = Field(default=0.3, ge=0.0, le=1.0)
+    economy_order: list[str] = Field(
+        default_factory=lambda: ["crime", "work", "ship", "drugs", "bank", "hotel"]
+    )
+    social_interval_minutes: int = 45
+    social_enabled: bool = True
+    combat_enabled: bool = False
+    min_health_percent: int = 35
+    play_window: PlayWindow = Field(default_factory=PlayWindow)
+    max_session_minutes: int = 120
+    idle_chance: float = 0.08
+    idle_min_minutes: int = 5
+    idle_max_minutes: int = 15
+    cooldown_jitter_min_sec: int = 15
+    cooldown_jitter_max_sec: int = 90
+
+
+def get_config_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.getenv("APPDATA") or Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.getenv("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "mafibot"
+
+
+def get_profile_dir() -> Path:
+    return get_config_dir() / "profile"
+
+
+def get_discovery_dir() -> Path:
+    return get_config_dir() / "discovery"
+
+
+def get_profiles_dir() -> Path:
+    return get_config_dir() / "profiles"
+
+
+def get_pages_config_path() -> Path:
+    return get_config_dir() / "pages.json"
+
+
+def bundled_profiles_dir() -> Path:
+    return Path(__file__).resolve().parent / "profiles"
+
+
+def load_bot_profile(name: str | None = None) -> BotProfile:
+    stem = (name or DEFAULT_PROFILE_NAME).strip()
+    for base in (get_profiles_dir(), bundled_profiles_dir()):
+        path = base / f"{stem}.json"
+        if path.is_file():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return BotProfile.model_validate(data)
+    if stem != DEFAULT_PROFILE_NAME:
+        return load_bot_profile(DEFAULT_PROFILE_NAME)
+    return BotProfile(name=stem)
+
+
+def in_play_window(profile: BotProfile) -> bool:
+    from datetime import datetime
+
+    now = datetime.now().time()
+    start = time(profile.play_window.start_hour, 0)
+    end = time(profile.play_window.end_hour, 0)
+    if start <= end:
+        return start <= now <= end
+    return now >= start or now <= end
+
+
+def load_dotenv_if_present() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    for path in (
+        Path.cwd() / ".env",
+        get_config_dir() / ".env",
+        Path(__file__).resolve().parents[1] / ".env",
+    ):
+        if path.is_file():
+            load_dotenv(path)
+            return

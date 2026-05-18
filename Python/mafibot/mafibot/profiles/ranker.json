@@ -1,0 +1,10 @@
+{
+  "name": "ranker",
+  "build": "ranker",
+  "aggression": 0.25,
+  "economy_order": ["crime", "travel", "work", "ship", "drugs", "bank", "hotel"],
+  "social_interval_minutes": 50,
+  "combat_enabled": false,
+  "min_health_percent": 40,
+  "max_session_minutes": 120
+}

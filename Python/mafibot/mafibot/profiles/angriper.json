@@ -1,0 +1,10 @@
+{
+  "name": "angriper",
+  "build": "angriper",
+  "aggression": 0.75,
+  "economy_order": ["crime", "murder", "travel", "hotel", "work"],
+  "social_interval_minutes": 40,
+  "combat_enabled": true,
+  "min_health_percent": 50,
+  "max_session_minutes": 100
+}

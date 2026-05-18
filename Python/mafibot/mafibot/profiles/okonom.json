@@ -1,0 +1,10 @@
+{
+  "name": "okonom",
+  "build": "okonom",
+  "aggression": 0.2,
+  "economy_order": ["work", "bank", "crime", "ship", "drugs", "hotel"],
+  "social_interval_minutes": 60,
+  "combat_enabled": false,
+  "min_health_percent": 35,
+  "max_session_minutes": 90
+}
