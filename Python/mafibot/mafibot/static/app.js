@@ -58,6 +58,12 @@ const ACTION_CATALOG = [
   },
 ];
 
+/** Actions with extra config panels (shown only when enabled in the list). */
+const ACTION_OPTION_PANELS = {
+  bank: "action-options-bank",
+  murder: "action-options-murder",
+};
+
 const ECONOMY_ACTION_IDS = new Set([
   "crime",
   "business",
@@ -277,6 +283,25 @@ function showActionHelp(actionId) {
   }
 }
 
+function isActionEnabledInUI(actionId) {
+  const li = $("cfg-action-list").querySelector(`.action-list-item[data-action="${actionId}"]`);
+  if (!li) return false;
+  const box = li.querySelector("[data-action-check]");
+  return box && box.checked;
+}
+
+function updateActionOptionsVisibility() {
+  let anyVisible = false;
+  for (const [actionId, panelId] of Object.entries(ACTION_OPTION_PANELS)) {
+    const panel = $(panelId);
+    if (!panel) continue;
+    const on = isActionEnabledInUI(actionId);
+    panel.classList.toggle("hidden", !on);
+    if (on) anyVisible = true;
+  }
+  $("action-options-section").classList.toggle("hidden", !anyVisible);
+}
+
 function renderActionList(enabledOrder) {
   const list = $("cfg-action-list");
   list.innerHTML = "";
@@ -316,6 +341,7 @@ function renderActionList(enabledOrder) {
     `;
     list.appendChild(li);
   }
+  updateActionOptionsVisibility();
 }
 
 function getEnabledActionOrderFromUI() {
@@ -334,6 +360,11 @@ function moveActionItem(li, direction) {
 }
 
 function setupActionListHandlers() {
+  $("cfg-action-list").addEventListener("change", (ev) => {
+    if (ev.target.matches("[data-action-check]")) {
+      updateActionOptionsVisibility();
+    }
+  });
   $("cfg-action-list").addEventListener("click", (ev) => {
     const helpBtn = ev.target.closest("[data-action-help]");
     if (helpBtn) {

@@ -156,9 +156,9 @@
           <p class="tos-note">Checked actions run in list order. Unchecked actions are skipped.</p>
           <ul id="cfg-action-list" class="action-list"></ul>
         </div>
-        <div class="action-options-section">
+        <div id="action-options-section" class="action-options-section hidden">
           <h3 class="action-options-heading">Action options</h3>
-          <details class="action-options-panel" open>
+          <details id="action-options-bank" class="action-options-panel" data-action-options="bank" open>
             <summary>Bank</summary>
             <div class="checkbox-row">
               <input type="checkbox" id="cfg-bank-auto" />
@@ -176,7 +176,7 @@
             </div>
             <p class="tos-note">When auto is off, bank only clicks generic innskudd/uttak. When on, bot transfers only if wallet is outside target ± tolerance.</p>
           </details>
-          <details class="action-options-panel">
+          <details id="action-options-murder" class="action-options-panel hidden" data-action-options="murder">
             <summary>Murder</summary>
             <div>
               <label for="cfg-murder-targets">Target usernames (one per line)</label>
