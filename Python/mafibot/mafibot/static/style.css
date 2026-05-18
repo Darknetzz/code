@@ -294,6 +294,36 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
+.action-options-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.action-options-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.action-options-panel {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.action-options-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+.action-options-panel[open] summary {
+  margin-bottom: 0.5rem;
+}
+
 .action-list-heading {
   display: block;
   font-size: 0.85rem;

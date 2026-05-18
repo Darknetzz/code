@@ -36,7 +36,7 @@ const ACTION_CATALOG = [
     id: "bank",
     label: "Bank",
     description:
-      "Opens the bank page and uses deposit/withdraw/transfer controls. Only scheduled if bank is in your enabled list. Must leave the hotel first.",
+      "Opens bank. With auto-balance: deposits or withdraws to keep wallet (Penger) near your target ± tolerance. Without auto: clicks generic innskudd/uttak. Must leave the hotel first.",
   },
   {
     id: "messages",
@@ -54,7 +54,7 @@ const ACTION_CATALOG = [
     id: "murder",
     label: "Murder (combat)",
     description:
-      "Opens murder/skyt when combat is enabled, aggression ≥ 0.5, health is OK, and cooldown is ready. Often opens the page but skips the kill unless aggression is high (≥ 0.85). Must leave the hotel. High ban risk.",
+      "Opens murder/skyt, fills a target username from your list, then shoots if aggression allows. Will not run without targets or with blank names. Must leave the hotel. High ban risk.",
   },
 ];
 
@@ -370,6 +370,11 @@ async function loadProfileForm(name) {
   $("cfg-jitter-max").value = doc.cooldown_jitter_max_sec ?? 120;
   $("cfg-click-min").value = doc.min_seconds_between_clicks ?? 2.8;
   $("cfg-tab-wait").value = doc.min_seconds_after_tab_change ?? 3.5;
+  $("cfg-bank-auto").checked = !!doc.bank_auto_balance;
+  $("cfg-bank-keep").value = doc.bank_keep_cash_on_hand ?? 100000;
+  $("cfg-bank-tolerance").value = doc.bank_balance_tolerance ?? 25000;
+  $("cfg-murder-targets").value = (doc.murder_targets || []).join("\n");
+  $("cfg-murder-rotate").checked = !!doc.murder_rotate_targets;
   renderActionList(profileToEnabledActionOrder(doc));
 }
 
@@ -393,6 +398,14 @@ function profilePayload() {
     economy_order: flags.economy_order,
     social_enabled: flags.social_enabled,
     combat_enabled: flags.combat_enabled,
+    bank_auto_balance: $("cfg-bank-auto").checked,
+    bank_keep_cash_on_hand: parseInt($("cfg-bank-keep").value, 10) || 0,
+    bank_balance_tolerance: parseInt($("cfg-bank-tolerance").value, 10) || 0,
+    murder_targets: $("cfg-murder-targets").value
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    murder_rotate_targets: $("cfg-murder-rotate").checked,
   };
 }
 
