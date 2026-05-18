@@ -9,7 +9,7 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
-from mafibot.human_policy import HumanPolicy, page_reading_pause
+from mafibot.human_policy import HumanPolicy, human_click_paced, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page
 from mafibot.profile_options import family_interval_minutes, messages_interval_minutes
 from mafibot.selectors import MESSAGE_REPLY_LABELS
@@ -72,9 +72,7 @@ class MessagesAction:
 
         open_msg = page.get_by_role("link", name=re.compile(r"les|åpne|innboks", re.I))
         if await open_msg.count() > 0:
-            from webbot.human import human_click
-
-            await human_click(page, open_msg.first)
+            await human_click_paced(page, open_msg.first, policy)
 
         replied = await click_button_matching(
             page,
@@ -114,9 +112,7 @@ class FamilyAction:
         if profile.family_auto_accept:
             accept = page.get_by_role("link", name=re.compile(r"godta|aksepter", re.I))
             if await accept.count() > 0:
-                from webbot.human import human_click
-
-                await human_click(page, accept.first)
+                await human_click_paced(page, accept.first, policy)
                 _last_family_at = datetime.now()
                 return ActionResult(True, "family invite handled")
 

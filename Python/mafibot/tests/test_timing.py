@@ -8,6 +8,7 @@ from mafibot.human_policy import (
     HumanPolicy,
     cycle_wait_after_action,
     cycle_wait_nothing_todo,
+    hotel_transition_policy,
     idle_break_seconds,
     pause_before_book_hotel,
     random_wait_seconds,
@@ -45,3 +46,10 @@ def test_idle_break_float_minutes():
     sec = idle_break_seconds(5.5, 12.25)
     assert isinstance(sec, float)
     assert 5.5 * 60 <= sec <= 12.25 * 60 + 0.01
+
+
+def test_hotel_transition_policy_slower_than_old_fast_path():
+    base = HumanPolicy(min_seconds_between_clicks=3.0, pre_click_pause_min=1.2)
+    fast = hotel_transition_policy(base)
+    assert fast.min_seconds_between_clicks >= 1.8
+    assert fast.pre_click_pause_min >= 0.6

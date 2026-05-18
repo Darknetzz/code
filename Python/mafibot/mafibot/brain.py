@@ -6,6 +6,7 @@ import asyncio
 import logging
 import random
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
 from playwright.async_api import Page
@@ -25,7 +26,11 @@ from mafibot.human_policy import (
     idle_break_seconds,
     page_reading_pause,
     pause_before_book_hotel,
+    policy_after_afk_warmup,
+    random_wait_seconds,
     sleep_wait,
+    sleep_with_idle_activity,
+    wait_with_idle_activity,
 )
 from mafibot.navigation import ensure_game_shell
 from mafibot.rotation import reset_rotation_state
@@ -49,6 +54,42 @@ _cancel = asyncio.Event()
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
 _last_idle_detail: str | None = None
 _last_parse_error: dict[str, str | None] | None = None
+
+
+@dataclass
+class SessionPacing:
+    actions_since_distraction: int = 0
+    next_distraction_after: int = 0
+    warmup_cycles_remaining: int = 0
+    active_policy: HumanPolicy | None = None
+
+
+def _new_session_pacing(base_policy: HumanPolicy) -> SessionPacing:
+    return SessionPacing(
+        next_distraction_after=random.randint(8, 15),
+        active_policy=base_policy,
+    )
+
+
+async def _maybe_distraction_pause(
+    page: Page,
+    pacing: SessionPacing,
+    cancel: asyncio.Event,
+) -> bool:
+    """Inject occasional longer idle activity between actions. Returns False if cancelled."""
+    pacing.actions_since_distraction += 1
+    if pacing.warmup_cycles_remaining > 0:
+        pacing.warmup_cycles_remaining -= 1
+        return True
+    if pacing.actions_since_distraction < pacing.next_distraction_after:
+        return True
+    pause = random_wait_seconds(10.0, 45.0, distribution="triangular")
+    log.info("distraction pause %.1fs", pause)
+    policy = pacing.active_policy or HumanPolicy()
+    ok = await sleep_with_idle_activity(page, pause, policy, cancel=cancel)
+    pacing.actions_since_distraction = 0
+    pacing.next_distraction_after = random.randint(8, 15)
+    return ok
 
 
 def get_last_parse_error() -> dict[str, str | None] | None:
@@ -408,6 +449,7 @@ async def run_session(
     reset_rotation_state()
     metrics = start_session_metrics(profile.name, dry_run=dry_run)
     policy = _policy_from_profile(profile)
+    pacing = _new_session_pacing(policy)
     limit = max_minutes if max_minutes is not None else profile.max_session_minutes
     deadline = datetime.now() + timedelta(minutes=limit)
     session_start = datetime.now()
@@ -422,18 +464,35 @@ async def run_session(
         if not in_play_window(profile):
             wait_sec = _seconds_until_play_window(profile) or 600.0
             log.info("outside play window — sleeping %.0fs", wait_sec)
-            try:
-                await asyncio.wait_for(_cancel.wait(), timeout=wait_sec)
-                break
-            except asyncio.TimeoutError:
-                pass
+            if not dry_run:
+                if not await sleep_with_idle_activity(
+                    page, wait_sec, pacing.active_policy or policy, cancel=_cancel
+                ):
+                    break
+            else:
+                try:
+                    await asyncio.wait_for(_cancel.wait(), timeout=wait_sec)
+                    break
+                except asyncio.TimeoutError:
+                    pass
             continue
 
         if random.random() < profile.idle_chance:
             idle_sec = idle_break_seconds(profile.idle_min_minutes, profile.idle_max_minutes)
             log.info("idle break %.2f min (human AFK)", idle_sec / 60.0)
-            await asyncio.sleep(idle_sec)
+            if not dry_run:
+                if not await sleep_with_idle_activity(
+                    page, idle_sec, pacing.active_policy or policy, cancel=_cancel
+                ):
+                    break
+            else:
+                await asyncio.sleep(idle_sec)
+            pacing.active_policy = policy_after_afk_warmup(policy)
+            pacing.warmup_cycles_remaining = random.randint(2, 3)
             continue
+
+        if not dry_run and not await _maybe_distraction_pause(page, pacing, _cancel):
+            break
 
         try:
             result = await run_once(page, profile, dry_run=dry_run)
@@ -454,22 +513,32 @@ async def run_session(
                     break
             except ParseError:
                 pass
-            wait = cycle_wait_nothing_todo(policy)
+            wait = cycle_wait_nothing_todo(pacing.active_policy or policy)
             log.info("waiting %.2fs (cooldown / nothing to do)", wait)
+            if dry_run:
+                try:
+                    await asyncio.wait_for(_cancel.wait(), timeout=wait)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+            elif not await wait_with_idle_activity(
+                page, wait, pacing.active_policy or policy, _cancel
+            ):
+                break
+            continue
+
+        wait = cycle_wait_after_action(pacing.active_policy or policy)
+        log.info("waiting %.2fs before next action", wait)
+        if dry_run:
             try:
                 await asyncio.wait_for(_cancel.wait(), timeout=wait)
                 break
             except asyncio.TimeoutError:
                 pass
-            continue
-
-        wait = cycle_wait_after_action(policy)
-        log.info("waiting %.2fs before next action", wait)
-        try:
-            await asyncio.wait_for(_cancel.wait(), timeout=wait)
+        elif not await wait_with_idle_activity(
+            page, wait, pacing.active_policy or policy, _cancel
+        ):
             break
-        except asyncio.TimeoutError:
-            pass
 
     if is_stop_requested():
         stop_reason = stop_reason or "user stop"

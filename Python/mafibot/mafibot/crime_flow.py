@@ -12,7 +12,7 @@ from mafibot.crime_catalog import (
     pick_option_ids,
     section_submit_labels,
 )
-from mafibot.human_policy import HumanPolicy, page_reading_pause
+from mafibot.human_policy import HumanPolicy, maybe_think_pause, page_reading_pause
 from mafibot.navigation import click_button_matching, click_option_matching
 from mafibot.page_actions import fill_murder_target
 from mafibot.profile_options import (
@@ -55,6 +55,7 @@ async def _run_perform_section_flow(
             break
     if picked_label is None and option_ids:
         return False, f"{section_id}: crime option not found ({', '.join(option_ids)})"
+    await maybe_think_pause(policy)
     await page_reading_pause(page)
 
     submit = crime_submit_labels(profile) or section_submit_labels(section_id)
@@ -82,6 +83,7 @@ async def _run_stjel_flow(
             break
     if picked_label is None and option_ids:
         return False, f"stjel: item not found ({', '.join(option_ids)})"
+    await maybe_think_pause(policy)
     await page_reading_pause(page)
 
     mode = crime_steal_target_mode(profile)

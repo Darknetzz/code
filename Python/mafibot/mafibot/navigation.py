@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from playwright.async_api import Locator, Page
 
 from mafibot.config import BASE_URL, GAME_URL
+from webbot.human import reading_pause
+
 from mafibot.human_policy import (
     HumanPolicy,
     after_navigation,
@@ -208,21 +210,44 @@ async def click_destination_matching(
             page, loc, policy=policy, dry_run=dry_run
         ):
             return name
-        select = page.locator("select")
-        for i in range(await select.count()):
-            box = select.nth(i)
-            if not await box.is_visible():
-                continue
-            option = box.locator("option", has_text=pattern)
-            if await option.count() == 0:
-                continue
-            if dry_run:
-                return name
-            await maybe_think_pause(policy or HumanPolicy())
-            await box.select_option(label=re.compile(re.escape(name), re.I))
-            await after_navigation(page, policy)
+        if await _select_destination_human(
+            page, name, pattern, policy=policy, dry_run=dry_run
+        ):
             return name
     return None
+
+
+async def _select_destination_human(
+    page: Page,
+    name: str,
+    pattern: re.Pattern[str],
+    *,
+    policy: HumanPolicy | None = None,
+    dry_run: bool = False,
+) -> bool:
+    """Open a visible select and pick an option with paced clicks."""
+    p = policy or HumanPolicy()
+    select = page.locator("select")
+    for i in range(await select.count()):
+        box = select.nth(i)
+        if not await box.is_visible():
+            continue
+        option = box.locator("option", has_text=pattern)
+        if await option.count() == 0:
+            continue
+        if dry_run:
+            return True
+        await maybe_think_pause(p)
+        await human_click_paced(page, box, p, allow_overshoot=False)
+        await reading_pause(0.4, 1.2, distribution="triangular")
+        target = option.first
+        try:
+            await human_click_paced(page, target, p, allow_overshoot=False)
+        except RuntimeError:
+            await box.select_option(label=pattern)
+        await after_navigation(page, p)
+        return True
+    return False
 
 
 async def click_option_matching(

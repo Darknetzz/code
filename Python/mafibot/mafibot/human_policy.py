@@ -6,22 +6,28 @@ import asyncio
 import logging
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from playwright.async_api import Locator, Page
 
 from webbot.human import (
     DelayDistribution,
-    human_click,
     human_delay,
     human_scroll,
     idle_mouse_drift,
+    move_mouse_human,
     reading_pause,
 )
 
 log = logging.getLogger("mafibot.timing")
 
 _last_click_at: float = 0.0
+_last_mouse: tuple[float, float] | None = None
+
+
+def reset_mouse_position() -> None:
+    global _last_mouse
+    _last_mouse = None
 
 
 def random_wait_seconds(
@@ -105,6 +111,74 @@ def cycle_wait_nothing_todo(policy: HumanPolicy) -> float:
     )
 
 
+async def _idle_micro_activity(page: Page, policy: HumanPolicy) -> None:
+    roll = random.random()
+    if roll < 0.40:
+        await idle_mouse_drift(page)
+    elif roll < 0.65:
+        delta = int(random_wait_seconds(40.0, 160.0))
+        await human_scroll(page, delta_y=delta)
+        await human_delay(0.4, 1.2)
+    elif roll < 0.80:
+        await reading_pause(1.0, 3.0, distribution="triangular")
+
+
+async def sleep_with_idle_activity(
+    page: Page,
+    total_seconds: float,
+    policy: HumanPolicy | None = None,
+    *,
+    cancel: asyncio.Event | None = None,
+) -> bool:
+    """
+    Sleep for roughly total_seconds with occasional drift/scroll between chunks.
+    Returns False if cancel is set before the wait completes.
+    """
+    if total_seconds <= 0:
+        return cancel is None or not cancel.is_set()
+
+    p = policy or HumanPolicy()
+    target = total_seconds
+    tolerance = max(0.5, target * 0.05)
+    elapsed = 0.0
+
+    while elapsed < target - tolerance:
+        if cancel and cancel.is_set():
+            return False
+        remaining = target - elapsed
+        chunk_hi = min(25.0, max(5.0, remaining))
+        chunk = random_wait_seconds(5.0, chunk_hi)
+        chunk = min(chunk, remaining)
+        await asyncio.sleep(chunk)
+        elapsed += chunk
+        if cancel and cancel.is_set():
+            return False
+        if elapsed < target - tolerance:
+            await _idle_micro_activity(page, p)
+
+    pad = max(0.0, target - elapsed)
+    if pad > 0:
+        if cancel:
+            try:
+                await asyncio.wait_for(cancel.wait(), timeout=pad)
+                return False
+            except asyncio.TimeoutError:
+                pass
+        else:
+            await asyncio.sleep(pad)
+    return cancel is None or not cancel.is_set()
+
+
+async def wait_with_idle_activity(
+    page: Page,
+    total_seconds: float,
+    policy: HumanPolicy,
+    cancel: asyncio.Event,
+) -> bool:
+    """Wait up to total_seconds with micro-activity; False when cancel fires."""
+    return await sleep_with_idle_activity(page, total_seconds, policy, cancel=cancel)
+
+
 async def _enforce_click_gap(policy: HumanPolicy) -> None:
     global _last_click_at
     now = time.monotonic()
@@ -124,18 +198,66 @@ async def maybe_think_pause(policy: HumanPolicy) -> None:
         )
 
 
+async def _target_point_from_locator(locator: Locator) -> tuple[float, float]:
+    box = await locator.bounding_box()
+    if not box:
+        raise RuntimeError("Element has no bounding box — is it visible?")
+    x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
+    y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
+    return x, y
+
+
+def _drift_chance(policy: HumanPolicy) -> float:
+    return min(0.55, 0.25 + policy.long_pause_chance)
+
+
+async def _human_move_and_click(
+    page: Page,
+    locator: Locator,
+    *,
+    allow_overshoot: bool = True,
+) -> None:
+    """Bezier move from last position, optional overshoot, hover settle, click."""
+    global _last_mouse
+
+    await locator.scroll_into_view_if_needed()
+    await human_delay(0.1, 0.4)
+
+    x, y = await _target_point_from_locator(locator)
+    start = _last_mouse
+
+    if allow_overshoot and random.random() < 0.03:
+        box = await locator.bounding_box()
+        if box and box["width"] * box["height"] > 8000:
+            ox = random.uniform(-15.0, 15.0)
+            oy = random.uniform(-15.0, 15.0)
+            await move_mouse_human(page, x + ox, y + oy, start=start)
+            await asyncio.sleep(random.uniform(0.06, 0.14))
+            start = (x + ox, y + oy)
+
+    await move_mouse_human(page, x, y, start=start)
+    _last_mouse = (x, y)
+    await asyncio.sleep(random.uniform(0.08, 0.22))
+    await page.mouse.click(x, y)
+    await human_delay(0.2, 0.6)
+
+
 async def human_click_paced(
     page: Page,
     locator: Locator,
     policy: HumanPolicy | None = None,
+    *,
+    allow_overshoot: bool = True,
 ) -> None:
     """Bezier click with mandatory minimum gap since last click."""
     p = policy or HumanPolicy()
+    await maybe_think_pause(p)
+    await maybe_scroll_page(page, p)
     await _enforce_click_gap(p)
     await reading_pause(p.pre_click_pause_min, p.pre_click_pause_max, distribution="triangular")
-    if random.random() < 0.35:
+    if random.random() < _drift_chance(p):
         await idle_mouse_drift(page)
-    await human_click(page, locator)
+    await _human_move_and_click(page, locator, allow_overshoot=allow_overshoot)
     await human_delay(0.5, 1.6, distribution="triangular", long_pause_chance=0.08)
 
 
@@ -175,16 +297,35 @@ async def pause_before_book_hotel(max_seconds: float = 2.0) -> float:
 
 
 def hotel_transition_policy(base: HumanPolicy) -> HumanPolicy:
-    """Faster clicks for leave/book steps; still human-like."""
+    """Faster clicks for leave/book steps; occasionally use full gameplay pacing."""
+    if random.random() < 0.20:
+        return base
     return HumanPolicy(
         jitter_min_sec=base.jitter_min_sec,
         jitter_max_sec=base.jitter_max_sec,
-        min_seconds_between_clicks=min(1.2, base.min_seconds_between_clicks),
-        min_seconds_after_tab_change=min(1.5, base.min_seconds_after_tab_change),
-        pre_click_pause_min=0.4,
-        pre_click_pause_max=1.2,
-        think_before_action_chance=0.05,
-        long_pause_chance=0.05,
+        jitter_distribution=base.jitter_distribution,
+        long_pause_chance=0.08,
+        scroll_before_click_chance=base.scroll_before_click_chance * 0.5,
+        min_seconds_between_clicks=max(1.8, base.min_seconds_between_clicks * 0.65),
+        min_seconds_after_tab_change=max(1.8, base.min_seconds_after_tab_change * 0.55),
+        pre_click_pause_min=0.6,
+        pre_click_pause_max=1.6,
+        think_before_action_chance=0.08,
+        think_pause_min=base.think_pause_min,
+        think_pause_max=base.think_pause_max,
+        post_action_wait_min_sec=base.post_action_wait_min_sec,
+        post_action_wait_max_sec=base.post_action_wait_max_sec,
+        nothing_todo_wait_min_sec=base.nothing_todo_wait_min_sec,
+        nothing_todo_wait_max_sec=base.nothing_todo_wait_max_sec,
+    )
+
+
+def policy_after_afk_warmup(base: HumanPolicy) -> HumanPolicy:
+    """Slightly longer post-action waits for a few cycles after an AFK break."""
+    return replace(
+        base,
+        post_action_wait_min_sec=base.post_action_wait_min_sec * 1.15,
+        post_action_wait_max_sec=base.post_action_wait_max_sec * 1.25,
     )
 
 

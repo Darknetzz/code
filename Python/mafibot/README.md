@@ -139,6 +139,9 @@ Session check → parse DOM (GameState) → brain picks action → human-like cl
 - **Navigation** — `ms.php` tabs first (e.g. Kriminalitet, Flyplass); sidebar for bedrifter/rederi; legacy `?side=` as fallback.
 - **Hotel-first (default)** — **Book** before each action, **leave** only for crime/travel/drugs/murder/bank, **book again** within **`max_seconds_before_book_hotel`** (default **2 s**) after each action. Long waits happen only *between* cycles. See [WHATIF.md](WHATIF.md).
 - **Human pacing** — `human_click_paced()` enforces minimum gaps between clicks, reading pauses before each click, optional “thinking” delays, and disabled buttons are skipped.
+- **Idle micro-activity** — Long cycle waits and AFK breaks use chunked sleeps with occasional mouse drift and scroll (not a frozen browser).
+- **Mouse continuity** — Clicks move from the last cursor position via Bezier paths instead of teleporting from a random point.
+- **Human selects** — Travel/drugs destinations open `<select>` elements with paced clicks when possible (fallback to `select_option` if needed).
 
 ### How wait times are chosen
 
@@ -151,7 +154,9 @@ All delays are **random floats in seconds** (via `random_wait_seconds()` / webbo
 | After tab change | `min_seconds_after_tab_change` + **0–4** s + navigation pause |
 | After one action (brain loop) | `cooldown_jitter` (**triangular**, e.g. 35–130 s) + `post_action_wait` (**8–25** s default) |
 | Nothing to do | `cooldown_jitter` + `nothing_todo_wait` (**45–180** s default) |
-| AFK idle break | **5.0–15.0** minutes as float × 60 (e.g. 7.38 min) |
+| AFK idle break | **5.0–15.0** minutes as float × 60, with drift/scroll between chunks |
+| Between cycles (idle) | Same chunked activity during cooldown waits |
+| Distraction pause | Every ~8–15 actions, extra **10–45** s idle activity |
 | Inside webbot | `human_delay` / `reading_pause` use triangular or uniform **float** samples |
 
 Tune in profile JSON (`cooldown_jitter_min_sec`, `post_action_wait_min_sec`, etc.—decimals allowed, e.g. `35.5`).
