@@ -47,6 +47,7 @@ DEFAULT_SIDES: dict[str, str] = {
     "messages": "meldinger",
     "family": "familie",
     "murder": "drap",
+    "hospital": "sykehus",
 }
 
 NAV_LINKS: dict[str, tuple[str, ...]] = {
@@ -61,6 +62,7 @@ NAV_LINKS: dict[str, tuple[str, ...]] = {
     "family": ("familie",),
     "murder": ("drap", "skyt"),
     "business": ("bedrifter", "mine bedrifter"),
+    "hospital": ("sykehus",),
 }
 
 # Detection (ms.php body text)
@@ -99,6 +101,15 @@ HOTEL_BOOK_LABELS = ("book", "sjekk inn")
 SHIP_ACTION_LABELS = ("send", "avreise", "skip")
 DRUGS_ACTION_LABELS = ("kjøp", "selg", "narkotika")
 MURDER_ACTION_LABELS = ("skyt", "drap", "angrip")
+HOSPITAL_ACTION_LABELS = (
+    "behandle",
+    "helbred",
+    "full helse",
+    "kur",
+    "sykehus",
+    "innleggelse",
+    "hent helse",
+)
 MESSAGE_REPLY_LABELS = ("svar", "send")
 
 

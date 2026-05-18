@@ -78,6 +78,7 @@ _ACTION_COOLDOWN_SPECS: tuple[tuple[str, str, str], ...] = (
     ("ship", "Ship", "rederi"),
     ("drugs", "Drugs", "narkotika"),
     ("murder", "Murder", "skyt"),
+    ("hospital", "Hospital", "sykehus"),
 )
 
 
@@ -110,6 +111,7 @@ class GameState:
     ship_ready: bool = True
     drugs_ready: bool = True
     murder_ready: bool = True
+    hospital_ready: bool = True
     cooldowns: list[CooldownInfo] = field(default_factory=list)
     active_cooldowns: list[ActionCooldown] = field(default_factory=list)
     page_text_sample: str = ""
@@ -205,6 +207,7 @@ def _action_is_on_cooldown(state: GameState, action_id: str) -> bool:
         "ship": not state.ship_ready,
         "drugs": not state.drugs_ready,
         "murder": not state.murder_ready,
+        "hospital": not state.hospital_ready,
     }.get(action_id, False)
 
 
@@ -291,6 +294,7 @@ async def parse_game_state(page: Page) -> GameState:
     state.ship_ready = state.ship_in_port or _cooldown_ready(text, "rederi")
     state.drugs_ready = _cooldown_ready(text, "narkotika")
     state.murder_ready = _cooldown_ready(text, "skyt")
+    state.hospital_ready = _cooldown_ready(text, "sykehus")
 
     for m in COOLDOWN_PATTERN.finditer(text):
         state.cooldowns.append(CooldownInfo(name="generic", raw=m.group(0)))

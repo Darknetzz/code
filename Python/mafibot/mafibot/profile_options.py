@@ -13,6 +13,22 @@ def family_interval_minutes(profile: BotProfile) -> int:
     return profile.family_interval_minutes or profile.social_interval_minutes
 
 
+def hospital_enabled(profile: BotProfile) -> bool:
+    return "hospital" in profile.economy_order
+
+
+def hospital_health_threshold(profile: BotProfile) -> int:
+    return profile.hospital_health_threshold
+
+
+def needs_hospital_visit(profile: BotProfile, state) -> bool:
+    if state.health_percent is None:
+        return False
+    if state.health_percent >= 100:
+        return False
+    return state.health_percent < hospital_health_threshold(profile)
+
+
 def crime_min_health_percent(profile: BotProfile) -> int:
     if profile.crime_min_health_percent is not None:
         return profile.crime_min_health_percent

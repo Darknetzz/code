@@ -40,11 +40,13 @@ def all_actions() -> list[Action]:
     from mafibot.actions.combat import MurderAction
     from mafibot.actions.crime import CrimeAction
     from mafibot.actions.economy import BankAction, BusinessAction, DrugsAction, ShipAction
+    from mafibot.actions.hospital import HospitalAction
     from mafibot.actions.social import FamilyAction, MessagesAction
     from mafibot.actions.travel import TravelAction
 
     return [
         CrimeAction(),
+        HospitalAction(),
         BusinessAction(),
         TravelAction(),
         ShipAction(),

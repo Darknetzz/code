@@ -162,6 +162,14 @@
         </div>
         <div id="action-options-section" class="action-options-section hidden">
           <h3 class="action-options-heading">Action options</h3>
+          <details id="action-options-hospital" class="action-options-panel hidden">
+            <summary>Hospital (Sykehus)</summary>
+            <div>
+              <label for="cfg-hospital-threshold">Use hospital when health below (%)</label>
+              <input type="number" id="cfg-hospital-threshold" min="1" max="99" value="80" />
+            </div>
+            <p class="tos-note">Enable <strong>Hospital</strong> in the action list above. While Helse is below this value, hospital is tried first.</p>
+          </details>
           <details id="action-options-crime" class="action-options-panel hidden">
             <summary>Crime</summary>
             <div class="grid-2">

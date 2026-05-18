@@ -85,7 +85,9 @@ def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
     )
 
 
-def _ordered_action_names(profile: BotProfile) -> list[str]:
+def _ordered_action_names(
+    profile: BotProfile, state: GameState | None = None
+) -> list[str]:
     """Priority list from profile.economy_order plus legacy social/combat flags."""
     order: list[str] = []
     for name in profile.economy_order:
@@ -106,6 +108,15 @@ def _ordered_action_names(profile: BotProfile) -> list[str]:
             n = "business"
         if n not in normalized:
             normalized.append(n)
+    if state is not None:
+        from mafibot.profile_options import hospital_enabled, needs_hospital_visit
+
+        if (
+            hospital_enabled(profile)
+            and needs_hospital_visit(profile, state)
+            and "hospital" in normalized
+        ):
+            normalized = ["hospital"] + [n for n in normalized if n != "hospital"]
     return normalized
 
 
@@ -184,7 +195,7 @@ async def pick_next_action(
     if state.in_jail:
         return None, "idle: in jail"
 
-    for name in _ordered_action_names(profile):
+    for name in _ordered_action_names(profile, state):
         action = action_by_name(name)
         if action is None:
             continue
@@ -194,7 +205,7 @@ async def pick_next_action(
             ) else ""
             return action, f"selected: {name}{hint}"
 
-    allowed = set(_ordered_action_names(profile))
+    allowed = set(_ordered_action_names(profile, state))
     for action in all_actions():
         if action.name in _ROTATION_EXCLUDE or action.name not in allowed:
             continue

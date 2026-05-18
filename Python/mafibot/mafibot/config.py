@@ -129,6 +129,13 @@ class BotProfile(BaseModel):
         description="Origin city/port → ordered destination harbors",
     )
     ship_rotate_destinations: bool = False
+    # Sykehus — visit when health % is below threshold (action must be in economy_order)
+    hospital_health_threshold: int = Field(
+        default=80,
+        ge=1,
+        le=99,
+        description="Run hospital when Helse is below this percent",
+    )
 
 
 def get_config_dir() -> Path:

@@ -82,11 +82,22 @@ async def test_active_cooldowns_empty_when_all_ready():
 
 
 @pytest.mark.asyncio
-async def test_pick_crime_when_ready():
+async def test_pick_hospital_when_health_below_threshold():
     html = (FIXTURES / "logged_in.html").read_text(encoding="utf-8")
     state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
     profile = load_bot_profile("ranker")
-    action, reason = await pick_next_action(state, profile)
+    action, _reason = await pick_next_action(state, profile)
+    assert action is not None
+    assert action.name == "hospital"
+
+
+@pytest.mark.asyncio
+async def test_pick_crime_when_ready_and_health_ok():
+    html = (FIXTURES / "logged_in.html").read_text(encoding="utf-8")
+    state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
+    profile = load_bot_profile("ranker")
+    profile.hospital_health_threshold = 70
+    action, _reason = await pick_next_action(state, profile)
     assert action is not None
     assert action.name == "crime"
 

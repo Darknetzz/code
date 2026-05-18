@@ -3,6 +3,12 @@ const $ = (id) => document.getElementById(id);
 /** All gameplay actions the brain can schedule (hotel handled separately). */
 const ACTION_CATALOG = [
   {
+    id: "hospital",
+    label: "Hospital (Sykehus)",
+    description:
+      "Opens the Sykehus tab and heals when Helse is below your threshold. Runs before other actions while injured. Can run in the hotel.",
+  },
+  {
     id: "crime",
     label: "Crime (Kriminalitet)",
     description:
@@ -60,6 +66,7 @@ const ACTION_CATALOG = [
 
 /** Actions with extra config panels (shown only when enabled in the list). */
 const ACTION_OPTION_PANELS = {
+  hospital: "action-options-hospital",
   crime: "action-options-crime",
   business: "action-options-business",
   ship: "action-options-ship",
@@ -211,6 +218,7 @@ function loadActionOptionsFromDoc(doc) {
   $("cfg-crime-steal-username").value = doc.crime_steal_username || "";
   $("cfg-crime-buttons").value = (doc.crime_button_labels || []).join(", ");
   updateCrimeOptionsPanels();
+  $("cfg-hospital-threshold").value = doc.hospital_health_threshold ?? 80;
   $("cfg-business-income-only").checked = doc.business_only_when_income_ready !== false;
   $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
   $("cfg-ship-routes").value = formatShipRoutes(doc.ship_routes || {});
@@ -250,6 +258,8 @@ function appendActionOptionsToPayload(payload) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  payload.hospital_health_threshold =
+    parseInt($("cfg-hospital-threshold").value, 10) || 80;
   payload.business_only_when_income_ready = $("cfg-business-income-only").checked;
   payload.ship_only_when_in_port = $("cfg-ship-in-port").checked;
   payload.ship_routes = parseShipRoutes($("cfg-ship-routes").value);
@@ -282,6 +292,7 @@ function appendActionOptionsToPayload(payload) {
 }
 
 const ECONOMY_ACTION_IDS = new Set([
+  "hospital",
   "crime",
   "business",
   "ship",

@@ -18,6 +18,7 @@ ACTIONS_OK_IN_HOTEL: frozenset[str] = frozenset(
     {
         "business",
         "ship",
+        "hospital",
         "messages",
         "family",
     }
