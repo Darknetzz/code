@@ -64,6 +64,21 @@ class BotProfile(BaseModel):
     nothing_todo_wait_max_sec: float = 180.0
     min_seconds_between_clicks: float = 2.8
     min_seconds_after_tab_change: float = 3.5
+    # Bank: keep wallet (Penger) near target via deposit/withdraw
+    bank_auto_balance: bool = False
+    bank_keep_cash_on_hand: int = Field(
+        default=100_000,
+        ge=0,
+        description="Target cash to keep in wallet (Penger)",
+    )
+    bank_balance_tolerance: int = Field(
+        default=25_000,
+        ge=0,
+        description="Only transfer when wallet is farther than this from target",
+    )
+    # Murder: must set at least one username or murder never runs
+    murder_targets: list[str] = Field(default_factory=list)
+    murder_rotate_targets: bool = False
 
 
 def get_config_dir() -> Path:

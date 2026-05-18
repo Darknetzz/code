@@ -34,6 +34,24 @@ class ParseError(Exception):
     """Page layout unexpected or missing required signals."""
 
 
+_BANK_BALANCE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"bank(?:konto)?[:\s]+([\d\s]+)\s*kr", re.I),
+    re.compile(r"på\s+konto[:\s]+([\d\s]+)\s*kr", re.I),
+    re.compile(r"i\s+bank(?:en)?[:\s]+([\d\s]+)\s*kr", re.I),
+    re.compile(r"saldo[:\s]+([\d\s]+)\s*kr", re.I),
+)
+
+
+def parse_bank_balance_from_text(text: str) -> int | None:
+    for pattern in _BANK_BALANCE_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            amount = _parse_int(match.group(1))
+            if amount is not None:
+                return amount
+    return None
+
+
 @dataclass
 class CooldownInfo:
     name: str
@@ -48,6 +66,7 @@ class GameState:
     in_game_shell: bool = False
     player_name: str | None = None
     money: int | None = None
+    bank_balance: int | None = None
     rank_points: int | None = None
     health_percent: int | None = None
     location: str | None = None
@@ -82,6 +101,11 @@ class GameState:
         if self.health_percent is None:
             return False
         return self.health_percent < 35
+
+    def low_health_for_profile(self, min_health_percent: int) -> bool:
+        if self.health_percent is None:
+            return False
+        return self.health_percent < min_health_percent
 
     @property
     def must_leave_hotel(self) -> bool:
@@ -163,6 +187,7 @@ async def parse_game_state(page: Page) -> GameState:
     money_m = MONEY_PATTERN.search(text)
     if money_m:
         state.money = _parse_int(money_m.group(1))
+    state.bank_balance = parse_bank_balance_from_text(text)
     poeng_m = POENG_PATTERN.search(text)
     if poeng_m:
         state.rank_points = int(poeng_m.group(1))
