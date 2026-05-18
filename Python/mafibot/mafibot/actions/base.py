@@ -39,18 +39,28 @@ class Action(Protocol):
 def all_actions() -> list[Action]:
     from mafibot.actions.combat import MurderAction
     from mafibot.actions.crime import CrimeAction
-    from mafibot.actions.economy import BankAction, DrugsAction, HotelAction, ShipAction, WorkAction
+    from mafibot.actions.economy import (
+        BankAction,
+        BusinessAction,
+        DrugsAction,
+        HotelAction,
+        ShipAction,
+        WorkAction,
+    )
+    from mafibot.actions.hotel_leave import LeaveHotelAction
     from mafibot.actions.social import FamilyAction, MessagesAction
     from mafibot.actions.travel import TravelAction
 
     return [
+        LeaveHotelAction(),
         CrimeAction(),
-        TravelAction(),
+        BusinessAction(),
         WorkAction(),
-        HotelAction(),
+        TravelAction(),
         ShipAction(),
         DrugsAction(),
         BankAction(),
+        HotelAction(),
         MessagesAction(),
         FamilyAction(),
         MurderAction(),

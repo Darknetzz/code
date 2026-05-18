@@ -10,7 +10,7 @@ from playwright.async_api import Page
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_side
+from mafibot.navigation import click_button_matching, goto_page
 from mafibot.selectors import MESSAGE_REPLY_LABELS
 from mafibot.state import GameState
 
@@ -63,7 +63,7 @@ class MessagesAction:
         if not _can_send_message():
             return ActionResult(False, "message rate limit (hourly)")
 
-        await goto_side(page, "messages", policy=policy)
+        await goto_page(page, "messages", policy=policy)
         await page_reading_pause(page)
 
         open_msg = page.get_by_role("link", name=re.compile(r"les|åpne|innboks", re.I))
@@ -105,7 +105,7 @@ class FamilyAction:
         if dry_run:
             return ActionResult(True, "dry-run: would check family")
 
-        await goto_side(page, "family", policy=policy)
+        await goto_page(page, "family", policy=policy)
         await page_reading_pause(page)
 
         accept = page.get_by_role("link", name=re.compile(r"godta|aksepter", re.I))

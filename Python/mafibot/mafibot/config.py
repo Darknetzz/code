@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 BASE_URL = "https://mafiaspillet.no/"
+GAME_URL = "https://mafiaspillet.no/ms.php"
 DEFAULT_PROFILE_NAME = "ranker"
 
 BuildStyle = Literal["ranker", "okonom", "angriper"]
@@ -27,7 +28,16 @@ class BotProfile(BaseModel):
     build: BuildStyle = "ranker"
     aggression: float = Field(default=0.3, ge=0.0, le=1.0)
     economy_order: list[str] = Field(
-        default_factory=lambda: ["crime", "work", "ship", "drugs", "bank", "hotel"]
+        default_factory=lambda: [
+            "leave_hotel",
+            "crime",
+            "business",
+            "ship",
+            "travel",
+            "drugs",
+            "bank",
+            "hotel",
+        ]
     )
     social_interval_minutes: int = 45
     social_enabled: bool = True
@@ -35,11 +45,13 @@ class BotProfile(BaseModel):
     min_health_percent: int = 35
     play_window: PlayWindow = Field(default_factory=PlayWindow)
     max_session_minutes: int = 120
-    idle_chance: float = 0.08
+    idle_chance: float = 0.1
     idle_min_minutes: int = 5
     idle_max_minutes: int = 15
-    cooldown_jitter_min_sec: int = 15
-    cooldown_jitter_max_sec: int = 90
+    cooldown_jitter_min_sec: int = 30
+    cooldown_jitter_max_sec: int = 120
+    min_seconds_between_clicks: float = 2.8
+    min_seconds_after_tab_change: float = 3.5
 
 
 def get_config_dir() -> Path:

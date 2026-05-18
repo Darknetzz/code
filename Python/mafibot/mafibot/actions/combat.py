@@ -10,7 +10,7 @@ from playwright.async_api import Page
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_side
+from mafibot.navigation import click_button_matching, goto_page
 from mafibot.selectors import MURDER_ACTION_LABELS
 from mafibot.state import GameState
 
@@ -43,7 +43,7 @@ class MurderAction:
         if dry_run:
             return ActionResult(True, "dry-run: would attempt murder (gated)")
 
-        await goto_side(page, "murder", policy=policy)
+        await goto_page(page, "murder", policy=policy)
         await page_reading_pause(page)
         # Prefer cancel/back if only exploring — do not chain kills
         back = page.get_by_role("link", name=re.compile(r"tilbake|avbryt", re.I))

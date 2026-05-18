@@ -2,9 +2,13 @@
   "name": "angriper",
   "build": "angriper",
   "aggression": 0.75,
-  "economy_order": ["crime", "murder", "travel", "hotel", "work"],
+  "economy_order": ["leave_hotel", "crime", "murder", "travel", "hotel"],
   "social_interval_minutes": 40,
   "combat_enabled": true,
   "min_health_percent": 50,
-  "max_session_minutes": 100
+  "max_session_minutes": 100,
+  "cooldown_jitter_min_sec": 30,
+  "cooldown_jitter_max_sec": 120,
+  "min_seconds_between_clicks": 2.8,
+  "min_seconds_after_tab_change": 3.5
 }

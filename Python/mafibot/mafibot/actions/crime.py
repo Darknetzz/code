@@ -1,4 +1,4 @@
-"""Crime actions."""
+"""Crime tab — Utfør / Stjel (only when not blocked by hotel)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from playwright.async_api import Page
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_side
+from mafibot.navigation import click_button_matching, goto_page
 from mafibot.selectors import CRIME_ACTION_LABELS
 from mafibot.state import GameState
 
@@ -17,6 +17,8 @@ class CrimeAction:
 
     async def can_run(self, state: GameState, profile: BotProfile) -> bool:
         if state.needs_stop or state.in_jail or state.in_hospital:
+            return False
+        if state.must_leave_hotel:
             return False
         if state.low_health and profile.min_health_percent > 0:
             if state.health_percent is not None and state.health_percent < profile.min_health_percent:
@@ -35,21 +37,17 @@ class CrimeAction:
         if dry_run:
             return ActionResult(True, "dry-run: would run crime")
 
-        await goto_side(page, "crime", policy=policy)
+        await goto_page(page, "crime", policy=policy)
         await page_reading_pause(page)
 
+        labels = CRIME_ACTION_LABELS
         if profile.build == "angriper":
-            labels = CRIME_ACTION_LABELS + ("tung", "hard")
+            labels = CRIME_ACTION_LABELS + ("tung",)
         elif profile.build == "okonom":
-            labels = CRIME_ACTION_LABELS + ("tyveri", "lett")
-        else:
-            labels = CRIME_ACTION_LABELS + ("lett", "fly")
+            labels = CRIME_ACTION_LABELS + ("stjel", "tyveri")
 
-        clicked = await click_button_matching(page, labels, policy=policy)
-        if not clicked:
-            clicked = await click_button_matching(page, CRIME_ACTION_LABELS, policy=policy)
-
+        clicked = await click_button_matching(page, labels, policy=policy, dry_run=dry_run)
         await between_actions(page, policy)
         if clicked:
-            return ActionResult(True, "crime action submitted")
-        return ActionResult(False, "no crime button found — run discover to refine selectors")
+            return ActionResult(True, "crime submitted (Utfør/Stjel)")
+        return ActionResult(False, "crime buttons disabled or not found (in hotel?)")

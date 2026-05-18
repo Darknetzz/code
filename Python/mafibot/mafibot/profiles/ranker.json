@@ -2,9 +2,13 @@
   "name": "ranker",
   "build": "ranker",
   "aggression": 0.25,
-  "economy_order": ["crime", "travel", "work", "ship", "drugs", "bank", "hotel"],
+  "economy_order": ["leave_hotel", "crime", "business", "ship", "travel", "drugs", "bank"],
   "social_interval_minutes": 50,
   "combat_enabled": false,
   "min_health_percent": 40,
-  "max_session_minutes": 120
+  "max_session_minutes": 120,
+  "cooldown_jitter_min_sec": 35,
+  "cooldown_jitter_max_sec": 130,
+  "min_seconds_between_clicks": 3.0,
+  "min_seconds_after_tab_change": 4.0
 }

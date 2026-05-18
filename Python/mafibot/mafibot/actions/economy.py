@@ -1,4 +1,4 @@
-"""Economy: work, hotel, ship, drugs, bank."""
+"""Economy: sidebar bedrifter/rederi + legacy pages."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from playwright.async_api import Page
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, between_actions, page_reading_pause
-from mafibot.navigation import click_button_matching, goto_side
+from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
 from mafibot.selectors import (
     DRUGS_ACTION_LABELS,
-    HOTEL_ACTION_LABELS,
+    HOTEL_BOOK_LABELS,
     SHIP_ACTION_LABELS,
     WORK_ACTION_LABELS,
 )
@@ -20,7 +20,7 @@ from mafibot.state import GameState
 class _EconomyPageAction:
     logical: str
     labels: tuple[str, ...]
-    ready_attr: str
+    use_sidebar: bool = False
 
     @property
     def name(self) -> str:
@@ -29,7 +29,15 @@ class _EconomyPageAction:
     async def can_run(self, state: GameState, profile: BotProfile) -> bool:
         if state.needs_stop or state.in_jail:
             return False
-        return bool(getattr(state, self.ready_attr, True))
+        if state.must_leave_hotel and self.logical in ("crime", "drugs", "murder"):
+            return False
+        if self.logical == "business":
+            return state.business_income_ready
+        if self.logical == "ship":
+            return state.ship_in_port or state.ship_ready
+        if self.logical == "work":
+            return state.work_ready
+        return True
 
     async def run(
         self,
@@ -43,43 +51,58 @@ class _EconomyPageAction:
         if dry_run:
             return ActionResult(True, f"dry-run: would run {self.logical}")
 
-        await goto_side(page, self.logical, policy=policy)
+        if self.use_sidebar:
+            ok = await goto_sidebar(page, self.logical, policy=policy, dry_run=dry_run)
+        else:
+            ok = await goto_page(page, self.logical, policy=policy, dry_run=dry_run)
+        if not ok and not dry_run:
+            await goto_page(page, self.logical, policy=policy)
+
         await page_reading_pause(page)
-        clicked = await click_button_matching(page, self.labels, policy=policy)
+        clicked = await click_button_matching(page, self.labels, policy=policy, dry_run=dry_run)
         await between_actions(page, policy)
-        if clicked:
+        if clicked or dry_run:
             return ActionResult(True, f"{self.logical} action submitted")
         return ActionResult(False, f"no button for {self.logical}")
 
 
 class WorkAction(_EconomyPageAction):
     logical = "work"
-    labels = WORK_ACTION_LABELS
-    ready_attr = "work_ready"
+    labels = WORK_ACTION_LABELS + ("hent",)
+    use_sidebar = True
+
+
+class BusinessAction(_EconomyPageAction):
+    logical = "business"
+    labels = WORK_ACTION_LABELS + ("hent", "inntekt")
+    use_sidebar = True
 
 
 class HotelAction(_EconomyPageAction):
     logical = "hotel"
-    labels = HOTEL_ACTION_LABELS
-    ready_attr = "hotel_ready"
+    labels = HOTEL_BOOK_LABELS
+
+    async def can_run(self, state: GameState, profile: BotProfile) -> bool:
+        if state.needs_stop or state.in_jail:
+            return False
+        return state.low_health or state.in_hospital
 
 
 class ShipAction(_EconomyPageAction):
     logical = "ship"
     labels = SHIP_ACTION_LABELS
-    ready_attr = "ship_ready"
+    use_sidebar = True
 
 
 class DrugsAction(_EconomyPageAction):
     logical = "drugs"
     labels = DRUGS_ACTION_LABELS
-    ready_attr = "drugs_ready"
+    use_sidebar = True
 
 
 class BankAction(_EconomyPageAction):
     logical = "bank"
     labels = ("innskudd", "uttak", "overfør", "bank")
-    ready_attr = "work_ready"  # bank has no dedicated timer in parser; piggyback
 
     async def can_run(self, state: GameState, profile: BotProfile) -> bool:
         if state.needs_stop or state.in_jail:

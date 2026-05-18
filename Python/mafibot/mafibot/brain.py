@@ -1,4 +1,4 @@
-"""Autopilot decision loop."""
+"""Autopilot decision loop — slow, human-paced."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from playwright.async_api import Page
 from mafibot.actions.base import Action, ActionResult, action_by_name, all_actions
 from mafibot.config import BotProfile, in_play_window
 from mafibot.human_policy import HumanPolicy, between_actions, cooldown_jitter, page_reading_pause
+from mafibot.navigation import ensure_game_shell
 from mafibot.session import capture_failure
 from mafibot.state import GameState, ParseError, parse_game_state
 
@@ -36,23 +37,32 @@ def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
     return HumanPolicy(
         jitter_min_sec=profile.cooldown_jitter_min_sec,
         jitter_max_sec=profile.cooldown_jitter_max_sec,
+        min_seconds_between_clicks=profile.min_seconds_between_clicks,
+        min_seconds_after_tab_change=profile.min_seconds_after_tab_change,
     )
 
 
 def _ordered_action_names(profile: BotProfile) -> list[str]:
     order: list[str] = []
+    if "leave_hotel" not in profile.economy_order:
+        order.append("leave_hotel")
     for name in profile.economy_order:
         if name not in order:
             order.append(name)
     if profile.social_enabled:
-        order.extend(["messages", "family"])
-    if profile.combat_enabled:
+        for s in ("messages", "family"):
+            if s not in order:
+                order.append(s)
+    if profile.combat_enabled and "murder" not in order:
         order.append("murder")
-    if "crime" not in order:
-        order.insert(0, "crime")
-    if "travel" not in order:
-        order.append("travel")
-    return order
+    # Map legacy "work" to business on ms.php
+    normalized = []
+    for n in order:
+        if n == "work":
+            normalized.append("business")
+        elif n not in normalized:
+            normalized.append(n)
+    return normalized
 
 
 async def pick_next_action(
@@ -67,13 +77,14 @@ async def pick_next_action(
     if state.in_jail:
         return None, "idle: in jail"
 
+    leave = action_by_name("leave_hotel")
+    if leave and await leave.can_run(state, profile):
+        return leave, "priority: leave hotel before other actions"
+
     if state.in_hospital or (state.low_health and profile.min_health_percent):
         hotel = action_by_name("hotel")
         if hotel and await hotel.can_run(state, profile):
-            return hotel, "safety: hospital/low health -> hotel"
-
-    if not state.crime_ready and not state.travel_ready:
-        return None, "wait: crime and travel on cooldown"
+            return hotel, "safety: low health -> hotel"
 
     for name in _ordered_action_names(profile):
         action = action_by_name(name)
@@ -97,6 +108,7 @@ async def run_once(
 ) -> ActionResult | None:
     policy = _policy_from_profile(profile)
     try:
+        await ensure_game_shell(page, policy)
         state = await parse_game_state(page)
     except ParseError as exc:
         log.error("parse failed: %s", exc)
@@ -144,7 +156,7 @@ async def run_session(
 
         if random.random() < profile.idle_chance:
             idle_min = random.randint(profile.idle_min_minutes, profile.idle_max_minutes)
-            log.info("idle break %s min", idle_min)
+            log.info("idle break %s min (human AFK)", idle_min)
             await asyncio.sleep(idle_min * 60)
             continue
 
@@ -153,11 +165,11 @@ async def run_session(
         except Exception:
             log.exception("run_once failed")
             await capture_failure(page, "run_once")
-            await asyncio.sleep(30)
+            await asyncio.sleep(random.uniform(25, 45))
             continue
 
         if result is None:
-            wait = cooldown_jitter(policy) + random.uniform(30, 120)
+            wait = cooldown_jitter(policy) + random.uniform(45, 180)
             log.info("waiting %.0fs (cooldown / nothing to do)", wait)
             try:
                 await asyncio.wait_for(_cancel.wait(), timeout=wait)
@@ -166,7 +178,7 @@ async def run_session(
                 pass
             continue
 
-        wait = cooldown_jitter(policy)
+        wait = cooldown_jitter(policy) + random.uniform(8, 25)
         try:
             await asyncio.wait_for(_cancel.wait(), timeout=wait)
             break
@@ -184,4 +196,4 @@ async def run_forever(page: Page, profile: BotProfile | None = None, **kwargs) -
         await run_session(page, prof, **kwargs)
         if is_stop_requested():
             break
-        await asyncio.sleep(random.uniform(300, 900))
+        await asyncio.sleep(random.uniform(400, 1200))

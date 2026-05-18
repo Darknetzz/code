@@ -4,6 +4,8 @@ Human-like browser autopilot for [Mafiaspillet.no](https://mafiaspillet.no/), bu
 
 The bot reads game state from the page DOM, chooses the next action (crime, travel, economy, messages, combat), and executes it through the same human-like input layer as webbot—not via the game API.
 
+The live game runs at **`https://mafiaspillet.no/ms.php`** with Norwegian **tabs** (Kriminalitet, Flyplass, …) and a sidebar (Mine bedrifter, Mitt rederi). Navigation uses slow, human-paced clicks—typically **3+ seconds between clicks**, longer pauses after tab changes, and **30–130 s** jitter between action cycles.
+
 ## Terms of service
 
 [Mafiaspillet section 7](https://mafiaspillet.no/?side=betingelser) forbids scripts, browser add-ons, and automation that performs or speeds up in-game actions (including automatic mouse movement). Using this tool can lead to **account bans**, loss of progress, or IP blocks.
@@ -93,7 +95,9 @@ Each profile sets economy action order, social check interval, health thresholds
 Session check → parse DOM (GameState) → brain picks action → human-like click/navigate → wait (jitter / cooldown)
 ```
 
-- **Navigation** — Prefer sidebar links; fall back to `?side=` URLs from `pages.json`.
+- **Navigation** — `ms.php` tabs first (e.g. Kriminalitet, Flyplass); sidebar for bedrifter/rederi; legacy `?side=` as fallback.
+- **Hotel** — If the page shows *Forlat hotell for å utføre*, the bot runs **leave_hotel** before crime or travel.
+- **Human pacing** — `human_click_paced()` enforces minimum gaps between clicks, reading pauses before each click, optional “thinking” delays, and disabled buttons are skipped.
 - **Safety** — Stops on captcha, ban text, or logout; low health can trigger hotel; jail pauses the loop.
 - **Social** — Messages and family are rate-limited to reduce spam-rule risk.
 - **Combat** — Murder only when enabled in profile and aggression gates pass.

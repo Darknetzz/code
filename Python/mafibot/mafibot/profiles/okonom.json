@@ -2,9 +2,13 @@
   "name": "okonom",
   "build": "okonom",
   "aggression": 0.2,
-  "economy_order": ["work", "bank", "crime", "ship", "drugs", "hotel"],
+  "economy_order": ["leave_hotel", "business", "ship", "bank", "crime", "drugs"],
   "social_interval_minutes": 60,
   "combat_enabled": false,
   "min_health_percent": 35,
-  "max_session_minutes": 90
+  "max_session_minutes": 90,
+  "cooldown_jitter_min_sec": 40,
+  "cooldown_jitter_max_sec": 150,
+  "min_seconds_between_clicks": 3.2,
+  "min_seconds_after_tab_change": 4.5
 }
