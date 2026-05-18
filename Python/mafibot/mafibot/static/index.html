@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mafibot</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Mafibot</h1>
+    <p>Local dashboard — <span id="health-version">…</span> · <span id="health-paths" class="health-meta"></span></p>
+  </header>
+
+  <main>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="run">Run</button>
+      <button type="button" class="tab-btn" data-tab="config">Config</button>
+      <button type="button" class="tab-btn" data-tab="login">Login</button>
+    </nav>
+
+    <section id="panel-run" class="tab-panel active" role="tabpanel">
+      <div class="card">
+        <h2>Autopilot</h2>
+        <div class="grid-2">
+          <div>
+            <label for="run-profile">Profile</label>
+            <select id="run-profile"></select>
+          </div>
+          <div>
+            <label for="run-max-minutes">Max session (minutes)</label>
+            <input type="number" id="run-max-minutes" min="1" value="120" />
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="run-dry-run" />
+          <label for="run-dry-run">Dry run (no clicks)</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="run-headless" />
+          <label for="run-headless">Headless browser</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="run-accept-tos" />
+          <label for="run-accept-tos">I accept ToS risk (section 7 — automation may ban account)</label>
+        </div>
+        <p class="tos-note">Bind localhost only. Do not expose this port without authentication.</p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btn-start-run">Start</button>
+          <button type="button" class="danger" id="btn-stop">Stop</button>
+          <button type="button" id="btn-discover">Discover pages</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Live status</h2>
+        <p>State: <span id="status-badge" class="badge idle">idle</span></p>
+        <dl class="status-grid" id="status-fields">
+          <div><dt>Profile</dt><dd id="st-profile">—</dd></div>
+          <div><dt>Elapsed</dt><dd id="st-elapsed">—</dd></div>
+          <div><dt>In hotel</dt><dd id="st-hotel">—</dd></div>
+          <div><dt>Money</dt><dd id="st-money">—</dd></div>
+          <div><dt>Health</dt><dd id="st-health">—</dd></div>
+          <div><dt>Location</dt><dd id="st-location">—</dd></div>
+          <div><dt>Crime ready</dt><dd id="st-crime">—</dd></div>
+          <div><dt>Last action</dt><dd id="st-action">—</dd></div>
+          <div><dt>Message</dt><dd id="st-message">—</dd></div>
+        </dl>
+        <p id="st-error" class="hidden" style="color: var(--danger);"></p>
+      </div>
+
+      <div class="card">
+        <h2>Log</h2>
+        <div id="log-output"></div>
+      </div>
+    </section>
+
+    <section id="panel-config" class="tab-panel" role="tabpanel">
+      <div class="card">
+        <h2>Bot profile</h2>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-profile-select">Profile name</label>
+            <select id="cfg-profile-select"></select>
+          </div>
+          <div>
+            <label for="cfg-build">Build</label>
+            <select id="cfg-build">
+              <option value="ranker">ranker</option>
+              <option value="okonom">okonom</option>
+              <option value="angriper">angriper</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-stay-in-hotel" checked />
+          <label for="cfg-stay-in-hotel">Stay in hotel</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-before" checked />
+          <label for="cfg-book-before">Book hotel before action</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-after" checked />
+          <label for="cfg-book-after">Book hotel after every action</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-idle" checked />
+          <label for="cfg-book-idle">Book hotel when idle</label>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-max-book-sec">Max seconds before book hotel</label>
+            <input type="number" id="cfg-max-book-sec" step="0.1" min="0" max="10" value="2" />
+          </div>
+          <div>
+            <label for="cfg-min-health">Min health %</label>
+            <input type="number" id="cfg-min-health" min="1" max="100" value="35" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-jitter-min">Cooldown jitter min (sec)</label>
+            <input type="number" id="cfg-jitter-min" step="0.1" value="30" />
+          </div>
+          <div>
+            <label for="cfg-jitter-max">Cooldown jitter max (sec)</label>
+            <input type="number" id="cfg-jitter-max" step="0.1" value="120" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-click-min">Min seconds between clicks</label>
+            <input type="number" id="cfg-click-min" step="0.1" value="2.8" />
+          </div>
+          <div>
+            <label for="cfg-tab-wait">Min seconds after tab change</label>
+            <input type="number" id="cfg-tab-wait" step="0.1" value="3.5" />
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-social" checked />
+          <label for="cfg-social">Social enabled</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-combat" />
+          <label for="cfg-combat">Combat enabled</label>
+        </div>
+        <div>
+          <label for="cfg-economy-order">Economy order (one per line)</label>
+          <textarea id="cfg-economy-order" rows="6"></textarea>
+        </div>
+        <p class="health-meta" id="cfg-dir-hint"></p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btn-save-profile">Save profile</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-login" class="tab-panel" role="tabpanel">
+      <div class="card">
+        <h2>Credentials (.env)</h2>
+        <p class="tos-note">Optional if you log in manually in the persistent browser profile.</p>
+        <div class="grid-2">
+          <div>
+            <label for="cred-user">Username</label>
+            <input type="text" id="cred-user" autocomplete="username" />
+          </div>
+          <div>
+            <label for="cred-pass">Password</label>
+            <input type="password" id="cred-pass" autocomplete="current-password" />
+          </div>
+        </div>
+        <p id="cred-status" class="health-meta"></p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btn-save-creds">Save credentials</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Browser session</h2>
+        <p>Logged in: <strong id="session-logged-in">unknown</strong></p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btn-open-login">Open login browser</button>
+          <button type="button" id="btn-login-done">Done (close browser)</button>
+          <button type="button" id="btn-refresh-session">Refresh session</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

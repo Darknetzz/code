@@ -149,6 +149,22 @@ def codegen() -> None:
     raise typer.Exit(subprocess.call(cmd))
 
 
+@app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8766, "--port"),
+) -> None:
+    """Start local web dashboard (Run / Config / Login)."""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[red]Install UI deps: pip install fastapi uvicorn[standard][/red]")
+        raise typer.Exit(1) from None
+    console.print(f"Mafibot UI: http://{host}:{port}/")
+    console.print("[dim]Localhost only — do not expose without auth.[/dim]")
+    uvicorn.run("mafibot.server:app", host=host, port=port, reload=False)
+
+
 @app.command("install-webbot-scenario")
 def install_webbot_scenario() -> None:
     """Copy webbot Python scenario into %APPDATA%/webbot/scenarios/."""

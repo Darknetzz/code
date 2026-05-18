@@ -42,9 +42,28 @@ python mafibot.py run --accept-tos --profile ranker --max-minutes 120
 
 # Dry-run: log decisions only, no clicks
 python mafibot.py run --accept-tos --dry-run -v
+
+# Web dashboard (localhost only)
+python mafibot.py ui
+# → http://127.0.0.1:8766/  (use --port to change)
 ```
 
 After the first `discover`, page slugs are written to your config dir as `pages.json`. Refine button labels in `mafibot/selectors.py` if discovery misses controls.
+
+## Web UI
+
+```bash
+python mafibot.py ui              # http://127.0.0.1:8766
+python mafibot.py ui --port 8767
+```
+
+The dashboard has three tabs:
+
+- **Run** — pick profile, start/stop autopilot, live status and log (WebSocket)
+- **Config** — edit and save bot profile JSON under your config `profiles/` dir
+- **Login** — store `.env` credentials, open a headed login browser, run discover
+
+**Security:** the server binds to `127.0.0.1` by default. Do not expose port 8766 on your LAN or the public internet without authentication; anyone who can reach it can start the bot and read/write credentials on disk.
 
 ## CLI commands
 
@@ -55,6 +74,7 @@ After the first `discover`, page slugs are written to your config dir as `pages.
 | `run --accept-tos` | Autopilot loop for one session (`Ctrl+C` to stop) |
 | `codegen` | Launch Playwright codegen on mafiaspillet.no |
 | `install-webbot-scenario` | Copy `mafia_autopilot.py` into webbot’s scenarios folder |
+| `ui` | Local web dashboard on `127.0.0.1:8766` (`--host`, `--port`) |
 | `version` | Print version and config directory |
 
 Common `run` options:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import Callable
 from datetime import datetime, timedelta
-
 from playwright.async_api import Page
 
 from mafibot.actions.base import Action, ActionResult, action_by_name, all_actions
@@ -33,6 +33,31 @@ log = logging.getLogger("mafibot")
 
 _cancel = asyncio.Event()
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
+
+StatusCallback = Callable[["GameState", str | None, str, str | None], None]
+_status_callbacks: list[StatusCallback] = []
+
+
+def add_status_callback(handler: StatusCallback) -> None:
+    _status_callbacks.append(handler)
+
+
+def remove_status_callback(handler: StatusCallback) -> None:
+    if handler in _status_callbacks:
+        _status_callbacks.remove(handler)
+
+
+def _notify_status(
+    state: GameState,
+    action_name: str | None,
+    message: str,
+    reason: str | None = None,
+) -> None:
+    for handler in list(_status_callbacks):
+        try:
+            handler(state, action_name, message, reason)
+        except Exception:
+            pass
 
 
 def request_stop() -> None:
@@ -204,6 +229,12 @@ async def run_once(
 
     action, reason = await pick_next_action(state, profile, dry_run=dry_run)
     log.info("decision: %s", reason)
+    _notify_status(
+        state,
+        action.name if action else None,
+        reason,
+        reason,
+    )
     if action is None:
         if profile.stay_in_hotel and profile.book_hotel_when_idle and not dry_run:
             await _book_hotel(page, profile, policy)
@@ -215,6 +246,16 @@ async def run_once(
 
     result = await execute_with_hotel_stay(page, action, profile, policy, dry_run=False)
     log.info("action %s: success=%s msg=%s", action.name, result.success, result.message)
+    try:
+        after_state = await parse_game_state(page)
+    except ParseError:
+        after_state = state
+    _notify_status(
+        after_state,
+        action.name,
+        result.message,
+        f"done: {action.name}",
+    )
     await page_reading_pause(page)
     await between_actions(page, policy)
     return result
