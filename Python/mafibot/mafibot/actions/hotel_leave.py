@@ -32,14 +32,16 @@ class LeaveHotelAction:
         if dry_run:
             return ActionResult(True, "dry-run: would leave hotel")
 
-        await goto_page(page, "crime", policy=policy)
+        await goto_page(page, "hotel", policy=policy)
         await page_reading_pause(page)
 
         clicked = await click_button_matching(page, HOTEL_LEAVE_LABELS, policy=policy)
         if not clicked:
+            await goto_page(page, "crime", policy=policy)
+            await page_reading_pause(page)
             clicked = await click_button_matching(
                 page,
-                ("forlat hotell", "forlat"),
+                ("forlat hotell", "forlat", "sjekk ut"),
                 policy=policy,
             )
 

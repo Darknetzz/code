@@ -151,6 +151,7 @@ def save_pages_map(
     *,
     discovered_links: list[dict] | None = None,
     discovered_tabs: list[dict] | None = None,
+    tab_labels: dict[str, str] | None = None,
 ) -> Path:
     path = get_pages_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -159,5 +160,7 @@ def save_pages_map(
         payload["discovered_links"] = discovered_links
     if discovered_tabs is not None:
         payload["discovered_tabs"] = discovered_tabs
+    if tab_labels is not None:
+        payload["tab_labels"] = tab_labels
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return path

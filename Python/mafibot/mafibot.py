@@ -23,6 +23,7 @@ from mafibot.auth import ensure_session, is_logged_in
 from mafibot.brain import clear_stop, request_stop, run_session
 from mafibot.config import BASE_URL, get_config_dir, load_bot_profile
 from mafibot.discover import run_discovery
+from mafibot.verify_pages import run_verification, verification_exit_code
 from mafibot.session import SessionConfig, mafia_session
 
 console = Console()
@@ -97,10 +98,37 @@ def discover(
 
     async def _main() -> None:
         async with mafia_session(SessionConfig(headless=headless)) as (_ctx, page):
-            path = await run_discovery(page, manual_login=True, compare_last=compare_last)
+            path = await run_discovery(
+                page,
+                manual_login=not headless,
+                compare_last=compare_last,
+            )
             console.print(f"Done: {path}")
 
     asyncio.run(_main())
+
+
+@app.command("verify-pages")
+def verify_pages(
+    discovery_dir: Path | None = typer.Option(
+        None,
+        "--discovery-dir",
+        help="Path to a discovery run folder (default: latest)",
+    ),
+) -> None:
+    """Audit discovery HTML against selectors and crime_catalog labels."""
+    _setup_logging(False)
+    try:
+        report_path, audits = run_verification(discovery_dir)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    fail_count = sum(len(a.failed) for a in audits)
+    missing = sum(1 for a in audits if a.html_path is None)
+    console.print(f"Report: {report_path}")
+    console.print(f"Pages: {len(audits)}, missing HTML: {missing}, failed checks: {fail_count}")
+    if verification_exit_code(audits) != 0:
+        raise typer.Exit(1)
 
 
 @app.command()

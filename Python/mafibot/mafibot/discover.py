@@ -12,7 +12,13 @@ from rich.console import Console
 from mafibot.auth import ensure_session
 from mafibot.config import get_discovery_dir
 from mafibot.selectors import GAME_TABS
-from mafibot.navigation import collect_side_links, collect_tab_labels, ensure_game_shell, goto_page
+from mafibot.navigation import (
+    collect_side_links,
+    collect_tab_labels,
+    ensure_game_shell,
+    goto_page,
+    goto_sidebar,
+)
 from mafibot.selectors import DEFAULT_SIDES, save_pages_map
 from mafibot.discover_diff import find_previous_discovery_run, write_discovery_report
 from mafibot.state import parse_game_state
@@ -20,6 +26,25 @@ from mafibot.state import parse_game_state
 console = Console()
 
 DISCOVERY_LOGICAL_PAGES = tuple(GAME_TABS.keys())
+
+# Bot action pages: tabs plus sidebar-only views (ship, drugs, murder).
+ACTION_SNAPSHOT_PAGES: tuple[str, ...] = (
+    "crime",
+    "travel",
+    "hotel",
+    "business",
+    "ship",
+    "drugs",
+    "bank",
+    "hospital",
+    "messages",
+    "family",
+    "murder",
+)
+
+SIDEBAR_SNAPSHOT_PAGES: frozenset[str] = frozenset(
+    {"business", "ship", "drugs", "murder"}
+)
 
 
 async def run_discovery(
@@ -50,14 +75,20 @@ async def run_discovery(
     )
     console.print(f"[green]{len(links)}[/green] ?side= links, [green]{len(tabs)}[/green] tab labels")
 
-    inferred = dict(DEFAULT_SIDES)
+    # Keep legacy ?side= slugs; store matched tab labels separately.
+    tab_labels_by_logical: dict[str, str] = {}
     for logical, label in GAME_TABS.items():
         for t in tabs:
             if label.lower() in (t.get("label") or "").lower():
-                inferred[logical] = t.get("label", label)
+                tab_labels_by_logical[logical] = t.get("label", label)
                 break
 
-    save_pages_map(inferred, discovered_links=links, discovered_tabs=tabs)
+    save_pages_map(
+        dict(DEFAULT_SIDES),
+        discovered_links=links,
+        discovered_tabs=tabs,
+        tab_labels=tab_labels_by_logical or None,
+    )
 
     manifest: list[dict] = []
     for logical in DISCOVERY_LOGICAL_PAGES:
@@ -85,10 +116,6 @@ async def run_discovery(
             manifest.append({"logical": logical, "error": str(exc)})
             console.print(f"  [yellow]skip[/yellow] {logical}: {exc}")
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
     report_path = write_discovery_report(run_dir, tabs)
     console.print(f"[green]Report:[/green] {report_path}")
     if compare_last:
@@ -106,5 +133,50 @@ async def run_discovery(
                 console.print(f"[dim]No HTML changes vs {prev.name}[/dim]")
         else:
             console.print("[dim]No previous discovery run to compare[/dim]")
+    console.print("[bold]Action page snapshots…[/bold]")
+    for logical in ACTION_SNAPSHOT_PAGES:
+        try:
+            if logical in SIDEBAR_SNAPSHOT_PAGES:
+                ok = await goto_sidebar(page, logical)
+                if not ok:
+                    await goto_page(page, logical, prefer_tab=True)
+            else:
+                await goto_page(page, logical, prefer_tab=True)
+            state = await parse_game_state(page)
+            safe = logical.replace("/", "_")
+            html_path = run_dir / f"{safe}.html"
+            html_path.write_text(await page.content(), encoding="utf-8")
+            await page.screenshot(path=str(run_dir / f"{safe}.png"), full_page=True)
+            manifest.append(
+                {
+                    "logical": logical,
+                    "kind": "action",
+                    "url": page.url,
+                    "in_hotel": state.in_hotel,
+                    "html": html_path.name,
+                }
+            )
+            console.print(f"  [dim]action[/dim] {logical}")
+        except Exception as exc:
+            manifest.append({"logical": logical, "kind": "action", "error": str(exc)})
+            console.print(f"  [yellow]action skip[/yellow] {logical}: {exc}")
+
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    from mafibot.verify_pages import run_verification
+
+    try:
+        report_path, audits = run_verification(run_dir)
+        fail_count = sum(len(a.failed) for a in audits)
+        console.print(
+            f"[green]Verification:[/green] {report_path} "
+            f"({fail_count} failed checks)"
+        )
+    except Exception as exc:
+        console.print(f"[yellow]Verification skipped:[/yellow] {exc}")
+
     console.print(f"[green]Discovery output:[/green] {run_dir}")
     return run_dir
