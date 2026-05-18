@@ -260,3 +260,67 @@ button:disabled {
 .hidden {
   display: none !important;
 }
+
+.action-list-section {
+  margin-top: 0.75rem;
+}
+
+.action-list-heading {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.action-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.action-list-item:last-child {
+  border-bottom: none;
+}
+
+.action-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.action-check input {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.action-reorder {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.action-reorder button {
+  padding: 0.2rem 0.45rem;
+  min-width: 2rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}

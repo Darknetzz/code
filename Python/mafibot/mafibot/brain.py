@@ -86,6 +86,7 @@ def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
 
 
 def _ordered_action_names(profile: BotProfile) -> list[str]:
+    """Priority list from profile.economy_order plus legacy social/combat flags."""
     order: list[str] = []
     for name in profile.economy_order:
         if name in _ROTATION_EXCLUDE:
@@ -104,8 +105,6 @@ def _ordered_action_names(profile: BotProfile) -> list[str]:
             n = "business"
         if n not in normalized:
             normalized.append(n)
-    if "crime" not in normalized:
-        normalized.insert(0, "crime")
     return normalized
 
 
@@ -194,8 +193,9 @@ async def pick_next_action(
             ) else ""
             return action, f"selected: {name}{hint}"
 
+    allowed = set(_ordered_action_names(profile))
     for action in all_actions():
-        if action.name in _ROTATION_EXCLUDE:
+        if action.name in _ROTATION_EXCLUDE or action.name not in allowed:
             continue
         if await action.can_run(state, profile):
             return action, f"fallback: {action.name}"

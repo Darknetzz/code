@@ -1,5 +1,29 @@
 const $ = (id) => document.getElementById(id);
 
+/** All gameplay actions the brain can schedule (hotel handled separately). */
+const ACTION_CATALOG = [
+  { id: "crime", label: "Crime (Kriminalitet)" },
+  { id: "business", label: "Business (Mine bedrifter)" },
+  { id: "work", label: "Work" },
+  { id: "ship", label: "Ship (Mitt rederi)" },
+  { id: "travel", label: "Travel (Flyplass)" },
+  { id: "drugs", label: "Drugs" },
+  { id: "bank", label: "Bank" },
+  { id: "messages", label: "Messages" },
+  { id: "family", label: "Family" },
+  { id: "murder", label: "Murder (combat)" },
+];
+
+const ECONOMY_ACTION_IDS = new Set([
+  "crime",
+  "business",
+  "work",
+  "ship",
+  "travel",
+  "drugs",
+  "bank",
+]);
+
 let ws = null;
 let elapsedTimer = null;
 let lastStatus = null;
@@ -110,6 +134,96 @@ async function loadProfiles() {
   }
 }
 
+function profileToEnabledActionOrder(doc) {
+  const order = [...(doc.economy_order || [])];
+  const seen = new Set(order);
+  const add = (id) => {
+    if (!seen.has(id)) {
+      order.push(id);
+      seen.add(id);
+    }
+  };
+  if (doc.social_enabled) {
+    add("messages");
+    add("family");
+  }
+  if (doc.combat_enabled) {
+    add("murder");
+  }
+  return order;
+}
+
+function renderActionList(enabledOrder) {
+  const list = $("cfg-action-list");
+  list.innerHTML = "";
+  const enabledSet = new Set(enabledOrder);
+  const displayOrder = [];
+  const seen = new Set();
+  for (const id of enabledOrder) {
+    if (ACTION_CATALOG.some((a) => a.id === id) && !seen.has(id)) {
+      displayOrder.push(id);
+      seen.add(id);
+    }
+  }
+  for (const { id } of ACTION_CATALOG) {
+    if (!seen.has(id)) {
+      displayOrder.push(id);
+    }
+  }
+
+  for (const id of displayOrder) {
+    const meta = ACTION_CATALOG.find((a) => a.id === id);
+    if (!meta) continue;
+    const li = document.createElement("li");
+    li.className = "action-list-item";
+    li.dataset.action = id;
+    li.innerHTML = `
+      <label class="action-check">
+        <input type="checkbox" data-action-check ${enabledSet.has(id) ? "checked" : ""} />
+        <span>${meta.label}</span>
+      </label>
+      <div class="action-reorder">
+        <button type="button" data-dir="up" title="Move up">↑</button>
+        <button type="button" data-dir="down" title="Move down">↓</button>
+      </div>
+    `;
+    list.appendChild(li);
+  }
+}
+
+function getEnabledActionOrderFromUI() {
+  return [...$("cfg-action-list").querySelectorAll(".action-list-item")]
+    .filter((li) => li.querySelector("[data-action-check]").checked)
+    .map((li) => li.dataset.action);
+}
+
+function moveActionItem(li, direction) {
+  const list = $("cfg-action-list");
+  if (direction === "up" && li.previousElementSibling) {
+    list.insertBefore(li, li.previousElementSibling);
+  } else if (direction === "down" && li.nextElementSibling) {
+    list.insertBefore(li.nextElementSibling, li);
+  }
+}
+
+function setupActionListHandlers() {
+  $("cfg-action-list").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-dir]");
+    if (!btn) return;
+    const li = btn.closest(".action-list-item");
+    if (li) moveActionItem(li, btn.dataset.dir);
+  });
+}
+
+function actionFlagsFromOrder(order) {
+  const enabled = new Set(order);
+  return {
+    economy_order: order.filter((id) => ECONOMY_ACTION_IDS.has(id)),
+    social_enabled: enabled.has("messages") || enabled.has("family"),
+    combat_enabled: enabled.has("murder"),
+  };
+}
+
 async function loadProfileForm(name) {
   const doc = await api(`/api/profiles/${encodeURIComponent(name)}`);
   $("cfg-build").value = doc.build || "ranker";
@@ -123,13 +237,13 @@ async function loadProfileForm(name) {
   $("cfg-jitter-max").value = doc.cooldown_jitter_max_sec ?? 120;
   $("cfg-click-min").value = doc.min_seconds_between_clicks ?? 2.8;
   $("cfg-tab-wait").value = doc.min_seconds_after_tab_change ?? 3.5;
-  $("cfg-social").checked = !!doc.social_enabled;
-  $("cfg-combat").checked = !!doc.combat_enabled;
-  $("cfg-economy-order").value = (doc.economy_order || []).join("\n");
+  renderActionList(profileToEnabledActionOrder(doc));
 }
 
 function profilePayload() {
   const name = $("cfg-profile-select").value;
+  const actionOrder = getEnabledActionOrderFromUI();
+  const flags = actionFlagsFromOrder(actionOrder);
   return {
     name,
     build: $("cfg-build").value,
@@ -143,12 +257,9 @@ function profilePayload() {
     cooldown_jitter_max_sec: parseFloat($("cfg-jitter-max").value),
     min_seconds_between_clicks: parseFloat($("cfg-click-min").value),
     min_seconds_after_tab_change: parseFloat($("cfg-tab-wait").value),
-    social_enabled: $("cfg-social").checked,
-    combat_enabled: $("cfg-combat").checked,
-    economy_order: $("cfg-economy-order").value
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    economy_order: flags.economy_order,
+    social_enabled: flags.social_enabled,
+    combat_enabled: flags.combat_enabled,
   };
 }
 
@@ -287,6 +398,7 @@ function setupActions() {
 
 async function init() {
   setupTabs();
+  setupActionListHandlers();
   setupActions();
   connectWs();
   await loadHealth();

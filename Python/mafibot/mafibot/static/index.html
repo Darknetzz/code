@@ -138,17 +138,10 @@
             <input type="number" id="cfg-tab-wait" step="0.1" value="3.5" />
           </div>
         </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-social" checked />
-          <label for="cfg-social">Social enabled</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-combat" />
-          <label for="cfg-combat">Combat enabled</label>
-        </div>
-        <div>
-          <label for="cfg-economy-order">Economy order (one per line)</label>
-          <textarea id="cfg-economy-order" rows="6"></textarea>
+        <div class="action-list-section">
+          <label class="action-list-heading">Actions (priority top → bottom)</label>
+          <p class="tos-note">Checked actions run in list order. Unchecked actions are skipped.</p>
+          <ul id="cfg-action-list" class="action-list"></ul>
         </div>
         <p class="health-meta" id="cfg-dir-hint"></p>
         <div class="btn-row">
