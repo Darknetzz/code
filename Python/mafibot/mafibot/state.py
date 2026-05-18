@@ -57,7 +57,7 @@ class ParseError(Exception):
 
 
 _HOTEL_FULL_PATTERN = re.compile(
-    r"fullt\s+hotell|ingen\s+ledige\s+rom|ikke\s+plass",
+    r"fullt\s+hotell|hotell\s+er\s+fullt|ingen\s+ledige\s+rom|ikke\s+plass",
     re.I,
 )
 _HOTEL_FUNDS_PATTERN = re.compile(

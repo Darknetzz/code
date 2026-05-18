@@ -36,7 +36,7 @@ class Action(Protocol):
     ) -> ActionResult: ...
 
 
-def all_actions() -> list[Action]:
+def _action_classes() -> tuple[type, ...]:
     from mafibot.actions.combat import MurderAction
     from mafibot.actions.crime import CrimeAction
     from mafibot.actions.economy import BankAction, BusinessAction, DrugsAction, ShipAction
@@ -44,18 +44,22 @@ def all_actions() -> list[Action]:
     from mafibot.actions.social import FamilyAction, MessagesAction
     from mafibot.actions.travel import TravelAction
 
-    return [
-        CrimeAction(),
-        HospitalAction(),
-        BusinessAction(),
-        TravelAction(),
-        ShipAction(),
-        DrugsAction(),
-        BankAction(),
-        MessagesAction(),
-        FamilyAction(),
-        MurderAction(),
-    ]
+    return (
+        CrimeAction,
+        HospitalAction,
+        BusinessAction,
+        TravelAction,
+        ShipAction,
+        DrugsAction,
+        BankAction,
+        MessagesAction,
+        FamilyAction,
+        MurderAction,
+    )
+
+
+def all_actions() -> list[Action]:
+    return [cls() for cls in _action_classes()]
 
 
 def action_by_name(name: str) -> Action | None:

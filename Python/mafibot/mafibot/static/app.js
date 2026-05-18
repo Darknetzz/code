@@ -342,6 +342,16 @@ function appendCrimeToPayload(payload) {
   payload.crime_rotate_actions = $("cfg-crime-rotate")?.checked !== false;
   payload.crime_steal_target_mode = $("cfg-crime-steal-target").value || "random";
   payload.crime_steal_username = $("cfg-crime-steal-username").value.trim();
+  delete payload.crime_kind;
+  delete payload.crime_perform_type;
+  delete payload.crime_steal_what;
+}
+
+function uiAuthHeaders() {
+  const token = sessionStorage.getItem("mafibot_ui_token") || "";
+  const h = { "Content-Type": "application/json" };
+  if (token) h["X-Mafibot-Token"] = token;
+  return h;
 }
 
 function loadActionOptionsFromDoc(doc) {
@@ -438,7 +448,7 @@ let profileCatalog = [];
 
 function api(path, options = {}) {
   return fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { ...uiAuthHeaders(), ...(options.headers || {}) },
     ...options,
   }).then(async (res) => {
     const text = await res.text();
@@ -538,6 +548,23 @@ function applyStatus(st) {
   renderActiveCooldowns(g.active_cooldowns);
   $("st-action").textContent = st.last_action || "—";
   $("st-message").textContent = st.last_message || "—";
+  const idleEl = $("st-idle");
+  if (idleEl) {
+    idleEl.textContent = st.idle_detail || "—";
+    idleEl.classList.toggle("hidden", !st.idle_detail);
+  }
+  const parseEl = $("st-parse-error");
+  if (parseEl) {
+    if (st.parse_error?.detail) {
+      parseEl.textContent = st.parse_error.detail;
+      if (st.parse_error.screenshot_path) {
+        parseEl.textContent += ` · screenshot: ${st.parse_error.screenshot_path}`;
+      }
+      parseEl.classList.remove("hidden");
+    } else {
+      parseEl.classList.add("hidden");
+    }
+  }
   const errEl = $("st-error");
   if (st.error) {
     errEl.textContent = st.error;
@@ -553,12 +580,19 @@ function applyStatus(st) {
 
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  const token = sessionStorage.getItem("mafibot_ui_token") || "";
+  const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+  ws = new WebSocket(`${proto}://${location.host}/ws${qs}`);
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === "log") appendLog(msg.message);
-      else if (msg.type === "status") applyStatus(msg);
+      else if (msg.type === "status") {
+        applyStatus(msg);
+        if (msg.state === "completed" || msg.state === "stopped" || msg.state === "failed") {
+          loadLastSessionMetrics();
+        }
+      }
     } catch (e) {
       console.warn(e);
     }
@@ -573,6 +607,32 @@ async function loadHealth() {
   $("health-version").textContent = `v${h.version}`;
   $("health-paths").textContent = `config: ${h.config_dir}`;
   $("cfg-dir-hint").textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
+}
+
+async function loadLastSessionMetrics() {
+  const el = $("last-session-summary");
+  if (!el) return;
+  try {
+    const m = await api("/api/session/metrics");
+    if (!m) {
+      el.textContent = "No previous session recorded.";
+      return;
+    }
+    const pct =
+      m.hotel_time_percent != null ? `${m.hotel_time_percent.toFixed(0)}% in hotel` : "—";
+    el.textContent = [
+      `Profile: ${m.profile}`,
+      `Actions: ${m.actions_run} ok / ${m.actions_failed} failed / ${m.actions_skipped} idle`,
+      `Parse errors: ${m.parse_failures} · Hotel book failures: ${m.hotel_book_failures}`,
+      `Money: ${m.money_start ?? "—"} → ${m.money_end ?? "—"}`,
+      `Time in hotel: ${pct}`,
+      m.stop_reason ? `Stop: ${m.stop_reason}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  } catch (e) {
+    el.textContent = `Could not load session metrics: ${e.message}`;
+  }
 }
 
 function profileLabel(item) {
@@ -818,6 +878,8 @@ function actionFlagsFromOrder(order) {
 async function loadProfileForm(name) {
   const doc = await api(`/api/profiles/${encodeURIComponent(name)}`);
   $("cfg-build").value = doc.build || "ranker";
+  if ($("cfg-scheduler")) $("cfg-scheduler").value = doc.scheduler || "priority";
+  if ($("cfg-stop-webhook")) $("cfg-stop-webhook").value = doc.stop_webhook_url || "";
   $("cfg-stay-in-hotel").checked = !!doc.stay_in_hotel;
   $("cfg-book-before").checked = !!doc.book_hotel_before_action;
   $("cfg-book-after").checked = !!doc.book_hotel_after_every_action;
@@ -839,6 +901,8 @@ function profilePayload() {
   const base = {
     name,
     build: $("cfg-build").value,
+    scheduler: $("cfg-scheduler")?.value || "priority",
+    stop_webhook_url: $("cfg-stop-webhook")?.value.trim() || "",
     stay_in_hotel: $("cfg-stay-in-hotel").checked,
     book_hotel_before_action: $("cfg-book-before").checked,
     book_hotel_after_every_action: $("cfg-book-after").checked,
@@ -923,7 +987,11 @@ function setupActions() {
     try {
       await api("/api/discover", {
         method: "POST",
-        body: JSON.stringify({ accept_tos: true, headless: $("run-headless").checked }),
+        body: JSON.stringify({
+          accept_tos: true,
+          headless: $("run-headless").checked,
+          compare_last: $("run-discover-compare")?.checked || false,
+        }),
       });
       appendLog("Discovery started");
     } catch (e) {
@@ -1045,6 +1113,14 @@ function setupActions() {
   $("btn-refresh-session").addEventListener("click", () => {
     refreshSession().catch((e) => alert(e.message));
   });
+
+  $("btn-save-ui-token")?.addEventListener("click", () => {
+    const v = $("ui-token")?.value.trim() || "";
+    if (v) sessionStorage.setItem("mafibot_ui_token", v);
+    else sessionStorage.removeItem("mafibot_ui_token");
+    appendLog(v ? "UI token saved for this browser tab" : "UI token cleared");
+    connectWs();
+  });
 }
 
 async function init() {
@@ -1062,6 +1138,9 @@ async function init() {
   await loadCredentialsStatus();
   const st = await api("/api/run/status");
   applyStatus(st);
+  await loadLastSessionMetrics();
+  const savedToken = sessionStorage.getItem("mafibot_ui_token");
+  if (savedToken && $("ui-token")) $("ui-token").value = savedToken;
   setInterval(() => {
     tickCooldownCountdowns();
     if (lastStatus?.elapsed_sec != null && ["running", "login", "discover"].includes(lastStatus.state)) {

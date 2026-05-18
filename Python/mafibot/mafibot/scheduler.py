@@ -114,6 +114,7 @@ async def pick_runnable_actions(
 def pick_soonest_ready(
     runnable: list[tuple[Action, str]],
     state: GameState,
+    order_names: list[str] | None = None,
 ) -> tuple[Action, str] | None:
     if not runnable:
         return None
@@ -121,10 +122,16 @@ def pick_soonest_ready(
         action, hint = runnable[0]
         return action, f"soonest: {action.name}{hint}"
 
-    def sort_key(item: tuple[Action, str]) -> datetime:
+    order = order_names or []
+
+    def sort_key(item: tuple[Action, str]) -> tuple[datetime, int]:
         action, _ = item
-        ready = _cooldown_ready_at(state, action.name)
-        return ready or datetime.max
+        ready = _cooldown_ready_at(state, action.name) or datetime.max
+        try:
+            idx = order.index(action.name)
+        except ValueError:
+            idx = len(order)
+        return (ready, idx)
 
     runnable_sorted = sorted(runnable, key=sort_key)
     action, hint = runnable_sorted[0]

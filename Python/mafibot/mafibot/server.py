@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from mafibot import __version__
-from mafibot.config import get_config_dir, get_profile_dir, get_profiles_dir
+from mafibot.brain import get_last_idle_detail
+from mafibot.config import BotProfile, get_config_dir, get_profile_dir, get_profiles_dir
 from mafibot.config_store import (
     create_profile,
     delete_profile,
@@ -34,19 +37,56 @@ from mafibot.models import (
     ProfileRenameRequest,
     RunRequest,
     RunStatusResponse,
+    SessionMetricsResponse,
     SessionStatusResponse,
 )
 from mafibot.runner import MafibotRunner, get_runner, run_state_blocks_start
+from mafibot.session_metrics import load_last_session_summary
 
 _STATIC_DIR = Path(__file__).parent / "static"
-
-app = FastAPI(title="Mafibot", description="Mafiaspillet autopilot dashboard")
-
 _ws_clients: list[WebSocket] = []
+_runner_hooked = False
+
+
+def _ui_token_expected() -> str:
+    return os.getenv("MAFIBOT_UI_TOKEN", "").strip()
+
+
+def _check_ui_token(request: Request) -> None:
+    expected = _ui_token_expected()
+    if not expected:
+        return
+    token = request.headers.get("X-Mafibot-Token", "").strip()
+    if token != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Mafibot-Token")
+
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    _ensure_runner_hooks()
+    yield
+
+
+app = FastAPI(
+    title="Mafibot",
+    description="Mafiaspillet autopilot dashboard",
+    lifespan=_lifespan,
+)
+
+
+@app.middleware("http")
+async def ui_token_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api/"):
+        _check_ui_token(request)
+    return await call_next(request)
 
 
 def _status_response(runner: MafibotRunner) -> RunStatusResponse:
     st = runner.status
+    idle = get_last_idle_detail()
+    if idle is None and st.last_message and st.last_message.startswith("nothing ready"):
+        idle = st.last_message
+    metrics = load_last_session_summary()
     return RunStatusResponse(
         state=st.state.value,
         profile=st.profile,
@@ -55,6 +95,8 @@ def _status_response(runner: MafibotRunner) -> RunStatusResponse:
         last_action=st.last_action,
         last_message=st.last_message,
         last_reason=st.last_reason,
+        idle_detail=idle,
+        parse_error=st.parse_error,
         error=st.error,
         game=GameStateResponse(**st.game.__dict__),
     )
@@ -67,6 +109,8 @@ async def _broadcast(message: dict) -> None:
         try:
             await ws.send_text(payload)
         except Exception:
+            log_debug = __import__("logging").getLogger("mafibot.server")
+            log_debug.debug("websocket send failed", exc_info=True)
             dead.append(ws)
     for ws in dead:
         if ws in _ws_clients:
@@ -94,9 +138,6 @@ def _runner_status_handler(_status: object) -> None:
     loop.create_task(_broadcast(_status_payload()))
 
 
-_runner_hooked = False
-
-
 def _ensure_runner_hooks() -> None:
     global _runner_hooked
     if not _runner_hooked:
@@ -104,11 +145,6 @@ def _ensure_runner_hooks() -> None:
         runner.add_log_handler(_runner_log_handler)
         runner.add_status_handler(_runner_status_handler)
         _runner_hooked = True
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    _ensure_runner_hooks()
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -126,6 +162,24 @@ def api_health() -> HealthResponse:
         profiles_dir=str(get_profiles_dir()),
         profile_dir=str(get_profile_dir()),
     )
+
+
+@app.get("/api/session/metrics", response_model=SessionMetricsResponse | None)
+def api_session_metrics() -> SessionMetricsResponse | None:
+    raw = load_last_session_summary()
+    if raw is None:
+        return None
+    total = raw.samples_in_hotel + raw.samples_out_hotel
+    pct = (100.0 * raw.samples_in_hotel / total) if total else None
+    return SessionMetricsResponse(
+        **raw.to_dict(),
+        hotel_time_percent=pct,
+    )
+
+
+@app.get("/api/profiles/schema")
+def api_profile_schema() -> dict:
+    return BotProfile.model_json_schema()
 
 
 @app.get("/api/profiles", response_model=list[ProfileListItem])
@@ -227,7 +281,9 @@ async def api_start_run(req: RunRequest) -> dict:
             if runner._task:
                 await runner._task
         except Exception:
-            pass
+            __import__("logging").getLogger("mafibot.server").debug(
+                "run watch task failed", exc_info=True
+            )
         await _broadcast(_status_payload())
 
     asyncio.create_task(_watch())
@@ -282,7 +338,11 @@ async def api_discover(req: DiscoverRequest) -> dict:
         raise HTTPException(status_code=409, detail="A task is already in progress")
     if not req.accept_tos:
         raise HTTPException(status_code=400, detail="accept_tos is required")
-    await runner.start_discover(headless=req.headless, channel=req.channel)
+    await runner.start_discover(
+        headless=req.headless,
+        channel=req.channel,
+        compare_last=req.compare_last,
+    )
 
     async def _watch() -> None:
         try:
@@ -298,6 +358,12 @@ async def api_discover(req: DiscoverRequest) -> dict:
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket) -> None:
+    expected = _ui_token_expected()
+    if expected:
+        token = websocket.query_params.get("token", "").strip()
+        if token != expected:
+            await websocket.close(code=4401)
+            return
     await websocket.accept()
     _ws_clients.append(websocket)
     _ensure_runner_hooks()

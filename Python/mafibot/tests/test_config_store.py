@@ -93,6 +93,22 @@ def test_delete_bundled_without_copy_fails(isolated_config):
         delete_profile("ranker")
 
 
+def test_save_strips_legacy_crime_fields(isolated_config):
+    _cfg, prof = isolated_config
+    doc = BotProfileDocument(
+        name="crimey",
+        crime_actions=["enkel"],
+        crime_kind="perform",
+        crime_perform_type="any",
+    )
+    save_profile_document(doc)
+    raw = (prof / "crimey.json").read_text(encoding="utf-8")
+    assert "crime_kind" not in raw
+    assert "crime_actions" in raw
+    loaded = load_profile_document("crimey")
+    assert loaded.crime_actions == ["enkel"]
+
+
 def test_credentials_merge_password_only(isolated_config):
     cfg, _ = isolated_config
     save_credentials(CredentialsUpdate(user="bob", password="p1"))

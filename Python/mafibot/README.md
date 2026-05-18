@@ -109,6 +109,27 @@ Three built-in play styles (JSON). Copy into your config `profiles/` folder to c
 
 Each profile sets economy action order, social check interval, health thresholds, play window (default 08:00–23:00), idle breaks, and cooldown jitter (15–90 s).
 
+### Crime sections (Kriminalitet)
+
+Profiles use `crime_actions` with section ids matching the in-game UI:
+
+| Id | Section |
+|----|---------|
+| `enkel` | Enkel kriminalitet (Utfør) |
+| `tung` | Tung kriminalitet (Utfør) |
+| `stjel` | Stjel |
+
+Optional per-section choice lists: `crime_enkel_choices`, `crime_tung_choices`, `crime_steal_items` (empty = any option in that section). Legacy `crime_kind` / `crime_perform_type` are migrated on load and stripped when saved.
+
+Set `scheduler` to `soonest_ready` to prefer runnable actions by cooldown timing (still respects `economy_order` as a tiebreaker).
+
+### Dashboard security and alerts
+
+- Set `MAFIBOT_UI_TOKEN` in the environment before `mafibot.py ui`; the Login tab can store the same token for API/WebSocket calls (`X-Mafibot-Token`).
+- Non-loopback bind requires `mafibot.py ui --insecure-bind`.
+- Optional `stop_webhook_url` in profile JSON posts to a Discord-compatible webhook when the session stops (captcha, ban, logout).
+- Last session stats are written to `last_session.json` under your config dir and shown in the Run tab.
+
 ## How it works
 
 ```text
@@ -154,9 +175,16 @@ Complete `mafibot.py login` first. The installed scenario embeds the path to thi
 
 Set `MAFIBOT_PROFILE=okonom` in the environment to override the default profile when using webbot.
 
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/ -q
+```
+
 ## Discovery output
 
-`discover` writes a timestamped folder under `discovery/`:
+`discover` writes a timestamped folder under `discovery/` with `discovery_report.md`. Use `--compare-last` to print HTML diffs against the previous run:
 
 - `links.json` — all unique `?side=` links found on the current page
 - `<page>.html` / `<page>.png` — snapshots per logical page (crime, travel, messages, …)

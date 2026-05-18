@@ -124,7 +124,8 @@ def load_profile_document(name: str) -> BotProfileDocument:
 
 def _prepare_profile_payload(data: dict) -> dict:
     cleaned = strip_legacy_crime_keys(migrate_crime_fields(data))
-    return BotProfile.model_validate(cleaned).model_dump()
+    dumped = BotProfile.model_validate(cleaned).model_dump()
+    return strip_legacy_crime_keys(dumped)
 
 
 def save_profile_document(doc: BotProfileDocument) -> BotProfileDocument:

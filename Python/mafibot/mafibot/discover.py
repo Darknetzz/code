@@ -14,6 +14,7 @@ from mafibot.config import get_discovery_dir
 from mafibot.selectors import GAME_TABS
 from mafibot.navigation import collect_side_links, collect_tab_labels, ensure_game_shell, goto_page
 from mafibot.selectors import DEFAULT_SIDES, save_pages_map
+from mafibot.discover_diff import find_previous_discovery_run, write_discovery_report
 from mafibot.state import parse_game_state
 
 console = Console()
@@ -21,7 +22,12 @@ console = Console()
 DISCOVERY_LOGICAL_PAGES = tuple(GAME_TABS.keys())
 
 
-async def run_discovery(page: Page, *, manual_login: bool = True) -> Path:
+async def run_discovery(
+    page: Page,
+    *,
+    manual_login: bool = True,
+    compare_last: bool = False,
+) -> Path:
     out_dir = get_discovery_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -83,5 +89,22 @@ async def run_discovery(page: Page, *, manual_login: bool = True) -> Path:
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    report_path = write_discovery_report(run_dir, tabs)
+    console.print(f"[green]Report:[/green] {report_path}")
+    if compare_last:
+        prev = find_previous_discovery_run(run_dir)
+        if prev:
+            from mafibot.discover_diff import compare_html_files
+
+            changed = 0
+            for html in sorted(run_dir.glob("*.html")):
+                other = prev / html.name
+                if other.is_file() and len(compare_html_files(html, other)) > 2:
+                    changed += 1
+                    console.print(f"  [yellow]changed[/yellow] {html.name} vs {prev.name}")
+            if not changed:
+                console.print(f"[dim]No HTML changes vs {prev.name}[/dim]")
+        else:
+            console.print("[dim]No previous discovery run to compare[/dim]")
     console.print(f"[green]Discovery output:[/green] {run_dir}")
     return run_dir

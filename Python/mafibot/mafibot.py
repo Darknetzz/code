@@ -85,6 +85,11 @@ def login(
 def discover(
     accept_tos: bool = typer.Option(False, "--accept-tos"),
     headless: bool = typer.Option(False, "--headless"),
+    compare_last: bool = typer.Option(
+        False,
+        "--compare-last",
+        help="Print HTML diffs vs the previous discovery run",
+    ),
 ) -> None:
     """Map ?side= links and save HTML/screenshots (requires login)."""
     _require_tos(accept_tos)
@@ -92,7 +97,7 @@ def discover(
 
     async def _main() -> None:
         async with mafia_session(SessionConfig(headless=headless)) as (_ctx, page):
-            path = await run_discovery(page, manual_login=True)
+            path = await run_discovery(page, manual_login=True, compare_last=compare_last)
             console.print(f"Done: {path}")
 
     asyncio.run(_main())
@@ -153,13 +158,27 @@ def codegen() -> None:
 def ui(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8766, "--port"),
+    insecure_bind: bool = typer.Option(
+        False,
+        "--insecure-bind",
+        help="Allow binding to non-loopback addresses (not recommended)",
+    ),
 ) -> None:
     """Start local web dashboard (Run / Config / Login)."""
+    if host not in ("127.0.0.1", "localhost", "::1") and not insecure_bind:
+        console.print(
+            "[red]Refusing to bind to non-loopback host. "
+            "Use --insecure-bind if you understand the risk.[/red]"
+        )
+        raise typer.Exit(1)
     try:
         import uvicorn
     except ImportError:
         console.print("[red]Install UI deps: pip install fastapi uvicorn[standard][/red]")
         raise typer.Exit(1) from None
+    token = __import__("os").getenv("MAFIBOT_UI_TOKEN", "").strip()
+    if token:
+        console.print("[dim]UI token auth enabled (MAFIBOT_UI_TOKEN).[/dim]")
     console.print(f"Mafibot UI: http://{host}:{port}/")
     console.print("[dim]Localhost only — do not expose without auth.[/dim]")
     uvicorn.run("mafibot.server:app", host=host, port=port, reload=False)

@@ -14,6 +14,7 @@ from typing import Any
 from playwright.async_api import BrowserContext, Page
 
 from mafibot import brain
+from mafibot.brain import get_last_idle_detail, get_last_parse_error
 from mafibot.auth import ensure_session, is_logged_in
 from mafibot.config import BotProfile, load_bot_profile
 from mafibot.discover import run_discovery
@@ -97,6 +98,7 @@ class MafibotStatus:
     last_action: str | None = None
     last_message: str | None = None
     last_reason: str | None = None
+    parse_error: dict[str, str | None] | None = None
     error: str | None = None
     game: GameStateSnapshot = field(default_factory=GameStateSnapshot)
 
@@ -147,14 +149,20 @@ class MafibotRunner:
             try:
                 h(message)
             except Exception:
-                pass
+                log.debug("log handler failed", exc_info=True)
 
     def _notify_status(self) -> None:
+        idle = get_last_idle_detail()
+        if idle and self._status.last_message and "nothing ready" in self._status.last_message:
+            self._status.last_reason = idle
+        parse_err = get_last_parse_error()
+        if parse_err:
+            self._status.parse_error = parse_err
         for h in self._status_handlers:
             try:
                 h(self._status)
             except Exception:
-                pass
+                log.debug("status handler failed", exc_info=True)
 
     def _ensure_brain_hook(self) -> None:
         if self._brain_status_hooked:
@@ -225,6 +233,7 @@ class MafibotRunner:
         *,
         headless: bool = False,
         channel: str | None = "chrome",
+        compare_last: bool = False,
     ) -> None:
         async with self._lock:
             if run_state_blocks_start(self._status.state):
@@ -234,6 +243,7 @@ class MafibotRunner:
         brain.clear_stop()
         self._status = MafibotStatus(state=RunnerState.discover, started_at=time.monotonic())
         self._notify_status()
+        self._compare_last = compare_last
         self._task = asyncio.create_task(
             self._run_discover(headless=headless, channel=channel)
         )
@@ -276,6 +286,8 @@ class MafibotRunner:
             return snap
         except Exception as exc:
             self._log(f"Session parse failed: {exc}")
+            if hasattr(exc, "to_dict"):
+                self._status.parse_error = exc.to_dict()  # type: ignore[union-attr]
             return self._status.game
 
     async def _run_bot(
@@ -372,7 +384,10 @@ class MafibotRunner:
                 self._page = page
                 if not await is_logged_in(page):
                     await ensure_session(page, manual=True)
-                out = await run_discovery(page, manual_login=False)
+                compare = getattr(self, "_compare_last", False)
+                out = await run_discovery(
+                    page, manual_login=False, compare_last=compare
+                )
                 self._log(f"Discovery saved to {out}")
             self._status.state = RunnerState.completed
         except asyncio.CancelledError:

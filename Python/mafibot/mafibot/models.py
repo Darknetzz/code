@@ -77,6 +77,27 @@ class DiscoverRequest(BaseModel):
     headless: bool = False
     channel: str | None = "chrome"
     accept_tos: bool = False
+    compare_last: bool = False
+
+
+class SessionMetricsResponse(BaseModel):
+    profile: str = ""
+    started_at: str = ""
+    ended_at: str = ""
+    dry_run: bool = False
+    actions_run: int = 0
+    actions_failed: int = 0
+    actions_skipped: int = 0
+    parse_failures: int = 0
+    hotel_book_failures: int = 0
+    samples_in_hotel: int = 0
+    samples_out_hotel: int = 0
+    money_start: int | None = None
+    money_end: int | None = None
+    rank_start: int | None = None
+    rank_end: int | None = None
+    stop_reason: str | None = None
+    hotel_time_percent: float | None = None
 
 
 class RunStatusResponse(BaseModel):
@@ -87,6 +108,8 @@ class RunStatusResponse(BaseModel):
     last_action: str | None = None
     last_message: str | None = None
     last_reason: str | None = None
+    idle_detail: str | None = None
+    parse_error: dict[str, str | None] | None = None
     error: str | None = None
     game: GameStateResponse = Field(default_factory=GameStateResponse)
 

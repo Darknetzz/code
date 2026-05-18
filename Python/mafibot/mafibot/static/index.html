@@ -44,7 +44,11 @@
           <input type="checkbox" id="run-accept-tos" />
           <label for="run-accept-tos">I accept ToS risk (section 7 — automation may ban account)</label>
         </div>
-        <p class="tos-note">Bind localhost only. Do not expose this port without authentication.</p>
+        <div class="checkbox-row">
+          <input type="checkbox" id="run-discover-compare" />
+          <label for="run-discover-compare">Discover: compare HTML to previous run</label>
+        </div>
+        <p class="tos-note">Bind localhost only. Set MAFIBOT_UI_TOKEN on the server and save the token under Login if exposing beyond localhost.</p>
         <div class="btn-row">
           <button type="button" class="primary" id="btn-start-run">Start</button>
           <button type="button" class="danger" id="btn-stop">Stop</button>
@@ -65,12 +69,19 @@
           <div><dt>Crime ready</dt><dd id="st-crime">—</dd></div>
           <div><dt>Last action</dt><dd id="st-action">—</dd></div>
           <div><dt>Message</dt><dd id="st-message">—</dd></div>
+          <div><dt>Idle reason</dt><dd id="st-idle" class="hidden">—</dd></div>
         </dl>
+        <p id="st-parse-error" class="hidden tos-note"></p>
         <h3 class="subsection-title">Active cooldowns</h3>
         <ul id="st-cooldowns" class="cooldown-list" aria-live="polite">
           <li class="cooldown-empty muted">None</li>
         </ul>
         <p id="st-error" class="hidden" style="color: var(--danger);"></p>
+      </div>
+
+      <div class="card">
+        <h2>Last session</h2>
+        <p id="last-session-summary" class="health-meta">—</p>
       </div>
 
       <div class="card">
@@ -108,6 +119,17 @@
               <option value="angriper">angriper</option>
             </select>
           </div>
+          <div>
+            <label for="cfg-scheduler">Scheduler</label>
+            <select id="cfg-scheduler">
+              <option value="priority">priority (economy order)</option>
+              <option value="soonest_ready">soonest_ready (cooldown-aware)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="cfg-stop-webhook">Stop webhook URL (optional)</label>
+          <input type="url" id="cfg-stop-webhook" placeholder="https://discord.com/api/webhooks/..." />
         </div>
         <div class="checkbox-row">
           <input type="checkbox" id="cfg-stay-in-hotel" checked />
@@ -363,6 +385,15 @@ Las Vegas</textarea>
         <p id="cred-status" class="health-meta"></p>
         <div class="btn-row">
           <button type="button" class="primary" id="btn-save-creds">Save credentials</button>
+        </div>
+        <div class="grid-2" style="margin-top: 1rem;">
+          <div>
+            <label for="ui-token">UI token (MAFIBOT_UI_TOKEN)</label>
+            <input type="password" id="ui-token" autocomplete="off" />
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-save-ui-token">Save UI token</button>
         </div>
       </div>
 

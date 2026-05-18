@@ -6,12 +6,14 @@ import asyncio
 import logging
 import random
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+
 from playwright.async_api import Page
 
 from mafibot.actions.base import Action, ActionResult, action_by_name, all_actions
 from mafibot.actions.hotel_book import BookHotelAction
 from mafibot.actions.hotel_leave import LeaveHotelAction
+from mafibot.alerts import notify_session_stop
 from mafibot.config import BotProfile, in_play_window
 from mafibot.hotel_stay import action_requires_leave_hotel
 from mafibot.human_policy import (
@@ -26,16 +28,38 @@ from mafibot.human_policy import (
     sleep_wait,
 )
 from mafibot.navigation import ensure_game_shell
+from mafibot.rotation import reset_rotation_state
+from mafibot.scheduler import (
+    action_block_reason,
+    ordered_action_names,
+    pick_runnable_actions,
+    pick_soonest_ready,
+)
 from mafibot.session import capture_failure
+from mafibot.session_metrics import (
+    current_session_metrics,
+    finish_session_metrics,
+    start_session_metrics,
+)
 from mafibot.state import GameState, ParseError, parse_game_state
 
 log = logging.getLogger("mafibot")
 
 _cancel = asyncio.Event()
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
+_last_idle_detail: str | None = None
+_last_parse_error: dict[str, str | None] | None = None
+
+
+def get_last_parse_error() -> dict[str, str | None] | None:
+    return _last_parse_error
 
 StatusCallback = Callable[["GameState", str | None, str, str | None], None]
 _status_callbacks: list[StatusCallback] = []
+
+
+def get_last_idle_detail() -> str | None:
+    return _last_idle_detail
 
 
 def add_status_callback(handler: StatusCallback) -> None:
@@ -57,7 +81,7 @@ def _notify_status(
         try:
             handler(state, action_name, message, reason)
         except Exception:
-            pass
+            log.debug("status callback failed", exc_info=True)
 
 
 def request_stop() -> None:
@@ -85,39 +109,8 @@ def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
     )
 
 
-def _ordered_action_names(
-    profile: BotProfile, state: GameState | None = None
-) -> list[str]:
-    """Priority list from profile.economy_order plus legacy social/combat flags."""
-    order: list[str] = []
-    for name in profile.economy_order:
-        if name in _ROTATION_EXCLUDE:
-            continue
-        if name not in order:
-            order.append(name)
-    if profile.social_enabled:
-        for s in ("messages", "family"):
-            if s not in order:
-                order.append(s)
-    if profile.combat_enabled and "murder" not in order:
-        order.append("murder")
-    normalized: list[str] = []
-    for n in order:
-        # Legacy profiles may still list "work" — same as business (Mine bedrifter).
-        if n == "work":
-            n = "business"
-        if n not in normalized:
-            normalized.append(n)
-    if state is not None:
-        from mafibot.profile_options import hospital_enabled, needs_hospital_visit
-
-        if (
-            hospital_enabled(profile)
-            and needs_hospital_visit(profile, state)
-            and "hospital" in normalized
-        ):
-            normalized = ["hospital"] + [n for n in normalized if n != "hospital"]
-    return normalized
+def _ordered_action_names(profile: BotProfile, state: GameState | None = None) -> list[str]:
+    return ordered_action_names(profile, state)
 
 
 async def _book_hotel(
@@ -131,9 +124,33 @@ async def _book_hotel(
     book = BookHotelAction()
     state = await parse_game_state(page)
     if not await book.can_run(state, profile):
-        return ActionResult(True, "skip book: already in hotel")
+        return ActionResult(True, "skip book: already in hotel or blocked")
     book_policy = hotel_transition_policy(policy) if quick else policy
     return await book.run(page, state, profile, book_policy, dry_run=dry_run, quick=quick)
+
+
+async def _book_hotel_with_retry(
+    page: Page,
+    profile: BotProfile,
+    policy: HumanPolicy,
+    *,
+    dry_run: bool = False,
+    quick: bool = False,
+) -> ActionResult:
+    result = await _book_hotel(page, profile, policy, dry_run=dry_run, quick=quick)
+    if result.success or dry_run:
+        return result
+    metrics = current_session_metrics()
+    if metrics:
+        metrics.hotel_book_failures += 1
+    log.warning("hotel book failed, retry once: %s", result.message)
+    await sleep_wait(1.0, 2.5, distribution="uniform", label="hotel_book_retry")
+    retry = await _book_hotel(page, profile, policy, dry_run=dry_run, quick=quick)
+    if not retry.success:
+        await capture_failure(page, "hotel_book_failed")
+        if metrics:
+            metrics.hotel_book_failures += 1
+    return retry
 
 
 async def _leave_hotel_if_needed(
@@ -162,7 +179,7 @@ async def execute_with_hotel_stay(
     state = await parse_game_state(page)
 
     if profile.stay_in_hotel and profile.book_hotel_before_action:
-        pre = await _book_hotel(page, profile, policy, dry_run=dry_run)
+        pre = await _book_hotel_with_retry(page, profile, policy, dry_run=dry_run)
         log.info("pre-action book: %s", pre.message)
         state = await parse_game_state(page)
 
@@ -177,10 +194,29 @@ async def execute_with_hotel_stay(
     if profile.stay_in_hotel and profile.book_hotel_after_every_action and not dry_run:
         gap = await pause_before_book_hotel(profile.max_seconds_before_book_hotel)
         log.info("pause before book: %.2fs (max %.2fs)", gap, profile.max_seconds_before_book_hotel)
-        post = await _book_hotel(page, profile, policy, dry_run=False, quick=True)
+        post = await _book_hotel_with_retry(page, profile, policy, dry_run=False, quick=True)
         log.info("post-action book: %s", post.message)
+        if not post.success:
+            result = ActionResult(
+                result.success,
+                f"{result.message}; post-book failed: {post.message}",
+            )
 
     return result
+
+
+async def explain_idle(state: GameState, profile: BotProfile) -> str:
+    parts: list[str] = []
+    for name in _ordered_action_names(profile, state):
+        action = action_by_name(name)
+        if action is None:
+            continue
+        reason = await action_block_reason(action, state, profile)
+        if reason:
+            parts.append(f"{name}: {reason}")
+    if not parts:
+        return "nothing ready"
+    return "; ".join(parts[:6])
 
 
 async def pick_next_action(
@@ -189,30 +225,78 @@ async def pick_next_action(
     *,
     dry_run: bool = False,
 ) -> tuple[Action | None, str]:
+    global _last_idle_detail
+
     if state.needs_stop:
-        return None, "stop: captcha, ban, or logged out"
+        _last_idle_detail = "stop: captcha, ban, or logged out"
+        return None, _last_idle_detail
 
     if state.in_jail:
-        return None, "idle: in jail"
+        _last_idle_detail = "idle: in jail"
+        return None, _last_idle_detail
 
-    for name in _ordered_action_names(profile, state):
+    names = _ordered_action_names(profile, state)
+    candidates: list[Action] = []
+    for name in names:
         action = action_by_name(name)
-        if action is None:
-            continue
-        if await action.can_run(state, profile):
-            hint = " (will leave hotel first)" if (
-                profile.stay_in_hotel and action_requires_leave_hotel(name) and state.in_hotel
-            ) else ""
-            return action, f"selected: {name}{hint}"
+        if action is not None:
+            candidates.append(action)
 
-    allowed = set(_ordered_action_names(profile, state))
-    for action in all_actions():
-        if action.name in _ROTATION_EXCLUDE or action.name not in allowed:
-            continue
-        if await action.can_run(state, profile):
-            return action, f"fallback: {action.name}"
+    if profile.scheduler == "soonest_ready":
+        runnable = await pick_runnable_actions(state, profile, candidates)
+        picked = pick_soonest_ready(runnable, state, names)
+        if picked:
+            action, reason = picked
+            return action, reason
+    else:
+        for action in candidates:
+            if await action.can_run(state, profile):
+                hint = ""
+                if (
+                    profile.stay_in_hotel
+                    and action_requires_leave_hotel(action.name)
+                    and state.in_hotel
+                ):
+                    hint = " (will leave hotel first)"
+                return action, f"selected: {action.name}{hint}"
 
-    return None, "nothing ready"
+    allowed = set(names)
+    fallback_actions = [
+        a
+        for a in all_actions()
+        if a.name not in _ROTATION_EXCLUDE and a.name in allowed
+    ]
+    if profile.scheduler == "soonest_ready":
+        runnable = await pick_runnable_actions(state, profile, fallback_actions)
+        picked = pick_soonest_ready(runnable, state, list(allowed))
+        if picked:
+            return picked
+    else:
+        for action in fallback_actions:
+            if await action.can_run(state, profile):
+                return action, f"fallback: {action.name}"
+
+    _last_idle_detail = await explain_idle(state, profile)
+    return None, f"nothing ready — {_last_idle_detail}"
+
+
+def _seconds_until_play_window(profile: BotProfile) -> float | None:
+    now = datetime.now().time()
+    start = time(profile.play_window.start_hour, 0)
+    end = time(profile.play_window.end_hour, 0)
+    if in_play_window(profile):
+        return None
+    if start <= end:
+        if now < start:
+            target = datetime.combine(datetime.now().date(), start)
+        else:
+            target = datetime.combine(datetime.now().date() + timedelta(days=1), start)
+    else:
+        if now > end and now < start:
+            target = datetime.combine(datetime.now().date(), start)
+        else:
+            return 600.0
+    return max(60.0, (target - datetime.now()).total_seconds())
 
 
 async def run_once(
@@ -222,55 +306,95 @@ async def run_once(
     dry_run: bool = False,
 ) -> ActionResult | None:
     policy = _policy_from_profile(profile)
+    metrics = current_session_metrics()
     try:
         await ensure_game_shell(page, policy)
         state = await parse_game_state(page)
     except ParseError as exc:
+        global _last_parse_error
         log.error("parse failed: %s", exc)
-        await capture_failure(page, "parse_error")
+        shot = await capture_failure(page, "parse_error")
+        if shot and not exc.screenshot_path:
+            exc.screenshot_path = shot
+        if metrics:
+            metrics.parse_failures += 1
+        detail = exc.to_dict()
+        _last_parse_error = detail
+        _notify_status(
+            GameState(),
+            None,
+            f"parse error: {detail.get('detail')}",
+            str(detail),
+        )
         return None
 
+    if metrics:
+        metrics.record_hotel_sample(state.in_hotel)
+        if metrics.money_start is None and state.money is not None:
+            metrics.money_start = state.money
+        if metrics.rank_start is None and state.rank_points is not None:
+            metrics.rank_start = state.rank_points
+
     if state.needs_stop:
-        log.warning(
-            "session stop: captcha=%s banned=%s login=%s",
-            state.captcha,
-            state.banned,
-            state.on_login_page,
-        )
+        reason = "captcha, ban, or logged out"
+        log.warning("session stop: %s", reason)
+        notify_session_stop(profile, reason)
         return None
 
     action, reason = await pick_next_action(state, profile, dry_run=dry_run)
     log.info("decision: %s", reason)
-    _notify_status(
-        state,
-        action.name if action else None,
-        reason,
-        reason,
-    )
+    _notify_status(state, action.name if action else None, reason, reason)
+
     if action is None:
         if profile.stay_in_hotel and profile.book_hotel_when_idle and not dry_run:
-            await _book_hotel(page, profile, policy)
+            await _book_hotel_with_retry(page, profile, policy)
+        if metrics:
+            metrics.actions_skipped += 1
         return None
 
     if dry_run:
         log.info("dry-run: %s (hotel wrap simulated)", action.name)
+        if metrics:
+            metrics.actions_run += 1
         return ActionResult(True, f"dry-run: {action.name}")
 
     result = await execute_with_hotel_stay(page, action, profile, policy, dry_run=False)
     log.info("action %s: success=%s msg=%s", action.name, result.success, result.message)
+    if metrics:
+        if result.success:
+            metrics.actions_run += 1
+        else:
+            metrics.actions_failed += 1
     try:
         after_state = await parse_game_state(page)
     except ParseError:
         after_state = state
-    _notify_status(
-        after_state,
-        action.name,
-        result.message,
-        f"done: {action.name}",
-    )
+    _notify_status(after_state, action.name, result.message, f"done: {action.name}")
     await page_reading_pause(page)
     await between_actions(page, policy)
     return result
+
+
+def _log_session_summary(profile: BotProfile, metrics) -> None:
+    if metrics is None:
+        return
+    hotel_total = metrics.samples_in_hotel + metrics.samples_out_hotel
+    pct = (
+        100.0 * metrics.samples_in_hotel / hotel_total if hotel_total else 0.0
+    )
+    log.info(
+        "session summary profile=%s actions=%s failed=%s skipped=%s parse_err=%s "
+        "hotel_fail=%s in_hotel=%.0f%% money %s→%s",
+        profile.name,
+        metrics.actions_run,
+        metrics.actions_failed,
+        metrics.actions_skipped,
+        metrics.parse_failures,
+        metrics.hotel_book_failures,
+        pct,
+        metrics.money_start,
+        metrics.money_end,
+    )
 
 
 async def run_session(
@@ -281,20 +405,28 @@ async def run_session(
     dry_run: bool = False,
 ) -> None:
     clear_stop()
+    reset_rotation_state()
+    metrics = start_session_metrics(profile.name, dry_run=dry_run)
     policy = _policy_from_profile(profile)
     limit = max_minutes if max_minutes is not None else profile.max_session_minutes
     deadline = datetime.now() + timedelta(minutes=limit)
     session_start = datetime.now()
+    stop_reason: str | None = None
 
     if profile.stay_in_hotel and not dry_run:
         await ensure_game_shell(page, policy)
-        await _book_hotel(page, profile, policy)
+        await _book_hotel_with_retry(page, profile, policy)
         log.info("session start: ensured hotel check-in")
 
     while datetime.now() < deadline and not is_stop_requested():
         if not in_play_window(profile):
-            log.info("outside play window — sleeping 10 min")
-            await asyncio.sleep(600)
+            wait_sec = _seconds_until_play_window(profile) or 600.0
+            log.info("outside play window — sleeping %.0fs", wait_sec)
+            try:
+                await asyncio.wait_for(_cancel.wait(), timeout=wait_sec)
+                break
+            except asyncio.TimeoutError:
+                pass
             continue
 
         if random.random() < profile.idle_chance:
@@ -308,10 +440,20 @@ async def run_session(
         except Exception:
             log.exception("run_once failed")
             await capture_failure(page, "run_once")
+            if metrics:
+                metrics.parse_failures += 1
             await sleep_wait(25.0, 45.0, distribution="triangular", label="error_recovery")
             continue
 
         if result is None:
+            try:
+                state = await parse_game_state(page)
+                if state.needs_stop:
+                    stop_reason = "captcha, ban, or logged out"
+                    notify_session_stop(profile, stop_reason)
+                    break
+            except ParseError:
+                pass
             wait = cycle_wait_nothing_todo(policy)
             log.info("waiting %.2fs (cooldown / nothing to do)", wait)
             try:
@@ -329,9 +471,28 @@ async def run_session(
         except asyncio.TimeoutError:
             pass
 
+    if is_stop_requested():
+        stop_reason = stop_reason or "user stop"
+
     if profile.stay_in_hotel and not dry_run:
-        await _book_hotel(page, profile, policy)
+        await _book_hotel_with_retry(page, profile, policy)
         log.info("session end: return to hotel")
+
+    money_end: int | None = None
+    rank_end: int | None = None
+    try:
+        final = await parse_game_state(page)
+        money_end = final.money
+        rank_end = final.rank_points
+    except ParseError:
+        pass
+
+    finished = finish_session_metrics(
+        stop_reason=stop_reason,
+        money_end=money_end,
+        rank_end=rank_end,
+    )
+    _log_session_summary(profile, finished)
 
     elapsed = datetime.now() - session_start
     log.info("session ended after %s", elapsed)
