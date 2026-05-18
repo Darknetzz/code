@@ -6,7 +6,8 @@ from playwright.async_api import Page
 
 from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
-from mafibot.hotel_stay import should_skip_booking
+from mafibot.hotel_stay import hotel_booking_blocked_reason, should_skip_booking
+from mafibot.state import parse_hotel_booking_hint
 from mafibot.human_policy import HumanPolicy, human_delay, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
 from mafibot.selectors import HOTEL_BOOK_LABELS
@@ -20,6 +21,8 @@ class BookHotelAction:
         if state.needs_stop or state.in_jail:
             return False
         if not profile.stay_in_hotel:
+            return False
+        if hotel_booking_blocked_reason(state, profile):
             return False
         return not should_skip_booking(state)
 
@@ -58,6 +61,9 @@ class BookHotelAction:
         if not quick:
             await human_delay(0.3, 1.0)
         after = await parse_game_state(page)
+        hint = parse_hotel_booking_hint(after.page_text_sample)
+        if hint:
+            return ActionResult(False, f"hotel book blocked: {hint}")
         if should_skip_booking(after) or clicked:
             return ActionResult(True, "booked hotel or check-in clicked")
         return ActionResult(False, "could not find hotel book/check-in control")

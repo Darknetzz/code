@@ -12,7 +12,7 @@ const ACTION_CATALOG = [
     id: "crime",
     label: "Crime (Kriminalitet)",
     description:
-      "Opens Kriminalitet when cooldown is ready. Configure perform (Utfør, lett/tung) or steal (Stjel, what to steal, random vs named player). Leaves hotel first, then returns after.",
+      "Opens Kriminalitet when ready. Enable Enkel, Tung, and/or Stjel (or All). Pick specific crimes per section; bot rotates when multiple are enabled. Leaves hotel first.",
   },
   {
     id: "business",
@@ -166,43 +166,182 @@ function effectiveInterval(doc, field, fallbackField = "social_interval_minutes"
   return fb && fb > 0 ? fb : 45;
 }
 
-const CRIME_STEAL_PRESETS = ["bil", "våpen", "penger", "poeng"];
+const CRIME_SECTIONS = [
+  { id: "enkel", label: "Enkel kriminalitet (Utfør)" },
+  { id: "tung", label: "Tung kriminalitet (Utfør)" },
+  { id: "stjel", label: "Stjel" },
+];
 
-function updateCrimeOptionsPanels() {
-  const kind = $("cfg-crime-kind").value;
-  $("cfg-crime-perform-panel").classList.toggle("hidden", kind !== "perform");
-  $("cfg-crime-steal-panel").classList.toggle("hidden", kind !== "steal");
-  const stealPreset = $("cfg-crime-steal-what-preset").value;
-  $("cfg-crime-steal-what-custom-wrap").classList.toggle(
-    "hidden",
-    stealPreset !== "custom"
-  );
-  const stealTarget = $("cfg-crime-steal-target").value;
-  $("cfg-crime-steal-username-wrap").classList.toggle(
-    "hidden",
-    stealTarget !== "specific"
-  );
-}
+const CRIME_OPTIONS = {
+  enkel: [
+    { id: "gate", label: "Ran tilfeldig person på gata" },
+    { id: "butikk", label: "Nask fra en butikk" },
+    { id: "kiosk", label: "Ran en kiosk" },
+  ],
+  tung: [
+    { id: "pengetransport", label: "Ran en pengetransport" },
+    { id: "bensin", label: "Ran en bensinstasjon" },
+  ],
+  stjel: [
+    { id: "garasje", label: "Stjel fra garasjen" },
+    { id: "vapen", label: "Stjel fra våpenlageret" },
+    { id: "penger", label: "Stjel penger" },
+  ],
+};
 
-function crimeStealWhatFromUi() {
-  const preset = $("cfg-crime-steal-what-preset").value;
-  if (preset === "custom") {
-    return $("cfg-crime-steal-what-custom").value.trim() || "bil";
+const crimeSectionInputs = new Map();
+const crimeOptionInputs = new Map();
+let crimeUiBuilt = false;
+
+function migrateLegacyCrimeDoc(doc) {
+  if (doc.crime_actions && doc.crime_actions.length) {
+    return doc;
   }
-  return preset;
-}
-
-function loadCrimeStealWhatToUi(what) {
-  const w = (what || "bil").trim().toLowerCase();
-  const presetEl = $("cfg-crime-steal-what-preset");
-  const normalized = CRIME_STEAL_PRESETS.find((p) => p.toLowerCase() === w);
-  if (normalized) {
-    presetEl.value = normalized;
-    $("cfg-crime-steal-what-custom").value = "";
+  const actions = [];
+  if (doc.crime_kind === "steal") {
+    actions.push("stjel");
+  } else if (doc.crime_perform_type === "tung") {
+    actions.push("tung");
+  } else if (doc.crime_perform_type === "lett") {
+    actions.push("enkel");
+  } else if (doc.crime_kind === "perform") {
+    actions.push("enkel", "tung");
   } else {
-    presetEl.value = "custom";
-    $("cfg-crime-steal-what-custom").value = what || "";
+    actions.push("enkel");
   }
+  const next = { ...doc, crime_actions: actions };
+  if (doc.crime_steal_what && !next.crime_steal_items?.length) {
+    const w = String(doc.crime_steal_what).toLowerCase();
+    const match = CRIME_OPTIONS.stjel.find(
+      (o) => o.id === w || o.label.toLowerCase().includes(w)
+    );
+    if (match) next.crime_steal_items = [match.id];
+  }
+  return next;
+}
+
+function crimeChoicesContainerId(sectionId) {
+  return sectionId === "stjel" ? "cfg-crime-stjel-choices" : `cfg-crime-${sectionId}-choices`;
+}
+
+function updateCrimeStealUsernameVisibility() {
+  const wrap = $("cfg-crime-steal-username-wrap");
+  if (!wrap) return;
+  wrap.classList.toggle("hidden", $("cfg-crime-steal-target").value !== "specific");
+}
+
+function updateCrimePanelsVisibility() {
+  $("cfg-crime-enkel-choices-wrap")?.classList.toggle(
+    "hidden",
+    !crimeSectionInputs.get("enkel")?.checked
+  );
+  $("cfg-crime-tung-choices-wrap")?.classList.toggle(
+    "hidden",
+    !crimeSectionInputs.get("tung")?.checked
+  );
+  $("cfg-crime-stjel-wrap")?.classList.toggle("hidden", !crimeSectionInputs.get("stjel")?.checked);
+  updateCrimeStealUsernameVisibility();
+}
+
+function syncCrimeAllCheckbox() {
+  const allEl = $("cfg-crime-all");
+  if (!allEl || crimeSectionInputs.size === 0) return;
+  allEl.checked = [...crimeSectionInputs.values()].every((i) => i.checked);
+}
+
+function ensureCrimeUi() {
+  if (crimeUiBuilt) return;
+  crimeUiBuilt = true;
+  const toggles = $("cfg-crime-section-toggles");
+  if (!toggles) return;
+
+  for (const sec of CRIME_SECTIONS) {
+    const label = document.createElement("label");
+    label.className = "crime-section-toggle";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = sec.id;
+    input.id = `cfg-crime-action-${sec.id}`;
+    crimeSectionInputs.set(sec.id, input);
+    label.appendChild(input);
+    label.append(document.createTextNode(sec.label));
+    toggles.appendChild(label);
+  }
+
+  for (const [sectionId, options] of Object.entries(CRIME_OPTIONS)) {
+    const container = $(crimeChoicesContainerId(sectionId));
+    if (!container) continue;
+    const entries = [];
+    for (const opt of options) {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = opt.id;
+      input.id = `cfg-crime-opt-${sectionId}-${opt.id}`;
+      label.appendChild(input);
+      label.append(document.createTextNode(opt.label));
+      container.appendChild(label);
+      entries.push({ id: opt.id, el: input });
+    }
+    crimeOptionInputs.set(sectionId, entries);
+  }
+
+  $("cfg-crime-all")?.addEventListener("change", () => {
+    const on = $("cfg-crime-all").checked;
+    for (const input of crimeSectionInputs.values()) {
+      input.checked = on;
+    }
+    updateCrimePanelsVisibility();
+  });
+  for (const input of crimeSectionInputs.values()) {
+    input.addEventListener("change", () => {
+      syncCrimeAllCheckbox();
+      updateCrimePanelsVisibility();
+    });
+  }
+  $("cfg-crime-steal-target")?.addEventListener("change", updateCrimeStealUsernameVisibility);
+}
+
+function loadCrimeFromDoc(doc) {
+  const migrated = migrateLegacyCrimeDoc(doc);
+  ensureCrimeUi();
+  const enabled = new Set(migrated.crime_actions || ["enkel"]);
+  for (const [id, input] of crimeSectionInputs) {
+    input.checked = enabled.has(id);
+  }
+  syncCrimeAllCheckbox();
+  const applyChoices = (sectionId, list) => {
+    const want = new Set(list || []);
+    for (const { id, el } of crimeOptionInputs.get(sectionId) || []) {
+      el.checked = want.size > 0 && want.has(id);
+    }
+  };
+  applyChoices("enkel", migrated.crime_enkel_choices);
+  applyChoices("tung", migrated.crime_tung_choices);
+  applyChoices("stjel", migrated.crime_steal_items);
+  const rot = $("cfg-crime-rotate");
+  if (rot) rot.checked = migrated.crime_rotate_actions !== false;
+  $("cfg-crime-steal-target").value = migrated.crime_steal_target_mode || "random";
+  $("cfg-crime-steal-username").value = migrated.crime_steal_username || "";
+  updateCrimePanelsVisibility();
+}
+
+function appendCrimeToPayload(payload) {
+  const actions = [];
+  for (const [id, input] of crimeSectionInputs) {
+    if (input.checked) actions.push(id);
+  }
+  const gather = (sectionId) =>
+    (crimeOptionInputs.get(sectionId) || [])
+      .filter(({ el }) => el.checked)
+      .map(({ id }) => id);
+  payload.crime_actions = actions;
+  payload.crime_enkel_choices = gather("enkel");
+  payload.crime_tung_choices = gather("tung");
+  payload.crime_steal_items = gather("stjel");
+  payload.crime_rotate_actions = $("cfg-crime-rotate")?.checked !== false;
+  payload.crime_steal_target_mode = $("cfg-crime-steal-target").value || "random";
+  payload.crime_steal_username = $("cfg-crime-steal-username").value.trim();
 }
 
 function loadActionOptionsFromDoc(doc) {
@@ -211,13 +350,8 @@ function loadActionOptionsFromDoc(doc) {
     doc.crime_min_health_percent != null && doc.crime_min_health_percent !== ""
       ? doc.crime_min_health_percent
       : "";
-  $("cfg-crime-kind").value = doc.crime_kind || "perform";
-  $("cfg-crime-perform-type").value = doc.crime_perform_type || "any";
-  loadCrimeStealWhatToUi(doc.crime_steal_what || "bil");
-  $("cfg-crime-steal-target").value = doc.crime_steal_target_mode || "random";
-  $("cfg-crime-steal-username").value = doc.crime_steal_username || "";
+  loadCrimeFromDoc(doc);
   $("cfg-crime-buttons").value = (doc.crime_button_labels || []).join(", ");
-  updateCrimeOptionsPanels();
   $("cfg-hospital-threshold").value = doc.hospital_health_threshold ?? 80;
   $("cfg-business-income-only").checked = doc.business_only_when_income_ready !== false;
   $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
@@ -249,11 +383,7 @@ function loadActionOptionsFromDoc(doc) {
 function appendActionOptionsToPayload(payload) {
   const crimeHpRaw = $("cfg-crime-min-health").value.trim();
   payload.crime_min_health_percent = crimeHpRaw ? parseInt(crimeHpRaw, 10) : null;
-  payload.crime_kind = $("cfg-crime-kind").value || "perform";
-  payload.crime_perform_type = $("cfg-crime-perform-type").value || "any";
-  payload.crime_steal_what = crimeStealWhatFromUi();
-  payload.crime_steal_target_mode = $("cfg-crime-steal-target").value || "random";
-  payload.crime_steal_username = $("cfg-crime-steal-username").value.trim();
+  appendCrimeToPayload(payload);
   payload.crime_button_labels = $("cfg-crime-buttons").value
     .split(",")
     .map((s) => s.trim())
@@ -650,12 +780,7 @@ function moveActionItem(li, direction) {
 }
 
 function setupCrimeOptionsHandlers() {
-  ["cfg-crime-kind", "cfg-crime-steal-what-preset", "cfg-crime-steal-target"].forEach(
-    (id) => {
-      const el = $(id);
-      if (el) el.addEventListener("change", updateCrimeOptionsPanels);
-    }
-  );
+  ensureCrimeUi();
 }
 
 function setupActionListHandlers() {
@@ -925,6 +1050,7 @@ function setupActions() {
 async function init() {
   setupTabs();
   ensureTravelCityList();
+  ensureCrimeUi();
   setupCrimeOptionsHandlers();
   setupActionListHandlers();
   setupActions();

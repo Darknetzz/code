@@ -7,11 +7,13 @@ import re
 from pathlib import Path
 
 from mafibot.config import (
+    BotProfile,
     bundled_profiles_dir,
     get_config_dir,
     get_profiles_dir,
     load_bot_profile,
 )
+from mafibot.profile_migrate import migrate_crime_fields, strip_legacy_crime_keys
 from mafibot.models import (
     BotProfileDocument,
     CredentialsStatus,
@@ -116,7 +118,13 @@ def rename_profile(old_name: str, new_name: str) -> BotProfileDocument:
 
 def load_profile_document(name: str) -> BotProfileDocument:
     profile = load_bot_profile(name)
-    return BotProfileDocument.model_validate(profile.model_dump())
+    data = strip_legacy_crime_keys(profile.model_dump())
+    return BotProfileDocument.model_validate(data)
+
+
+def _prepare_profile_payload(data: dict) -> dict:
+    cleaned = strip_legacy_crime_keys(migrate_crime_fields(data))
+    return BotProfile.model_validate(cleaned).model_dump()
 
 
 def save_profile_document(doc: BotProfileDocument) -> BotProfileDocument:
@@ -124,7 +132,7 @@ def save_profile_document(doc: BotProfileDocument) -> BotProfileDocument:
     dest = get_profiles_dir()
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{stem}.json"
-    data = doc.model_dump()
+    data = _prepare_profile_payload(doc.model_dump())
     data["name"] = stem
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     return BotProfileDocument.model_validate(data)

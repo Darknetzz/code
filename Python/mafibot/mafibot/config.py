@@ -21,6 +21,7 @@ GAME_URL = "https://mafiaspillet.no/ms.php"
 DEFAULT_PROFILE_NAME = "ranker"
 
 BuildStyle = Literal["ranker", "okonom", "angriper"]
+SchedulerMode = Literal["priority", "soonest_ready"]
 
 
 class PlayWindow(BaseModel):
@@ -41,6 +42,14 @@ class BotProfile(BaseModel):
             "drugs",
             "bank",
         ]
+    )
+    scheduler: SchedulerMode = Field(
+        default="priority",
+        description="priority: economy_order first match; soonest_ready: pick ready action with nearest cooldown end",
+    )
+    stop_webhook_url: str = Field(
+        default="",
+        description="Optional Discord-compatible webhook URL when session stops (captcha/ban/logout)",
     )
     stay_in_hotel: bool = True
     book_hotel_before_action: bool = True
@@ -93,9 +102,27 @@ class BotProfile(BaseModel):
     family_auto_accept: bool = True
     # Crime (optional overrides)
     crime_min_health_percent: int | None = None
+    crime_actions: list[str] = Field(
+        default_factory=list,
+        description="Enabled sections: enkel, tung, stjel (one or more)",
+    )
+    crime_enkel_choices: list[str] = Field(
+        default_factory=list,
+        description="Enkel crime option ids; empty = any in section",
+    )
+    crime_tung_choices: list[str] = Field(
+        default_factory=list,
+        description="Tung crime option ids; empty = any in section",
+    )
+    crime_steal_items: list[str] = Field(
+        default_factory=lambda: ["penger"],
+        description="Stjel item ids: garasje, vapen, penger",
+    )
+    crime_rotate_actions: bool = True
+    # Legacy (migrated to crime_actions / choices when unset)
     crime_kind: CrimeKind = "perform"
     crime_perform_type: CrimePerformType = "any"
-    crime_steal_what: str = "bil"
+    crime_steal_what: str = "penger"
     crime_steal_target_mode: CrimeStealTargetMode = "random"
     crime_steal_username: str = ""
     crime_button_labels: list[str] = Field(
@@ -169,11 +196,13 @@ def bundled_profiles_dir() -> Path:
 
 
 def load_bot_profile(name: str | None = None) -> BotProfile:
+    from mafibot.profile_migrate import migrate_crime_fields
+
     stem = (name or DEFAULT_PROFILE_NAME).strip()
     for base in (get_profiles_dir(), bundled_profiles_dir()):
         path = base / f"{stem}.json"
         if path.is_file():
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = migrate_crime_fields(json.loads(path.read_text(encoding="utf-8")))
             return BotProfile.model_validate(data)
     if stem != DEFAULT_PROFILE_NAME:
         return load_bot_profile(DEFAULT_PROFILE_NAME)

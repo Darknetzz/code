@@ -34,6 +34,46 @@ from mafibot.selectors import (
 class ParseError(Exception):
     """Page layout unexpected or missing required signals."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "parse_failed",
+        detail: str | None = None,
+        screenshot_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.detail = detail or message
+        self.screenshot_path = screenshot_path
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "code": self.code,
+            "message": str(self),
+            "detail": self.detail,
+            "screenshot_path": self.screenshot_path,
+        }
+
+
+_HOTEL_FULL_PATTERN = re.compile(
+    r"fullt\s+hotell|ingen\s+ledige\s+rom|ikke\s+plass",
+    re.I,
+)
+_HOTEL_FUNDS_PATTERN = re.compile(
+    r"ikke\s+nok\s+penger|for\s+lite\s+penger|mangler\s+penger",
+    re.I,
+)
+
+
+def parse_hotel_booking_hint(text: str) -> str | None:
+    """Return failure reason from page text after a book attempt, or None if ok."""
+    if _HOTEL_FULL_PATTERN.search(text):
+        return "hotel_full"
+    if _HOTEL_FUNDS_PATTERN.search(text):
+        return "insufficient_funds"
+    return None
+
 
 _BANK_BALANCE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"bank(?:konto)?[:\s]+([\d\s]+)\s*kr", re.I),
@@ -244,7 +284,11 @@ async def parse_game_state(page: Page) -> GameState:
     try:
         body_text = await page.locator("body").inner_text()
     except Exception as exc:
-        raise ParseError(f"Could not read page body: {exc}") from exc
+        raise ParseError(
+            f"Could not read page body: {exc}",
+            code="body_read_failed",
+            detail=str(exc),
+        ) from exc
 
     text = body_text[:16000]
     state = GameState(

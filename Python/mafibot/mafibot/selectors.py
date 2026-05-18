@@ -101,6 +101,15 @@ HOTEL_BOOK_LABELS = ("book", "sjekk inn")
 SHIP_ACTION_LABELS = ("send", "avreise", "skip")
 DRUGS_ACTION_LABELS = ("kjøp", "selg", "narkotika")
 MURDER_ACTION_LABELS = ("skyt", "drap", "angrip")
+STEAL_RANDOM_TARGET_LABELS = (
+    "tilfeldig",
+    "random",
+    "trekk",
+    "velg tilfeldig",
+    "tilfeldig spiller",
+    "tilfeldig bruker",
+)
+
 HOSPITAL_ACTION_LABELS = (
     "behandle",
     "helbred",
