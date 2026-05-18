@@ -9,7 +9,8 @@ from mafibot.config import BotProfile
 from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import click_button_matching, goto_page, goto_sidebar
 from mafibot.page_actions import bank_adjustment, read_page_balances, submit_bank_transfer
-from mafibot.selectors import DRUGS_ACTION_LABELS, SHIP_ACTION_LABELS, WORK_ACTION_LABELS
+from mafibot.profile_options import drugs_click_labels
+from mafibot.selectors import SHIP_ACTION_LABELS, WORK_ACTION_LABELS
 from mafibot.state import GameState
 
 
@@ -26,9 +27,13 @@ class _EconomyPageAction:
         if state.needs_stop or state.in_jail:
             return False
         if self.logical == "business":
-            return state.business_income_ready
+            if profile.business_only_when_income_ready:
+                return state.business_income_ready
+            return True
         if self.logical == "ship":
-            return state.ship_in_port or state.ship_ready
+            if profile.ship_only_when_in_port:
+                return state.ship_in_port or state.ship_ready
+            return True
         return True
 
     async def run(
@@ -71,8 +76,34 @@ class ShipAction(_EconomyPageAction):
 
 class DrugsAction(_EconomyPageAction):
     logical = "drugs"
-    labels = DRUGS_ACTION_LABELS
+    labels = ("kjøp", "selg", "narkotika")
     use_sidebar = True
+
+    async def run(
+        self,
+        page: Page,
+        state: GameState,
+        profile: BotProfile,
+        policy: HumanPolicy,
+        *,
+        dry_run: bool = False,
+    ) -> ActionResult:
+        if dry_run:
+            return ActionResult(True, f"dry-run: would run drugs ({profile.drugs_prefer})")
+
+        if self.use_sidebar:
+            ok = await goto_sidebar(page, self.logical, policy=policy, dry_run=dry_run)
+        else:
+            ok = await goto_page(page, self.logical, policy=policy, dry_run=dry_run)
+        if not ok and not dry_run:
+            await goto_page(page, self.logical, policy=policy)
+
+        await page_reading_pause(page)
+        labels = drugs_click_labels(profile)
+        clicked = await click_button_matching(page, labels, policy=policy, dry_run=dry_run)
+        if clicked or dry_run:
+            return ActionResult(True, f"drugs action submitted ({profile.drugs_prefer})")
+        return ActionResult(False, f"no button for drugs ({profile.drugs_prefer})")
 
 
 class BankAction:

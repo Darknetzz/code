@@ -158,7 +158,54 @@
         </div>
         <div id="action-options-section" class="action-options-section hidden">
           <h3 class="action-options-heading">Action options</h3>
-          <details id="action-options-bank" class="action-options-panel" data-action-options="bank" open>
+          <details id="action-options-crime" class="action-options-panel hidden">
+            <summary>Crime</summary>
+            <div class="grid-2">
+              <div>
+                <label for="cfg-crime-min-health">Min health % (crime only)</label>
+                <input type="number" id="cfg-crime-min-health" min="0" max="100" placeholder="profile default" />
+              </div>
+              <div>
+                <label for="cfg-crime-buttons">Button labels (comma-separated)</label>
+                <input type="text" id="cfg-crime-buttons" placeholder="utfør, stjel" />
+              </div>
+            </div>
+            <p class="tos-note">Leave health blank to use profile min health. Empty buttons = build defaults.</p>
+          </details>
+          <details id="action-options-business" class="action-options-panel hidden">
+            <summary>Business</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-business-income-only" checked />
+              <label for="cfg-business-income-only">Only when income ready</label>
+            </div>
+          </details>
+          <details id="action-options-ship" class="action-options-panel hidden">
+            <summary>Ship</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-ship-in-port" checked />
+              <label for="cfg-ship-in-port">Only when ship in port / ready</label>
+            </div>
+          </details>
+          <details id="action-options-travel" class="action-options-panel hidden">
+            <summary>Travel</summary>
+            <div>
+              <label for="cfg-travel-destinations">Preferred cities (one per line)</label>
+              <textarea id="cfg-travel-destinations" rows="2" placeholder="Kabul"></textarea>
+            </div>
+            <p class="tos-note">Empty = first available flight. With cities, selects destination first.</p>
+          </details>
+          <details id="action-options-drugs" class="action-options-panel hidden">
+            <summary>Drugs</summary>
+            <div>
+              <label for="cfg-drugs-prefer">Prefer</label>
+              <select id="cfg-drugs-prefer">
+                <option value="any">Buy or sell</option>
+                <option value="buy">Buy only</option>
+                <option value="sell">Sell only</option>
+              </select>
+            </div>
+          </details>
+          <details id="action-options-bank" class="action-options-panel hidden">
             <summary>Bank</summary>
             <div class="checkbox-row">
               <input type="checkbox" id="cfg-bank-auto" />
@@ -176,7 +223,35 @@
             </div>
             <p class="tos-note">When auto is off, bank only clicks generic innskudd/uttak. When on, bot transfers only if wallet is outside target ± tolerance.</p>
           </details>
-          <details id="action-options-murder" class="action-options-panel hidden" data-action-options="murder">
+          <details id="action-options-messages" class="action-options-panel hidden">
+            <summary>Messages</summary>
+            <div class="grid-2">
+              <div>
+                <label for="cfg-messages-interval">Check interval (minutes)</label>
+                <input type="number" id="cfg-messages-interval" min="1" step="1" value="45" />
+              </div>
+              <div>
+                <label for="cfg-messages-max-hour">Max replies per hour</label>
+                <input type="number" id="cfg-messages-max-hour" min="0" max="60" value="8" />
+              </div>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-messages-unread-only" />
+              <label for="cfg-messages-unread-only">Only when unread messages</label>
+            </div>
+          </details>
+          <details id="action-options-family" class="action-options-panel hidden">
+            <summary>Family</summary>
+            <div>
+              <label for="cfg-family-interval">Visit interval (minutes)</label>
+              <input type="number" id="cfg-family-interval" min="1" step="1" value="45" />
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-family-auto-accept" checked />
+              <label for="cfg-family-auto-accept">Auto-accept invites</label>
+            </div>
+          </details>
+          <details id="action-options-murder" class="action-options-panel hidden">
             <summary>Murder</summary>
             <div>
               <label for="cfg-murder-targets">Target usernames (one per line)</label>

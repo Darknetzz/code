@@ -60,9 +60,76 @@ const ACTION_CATALOG = [
 
 /** Actions with extra config panels (shown only when enabled in the list). */
 const ACTION_OPTION_PANELS = {
+  crime: "action-options-crime",
+  business: "action-options-business",
+  ship: "action-options-ship",
+  travel: "action-options-travel",
+  drugs: "action-options-drugs",
   bank: "action-options-bank",
+  messages: "action-options-messages",
+  family: "action-options-family",
   murder: "action-options-murder",
 };
+
+function effectiveInterval(doc, field, fallbackField = "social_interval_minutes") {
+  const v = doc[field];
+  if (v && v > 0) return v;
+  const fb = doc[fallbackField];
+  return fb && fb > 0 ? fb : 45;
+}
+
+function loadActionOptionsFromDoc(doc) {
+  const crimeHp = $("cfg-crime-min-health");
+  crimeHp.value =
+    doc.crime_min_health_percent != null && doc.crime_min_health_percent !== ""
+      ? doc.crime_min_health_percent
+      : "";
+  $("cfg-crime-buttons").value = (doc.crime_button_labels || []).join(", ");
+  $("cfg-business-income-only").checked = doc.business_only_when_income_ready !== false;
+  $("cfg-ship-in-port").checked = doc.ship_only_when_in_port !== false;
+  $("cfg-travel-destinations").value = (doc.travel_destinations || []).join("\n");
+  $("cfg-drugs-prefer").value = doc.drugs_prefer || "any";
+  $("cfg-bank-auto").checked = !!doc.bank_auto_balance;
+  $("cfg-bank-keep").value = doc.bank_keep_cash_on_hand ?? 100000;
+  $("cfg-bank-tolerance").value = doc.bank_balance_tolerance ?? 25000;
+  $("cfg-messages-interval").value = effectiveInterval(doc, "messages_interval_minutes");
+  $("cfg-messages-max-hour").value = doc.messages_max_per_hour ?? 8;
+  $("cfg-messages-unread-only").checked = !!doc.messages_only_when_unread;
+  $("cfg-family-interval").value = effectiveInterval(doc, "family_interval_minutes");
+  $("cfg-family-auto-accept").checked = doc.family_auto_accept !== false;
+  $("cfg-murder-targets").value = (doc.murder_targets || []).join("\n");
+  $("cfg-murder-rotate").checked = !!doc.murder_rotate_targets;
+}
+
+function appendActionOptionsToPayload(payload) {
+  const crimeHpRaw = $("cfg-crime-min-health").value.trim();
+  payload.crime_min_health_percent = crimeHpRaw ? parseInt(crimeHpRaw, 10) : null;
+  payload.crime_button_labels = $("cfg-crime-buttons").value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  payload.business_only_when_income_ready = $("cfg-business-income-only").checked;
+  payload.ship_only_when_in_port = $("cfg-ship-in-port").checked;
+  payload.travel_destinations = $("cfg-travel-destinations").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  payload.drugs_prefer = $("cfg-drugs-prefer").value || "any";
+  payload.bank_auto_balance = $("cfg-bank-auto").checked;
+  payload.bank_keep_cash_on_hand = parseInt($("cfg-bank-keep").value, 10) || 0;
+  payload.bank_balance_tolerance = parseInt($("cfg-bank-tolerance").value, 10) || 0;
+  payload.messages_interval_minutes = parseInt($("cfg-messages-interval").value, 10) || 45;
+  payload.messages_max_per_hour = parseInt($("cfg-messages-max-hour").value, 10) ?? 8;
+  payload.messages_only_when_unread = $("cfg-messages-unread-only").checked;
+  payload.family_interval_minutes = parseInt($("cfg-family-interval").value, 10) || 45;
+  payload.family_auto_accept = $("cfg-family-auto-accept").checked;
+  payload.murder_targets = $("cfg-murder-targets").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  payload.murder_rotate_targets = $("cfg-murder-rotate").checked;
+  return payload;
+}
 
 const ECONOMY_ACTION_IDS = new Set([
   "crime",

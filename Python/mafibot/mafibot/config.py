@@ -9,6 +9,8 @@ from datetime import time
 from pathlib import Path
 from typing import Literal
 
+DrugsPrefer = Literal["any", "buy", "sell"]
+
 from pydantic import BaseModel, Field
 
 BASE_URL = "https://mafiaspillet.no/"
@@ -79,6 +81,23 @@ class BotProfile(BaseModel):
     # Murder: must set at least one username or murder never runs
     murder_targets: list[str] = Field(default_factory=list)
     murder_rotate_targets: bool = False
+    # Messages
+    messages_interval_minutes: int = 0
+    messages_only_when_unread: bool = False
+    messages_max_per_hour: int = Field(default=8, ge=0, le=60)
+    # Family
+    family_interval_minutes: int = 0
+    family_auto_accept: bool = True
+    # Crime (optional overrides)
+    crime_min_health_percent: int | None = None
+    crime_button_labels: list[str] = Field(default_factory=list)
+    # Travel
+    travel_destinations: list[str] = Field(default_factory=list)
+    # Drugs
+    drugs_prefer: DrugsPrefer = "any"
+    # Business / ship gating
+    business_only_when_income_ready: bool = True
+    ship_only_when_in_port: bool = True
 
 
 def get_config_dir() -> Path:
