@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from playwright.async_api import Page
 
 from mafibot.game_cities import GAME_CITIES
+from mafibot.page_capture import collect_page_text, html_to_plain_text
 from mafibot.selectors import (
     BAN_PATTERN,
     BUSINESS_INCOME_PATTERN,
@@ -64,6 +65,15 @@ _HOTEL_FUNDS_PATTERN = re.compile(
     r"ikke\s+nok\s+penger|for\s+lite\s+penger|mangler\s+penger",
     re.I,
 )
+_HOTEL_NIGHTLY_COST_PATTERN = re.compile(
+    r"(?:rom|overnatt|hotell)[^.]{0,80}?([\d\s]+)\s*kr",
+    re.I,
+)
+_WORK_READY_PATTERN = re.compile(
+    r"arbeid[^.\n]{0,60}(?:klar!|kan\s+arbeide|start\s+arbeid)",
+    re.I,
+)
+_MISSIONS_IN_PROGRESS_PATTERN = re.compile(r"på\s+oppdrag\s+\d+", re.I)
 
 
 def parse_hotel_booking_hint(text: str) -> str | None:
@@ -73,6 +83,13 @@ def parse_hotel_booking_hint(text: str) -> str | None:
     if _HOTEL_FUNDS_PATTERN.search(text):
         return "insufficient_funds"
     return None
+
+
+def parse_hotel_nightly_cost(text: str) -> int | None:
+    match = _HOTEL_NIGHTLY_COST_PATTERN.search(text)
+    if not match:
+        return None
+    return _parse_int(match.group(1))
 
 
 _BANK_BALANCE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -114,11 +131,16 @@ class ActionCooldown:
 _ACTION_COOLDOWN_SPECS: tuple[tuple[str, str, str], ...] = (
     ("crime", "Crime", "kriminalitet"),
     ("travel", "Travel", "flyplass"),
+    ("work", "Work", "arbeid"),
     ("business", "Business", "bedrift"),
     ("ship", "Ship", "rederi"),
     ("drugs", "Drugs", "narkotika"),
     ("murder", "Murder", "skyt"),
     ("hospital", "Hospital", "sykehus"),
+    ("minions", "Minions", "folk"),
+    ("missions", "Missions", "oppdrag"),
+    ("organized_crime", "Org crime", "organisert"),
+    ("market", "Market", "marked"),
 )
 
 
@@ -144,14 +166,21 @@ class GameState:
     banned: bool = False
     business_income_ready: bool = False
     ship_in_port: bool = False
+    hotel_nightly_cost: int | None = None
+    missions_in_progress: bool = False
     crime_ready: bool = True
     travel_ready: bool = True
     work_ready: bool = True
+    job_ready: bool = True
     hotel_ready: bool = True
     ship_ready: bool = True
     drugs_ready: bool = True
     murder_ready: bool = True
     hospital_ready: bool = True
+    minions_ready: bool = True
+    missions_ready: bool = True
+    organized_crime_ready: bool = True
+    market_ready: bool = True
     cooldowns: list[CooldownInfo] = field(default_factory=list)
     active_cooldowns: list[ActionCooldown] = field(default_factory=list)
     page_text_sample: str = ""
@@ -243,11 +272,16 @@ def _action_is_on_cooldown(state: GameState, action_id: str) -> bool:
     return {
         "crime": not state.crime_ready,
         "travel": not state.travel_ready,
+        "work": not state.job_ready,
         "business": not state.work_ready,
         "ship": not state.ship_ready,
         "drugs": not state.drugs_ready,
         "murder": not state.murder_ready,
         "hospital": not state.hospital_ready,
+        "minions": not state.minions_ready,
+        "missions": not state.missions_ready,
+        "organized_crime": not state.organized_crime_ready,
+        "market": not state.market_ready,
     }.get(action_id, False)
 
 
@@ -282,7 +316,7 @@ async def parse_game_state(page: Page) -> GameState:
         side = url.split("side=", 1)[-1].split("&", 1)[0]
 
     try:
-        body_text = await page.locator("body").inner_text()
+        body_text = await collect_page_text(page)
     except Exception as exc:
         raise ParseError(
             f"Could not read page body: {exc}",
@@ -310,6 +344,8 @@ async def parse_game_state(page: Page) -> GameState:
     state.hotel_blocks_actions = bool(HOTEL_BLOCKS_PATTERN.search(text))
     state.business_income_ready = bool(BUSINESS_INCOME_PATTERN.search(text))
     state.ship_in_port = bool(SHIP_IN_PORT_PATTERN.search(text))
+    state.hotel_nightly_cost = parse_hotel_nightly_cost(text)
+    state.missions_in_progress = bool(_MISSIONS_IN_PROGRESS_PATTERN.search(text))
 
     money_m = MONEY_PATTERN.search(text)
     if money_m:
@@ -334,11 +370,19 @@ async def parse_game_state(page: Page) -> GameState:
 
     state.crime_ready = _cooldown_ready(text, "kriminalitet") and not state.in_jail
     state.travel_ready = _cooldown_ready(text, "flyplass") or bool(KLAR_TAB_PATTERN.search(text))
+    state.job_ready = _cooldown_ready(text, "arbeid") or bool(_WORK_READY_PATTERN.search(text))
     state.work_ready = state.business_income_ready or _cooldown_ready(text, "bedrift")
     state.ship_ready = state.ship_in_port or _cooldown_ready(text, "rederi")
     state.drugs_ready = _cooldown_ready(text, "narkotika")
     state.murder_ready = _cooldown_ready(text, "skyt")
     state.hospital_ready = _cooldown_ready(text, "sykehus")
+    state.minions_ready = _cooldown_ready(text, "folk") or _cooldown_ready(text, "undersåtter")
+    state.missions_ready = (
+        not state.missions_in_progress
+        and (_cooldown_ready(text, "oppdrag") or _cooldown_ready(text, "oppdrag2"))
+    )
+    state.organized_crime_ready = _cooldown_ready(text, "organisert")
+    state.market_ready = _cooldown_ready(text, "marked")
 
     for m in COOLDOWN_PATTERN.finditer(text):
         state.cooldowns.append(CooldownInfo(name="generic", raw=m.group(0)))
@@ -367,11 +411,6 @@ async def parse_from_html(html: str, page_url: str = "") -> GameState:
             return self
 
         async def inner_text(self) -> str:
-            body = re.search(r"<body[^>]*>(.*)</body>", self._html, re.I | re.S)
-            raw = body.group(1) if body else self._html
-            raw = re.sub(r"<script[^>]*>.*?</script>", " ", raw, flags=re.I | re.S)
-            raw = re.sub(r"<style[^>]*>.*?</style>", " ", raw, flags=re.I | re.S)
-            raw = re.sub(r"<[^>]+>", "\n", raw)
-            return re.sub(r"\n+", "\n", raw).strip()
+            return html_to_plain_text(self._html)
 
     return await parse_game_state(_FakePage())  # type: ignore[arg-type]

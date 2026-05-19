@@ -51,6 +51,7 @@ from mafibot.state import GameState, ParseError, parse_game_state
 log = logging.getLogger("mafibot")
 
 _cancel = asyncio.Event()
+_hotel_disabled_for_session = False
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
 _last_idle_detail: str | None = None
 _last_parse_error: dict[str, str | None] | None = None
@@ -130,7 +131,23 @@ def request_stop() -> None:
 
 
 def clear_stop() -> None:
+    global _hotel_disabled_for_session
     _cancel.clear()
+    _hotel_disabled_for_session = False
+
+
+def _effective_stay_in_hotel(profile: BotProfile) -> bool:
+    return profile.stay_in_hotel and not _hotel_disabled_for_session
+
+
+def _maybe_disable_hotel_for_session(profile: BotProfile) -> None:
+    global _hotel_disabled_for_session
+    if not profile.hotel_fallback_when_blocked:
+        return
+    metrics = current_session_metrics()
+    if metrics and metrics.hotel_book_failures >= 3:
+        _hotel_disabled_for_session = True
+        log.warning("hotel booking failed repeatedly — disabling stay_in_hotel for this session")
 
 
 def is_stop_requested() -> bool:
@@ -162,6 +179,8 @@ async def _book_hotel(
     dry_run: bool = False,
     quick: bool = False,
 ) -> ActionResult:
+    if not _effective_stay_in_hotel(profile):
+        return ActionResult(True, "skip book: hotel disabled for session")
     book = BookHotelAction()
     state = await parse_game_state(page)
     if not await book.can_run(state, profile):
@@ -191,6 +210,7 @@ async def _book_hotel_with_retry(
         await capture_failure(page, "hotel_book_failed")
         if metrics:
             metrics.hotel_book_failures += 1
+        _maybe_disable_hotel_for_session(profile)
     return retry
 
 
@@ -219,12 +239,12 @@ async def execute_with_hotel_stay(
     """Book → (leave if needed) → action → book again."""
     state = await parse_game_state(page)
 
-    if profile.stay_in_hotel and profile.book_hotel_before_action:
+    if _effective_stay_in_hotel(profile) and profile.book_hotel_before_action:
         pre = await _book_hotel_with_retry(page, profile, policy, dry_run=dry_run)
         log.info("pre-action book: %s", pre.message)
         state = await parse_game_state(page)
 
-    if profile.stay_in_hotel and action_requires_leave_hotel(action.name):
+    if _effective_stay_in_hotel(profile) and action_requires_leave_hotel(action.name):
         left = await _leave_hotel_if_needed(page, profile, policy, dry_run=dry_run)
         if left:
             log.info("leave for %s: %s", action.name, left.message)
@@ -232,7 +252,7 @@ async def execute_with_hotel_stay(
 
     result = await action.run(page, state, profile, policy, dry_run=dry_run)
 
-    if profile.stay_in_hotel and profile.book_hotel_after_every_action and not dry_run:
+    if _effective_stay_in_hotel(profile) and profile.book_hotel_after_every_action and not dry_run:
         gap = await pause_before_book_hotel(profile.max_seconds_before_book_hotel)
         log.info("pause before book: %.2fs (max %.2fs)", gap, profile.max_seconds_before_book_hotel)
         post = await _book_hotel_with_retry(page, profile, policy, dry_run=False, quick=True)
@@ -294,7 +314,7 @@ async def pick_next_action(
             if await action.can_run(state, profile):
                 hint = ""
                 if (
-                    profile.stay_in_hotel
+                    _effective_stay_in_hotel(profile)
                     and action_requires_leave_hotel(action.name)
                     and state.in_hotel
                 ):
@@ -387,7 +407,7 @@ async def run_once(
     _notify_status(state, action.name if action else None, reason, reason)
 
     if action is None:
-        if profile.stay_in_hotel and profile.book_hotel_when_idle and not dry_run:
+        if _effective_stay_in_hotel(profile) and profile.book_hotel_when_idle and not dry_run:
             await _book_hotel_with_retry(page, profile, policy)
         if metrics:
             metrics.actions_skipped += 1
@@ -455,7 +475,7 @@ async def run_session(
     session_start = datetime.now()
     stop_reason: str | None = None
 
-    if profile.stay_in_hotel and not dry_run:
+    if _effective_stay_in_hotel(profile) and not dry_run:
         await ensure_game_shell(page, policy)
         await _book_hotel_with_retry(page, profile, policy)
         log.info("session start: ensured hotel check-in")
@@ -543,7 +563,7 @@ async def run_session(
     if is_stop_requested():
         stop_reason = stop_reason or "user stop"
 
-    if profile.stay_in_hotel and not dry_run:
+    if _effective_stay_in_hotel(profile) and not dry_run:
         await _book_hotel_with_retry(page, profile, policy)
         log.info("session end: return to hotel")
 

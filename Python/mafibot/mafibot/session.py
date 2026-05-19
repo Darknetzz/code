@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import AsyncIterator
@@ -21,10 +22,36 @@ class SessionConfig:
     ignore_https_errors: bool = False
     viewport_width: int = 1280
     viewport_height: int = 900
+    proxy_server: str | None = None
+    proxy_username: str | None = None
+    proxy_password: str | None = None
+
+
+def _proxy_from_env() -> dict[str, str] | None:
+    server = os.getenv("MAFIBOT_PROXY_SERVER", "").strip()
+    if not server:
+        return None
+    proxy: dict[str, str] = {"server": server}
+    user = os.getenv("MAFIBOT_PROXY_USERNAME", "").strip()
+    password = os.getenv("MAFIBOT_PROXY_PASSWORD", "").strip()
+    if user:
+        proxy["username"] = user
+    if password:
+        proxy["password"] = password
+    return proxy
 
 
 def browser_config(cfg: SessionConfig | None = None) -> BrowserConfig:
     c = cfg or SessionConfig()
+    proxy: dict[str, str] | None = None
+    if c.proxy_server:
+        proxy = {"server": c.proxy_server}
+        if c.proxy_username:
+            proxy["username"] = c.proxy_username
+        if c.proxy_password:
+            proxy["password"] = c.proxy_password
+    else:
+        proxy = _proxy_from_env()
     return BrowserConfig(
         headless=c.headless,
         channel=c.channel,
@@ -33,6 +60,7 @@ def browser_config(cfg: SessionConfig | None = None) -> BrowserConfig:
         viewport_width=c.viewport_width,
         viewport_height=c.viewport_height,
         user_data_dir=get_profile_dir(),
+        proxy=proxy,
     )
 
 

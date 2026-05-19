@@ -48,13 +48,13 @@ async def test_ms_hotel_in_hotel_crime_still_ready_for_scheduler():
 
 
 @pytest.mark.asyncio
-async def test_pick_business_while_in_hotel_before_crime_if_both_ready():
+async def test_pick_work_while_in_hotel_before_crime_if_both_ready():
     html = (FIXTURES / "ms_logged_in.html").read_text(encoding="utf-8")
     state = await parse_from_html(html, page_url="https://mafiaspillet.no/ms.php")
     profile = load_bot_profile("okonom")
     action, reason = await pick_next_action(state, profile)
     assert action is not None
-    assert action.name == "business"
+    assert action.name == "work"
 
 
 @pytest.mark.asyncio

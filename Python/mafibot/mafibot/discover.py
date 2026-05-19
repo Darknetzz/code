@@ -19,7 +19,7 @@ from mafibot.navigation import (
     goto_page,
     goto_sidebar,
 )
-from mafibot.selectors import DEFAULT_SIDES, save_pages_map
+from mafibot.selectors import DEFAULT_SIDES, merge_discovered_pages, save_pages_map
 from mafibot.discover_diff import find_previous_discovery_run, write_discovery_report
 from mafibot.page_capture import capture_page_html
 from mafibot.state import parse_game_state
@@ -41,6 +41,11 @@ ACTION_SNAPSHOT_PAGES: tuple[str, ...] = (
     "messages",
     "family",
     "murder",
+    "work",
+    "minions",
+    "missions",
+    "organized_crime",
+    "market",
 )
 
 SIDEBAR_SNAPSHOT_PAGES: frozenset[str] = frozenset(
@@ -85,7 +90,7 @@ async def run_discovery(
                 break
 
     save_pages_map(
-        dict(DEFAULT_SIDES),
+        merge_discovered_pages(links, tabs),
         discovered_links=links,
         discovered_tabs=tabs,
         tab_labels=tab_labels_by_logical or None,

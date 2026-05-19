@@ -20,7 +20,7 @@ from mafibot.drugs_locations import (
     drugs_enabled,
     location_allows_drugs,
 )
-from mafibot.selectors import SHIP_ACTION_LABELS, WORK_ACTION_LABELS
+from mafibot.selectors import BUSINESS_ACTION_LABELS, SHIP_ACTION_LABELS, WORK_ACTION_LABELS
 from mafibot.state import GameState
 
 
@@ -72,9 +72,22 @@ class _EconomyPageAction:
         return ActionResult(False, f"no button for {self.logical}")
 
 
+class WorkAction(_EconomyPageAction):
+    logical = "work"
+    labels = WORK_ACTION_LABELS
+    use_sidebar = False
+
+    async def can_run(self, state: GameState, profile: BotProfile) -> bool:
+        if state.needs_stop or state.in_jail:
+            return False
+        if profile.work_only_when_ready:
+            return state.job_ready
+        return True
+
+
 class BusinessAction(_EconomyPageAction):
     logical = "business"
-    labels = WORK_ACTION_LABELS + ("hent", "inntekt")
+    labels = BUSINESS_ACTION_LABELS
     use_sidebar = True
 
 

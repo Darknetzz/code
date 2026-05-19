@@ -21,6 +21,7 @@ class BrowserConfig:
     viewport_width: int = 1280
     viewport_height: int = 720
     user_data_dir: Path | None = None
+    proxy: dict[str, str] | None = None
     extra_args: list[str] = field(
         default_factory=lambda: ["--disable-blink-features=AutomationControlled"]
     )
@@ -61,6 +62,8 @@ def _launch_kwargs(config: BrowserConfig, profile: Path) -> dict:
         kwargs["slow_mo"] = config.slow_mo
     if config.ignore_https_errors:
         kwargs["ignore_https_errors"] = True
+    if config.proxy:
+        kwargs["proxy"] = config.proxy
     return kwargs
 
 

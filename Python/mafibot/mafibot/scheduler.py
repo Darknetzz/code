@@ -20,6 +20,14 @@ def ordered_action_names(profile: BotProfile, state: GameState | None = None) ->
             continue
         if name not in order:
             order.append(name)
+    if profile.minions_enabled and "minions" not in order:
+        order.append("minions")
+    if profile.missions_enabled and "missions" not in order:
+        order.append("missions")
+    if profile.organized_crime_enabled and "organized_crime" not in order:
+        order.append("organized_crime")
+    if profile.market_enabled and profile.market_mode != "none" and "market" not in order:
+        order.append("market")
     if profile.social_enabled:
         for s in ("messages", "family"):
             if s not in order:
@@ -28,8 +36,6 @@ def ordered_action_names(profile: BotProfile, state: GameState | None = None) ->
         order.append("murder")
     normalized: list[str] = []
     for n in order:
-        if n == "work":
-            n = "business"
         if n not in normalized:
             normalized.append(n)
     if state is not None:
@@ -49,11 +55,16 @@ def _cooldown_ready_at(state: GameState, action_id: str) -> datetime | None:
     ready_map = {
         "crime": state.crime_ready,
         "travel": state.travel_ready,
+        "work": state.job_ready,
         "business": state.work_ready,
         "ship": state.ship_ready,
         "drugs": state.drugs_ready,
         "murder": state.murder_ready,
         "hospital": state.hospital_ready,
+        "minions": state.minions_ready,
+        "missions": state.missions_ready,
+        "organized_crime": state.organized_crime_ready,
+        "market": state.market_ready,
     }
     if ready_map.get(action_id, True):
         return datetime.now()
@@ -77,10 +88,23 @@ async def action_block_reason(
             return "crime on cooldown"
         if action.name == "travel" and not state.travel_ready:
             return "travel on cooldown"
+        if action.name == "work" and not state.job_ready:
+            return "work not ready"
         if action.name == "business" and not state.work_ready:
             return "business not ready"
         if action.name == "ship" and not state.ship_ready:
             return "ship not ready"
+        if action.name == "minions" and not state.minions_ready:
+            return "minions on cooldown"
+        if action.name == "missions":
+            if state.missions_in_progress:
+                return "mission in progress"
+            if not state.missions_ready:
+                return "missions on cooldown"
+        if action.name == "organized_crime" and not state.organized_crime_ready:
+            return "organized crime on cooldown"
+        if action.name == "market" and not state.market_ready:
+            return "market on cooldown"
         if profile.stay_in_hotel and action_requires_leave_hotel(action.name) and state.in_hotel:
             if state.hotel_blocks_actions:
                 pass

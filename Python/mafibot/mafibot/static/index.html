@@ -154,6 +154,24 @@
         </div>
         <div class="grid-2">
           <div>
+            <label for="cfg-hotel-min-wallet">Hotel min wallet (kr)</label>
+            <input type="number" id="cfg-hotel-min-wallet" min="0" step="100" value="500" />
+          </div>
+          <div>
+            <label for="cfg-hotel-max-cost">Max nightly hotel cost (kr)</label>
+            <input type="number" id="cfg-hotel-max-cost" min="0" step="100" placeholder="no limit" />
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-hotel-book-broke" />
+          <label for="cfg-hotel-book-broke">Book hotel when wallet below min</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-hotel-fallback" checked />
+          <label for="cfg-hotel-fallback">Disable hotel-first after repeated book failures</label>
+        </div>
+        <div class="grid-2">
+          <div>
             <label for="cfg-max-book-sec">Max seconds before book hotel</label>
             <input type="number" id="cfg-max-book-sec" step="0.1" min="0" max="10" value="2" />
           </div>
@@ -245,6 +263,49 @@
               <input type="text" id="cfg-crime-buttons" placeholder="utfør, begå" />
             </div>
             <p class="tos-note">Enable one or more actions (or All). Empty sub-options = any crime in that section. Stjel + specific user needs a username.</p>
+          </details>
+          <details id="action-options-work" class="action-options-panel hidden">
+            <summary>Work</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-work-ready-only" checked />
+              <label for="cfg-work-ready-only">Only when work timer ready</label>
+            </div>
+          </details>
+          <details id="action-options-minions" class="action-options-panel hidden">
+            <summary>Minions</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-minions-enabled" />
+              <label for="cfg-minions-enabled">Enable Undersåtter action</label>
+            </div>
+          </details>
+          <details id="action-options-missions" class="action-options-panel hidden">
+            <summary>Missions</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-missions-enabled" />
+              <label for="cfg-missions-enabled">Enable Oppdrag auto-start</label>
+            </div>
+          </details>
+          <details id="action-options-organized-crime" class="action-options-panel hidden">
+            <summary>Organized crime</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-org-crime-enabled" />
+              <label for="cfg-org-crime-enabled">Enable Organisert Kriminalitet</label>
+            </div>
+          </details>
+          <details id="action-options-market" class="action-options-panel hidden">
+            <summary>Market</summary>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-market-enabled" />
+              <label for="cfg-market-enabled">Enable Marked trading</label>
+            </div>
+            <div>
+              <label for="cfg-market-mode">Mode</label>
+              <select id="cfg-market-mode">
+                <option value="none">Off</option>
+                <option value="sell_junk">Sell junk</option>
+                <option value="buy_supplies">Buy supplies</option>
+              </select>
+            </div>
           </details>
           <details id="action-options-business" class="action-options-panel hidden">
             <summary>Business</summary>

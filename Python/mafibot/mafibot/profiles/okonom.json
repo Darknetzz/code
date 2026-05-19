@@ -2,7 +2,7 @@
   "name": "okonom",
   "build": "okonom",
   "aggression": 0.2,
-  "economy_order": ["business", "ship", "bank", "crime", "drugs"],
+  "economy_order": ["work", "business", "ship", "bank", "crime", "drugs"],
   "stay_in_hotel": true,
   "book_hotel_before_action": true,
   "book_hotel_after_every_action": true,

@@ -38,7 +38,11 @@ SIDEBAR_LINKS: dict[str, tuple[str, ...]] = {
 DEFAULT_SIDES: dict[str, str] = {
     "home": "forsiden",
     "crime": "kriminalitet",
+    "minions": "folk",
+    "missions": "oppdrag",
     "travel": "reise",
+    "organized_crime": "org_krim",
+    "market": "marked",
     "hotel": "hotell",
     "work": "arbeid",
     "bank": "bank",
@@ -50,8 +54,33 @@ DEFAULT_SIDES: dict[str, str] = {
     "hospital": "sykehus",
 }
 
+# game.php?p= route → logical page (from ms.php tab data-url)
+TAB_FRAME_ROUTES: dict[str, str] = {
+    "hjem": "home",
+    "krim": "crime",
+    "folk": "minions",
+    "oppdrag2": "missions",
+    "oppdrag": "missions",
+    "flyplass2": "travel",
+    "flyplass": "travel",
+    "org_krim": "organized_crime",
+    "org_kriminalitet": "organized_crime",
+    "marked": "market",
+    "forum": "forum",
+    "sykehus": "hospital",
+    "familie": "family",
+    "hotell": "hotel",
+    "meldinger": "messages",
+    "bedrifter": "business",
+    "arbeid": "work",
+}
+
 NAV_LINKS: dict[str, tuple[str, ...]] = {
     "crime": ("kriminalitet",),
+    "minions": ("undersåtter", "folk"),
+    "missions": ("oppdrag",),
+    "organized_crime": ("organisert",),
+    "market": ("marked",),
     "travel": ("flyplass", "reise"),
     "hotel": ("hotell",),
     "work": ("arbeid",),
@@ -95,7 +124,12 @@ UNREAD_MESSAGES_PATTERN = re.compile(r"(\d+)\s*(?:uleste|nye)\s*melding", re.I)
 # Buttons (ms.php)
 CRIME_ACTION_LABELS = ("utfør", "stjel", "begå", "gjør")
 TRAVEL_ACTION_LABELS = ("reise", "fly", "avgang")
-WORK_ACTION_LABELS = ("hent", "inntekt", "arbeid")
+WORK_ACTION_LABELS = ("arbeid", "jobb", "start arbeid", "utfør arbeid")
+BUSINESS_ACTION_LABELS = ("hent", "inntekt", "samle inntekt")
+MINIONS_ACTION_LABELS = ("utfør", "samle", "bruk", "folk")
+MISSIONS_ACTION_LABELS = ("start", "oppdrag", "utfør", "dra på oppdrag")
+ORG_CRIME_ACTION_LABELS = ("utfør", "begå", "deltak", "start")
+MARKET_ACTION_LABELS = ("kjøp", "selg", "marked", "by")
 HOTEL_LEAVE_LABELS = ("forlat hotell", "sjekk ut")
 HOTEL_BOOK_LABELS = ("book hotell", "sjekk inn", "overnatt")
 SHIP_ACTION_LABELS = ("send", "avreise", "skip")
@@ -144,6 +178,41 @@ def tab_label_for(logical: str) -> str | None:
 
 def side_for(logical: str) -> str:
     return load_pages_map().get(logical, DEFAULT_SIDES.get(logical, logical))
+
+
+def merge_discovered_pages(
+    links: list[dict] | None,
+    tabs: list[dict] | None,
+) -> dict[str, str]:
+    """Merge discovery output into logical → slug map (tabs preferred over legacy ?side=)."""
+    merged = dict(DEFAULT_SIDES)
+    if links:
+        for link in links:
+            side = (link.get("side") or "").strip()
+            if not side:
+                continue
+            text = (link.get("text") or "").lower()
+            for logical, keywords in NAV_LINKS.items():
+                if any(k in text for k in keywords):
+                    merged[logical] = side
+                    break
+    if tabs:
+        for tab in tabs:
+            label = (tab.get("label") or "").lower()
+            for logical, game_label in GAME_TABS.items():
+                if game_label.lower() in label or label in game_label.lower():
+                    route = tab.get("route") or tab.get("data_url") or tab.get("href") or ""
+                    p_match = re.search(r"[?&]p=([^&\"'#]+)", route, re.I)
+                    if p_match:
+                        merged[logical] = p_match.group(1)
+                    break
+            route = tab.get("route") or tab.get("data_url") or tab.get("href") or ""
+            p_match = re.search(r"[?&]p=([^&\"'#]+)", route, re.I)
+            if p_match:
+                logical = TAB_FRAME_ROUTES.get(p_match.group(1).lower())
+                if logical:
+                    merged[logical] = p_match.group(1)
+    return merged
 
 
 def save_pages_map(

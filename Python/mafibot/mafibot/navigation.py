@@ -367,14 +367,21 @@ async def collect_side_links(page: Page) -> list[dict[str, str]]:
 
 async def collect_tab_labels(page: Page) -> list[dict[str, str]]:
     tabs: list[dict[str, str]] = []
-    for anchor in await page.locator("a").all():
+    for anchor in await page.locator("a.top-menu-item, a[data-url]").all():
         try:
             text = (await anchor.inner_text()).strip()
         except Exception:
             continue
         if not text or len(text) > 40:
             continue
+        data_url = (await anchor.get_attribute("data-url")) or ""
+        href = (await anchor.get_attribute("href")) or ""
+        route = data_url or href
         if text in {t["label"] for t in tabs}:
             continue
-        tabs.append({"label": text})
+        entry: dict[str, str] = {"label": text}
+        if route:
+            entry["data_url"] = route
+            entry["route"] = route
+        tabs.append(entry)
     return tabs

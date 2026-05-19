@@ -7,7 +7,6 @@ target/
 lib
 logs
 chromium
-auth.py
 *.pyc
 __pycache__/
 build/

@@ -6,21 +6,26 @@ from __future__ import annotations
 ACTIONS_REQUIRING_LEAVE: frozenset[str] = frozenset(
     {
         "crime",
+        "organized_crime",
         "travel",
         "drugs",
         "murder",
         "bank",
+        "market",
     }
 )
 
 # Usually available from sidebar while still in hotel.
 ACTIONS_OK_IN_HOTEL: frozenset[str] = frozenset(
     {
+        "work",
         "business",
         "ship",
         "hospital",
         "messages",
         "family",
+        "minions",
+        "missions",
     }
 )
 
@@ -35,7 +40,7 @@ def should_skip_booking(state) -> bool:
 
 
 def hotel_booking_blocked_reason(state, profile) -> str | None:
-    """Skip booking when broke or hotel unavailable (parsed from last page text)."""
+    """Skip booking when broke, over budget, or hotel unavailable (parsed from last page text)."""
     from mafibot.state import parse_hotel_booking_hint
 
     sample = getattr(state, "page_text_sample", "") or ""
@@ -44,6 +49,18 @@ def hotel_booking_blocked_reason(state, profile) -> str | None:
         return "insufficient_funds"
     if hint == "hotel_full":
         return "hotel_full"
-    if profile.stay_in_hotel and state.money is not None and state.money < 500:
+    if (
+        profile.stay_in_hotel
+        and not profile.hotel_book_when_broke
+        and state.money is not None
+        and state.money < profile.hotel_min_wallet
+    ):
         return "low_wallet"
+    nightly = getattr(state, "hotel_nightly_cost", None)
+    if (
+        profile.hotel_max_nightly_cost is not None
+        and nightly is not None
+        and nightly > profile.hotel_max_nightly_cost
+    ):
+        return "over_budget"
     return None

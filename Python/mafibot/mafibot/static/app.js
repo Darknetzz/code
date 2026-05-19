@@ -15,6 +15,12 @@ const ACTION_CATALOG = [
       "Opens Kriminalitet when ready. Enable Enkel, Tung, and/or Stjel (or All). Pick specific crimes per section; bot rotates when multiple are enabled. Leaves hotel first.",
   },
   {
+    id: "work",
+    label: "Work (Arbeid)",
+    description:
+      "Opens the Arbeid tab and clicks work when the job timer is ready. Separate from sidebar business income. Can run in the hotel.",
+  },
+  {
     id: "business",
     label: "Business (Mine bedrifter)",
     description:
@@ -57,6 +63,30 @@ const ACTION_CATALOG = [
       "Opens Familie on a timer (social_interval_minutes). Accepts invites (Godta/Aksepter) if shown; otherwise just visits the page. Stays in hotel.",
   },
   {
+    id: "minions",
+    label: "Minions (Undersåtter)",
+    description:
+      "Opens Undersåtter when enabled and cooldown is clear. Good for rank progression. Can run in the hotel.",
+  },
+  {
+    id: "missions",
+    label: "Missions (Oppdrag)",
+    description:
+      "Starts a mission when Oppdrag shows Klar. Skips if already on a mission. Can run in the hotel.",
+  },
+  {
+    id: "organized_crime",
+    label: "Organized crime",
+    description:
+      "Opens Organisert Kriminalitet and clicks Utfør when ready. Must leave the hotel first.",
+  },
+  {
+    id: "market",
+    label: "Market (Marked)",
+    description:
+      "Opens Marked for buy/sell when enabled. Rate-limited per hour. Must leave the hotel first.",
+  },
+  {
     id: "murder",
     label: "Murder (combat)",
     description:
@@ -68,7 +98,12 @@ const ACTION_CATALOG = [
 const ACTION_OPTION_PANELS = {
   hospital: "action-options-hospital",
   crime: "action-options-crime",
+  work: "action-options-work",
   business: "action-options-business",
+  minions: "action-options-minions",
+  missions: "action-options-missions",
+  organized_crime: "action-options-organized-crime",
+  market: "action-options-market",
   ship: "action-options-ship",
   travel: "action-options-travel",
   drugs: "action-options-drugs",
@@ -435,11 +470,16 @@ function appendActionOptionsToPayload(payload) {
 const ECONOMY_ACTION_IDS = new Set([
   "hospital",
   "crime",
+  "work",
   "business",
+  "minions",
+  "missions",
+  "organized_crime",
   "ship",
   "travel",
   "drugs",
   "bank",
+  "market",
 ]);
 
 let ws = null;
@@ -873,6 +913,13 @@ function actionFlagsFromOrder(order) {
     economy_order: order.filter((id) => ECONOMY_ACTION_IDS.has(id)),
     social_enabled: enabled.has("messages") || enabled.has("family"),
     combat_enabled: enabled.has("murder"),
+    minions_enabled: !!$("cfg-minions-enabled")?.checked || enabled.has("minions"),
+    missions_enabled: !!$("cfg-missions-enabled")?.checked || enabled.has("missions"),
+    organized_crime_enabled:
+      !!$("cfg-org-crime-enabled")?.checked || enabled.has("organized_crime"),
+    market_enabled:
+      !!$("cfg-market-enabled")?.checked ||
+      (enabled.has("market") && ($("cfg-market-mode")?.value || "none") !== "none"),
   };
 }
 
@@ -885,6 +932,16 @@ async function loadProfileForm(name) {
   $("cfg-book-before").checked = !!doc.book_hotel_before_action;
   $("cfg-book-after").checked = !!doc.book_hotel_after_every_action;
   $("cfg-book-idle").checked = !!doc.book_hotel_when_idle;
+  if ($("cfg-hotel-min-wallet")) $("cfg-hotel-min-wallet").value = doc.hotel_min_wallet ?? 500;
+  if ($("cfg-hotel-max-cost")) $("cfg-hotel-max-cost").value = doc.hotel_max_nightly_cost ?? "";
+  if ($("cfg-hotel-book-broke")) $("cfg-hotel-book-broke").checked = !!doc.hotel_book_when_broke;
+  if ($("cfg-hotel-fallback")) $("cfg-hotel-fallback").checked = doc.hotel_fallback_when_blocked !== false;
+  if ($("cfg-minions-enabled")) $("cfg-minions-enabled").checked = !!doc.minions_enabled;
+  if ($("cfg-missions-enabled")) $("cfg-missions-enabled").checked = !!doc.missions_enabled;
+  if ($("cfg-org-crime-enabled")) $("cfg-org-crime-enabled").checked = !!doc.organized_crime_enabled;
+  if ($("cfg-market-enabled")) $("cfg-market-enabled").checked = !!doc.market_enabled;
+  if ($("cfg-market-mode")) $("cfg-market-mode").value = doc.market_mode || "none";
+  if ($("cfg-work-ready-only")) $("cfg-work-ready-only").checked = doc.work_only_when_ready !== false;
   $("cfg-max-book-sec").value = doc.max_seconds_before_book_hotel ?? 2;
   $("cfg-min-health").value = doc.min_health_percent ?? 35;
   $("cfg-jitter-min").value = doc.cooldown_jitter_min_sec ?? 30;
@@ -908,6 +965,15 @@ function profilePayload() {
     book_hotel_before_action: $("cfg-book-before").checked,
     book_hotel_after_every_action: $("cfg-book-after").checked,
     book_hotel_when_idle: $("cfg-book-idle").checked,
+    hotel_min_wallet: parseInt($("cfg-hotel-min-wallet")?.value, 10) || 500,
+    hotel_max_nightly_cost: (() => {
+      const v = $("cfg-hotel-max-cost")?.value.trim();
+      return v ? parseInt(v, 10) : null;
+    })(),
+    hotel_book_when_broke: !!$("cfg-hotel-book-broke")?.checked,
+    hotel_fallback_when_blocked: $("cfg-hotel-fallback")?.checked !== false,
+    work_only_when_ready: $("cfg-work-ready-only")?.checked !== false,
+    market_mode: $("cfg-market-mode")?.value || "none",
     max_seconds_before_book_hotel: parseFloat($("cfg-max-book-sec").value),
     min_health_percent: parseInt($("cfg-min-health").value, 10),
     cooldown_jitter_min_sec: parseFloat($("cfg-jitter-min").value),

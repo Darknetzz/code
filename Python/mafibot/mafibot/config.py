@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 DrugsPrefer = Literal["any", "buy", "sell"]
+MarketMode = Literal["none", "sell_junk", "buy_supplies"]
 CrimeKind = Literal["perform", "steal"]
 CrimePerformType = Literal["lett", "tung", "any"]
 CrimeStealTargetMode = Literal["random", "specific"]
@@ -60,6 +61,21 @@ class BotProfile(BaseModel):
         ge=0.0,
         le=10.0,
         description="Max delay between gameplay action and book-hotel step",
+    )
+    hotel_min_wallet: int = Field(
+        default=500,
+        ge=0,
+        description="Skip hotel booking when wallet (Penger) is below this",
+    )
+    hotel_book_when_broke: bool = False
+    hotel_max_nightly_cost: int | None = Field(
+        default=None,
+        ge=0,
+        description="Skip booking when parsed nightly room cost exceeds this",
+    )
+    hotel_fallback_when_blocked: bool = Field(
+        default=True,
+        description="Disable stay_in_hotel for rest of session after repeated book failures",
     )
     social_interval_minutes: int = 45
     social_enabled: bool = True
@@ -143,7 +159,8 @@ class BotProfile(BaseModel):
             "Las Vegas",
         ]
     )
-    # Business / ship gating
+    # Business / ship / work gating
+    work_only_when_ready: bool = True
     business_only_when_income_ready: bool = True
     ship_only_when_in_port: bool = True
     # Ship: where to send skip (Mitt rederi) — routes keyed by current city/port
@@ -163,6 +180,20 @@ class BotProfile(BaseModel):
         le=99,
         description="Run hospital when Helse is below this percent",
     )
+    # Minions (Undersåtter)
+    minions_enabled: bool = False
+    # Missions (Oppdrag)
+    missions_enabled: bool = False
+    missions_auto_start: bool = True
+    # Organized crime
+    organized_crime_enabled: bool = False
+    organized_crime_min_health_percent: int | None = None
+    # Market (Marked)
+    market_enabled: bool = False
+    market_mode: MarketMode = "none"
+    market_max_per_hour: int = Field(default=4, ge=0, le=30)
+    market_sell_items: list[str] = Field(default_factory=list)
+    market_buy_items: list[str] = Field(default_factory=list)
 
 
 def get_config_dir() -> Path:
