@@ -61,3 +61,23 @@ def crime_needs_steal_username(profile: BotProfile) -> bool:
         and crime_steal_target_mode(profile) == "specific"
         and not crime_steal_username(profile)
     )
+
+
+def crime_any_section_ready(profile: BotProfile, state) -> bool:
+    if not state.crime_ready:
+        return False
+    sections = crime_actions_enabled(profile)
+    if not sections:
+        return state.crime_ready
+    ready_map = {
+        "enkel": state.crime_enkel_ready,
+        "tung": state.crime_tung_ready,
+        "stjel": state.crime_stjel_ready,
+    }
+    return any(ready_map.get(section, state.crime_ready) for section in sections)
+
+
+def gameplay_paused(profile: BotProfile, state) -> bool:
+    if not profile.pause_on_restricted_status:
+        return False
+    return state.gameplay_restricted()

@@ -10,6 +10,7 @@ from playwright.async_api import Page
 
 from mafibot.game_cities import GAME_CITIES
 from mafibot.page_capture import collect_page_text, html_to_plain_text
+from mafibot.state_parsers import ParsedExtendedState, ReportEntry, parse_extended_state
 from mafibot.selectors import (
     BAN_PATTERN,
     BUSINESS_INCOME_PATTERN,
@@ -181,6 +182,24 @@ class GameState:
     missions_ready: bool = True
     organized_crime_ready: bool = True
     market_ready: bool = True
+    crime_enkel_ready: bool = True
+    crime_tung_ready: bool = True
+    crime_stjel_ready: bool = True
+    attack: int | None = None
+    protection: int | None = None
+    rank_name: str | None = None
+    happy_hour_buffs: list[str] = field(default_factory=list)
+    happy_hour_active: bool = False
+    mission_number: int | None = None
+    mission_progress_current: int | None = None
+    mission_progress_total: int | None = None
+    mission_requirement_hint: str | None = None
+    feriemodus: bool = False
+    startbeskyttelse: bool = False
+    kidnapped: bool = False
+    family_war_active: bool = False
+    minions_train_ready: bool = False
+    report_entries: list[ReportEntry] = field(default_factory=list)
     cooldowns: list[CooldownInfo] = field(default_factory=list)
     active_cooldowns: list[ActionCooldown] = field(default_factory=list)
     page_text_sample: str = ""
@@ -204,6 +223,41 @@ class GameState:
     @property
     def must_leave_hotel(self) -> bool:
         return self.in_hotel and self.hotel_blocks_actions
+
+    def gameplay_restricted(self) -> bool:
+        """Ferie, kidnapping, or start protection — bot should not act aggressively."""
+        return self.feriemodus or self.kidnapped or self.startbeskyttelse
+
+    def mission_progress_remaining(self) -> int | None:
+        if (
+            self.mission_progress_current is None
+            or self.mission_progress_total is None
+        ):
+            return None
+        return max(0, self.mission_progress_total - self.mission_progress_current)
+
+    def apply_extended(self, ext: ParsedExtendedState) -> None:
+        self.attack = ext.attack
+        self.protection = ext.protection
+        self.rank_name = ext.rank_name
+        self.happy_hour_buffs = list(ext.happy_hour_buffs)
+        self.happy_hour_active = ext.happy_hour_active
+        self.mission_number = ext.mission_number
+        self.mission_progress_current = ext.mission_progress_current
+        self.mission_progress_total = ext.mission_progress_total
+        self.mission_requirement_hint = ext.mission_requirement_hint
+        self.feriemodus = ext.feriemodus
+        self.startbeskyttelse = ext.startbeskyttelse
+        self.kidnapped = ext.kidnapped
+        self.family_war_active = ext.family_war_active
+        self.minions_train_ready = ext.minions_train_ready
+        if ext.crime_enkel_ready is not None:
+            self.crime_enkel_ready = ext.crime_enkel_ready
+        if ext.crime_tung_ready is not None:
+            self.crime_tung_ready = ext.crime_tung_ready
+        if ext.crime_stjel_ready is not None:
+            self.crime_stjel_ready = ext.crime_stjel_ready
+        self.report_entries = list(ext.report_entries)
 
 
 def _parse_int(s: str | None) -> int | None:
@@ -392,6 +446,18 @@ async def parse_game_state(page: Page) -> GameState:
         state.cooldowns.append(CooldownInfo(name="timer", ready_at=ready, raw=m.group(0)))
 
     state.active_cooldowns = collect_active_cooldowns(state, text)
+
+    ext = parse_extended_state(text, crime_ready=state.crime_ready)
+    state.apply_extended(ext)
+    state.crime_enkel_ready = (
+        ext.crime_enkel_ready if ext.crime_enkel_ready is not None else state.crime_ready
+    )
+    state.crime_tung_ready = (
+        ext.crime_tung_ready if ext.crime_tung_ready is not None else state.crime_ready
+    )
+    state.crime_stjel_ready = (
+        ext.crime_stjel_ready if ext.crime_stjel_ready is not None else state.crime_ready
+    )
 
     if state.on_login_page:
         state.logged_in = False

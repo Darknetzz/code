@@ -47,6 +47,14 @@ class ActiveCooldownSnapshot:
 
 
 @dataclass
+class ReportEntrySnapshot:
+    username: str
+    city: str | None = None
+    null_delay: bool = False
+    incoming_shot: bool = False
+
+
+@dataclass
 class GameStateSnapshot:
     logged_in: bool = False
     in_hotel: bool = False
@@ -55,7 +63,25 @@ class GameStateSnapshot:
     health_percent: int | None = None
     location: str | None = None
     crime_ready: bool = False
+    crime_enkel_ready: bool = True
+    crime_tung_ready: bool = True
+    crime_stjel_ready: bool = True
     player_name: str | None = None
+    attack: int | None = None
+    protection: int | None = None
+    rank_name: str | None = None
+    happy_hour_active: bool = False
+    happy_hour_buffs: list[str] = field(default_factory=list)
+    mission_number: int | None = None
+    mission_progress_current: int | None = None
+    mission_progress_total: int | None = None
+    mission_requirement_hint: str | None = None
+    feriemodus: bool = False
+    startbeskyttelse: bool = False
+    kidnapped: bool = False
+    family_war_active: bool = False
+    minions_train_ready: bool = False
+    report_entries: list[ReportEntrySnapshot] = field(default_factory=list)
     active_cooldowns: list[ActiveCooldownSnapshot] = field(default_factory=list)
 
     @classmethod
@@ -77,6 +103,15 @@ class GameStateSnapshot:
                     raw=cd.raw,
                 )
             )
+        reports = [
+            ReportEntrySnapshot(
+                username=e.username,
+                city=e.city,
+                null_delay=e.null_delay,
+                incoming_shot=e.incoming_shot,
+            )
+            for e in getattr(state, "report_entries", ()) or ()
+        ]
         return cls(
             logged_in=state.logged_in,
             in_hotel=state.in_hotel,
@@ -85,6 +120,24 @@ class GameStateSnapshot:
             health_percent=state.health_percent,
             location=state.location,
             crime_ready=state.crime_ready,
+            crime_enkel_ready=getattr(state, "crime_enkel_ready", state.crime_ready),
+            crime_tung_ready=getattr(state, "crime_tung_ready", state.crime_ready),
+            crime_stjel_ready=getattr(state, "crime_stjel_ready", state.crime_ready),
+            attack=getattr(state, "attack", None),
+            protection=getattr(state, "protection", None),
+            rank_name=getattr(state, "rank_name", None),
+            happy_hour_active=getattr(state, "happy_hour_active", False),
+            happy_hour_buffs=list(getattr(state, "happy_hour_buffs", []) or []),
+            mission_number=getattr(state, "mission_number", None),
+            mission_progress_current=getattr(state, "mission_progress_current", None),
+            mission_progress_total=getattr(state, "mission_progress_total", None),
+            mission_requirement_hint=getattr(state, "mission_requirement_hint", None),
+            feriemodus=getattr(state, "feriemodus", False),
+            startbeskyttelse=getattr(state, "startbeskyttelse", False),
+            kidnapped=getattr(state, "kidnapped", False),
+            family_war_active=getattr(state, "family_war_active", False),
+            minions_train_ready=getattr(state, "minions_train_ready", False),
+            report_entries=reports,
             active_cooldowns=cooldowns,
         )
 

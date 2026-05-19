@@ -67,6 +67,10 @@
           <div><dt>Health</dt><dd id="st-health">—</dd></div>
           <div><dt>Location</dt><dd id="st-location">—</dd></div>
           <div><dt>Crime ready</dt><dd id="st-crime">—</dd></div>
+          <div><dt>Happy Hour</dt><dd id="st-happy-hour">—</dd></div>
+          <div><dt>Mission</dt><dd id="st-mission">—</dd></div>
+          <div><dt>Combat stats</dt><dd id="st-combat">—</dd></div>
+          <div><dt>Status flags</dt><dd id="st-flags">—</dd></div>
           <div><dt>Last action</dt><dd id="st-action">—</dd></div>
           <div><dt>Message</dt><dd id="st-message">—</dd></div>
           <div><dt>Idle reason</dt><dd id="st-idle" class="hidden">—</dd></div>
@@ -277,6 +281,14 @@
               <input type="checkbox" id="cfg-minions-enabled" />
               <label for="cfg-minions-enabled">Enable Undersåtter action</label>
             </div>
+            <div>
+              <label for="cfg-minions-action">Action</label>
+              <select id="cfg-minions-action">
+                <option value="train">Train</option>
+                <option value="collect_reports_only">Reports only</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
           </details>
           <details id="action-options-missions" class="action-options-panel hidden">
             <summary>Missions</summary>
@@ -284,12 +296,29 @@
               <input type="checkbox" id="cfg-missions-enabled" />
               <label for="cfg-missions-enabled">Enable Oppdrag auto-start</label>
             </div>
+            <div>
+              <label for="cfg-missions-mode">Mode</label>
+              <select id="cfg-missions-mode">
+                <option value="start_only">Start only</option>
+                <option value="auto_progress">Auto progress</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
           </details>
           <details id="action-options-organized-crime" class="action-options-panel hidden">
             <summary>Organized crime</summary>
             <div class="checkbox-row">
               <input type="checkbox" id="cfg-org-crime-enabled" />
               <label for="cfg-org-crime-enabled">Enable Organisert Kriminalitet</label>
+            </div>
+            <div>
+              <label for="cfg-org-crime-difficulty">Difficulty</label>
+              <select id="cfg-org-crime-difficulty">
+                <option value="auto">Auto</option>
+                <option value="lett">Lett</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
             </div>
           </details>
           <details id="action-options-market" class="action-options-panel hidden">
@@ -424,7 +453,19 @@ Las Vegas</textarea>
               <input type="checkbox" id="cfg-murder-rotate" />
               <label for="cfg-murder-rotate">Rotate through targets each attempt</label>
             </div>
-            <p class="tos-note">Murder will not run with an empty target list. Requires aggression ≥ 0.5 (use angriper profile or raise aggression).</p>
+            <div>
+              <label for="cfg-murder-mode">Mode</label>
+              <select id="cfg-murder-mode">
+                <option value="static_targets">Static targets</option>
+                <option value="report_stream">Report stream (null delay)</option>
+                <option value="retaliate_only">Retaliate only</option>
+              </select>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="cfg-murder-shoot" checked />
+              <label for="cfg-murder-shoot">Actually shoot (not just fill target)</label>
+            </div>
+            <p class="tos-note">Murder will not run with an empty target list (except report/retaliate modes). Requires aggression ≥ 0.5 for static targets.</p>
           </details>
         </div>
         <p class="health-meta" id="cfg-dir-hint"></p>

@@ -23,6 +23,10 @@ DEFAULT_PROFILE_NAME = "ranker"
 
 BuildStyle = Literal["ranker", "okonom", "angriper"]
 SchedulerMode = Literal["priority", "soonest_ready"]
+MissionsMode = Literal["off", "start_only", "auto_progress"]
+MinionsAction = Literal["disabled", "train", "collect_reports_only"]
+MurderMode = Literal["static_targets", "report_stream", "retaliate_only"]
+OrganizedCrimeDifficulty = Literal["auto", "lett", "medium", "hard"]
 
 
 class PlayWindow(BaseModel):
@@ -106,9 +110,26 @@ class BotProfile(BaseModel):
         ge=0,
         description="Only transfer when wallet is farther than this from target",
     )
-    # Murder: must set at least one username or murder never runs
+    # Murder
     murder_targets: list[str] = Field(default_factory=list)
     murder_rotate_targets: bool = False
+    murder_mode: MurderMode = Field(
+        default="static_targets",
+        description="static_targets: murder_targets list; report_stream: orange reports; retaliate_only: incoming shots",
+    )
+    murder_actually_shoot: bool = True
+    murder_min_attack_margin: int = Field(
+        default=0,
+        ge=0,
+        description="Require attack >= target protection + margin when protection is known",
+    )
+    murder_travel_before_shoot: bool = True
+    pause_on_restricted_status: bool = Field(
+        default=True,
+        description="Skip gameplay when feriemodus, kidnapped, or startbeskyttelse",
+    )
+    assist_webhook_on_war: bool = False
+    assist_webhook_on_kidnap: bool = False
     # Messages
     messages_interval_minutes: int = 0
     messages_only_when_unread: bool = False
@@ -182,18 +203,31 @@ class BotProfile(BaseModel):
     )
     # Minions (Undersåtter)
     minions_enabled: bool = False
+    minions_action: MinionsAction = "train"
+    minions_train_when_ready: bool = True
     # Missions (Oppdrag)
     missions_enabled: bool = False
     missions_auto_start: bool = True
+    missions_mode: MissionsMode = "start_only"
+    missions_prioritize_when_incomplete: bool = True
     # Organized crime
     organized_crime_enabled: bool = False
     organized_crime_min_health_percent: int | None = None
+    organized_crime_difficulty: OrganizedCrimeDifficulty = "auto"
     # Market (Marked)
     market_enabled: bool = False
     market_mode: MarketMode = "none"
     market_max_per_hour: int = Field(default=4, ge=0, le=30)
     market_sell_items: list[str] = Field(default_factory=list)
     market_buy_items: list[str] = Field(default_factory=list)
+    market_buy_when_mission_needs: bool = True
+    # Travel rotation (anti-surveillance)
+    travel_rotate_cities: bool = False
+    travel_city_pool: list[str] = Field(default_factory=list)
+    travel_rotate_min_minutes: int = Field(default=45, ge=5)
+    # Scheduler boosts
+    scheduler_happy_hour_boost: bool = True
+    scheduler_city_income_boost: bool = True
 
 
 def get_config_dir() -> Path:

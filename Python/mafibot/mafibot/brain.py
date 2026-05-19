@@ -33,6 +33,8 @@ from mafibot.human_policy import (
     wait_with_idle_activity,
 )
 from mafibot.navigation import ensure_game_shell
+from mafibot.assist_alerts import maybe_assist_alerts, reset_assist_alerts
+from mafibot.profile_options import gameplay_paused
 from mafibot.rotation import reset_rotation_state
 from mafibot.scheduler import (
     action_block_reason,
@@ -134,6 +136,7 @@ def clear_stop() -> None:
     global _hotel_disabled_for_session
     _cancel.clear()
     _hotel_disabled_for_session = False
+    reset_assist_alerts()
 
 
 def _effective_stay_in_hotel(profile: BotProfile) -> bool:
@@ -294,6 +297,17 @@ async def pick_next_action(
 
     if state.in_jail:
         _last_idle_detail = "idle: in jail"
+        return None, _last_idle_detail
+
+    maybe_assist_alerts(state, profile)
+
+    if gameplay_paused(profile, state):
+        if state.kidnapped:
+            _last_idle_detail = "idle: kidnapped"
+        elif state.feriemodus:
+            _last_idle_detail = "idle: feriemodus"
+        else:
+            _last_idle_detail = "idle: startbeskyttelse"
         return None, _last_idle_detail
 
     names = _ordered_action_names(profile, state)

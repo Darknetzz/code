@@ -35,6 +35,13 @@ class ActiveCooldownResponse(BaseModel):
     raw: str = ""
 
 
+class ReportEntryResponse(BaseModel):
+    username: str
+    city: str | None = None
+    null_delay: bool = False
+    incoming_shot: bool = False
+
+
 class GameStateResponse(BaseModel):
     logged_in: bool = False
     in_hotel: bool = False
@@ -43,7 +50,25 @@ class GameStateResponse(BaseModel):
     health_percent: int | None = None
     location: str | None = None
     crime_ready: bool = False
+    crime_enkel_ready: bool = True
+    crime_tung_ready: bool = True
+    crime_stjel_ready: bool = True
     player_name: str | None = None
+    attack: int | None = None
+    protection: int | None = None
+    rank_name: str | None = None
+    happy_hour_active: bool = False
+    happy_hour_buffs: list[str] = Field(default_factory=list)
+    mission_number: int | None = None
+    mission_progress_current: int | None = None
+    mission_progress_total: int | None = None
+    mission_requirement_hint: str | None = None
+    feriemodus: bool = False
+    startbeskyttelse: bool = False
+    kidnapped: bool = False
+    family_war_active: bool = False
+    minions_train_ready: bool = False
+    report_entries: list[ReportEntryResponse] = Field(default_factory=list)
     active_cooldowns: list[ActiveCooldownResponse] = Field(default_factory=list)
 
 

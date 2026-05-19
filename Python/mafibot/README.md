@@ -103,11 +103,17 @@ Three built-in play styles (JSON). Copy into your config `profiles/` folder to c
 
 | Profile | Focus | Combat |
 |---------|--------|--------|
-| `ranker` | Crime → business → ship → travel → drugs | Off |
+| `ranker` | Missions → crime → business → ship → travel → drugs | Off |
+| `early_ranker` | Auto-progress missions 1–9, market supplies, minion train | Off |
 | `okonom` | Work → bank → crime → ship | Off |
-| `angriper` | Crime → murder → travel | On (high aggression) |
+| `okonom_full` | Work, business, bank, city-income scheduler, travel rotation | Off |
+| `angriper` | Crime → murder → travel | On (retaliate-only default) |
+| `wartime_angriper` | Retaliate murder, war/kidnap webhooks | On |
+| `minion_ranker` | Minions + crime + business | Off |
 
 Each profile sets economy action order, social check interval, health thresholds, play window (default 08:00–23:00), idle breaks, and cooldown jitter (15–90 s).
+
+New profile fields (optional): `missions_mode` (`start_only` / `auto_progress`), `minions_action` (`train` / `collect_reports_only`), `murder_mode` (`static_targets` / `report_stream` / `retaliate_only`), `organized_crime_difficulty`, `travel_rotate_cities`, `scheduler_happy_hour_boost`, `assist_webhook_on_war` / `assist_webhook_on_kidnap`.
 
 ### Crime sections (Kriminalitet)
 

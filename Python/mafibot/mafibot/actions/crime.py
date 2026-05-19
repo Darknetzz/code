@@ -11,8 +11,10 @@ from mafibot.crime_flow import crime_flow_dry_run_summary, run_crime_flow
 from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import goto_page
 from mafibot.profile_options import (
+    crime_any_section_ready,
     crime_min_health_percent,
     crime_needs_steal_username,
+    gameplay_paused,
 )
 from mafibot.state import GameState
 
@@ -21,6 +23,8 @@ class CrimeAction:
     name = "crime"
 
     async def can_run(self, state: GameState, profile: BotProfile) -> bool:
+        if gameplay_paused(profile, state):
+            return False
         if state.needs_stop or state.in_jail or state.in_hospital:
             return False
         min_hp = crime_min_health_percent(profile)
@@ -30,7 +34,7 @@ class CrimeAction:
             return False
         if crime_needs_steal_username(profile):
             return False
-        return state.crime_ready
+        return crime_any_section_ready(profile, state)
 
     async def run(
         self,

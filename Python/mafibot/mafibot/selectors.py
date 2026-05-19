@@ -127,8 +127,29 @@ TRAVEL_ACTION_LABELS = ("reise", "fly", "avgang")
 WORK_ACTION_LABELS = ("arbeid", "jobb", "start arbeid", "utfør arbeid")
 BUSINESS_ACTION_LABELS = ("hent", "inntekt", "samle inntekt")
 MINIONS_ACTION_LABELS = ("utfør", "samle", "bruk", "folk")
+MINIONS_TRAIN_LABELS = ("trene", "tren", "trening", "tren undersåtter")
 MISSIONS_ACTION_LABELS = ("start", "oppdrag", "utfør", "dra på oppdrag")
 ORG_CRIME_ACTION_LABELS = ("utfør", "begå", "deltak", "start")
+
+
+def market_item_labels(item_id: str) -> tuple[str, ...]:
+    item_id = item_id.lower().strip()
+    if item_id in ("våpen", "vapen", "weapon"):
+        return ("våpen", "skytevåpen", "pistol")
+    if item_id in ("kuler", "bullets", "ammo"):
+        return ("kuler", "ammunisjon", "patroner")
+    if item_id in ("bil", "car"):
+        return ("bil", "kjøretøy", "bilkjøp")
+    return (item_id,)
+
+
+def org_crime_difficulty_labels(level: str) -> tuple[str, ...]:
+    level = level.lower()
+    if level == "lett":
+        return ("lett", "enkel", "lav")
+    if level == "hard":
+        return ("hard", "vanskelig", "tung")
+    return ("medium", "middels", "normal")
 MARKET_ACTION_LABELS = ("kjøp", "selg", "marked", "by")
 HOTEL_LEAVE_LABELS = ("forlat hotell", "sjekk ut")
 HOTEL_BOOK_LABELS = ("book hotell", "sjekk inn", "overnatt")

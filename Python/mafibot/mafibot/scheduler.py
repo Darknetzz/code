@@ -8,6 +8,7 @@ from mafibot.actions.base import Action
 from mafibot.config import BotProfile
 from mafibot.hotel_stay import action_requires_leave_hotel
 from mafibot.profile_options import hospital_enabled, needs_hospital_visit
+from mafibot.scheduler_weights import action_priority_boosts, reorder_by_boosts
 from mafibot.state import GameState
 
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
@@ -20,7 +21,11 @@ def ordered_action_names(profile: BotProfile, state: GameState | None = None) ->
             continue
         if name not in order:
             order.append(name)
-    if profile.minions_enabled and "minions" not in order:
+    if (
+        profile.minions_enabled
+        and profile.minions_action != "disabled"
+        and "minions" not in order
+    ):
         order.append("minions")
     if profile.missions_enabled and "missions" not in order:
         order.append("missions")
@@ -45,6 +50,9 @@ def ordered_action_names(profile: BotProfile, state: GameState | None = None) ->
             and "hospital" in normalized
         ):
             normalized = ["hospital"] + [n for n in normalized if n != "hospital"]
+    boosts = action_priority_boosts(state, profile) if state is not None else {}
+    if boosts:
+        normalized = reorder_by_boosts(normalized, boosts)
     return normalized
 
 

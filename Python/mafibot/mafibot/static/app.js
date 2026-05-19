@@ -424,6 +424,13 @@ function loadActionOptionsFromDoc(doc) {
   $("cfg-family-auto-accept").checked = doc.family_auto_accept !== false;
   $("cfg-murder-targets").value = (doc.murder_targets || []).join("\n");
   $("cfg-murder-rotate").checked = !!doc.murder_rotate_targets;
+  if ($("cfg-missions-mode")) $("cfg-missions-mode").value = doc.missions_mode || "start_only";
+  if ($("cfg-minions-action")) $("cfg-minions-action").value = doc.minions_action || "train";
+  if ($("cfg-org-crime-difficulty")) {
+    $("cfg-org-crime-difficulty").value = doc.organized_crime_difficulty || "auto";
+  }
+  if ($("cfg-murder-mode")) $("cfg-murder-mode").value = doc.murder_mode || "static_targets";
+  if ($("cfg-murder-shoot")) $("cfg-murder-shoot").checked = doc.murder_actually_shoot !== false;
 }
 
 function appendActionOptionsToPayload(payload) {
@@ -464,6 +471,15 @@ function appendActionOptionsToPayload(payload) {
     .map((s) => s.trim())
     .filter(Boolean);
   payload.murder_rotate_targets = $("cfg-murder-rotate").checked;
+  if ($("cfg-missions-mode")) payload.missions_mode = $("cfg-missions-mode").value;
+  if ($("cfg-minions-action")) payload.minions_action = $("cfg-minions-action").value;
+  if ($("cfg-org-crime-difficulty")) {
+    payload.organized_crime_difficulty = $("cfg-org-crime-difficulty").value;
+  }
+  if ($("cfg-murder-mode")) payload.murder_mode = $("cfg-murder-mode").value;
+  if ($("cfg-murder-shoot")) {
+    payload.murder_actually_shoot = $("cfg-murder-shoot").checked;
+  }
   return payload;
 }
 
@@ -586,6 +602,37 @@ function applyStatus(st) {
   $("st-health").textContent = g.health_percent != null ? `${g.health_percent}%` : "—";
   $("st-location").textContent = g.location || "—";
   $("st-crime").textContent = g.crime_ready ? "yes" : "no";
+  const hh = $("st-happy-hour");
+  if (hh) {
+    hh.textContent = g.happy_hour_active
+      ? (g.happy_hour_buffs || []).join(", ") || "active"
+      : "no";
+  }
+  const miss = $("st-mission");
+  if (miss) {
+    const parts = [];
+    if (g.mission_number != null) parts.push(`#${g.mission_number}`);
+    if (g.mission_progress_current != null && g.mission_progress_total != null) {
+      parts.push(`${g.mission_progress_current}/${g.mission_progress_total}`);
+    }
+    if (g.mission_requirement_hint) parts.push(g.mission_requirement_hint);
+    miss.textContent = parts.length ? parts.join(" · ") : "—";
+  }
+  const combat = $("st-combat");
+  if (combat) {
+    const a = g.attack != null ? `A${g.attack}` : "";
+    const p = g.protection != null ? `P${g.protection}` : "";
+    combat.textContent = [a, p].filter(Boolean).join(" / ") || "—";
+  }
+  const flags = $("st-flags");
+  if (flags) {
+    const f = [];
+    if (g.feriemodus) f.push("ferie");
+    if (g.kidnapped) f.push("kidnappet");
+    if (g.startbeskyttelse) f.push("startbeskyttelse");
+    if (g.family_war_active) f.push("krig");
+    flags.textContent = f.length ? f.join(", ") : "—";
+  }
   renderActiveCooldowns(g.active_cooldowns);
   $("st-action").textContent = st.last_action || "—";
   $("st-message").textContent = st.last_message || "—";
