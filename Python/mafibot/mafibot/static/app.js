@@ -431,6 +431,7 @@ function loadActionOptionsFromDoc(doc) {
   }
   if ($("cfg-murder-mode")) $("cfg-murder-mode").value = doc.murder_mode || "static_targets";
   if ($("cfg-murder-shoot")) $("cfg-murder-shoot").checked = doc.murder_actually_shoot !== false;
+  window.MafibotConfigPanel?.updateMurderTargetsVisibility();
 }
 
 function appendActionOptionsToPayload(payload) {
@@ -787,6 +788,11 @@ async function saveCurrentProfile() {
     throw new Error("Name must use letters, numbers, underscore, or hyphen only.");
   }
   const payload = profilePayload();
+  const warnings = window.MafibotConfigPanel?.collectConfigWarnings(payload) || [];
+  window.MafibotConfigPanel?.showValidationBanner(warnings);
+  if (warnings.some((w) => w.includes("No actions enabled"))) {
+    throw new Error(warnings.join(" "));
+  }
   payload.name = targetName;
   if (targetName !== selected) {
     await api(`/api/profiles/${encodeURIComponent(selected)}/rename`, {
@@ -819,6 +825,10 @@ function profileToEnabledActionOrder(doc) {
   if (doc.combat_enabled) {
     add("murder");
   }
+  if (doc.minions_enabled) add("minions");
+  if (doc.missions_enabled) add("missions");
+  if (doc.organized_crime_enabled) add("organized_crime");
+  if (doc.market_enabled) add("market");
   return order;
 }
 
@@ -956,25 +966,21 @@ function setupActionListHandlers() {
 
 function actionFlagsFromOrder(order) {
   const enabled = new Set(order);
+  const marketMode = $("cfg-market-mode")?.value || "none";
   return {
     economy_order: order.filter((id) => ECONOMY_ACTION_IDS.has(id)),
     social_enabled: enabled.has("messages") || enabled.has("family"),
     combat_enabled: enabled.has("murder"),
-    minions_enabled: !!$("cfg-minions-enabled")?.checked || enabled.has("minions"),
-    missions_enabled: !!$("cfg-missions-enabled")?.checked || enabled.has("missions"),
-    organized_crime_enabled:
-      !!$("cfg-org-crime-enabled")?.checked || enabled.has("organized_crime"),
-    market_enabled:
-      !!$("cfg-market-enabled")?.checked ||
-      (enabled.has("market") && ($("cfg-market-mode")?.value || "none") !== "none"),
+    minions_enabled: enabled.has("minions"),
+    missions_enabled: enabled.has("missions"),
+    organized_crime_enabled: enabled.has("organized_crime"),
+    market_enabled: enabled.has("market") && marketMode !== "none",
   };
 }
 
-async function loadProfileForm(name) {
-  const doc = await api(`/api/profiles/${encodeURIComponent(name)}`);
+function applyProfileDocument(doc) {
   $("cfg-build").value = doc.build || "ranker";
   if ($("cfg-scheduler")) $("cfg-scheduler").value = doc.scheduler || "priority";
-  if ($("cfg-stop-webhook")) $("cfg-stop-webhook").value = doc.stop_webhook_url || "";
   $("cfg-stay-in-hotel").checked = !!doc.stay_in_hotel;
   $("cfg-book-before").checked = !!doc.book_hotel_before_action;
   $("cfg-book-after").checked = !!doc.book_hotel_after_every_action;
@@ -983,10 +989,6 @@ async function loadProfileForm(name) {
   if ($("cfg-hotel-max-cost")) $("cfg-hotel-max-cost").value = doc.hotel_max_nightly_cost ?? "";
   if ($("cfg-hotel-book-broke")) $("cfg-hotel-book-broke").checked = !!doc.hotel_book_when_broke;
   if ($("cfg-hotel-fallback")) $("cfg-hotel-fallback").checked = doc.hotel_fallback_when_blocked !== false;
-  if ($("cfg-minions-enabled")) $("cfg-minions-enabled").checked = !!doc.minions_enabled;
-  if ($("cfg-missions-enabled")) $("cfg-missions-enabled").checked = !!doc.missions_enabled;
-  if ($("cfg-org-crime-enabled")) $("cfg-org-crime-enabled").checked = !!doc.organized_crime_enabled;
-  if ($("cfg-market-enabled")) $("cfg-market-enabled").checked = !!doc.market_enabled;
   if ($("cfg-market-mode")) $("cfg-market-mode").value = doc.market_mode || "none";
   if ($("cfg-work-ready-only")) $("cfg-work-ready-only").checked = doc.work_only_when_ready !== false;
   $("cfg-max-book-sec").value = doc.max_seconds_before_book_hotel ?? 2;
@@ -997,6 +999,17 @@ async function loadProfileForm(name) {
   $("cfg-tab-wait").value = doc.min_seconds_after_tab_change ?? 3.5;
   loadActionOptionsFromDoc(doc);
   renderActionList(profileToEnabledActionOrder(doc));
+  window.MafibotConfigPanel?.loadExtendedProfileFields(doc);
+}
+
+async function loadProfileForm(name) {
+  const doc = await api(`/api/profiles/${encodeURIComponent(name)}`);
+  applyProfileDocument(doc);
+  window.MafibotConfigPanel?.setConfigSnapshotFromPayload(profilePayload());
+  window.MafibotConfigPanel?.renderConfigSummary(profilePayload());
+  window.MafibotConfigPanel?.showValidationBanner(
+    window.MafibotConfigPanel.collectConfigWarnings(profilePayload())
+  );
 }
 
 function profilePayload() {
@@ -1007,7 +1020,6 @@ function profilePayload() {
     name,
     build: $("cfg-build").value,
     scheduler: $("cfg-scheduler")?.value || "priority",
-    stop_webhook_url: $("cfg-stop-webhook")?.value.trim() || "",
     stay_in_hotel: $("cfg-stay-in-hotel").checked,
     book_hotel_before_action: $("cfg-book-before").checked,
     book_hotel_after_every_action: $("cfg-book-after").checked,
@@ -1030,8 +1042,16 @@ function profilePayload() {
     economy_order: flags.economy_order,
     social_enabled: flags.social_enabled,
     combat_enabled: flags.combat_enabled,
+    minions_enabled: flags.minions_enabled,
+    missions_enabled: flags.missions_enabled,
+    organized_crime_enabled: flags.organized_crime_enabled,
+    market_enabled: flags.market_enabled,
+    market_mode: $("cfg-market-mode")?.value || "none",
   };
-  return appendActionOptionsToPayload(base);
+  const payload = appendActionOptionsToPayload(base);
+  return window.MafibotConfigPanel
+    ? window.MafibotConfigPanel.appendExtendedProfileFields(payload)
+    : payload;
 }
 
 async function loadCredentialsStatus() {
@@ -1072,7 +1092,10 @@ function setupActions() {
         method: "POST",
         body: JSON.stringify({
           profile: $("run-profile").value,
-          max_minutes: parseInt($("run-max-minutes").value, 10) || null,
+          max_minutes: (() => {
+            const v = $("run-max-minutes").value.trim();
+            return v ? parseInt(v, 10) : null;
+          })(),
           dry_run: $("run-dry-run").checked,
           headless: $("run-headless").checked,
           accept_tos: true,
@@ -1244,6 +1267,7 @@ async function init() {
   setupCrimeOptionsHandlers();
   setupActionListHandlers();
   setupActions();
+  window.MafibotConfigPanel?.setupConfigPanelExtras();
   connectWs();
   await loadHealth();
   await loadProfiles();
