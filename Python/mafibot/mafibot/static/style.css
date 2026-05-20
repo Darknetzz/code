@@ -446,6 +446,16 @@ button:disabled {
   color: var(--muted);
 }
 
+.login-subsection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.login-subsection .subsection-title {
+  margin-top: 0;
+}
+
 .cred-saved-user {
   margin: 0 0 0.35rem;
   font-size: 1.1rem;

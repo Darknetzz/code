@@ -63,9 +63,12 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card card-last-session">
         <h2>Last session</h2>
-        <p id="last-session-summary" class="health-meta">—</p>
+        <p id="last-session-empty" class="last-session-empty muted">Loading…</p>
+        <table class="config-overview-table last-session-table hidden" id="last-session-table">
+          <tbody id="last-session-body"></tbody>
+        </table>
       </div>
         </div>
 
@@ -680,14 +683,31 @@ Las Vegas</textarea>
           <button type="button" class="primary" id="btn-save-creds">Save credentials</button>
         </div>
         </div>
-        <div class="grid-2" style="margin-top: 1rem;">
-          <div>
-            <label for="ui-token">UI token</label>
+        <div class="login-subsection">
+          <h3 class="subsection-title">Dashboard access token</h3>
+          <p class="tos-note">
+            Optional shared secret that protects the dashboard API (start/stop bot, profiles, credentials).
+            This is <strong>not</strong> your Mafiaspillet username or password.
+          </p>
+          <p class="tos-note">
+            On the server, set the environment variable <strong>MAFIBOT_UI_TOKEN</strong> before running
+            <strong>mafibot.py ui</strong>. Enter the same value below and click Save — it is kept only in this
+            browser tab and sent on API calls (<strong>X-Mafibot-Token</strong>) and the live log WebSocket
+            (<strong>?token=</strong>).
+          </p>
+          <p class="tos-note">
+            Leave empty when you only open the dashboard at <strong>127.0.0.1</strong> (default). Use a long random
+            token if you bind to another host or expose port 8766 on your network.
+          </p>
+          <div class="grid-2">
+            <div>
+              <label for="ui-token">UI token</label>
             <input type="password" id="ui-token" autocomplete="off" placeholder="same as MAFIBOT_UI_TOKEN on server" />
           </div>
         </div>
         <div class="btn-row">
           <button type="button" id="btn-save-ui-token">Save UI token</button>
+        </div>
         </div>
       </div>
         </div>
