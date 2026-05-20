@@ -717,29 +717,141 @@ async function loadHealth() {
   $("cfg-dir-hint").textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
 }
 
+function formatKr(amount) {
+  if (amount == null || Number.isNaN(amount)) return "—";
+  return `${Number(amount).toLocaleString("nb-NO")} kr`;
+}
+
+function formatSessionWhen(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
+function formatSessionDuration(startIso, endIso) {
+  if (!startIso || !endIso) return "—";
+  const ms = new Date(endIso) - new Date(startIso);
+  if (Number.isNaN(ms) || ms < 0) return "—";
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+function renderLastSessionMetrics(m) {
+  const empty = $("last-session-empty");
+  const table = $("last-session-table");
+  const body = $("last-session-body");
+  if (!empty || !table || !body) return;
+
+  const showEmpty = (message) => {
+    empty.textContent = message;
+    empty.classList.remove("hidden");
+    table.classList.add("hidden");
+    body.replaceChildren();
+  };
+
+  const showTable = () => {
+    empty.classList.add("hidden");
+    table.classList.remove("hidden");
+    body.replaceChildren();
+  };
+
+  if (!m) {
+    showEmpty("No previous session recorded.");
+    return;
+  }
+
+  showTable();
+
+  const addRow = (label, value) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    const td = document.createElement("td");
+    if (value instanceof Node) td.appendChild(value);
+    else td.textContent = value;
+    tr.append(th, td);
+    body.appendChild(tr);
+  };
+
+  const pill = (text, kind) => {
+    const span = document.createElement("span");
+    span.className = `config-pill session-pill session-pill-${kind}`;
+    span.textContent = text;
+    return span;
+  };
+
+  const profileCell = document.createElement("span");
+  profileCell.className = "last-session-profile";
+  profileCell.textContent = m.profile || "—";
+  if (m.dry_run) {
+    profileCell.appendChild(document.createTextNode(" "));
+    profileCell.appendChild(pill("Dry run", "muted"));
+  }
+  addRow("Profile", profileCell);
+  addRow("Started", formatSessionWhen(m.started_at));
+  addRow("Ended", formatSessionWhen(m.ended_at));
+  addRow("Duration", formatSessionDuration(m.started_at, m.ended_at));
+
+  const actions = document.createElement("span");
+  actions.className = "config-overview-pills";
+  actions.append(
+    pill(`${m.actions_run} ok`, "ok"),
+    pill(`${m.actions_failed} failed`, m.actions_failed ? "fail" : "muted"),
+    pill(`${m.actions_skipped} idle`, "muted")
+  );
+  addRow("Actions", actions);
+
+  if (m.money_start != null || m.money_end != null) {
+    const money = document.createElement("span");
+    money.className = "last-session-money";
+    const delta =
+      m.money_start != null && m.money_end != null ? m.money_end - m.money_start : null;
+    money.textContent = `${formatKr(m.money_start)} → ${formatKr(m.money_end)}`;
+    if (delta != null && delta !== 0) {
+      const deltaEl = document.createElement("span");
+      deltaEl.className = `last-session-delta ${delta > 0 ? "positive" : "negative"}`;
+      deltaEl.textContent = ` (${delta > 0 ? "+" : ""}${formatKr(delta)})`;
+      money.appendChild(deltaEl);
+    }
+    addRow("Money", money);
+  }
+
+  if (m.rank_start != null || m.rank_end != null) {
+    addRow("Rank", `${m.rank_start ?? "—"} → ${m.rank_end ?? "—"}`);
+  }
+
+  if (m.hotel_time_percent != null) {
+    addRow("Time in hotel", `${m.hotel_time_percent.toFixed(0)}%`);
+  }
+
+  const issues = [];
+  if (m.parse_failures) issues.push(`${m.parse_failures} parse`);
+  if (m.hotel_book_failures) issues.push(`${m.hotel_book_failures} hotel book`);
+  if (issues.length) addRow("Issues", issues.join(" · "));
+
+  if (m.stop_reason) {
+    const stop = document.createElement("span");
+    stop.className = "config-pill session-pill session-pill-stop";
+    stop.textContent = m.stop_reason;
+    addRow("Stopped", stop);
+  }
+}
+
 async function loadLastSessionMetrics() {
-  const el = $("last-session-summary");
-  if (!el) return;
+  const empty = $("last-session-empty");
+  if (!empty) return;
   try {
     const m = await api("/api/session/metrics");
-    if (!m) {
-      el.textContent = "No previous session recorded.";
-      return;
-    }
-    const pct =
-      m.hotel_time_percent != null ? `${m.hotel_time_percent.toFixed(0)}% in hotel` : "—";
-    el.textContent = [
-      `Profile: ${m.profile}`,
-      `Actions: ${m.actions_run} ok / ${m.actions_failed} failed / ${m.actions_skipped} idle`,
-      `Parse errors: ${m.parse_failures} · Hotel book failures: ${m.hotel_book_failures}`,
-      `Money: ${m.money_start ?? "—"} → ${m.money_end ?? "—"}`,
-      `Time in hotel: ${pct}`,
-      m.stop_reason ? `Stop: ${m.stop_reason}` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    renderLastSessionMetrics(m);
   } catch (e) {
-    el.textContent = `Could not load session metrics: ${e.message}`;
+    empty.classList.remove("hidden");
+    $("last-session-table")?.classList.add("hidden");
+    empty.textContent = `Could not load: ${e.message}`;
   }
 }
 

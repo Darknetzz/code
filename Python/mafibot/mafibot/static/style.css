@@ -781,6 +781,58 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+.card-last-session .last-session-empty {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+}
+
+.last-session-table {
+  margin-top: 0.35rem;
+}
+
+.last-session-profile {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.last-session-money {
+  display: inline;
+}
+
+.last-session-delta {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.last-session-delta.positive {
+  color: var(--success);
+}
+
+.last-session-delta.negative {
+  color: var(--danger);
+}
+
+.session-pill.session-pill-ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.session-pill.session-pill-fail {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.session-pill.session-pill-stop {
+  color: #79c0ff;
+  border-color: color-mix(in srgb, #79c0ff 40%, var(--border));
+}
+
+.session-pill.session-pill-muted {
+  color: var(--muted);
+}
+
 .config-section {
   margin: 0.75rem 0;
   padding: 0.5rem 0.75rem;
