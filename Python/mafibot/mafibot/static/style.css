@@ -109,9 +109,13 @@ main:has(#panel-sessions.active) {
 
 .sessions-layout {
   display: grid;
-  grid-template-columns: 1fr minmax(280px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
   gap: 1rem;
   align-items: start;
+}
+
+.sessions-layout > .card {
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
@@ -176,6 +180,31 @@ main:has(#panel-sessions.active) {
 .session-history-item-meta {
   font-size: 0.76rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sessions-storage-hint {
+  margin-top: 0.35rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.sessions-storage-hint code {
+  display: block;
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 .sessions-live-card h2 {

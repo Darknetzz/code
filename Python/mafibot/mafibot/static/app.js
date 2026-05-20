@@ -1184,7 +1184,14 @@ async function loadSessionsPage() {
 
   const hint = $("sessions-storage-hint");
   if (hint && mafibotConfigDir) {
-    hint.textContent = `Stored in ${mafibotConfigDir}/sessions_history.ndjson (and last_session.json).`;
+    hint.replaceChildren();
+    hint.append(document.createTextNode("Stored in:"), document.createElement("br"));
+    const historyFile = document.createElement("code");
+    historyFile.textContent = `${mafibotConfigDir}/sessions_history.ndjson`;
+    hint.append(historyFile, document.createElement("br"));
+    const lastFile = document.createElement("code");
+    lastFile.textContent = `${mafibotConfigDir}/last_session.json`;
+    hint.append(lastFile);
   }
 
   const metricsPromise = api("/api/session/metrics").catch((e) => ({ error: e }));
