@@ -63,7 +63,6 @@ def _cooldown_ready_at(state: GameState, action_id: str) -> datetime | None:
     ready_map = {
         "crime": state.crime_ready,
         "travel": state.travel_ready,
-        "work": state.job_ready,
         "business": state.work_ready,
         "ship": state.ship_ready,
         "drugs": state.drugs_ready,
@@ -96,8 +95,6 @@ async def action_block_reason(
             return "crime on cooldown"
         if action.name == "travel" and not state.travel_ready:
             return "travel on cooldown"
-        if action.name == "work" and not state.job_ready:
-            return "work not ready"
         if action.name == "business" and not state.work_ready:
             return "business not ready"
         if action.name == "ship" and not state.ship_ready:

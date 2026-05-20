@@ -21,7 +21,6 @@ from mafibot.selectors import (
     SHIP_ACTION_LABELS,
     SIDEBAR_LINKS,
     TRAVEL_ACTION_LABELS,
-    WORK_ACTION_LABELS,
     BUSINESS_ACTION_LABELS,
     MINIONS_ACTION_LABELS,
     MISSIONS_ACTION_LABELS,
@@ -43,7 +42,6 @@ ACTION_PAGES: tuple[str, ...] = (
     "messages",
     "family",
     "murder",
-    "work",
     "minions",
     "missions",
     "organized_crime",
@@ -134,8 +132,6 @@ def _requirements_for(logical: str) -> list[tuple[str, tuple[str, ...]]]:
         reqs.append(("hotel:leave", HOTEL_LEAVE_LABELS))
     elif logical == "business":
         reqs.append(("business:action", BUSINESS_ACTION_LABELS))
-    elif logical == "work":
-        reqs.append(("work:action", WORK_ACTION_LABELS))
     elif logical == "minions":
         reqs.append(("minions:action", MINIONS_ACTION_LABELS))
     elif logical == "missions":

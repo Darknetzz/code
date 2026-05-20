@@ -44,7 +44,6 @@ DEFAULT_SIDES: dict[str, str] = {
     "organized_crime": "org_krim",
     "market": "marked",
     "hotel": "hotell",
-    "work": "arbeid",
     "bank": "bank",
     "ship": "rederi",
     "drugs": "narkotika",
@@ -72,7 +71,6 @@ TAB_FRAME_ROUTES: dict[str, str] = {
     "hotell": "hotel",
     "meldinger": "messages",
     "bedrifter": "business",
-    "arbeid": "work",
 }
 
 NAV_LINKS: dict[str, tuple[str, ...]] = {
@@ -83,7 +81,6 @@ NAV_LINKS: dict[str, tuple[str, ...]] = {
     "market": ("marked",),
     "travel": ("flyplass", "reise"),
     "hotel": ("hotell",),
-    "work": ("arbeid",),
     "bank": ("bank",),
     "ship": ("rederi", "skip", "mitt rederi"),
     "drugs": ("narkotika",),
@@ -124,7 +121,6 @@ UNREAD_MESSAGES_PATTERN = re.compile(r"(\d+)\s*(?:uleste|nye)\s*melding", re.I)
 # Buttons (ms.php)
 CRIME_ACTION_LABELS = ("utfør", "stjel", "begå", "gjør")
 TRAVEL_ACTION_LABELS = ("reise", "fly", "avgang")
-WORK_ACTION_LABELS = ("arbeid", "jobb", "start arbeid", "utfør arbeid")
 BUSINESS_ACTION_LABELS = ("hent", "inntekt", "samle inntekt")
 MINIONS_ACTION_LABELS = ("utfør", "samle", "bruk", "folk")
 MINIONS_TRAIN_LABELS = ("trene", "tren", "trening", "tren undersåtter")

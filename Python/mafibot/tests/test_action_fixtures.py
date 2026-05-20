@@ -22,7 +22,6 @@ GAME_URL = "https://mafiaspillet.no/ms.php"
         ("business", "okonom"),
         ("ship", "okonom"),
         ("bank", "okonom_full"),
-        ("work", "okonom"),
         ("hospital", "ranker"),
         ("messages", "ranker"),
         ("family", "ranker"),

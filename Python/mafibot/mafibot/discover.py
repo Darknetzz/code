@@ -41,7 +41,6 @@ ACTION_SNAPSHOT_PAGES: tuple[str, ...] = (
     "messages",
     "family",
     "murder",
-    "work",
     "minions",
     "missions",
     "organized_crime",

@@ -70,10 +70,6 @@ _HOTEL_NIGHTLY_COST_PATTERN = re.compile(
     r"(?:rom|overnatt|hotell)[^.]{0,80}?([\d\s]+)\s*kr",
     re.I,
 )
-_WORK_READY_PATTERN = re.compile(
-    r"arbeid[^.\n]{0,60}(?:klar!|kan\s+arbeide|start\s+arbeid)",
-    re.I,
-)
 _MISSIONS_IN_PROGRESS_PATTERN = re.compile(r"på\s+oppdrag\s+\d+", re.I)
 
 
@@ -132,7 +128,6 @@ class ActionCooldown:
 _ACTION_COOLDOWN_SPECS: tuple[tuple[str, str, str], ...] = (
     ("crime", "Crime", "kriminalitet"),
     ("travel", "Travel", "flyplass"),
-    ("work", "Work", "arbeid"),
     ("business", "Business", "bedrift"),
     ("ship", "Ship", "rederi"),
     ("drugs", "Drugs", "narkotika"),
@@ -172,7 +167,6 @@ class GameState:
     crime_ready: bool = True
     travel_ready: bool = True
     work_ready: bool = True
-    job_ready: bool = True
     hotel_ready: bool = True
     ship_ready: bool = True
     drugs_ready: bool = True
@@ -326,7 +320,6 @@ def _action_is_on_cooldown(state: GameState, action_id: str) -> bool:
     return {
         "crime": not state.crime_ready,
         "travel": not state.travel_ready,
-        "work": not state.job_ready,
         "business": not state.work_ready,
         "ship": not state.ship_ready,
         "drugs": not state.drugs_ready,
@@ -424,7 +417,6 @@ async def parse_game_state(page: Page) -> GameState:
 
     state.crime_ready = _cooldown_ready(text, "kriminalitet") and not state.in_jail
     state.travel_ready = _cooldown_ready(text, "flyplass") or bool(KLAR_TAB_PATTERN.search(text))
-    state.job_ready = _cooldown_ready(text, "arbeid") or bool(_WORK_READY_PATTERN.search(text))
     state.work_ready = state.business_income_ready or _cooldown_ready(text, "bedrift")
     state.ship_ready = state.ship_in_port or _cooldown_ready(text, "rederi")
     state.drugs_ready = _cooldown_ready(text, "narkotika")

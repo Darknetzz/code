@@ -39,7 +39,7 @@ class Action(Protocol):
 def _action_classes() -> tuple[type, ...]:
     from mafibot.actions.combat import MurderAction
     from mafibot.actions.crime import CrimeAction
-    from mafibot.actions.economy import BankAction, BusinessAction, DrugsAction, ShipAction, WorkAction
+    from mafibot.actions.economy import BankAction, BusinessAction, DrugsAction, ShipAction
     from mafibot.actions.hospital import HospitalAction
     from mafibot.actions.market import MarketAction
     from mafibot.actions.minions import MinionsAction
@@ -51,7 +51,6 @@ def _action_classes() -> tuple[type, ...]:
     return (
         CrimeAction,
         HospitalAction,
-        WorkAction,
         BusinessAction,
         TravelAction,
         ShipAction,

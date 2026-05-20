@@ -18,7 +18,6 @@ ACTIONS_REQUIRING_LEAVE: frozenset[str] = frozenset(
 # Usually available from sidebar while still in hotel.
 ACTIONS_OK_IN_HOTEL: frozenset[str] = frozenset(
     {
-        "work",
         "business",
         "ship",
         "hospital",

@@ -15,12 +15,6 @@ const ACTION_CATALOG = [
       "Opens Kriminalitet when ready. Enable Enkel, Tung, and/or Stjel (or All). Pick specific crimes per section; bot rotates when multiple are enabled. Leaves hotel first.",
   },
   {
-    id: "work",
-    label: "Work (Arbeid)",
-    description:
-      "Opens the Arbeid tab and clicks work when the job timer is ready. Separate from sidebar business income. Can run in the hotel.",
-  },
-  {
     id: "business",
     label: "Business (Mine bedrifter)",
     description:
@@ -174,7 +168,6 @@ function updateLiveSessionMetrics(metrics, state) {
 const ACTION_OPTION_PANELS = {
   hospital: "action-options-hospital",
   crime: "action-options-crime",
-  work: "action-options-work",
   business: "action-options-business",
   minions: "action-options-minions",
   missions: "action-options-missions",
@@ -563,7 +556,6 @@ function appendActionOptionsToPayload(payload) {
 const ECONOMY_ACTION_IDS = new Set([
   "hospital",
   "crime",
-  "work",
   "business",
   "minions",
   "missions",
@@ -1657,7 +1649,6 @@ function applyProfileDocument(doc) {
   if ($("cfg-hotel-book-broke")) $("cfg-hotel-book-broke").checked = !!doc.hotel_book_when_broke;
   if ($("cfg-hotel-fallback")) $("cfg-hotel-fallback").checked = doc.hotel_fallback_when_blocked !== false;
   if ($("cfg-market-mode")) $("cfg-market-mode").value = doc.market_mode || "none";
-  if ($("cfg-work-ready-only")) $("cfg-work-ready-only").checked = doc.work_only_when_ready !== false;
   $("cfg-max-book-sec").value = doc.max_seconds_before_book_hotel ?? 2;
   $("cfg-min-health").value = doc.min_health_percent ?? 35;
   $("cfg-jitter-min").value = doc.cooldown_jitter_min_sec ?? 30;
@@ -1698,7 +1689,6 @@ function profilePayload() {
     })(),
     hotel_book_when_broke: !!$("cfg-hotel-book-broke")?.checked,
     hotel_fallback_when_blocked: $("cfg-hotel-fallback")?.checked !== false,
-    work_only_when_ready: $("cfg-work-ready-only")?.checked !== false,
     market_mode: $("cfg-market-mode")?.value || "none",
     max_seconds_before_book_hotel: parseFloat($("cfg-max-book-sec").value),
     min_health_percent: parseInt($("cfg-min-health").value, 10),

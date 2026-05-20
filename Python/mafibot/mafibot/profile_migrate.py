@@ -48,9 +48,19 @@ def migrate_crime_fields(data: dict) -> dict:
     return out
 
 
+def strip_legacy_work_action(data: dict) -> dict:
+    """Remove obsolete 'work' action (no Arbeid page in current ms.php UI)."""
+    out = dict(data)
+    order = out.get("economy_order")
+    if isinstance(order, list):
+        out["economy_order"] = [a for a in order if a != "work"]
+    out.pop("work_only_when_ready", None)
+    return out
+
+
 def strip_legacy_crime_keys(data: dict) -> dict:
     """Remove deprecated crime keys from persisted profile JSON."""
-    out = migrate_crime_fields(data)
+    out = strip_legacy_work_action(migrate_crime_fields(data))
     for key in LEGACY_CRIME_KEYS:
         out.pop(key, None)
     return out

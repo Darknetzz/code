@@ -141,8 +141,8 @@ Three built-in play styles (JSON). Copy into your config `profiles/` folder to c
 |---------|--------|--------|
 | `ranker` | Missions → crime → business → ship → travel → drugs | Off |
 | `early_ranker` | Auto-progress missions 1–9, market supplies, minion train | Off |
-| `okonom` | Work → bank → crime → ship | Off |
-| `okonom_full` | Work, business, bank, city-income scheduler, travel rotation | Off |
+| `okonom` | Business → ship → bank → crime → drugs | Off |
+| `okonom_full` | Business, ship, bank, city-income scheduler, travel rotation | Off |
 | `angriper` | Crime → murder → travel | On (retaliate-only default) |
 | `wartime_angriper` | Retaliate murder, war/kidnap webhooks | On |
 | `minion_ranker` | Minions + crime + business | Off |

@@ -204,8 +204,7 @@ class BotProfile(BaseModel):
             "Las Vegas",
         ]
     )
-    # Business / ship / work gating
-    work_only_when_ready: bool = True
+    # Business / ship gating
     business_only_when_income_ready: bool = True
     ship_only_when_in_port: bool = True
     # Ship: where to send skip (Mitt rederi) — routes keyed by current city/port
@@ -287,13 +286,14 @@ def bundled_profiles_dir() -> Path:
 
 
 def load_bot_profile(name: str | None = None) -> BotProfile:
-    from mafibot.profile_migrate import migrate_crime_fields
+    from mafibot.profile_migrate import migrate_crime_fields, strip_legacy_work_action
 
     stem = (name or DEFAULT_PROFILE_NAME).strip()
     for base in (get_profiles_dir(), bundled_profiles_dir()):
         path = base / f"{stem}.json"
         if path.is_file():
-            data = migrate_crime_fields(json.loads(path.read_text(encoding="utf-8")))
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            data = strip_legacy_work_action(migrate_crime_fields(raw))
             return BotProfile.model_validate(data)
     if stem != DEFAULT_PROFILE_NAME:
         return load_bot_profile(DEFAULT_PROFILE_NAME)
