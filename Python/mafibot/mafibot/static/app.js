@@ -1281,11 +1281,12 @@ async function loadSessionsPage() {
 
 async function loadPreflight() {
   const panel = $("preflight-panel");
+  const card = $("preflight-card");
   if (!panel) return;
+  card?.classList.remove("hidden");
   try {
     const pf = await api("/api/preflight");
     panel.replaceChildren();
-    panel.classList.remove("hidden");
     const title = document.createElement("p");
     title.className = `preflight-title ${pf.ok ? "preflight-title--ok" : "preflight-title--fail"}`;
     title.textContent = pf.ok ? "Pre-flight: OK" : "Pre-flight: issues";
@@ -1320,7 +1321,6 @@ async function loadPreflight() {
     p.className = "preflight-error";
     p.textContent = `Pre-flight unavailable: ${e.message}`;
     panel.appendChild(p);
-    panel.classList.remove("hidden");
   }
 }
 

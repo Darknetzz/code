@@ -356,6 +356,16 @@ main:has(#panel-sessions.active) {
   }
 }
 
+.card-preflight .preflight-panel {
+  margin-top: 0.35rem;
+  padding: 0;
+  font-size: 0.76rem;
+  line-height: 1.38;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
 .preflight-panel {
   margin-top: 0.65rem;
   padding: 0.45rem 0.6rem;

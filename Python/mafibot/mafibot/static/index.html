@@ -109,12 +109,19 @@
         <ul id="st-action-counts" class="action-counts-list hidden" aria-live="polite"></ul>
         <p id="st-parse-error" class="hidden tos-note"></p>
         <p id="st-parse-playbook" class="hidden muted small"></p>
-        <div id="preflight-panel" class="preflight-panel hidden" aria-live="polite"></div>
         <h3 class="subsection-title">Active cooldowns</h3>
         <ul id="st-cooldowns" class="cooldown-list" aria-live="polite">
           <li class="cooldown-empty muted">None</li>
         </ul>
         <p id="st-error" class="hidden" style="color: var(--danger);"></p>
+          </div>
+
+          <div class="card card-preflight" id="preflight-card">
+            <h2>Pre-flight</h2>
+            <p class="tos-note">Static checks before Start (config dir, pages.json, latest discovery).</p>
+            <div id="preflight-panel" class="preflight-panel" aria-live="polite">
+              <p class="muted">Loading…</p>
+            </div>
           </div>
 
           <div class="card card-log">
