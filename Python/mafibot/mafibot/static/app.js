@@ -61,7 +61,7 @@ const ACTION_CATALOG = [
     id: "minions",
     label: "Undersåtter",
     description:
-      "Opens Undersåtter when enabled and cooldown is clear. Good for rank progression. Can run in the hotel.",
+      "Opens Undersåtter, sets Treningstype per minion from config, then Tren alle when ready. Can run in the hotel.",
   },
   {
     id: "missions",

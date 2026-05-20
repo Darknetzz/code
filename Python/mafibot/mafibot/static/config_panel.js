@@ -174,12 +174,21 @@
   function loadMinionsFromDoc(doc) {
     const def = $c("cfg-minions-default-training");
     if (def) def.value = doc.minions_default_training || "angrep";
-    renderMinionsRoster(minionsRoster, doc.minions_training || {});
-    if (minionsRoster.length) {
+    const training = doc.minions_training || {};
+    let list = minionsRoster;
+    if (!list.length && Object.keys(training).length) {
+      list = Object.keys(training).map((name) => ({
+        name,
+        alive: true,
+        training: training[name],
+      }));
+    }
+    renderMinionsRoster(list, training);
+    if (list.length) {
       updateMinionsSummary({
-        total: minionsRoster.length,
-        alive: minionsRoster.filter((m) => m.alive).length,
-        dead: minionsRoster.filter((m) => !m.alive).length,
+        total: list.length,
+        alive: list.filter((m) => m.alive).length,
+        dead: list.filter((m) => !m.alive).length,
       });
     } else {
       updateMinionsSummary(null);

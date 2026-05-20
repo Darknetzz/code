@@ -16,7 +16,7 @@ from mafibot.minions_page import (
 )
 from mafibot.navigation import click_button_matching
 from mafibot.profile_options import gameplay_paused
-from mafibot.selectors import MINIONS_ACTION_LABELS, MINIONS_TRAIN_LABELS
+from mafibot.selectors import MINIONS_ACTION_LABELS
 from mafibot.state import GameState
 
 

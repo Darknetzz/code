@@ -1746,3 +1746,34 @@ button:disabled {
   color: var(--muted);
   font-style: italic;
 }
+
+.minions-roster {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+.minions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.minions-table th,
+.minions-table td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.minions-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.minion-alive {
+  color: var(--ok, #3dd68c);
+}
+
+.minion-dead {
+  color: var(--danger, #f85149);
+}

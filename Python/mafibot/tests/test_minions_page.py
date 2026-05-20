@@ -16,9 +16,9 @@ _FIXTURE = (
 def test_parse_minions_from_fixture():
     html = _FIXTURE.read_text(encoding="utf-8")
     roster = parse_minions_from_html(html)
-    assert roster.total == 11
+    assert roster.total == 12
     assert roster.alive_count == 4
-    assert roster.dead_count == 7
+    assert roster.dead_count == 8
     alive = [m for m in roster.minions if m.alive]
     assert [m.name for m in alive] == [
         "Hozoxube",
