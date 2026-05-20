@@ -636,23 +636,23 @@ async function loadPersistedLogs() {
 }
 
 function setBadge(state) {
-  const badge = $("status-badge");
-  badge.textContent = state || "idle";
-  badge.className = `badge ${(state || "idle").toLowerCase()}`;
+  const s = (state || "idle").toLowerCase();
+  for (const id of ["status-badge", "global-status-badge"]) {
+    const badge = $(id);
+    if (!badge) continue;
+    badge.textContent = state || "idle";
+    badge.className = `badge ${s}`;
+  }
 }
 
 function updateRunControls(state) {
   const busy = ["running", "login", "discover"].includes(state);
   const label = state || "idle";
-  for (const id of ["run-status-dot", "run-activity-dot"]) {
+  for (const id of ["global-status-dot"]) {
     const dot = $(id);
     if (!dot) continue;
     dot.classList.toggle("running", busy);
     dot.classList.toggle("stopped", !busy);
-  }
-  const activityText = $("run-activity-text");
-  if (activityText) {
-    activityText.textContent = busy ? `Bot active (${label})` : "Bot stopped";
   }
   const startBtn = $("btn-start-run");
   const stopBtn = $("btn-stop");
@@ -660,15 +660,29 @@ function updateRunControls(state) {
   if (stopBtn) stopBtn.disabled = !busy;
 }
 
+function setGlobalStatusField(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+
 function applyStatus(st) {
   lastStatus = st;
   setBadge(st.state);
   updateRunControls(st.state);
-  $("st-profile").textContent = st.profile || "—";
-  $("st-elapsed").textContent = formatElapsed(st.elapsed_sec);
+  const profileText = st.profile || "—";
+  $("st-profile").textContent = profileText;
+  setGlobalStatusField("global-st-profile", profileText ? `Profile: ${profileText}` : "—");
+  const elapsedText = formatElapsed(st.elapsed_sec);
+  $("st-elapsed").textContent = elapsedText;
+  setGlobalStatusField("global-st-elapsed", elapsedText !== "—" ? elapsedText : "");
   const g = st.game || {};
   $("st-hotel").textContent = g.in_hotel ? "yes" : "no";
-  $("st-money").textContent = g.money != null ? String(g.money) : "—";
+  const moneyText = g.money != null ? String(g.money) : "—";
+  $("st-money").textContent = moneyText;
+  setGlobalStatusField(
+    "global-st-money",
+    g.money != null ? `${formatKr(g.money)} kr` : ""
+  );
   $("st-health").textContent = g.health_percent != null ? `${g.health_percent}%` : "—";
   $("st-location").textContent = g.location || "—";
   $("st-crime").textContent = g.crime_ready ? "yes" : "no";
@@ -704,8 +718,15 @@ function applyStatus(st) {
     flags.textContent = f.length ? f.join(", ") : "—";
   }
   renderActiveCooldowns(g.active_cooldowns);
-  $("st-action").textContent = st.last_action || "—";
-  $("st-message").textContent = st.last_message || "—";
+  const actionText = st.last_action || "—";
+  $("st-action").textContent = actionText;
+  setGlobalStatusField(
+    "global-st-action",
+    st.last_action ? `Action: ${st.last_action}` : ""
+  );
+  const messageText = st.last_message || "—";
+  $("st-message").textContent = messageText;
+  setGlobalStatusField("global-st-message", st.last_message || "");
   const idleEl = $("st-idle");
   if (idleEl) {
     idleEl.textContent = st.idle_detail || "—";
@@ -740,8 +761,8 @@ function applyStatus(st) {
     errEl.classList.add("hidden");
   }
   const busy = ["running", "login", "discover"].includes(st.state);
-  $("btn-open-login").disabled = busy;
-  $("btn-discover").disabled = busy;
+  $("btn-open-login")?.disabled = busy;
+  $("btn-discover")?.disabled = busy;
 }
 
 function connectWs() {

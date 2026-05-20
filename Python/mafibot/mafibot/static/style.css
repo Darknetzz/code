@@ -28,26 +28,120 @@ body {
   min-height: 100vh;
 }
 
-header {
-  padding: 1rem 1.5rem;
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-header h1 {
+.site-header-top {
+  padding: 1rem 1.5rem 0.5rem;
+}
+
+.site-header h1 {
   margin: 0 0 0.25rem;
   font-size: 1.35rem;
 }
 
-header p {
+.site-header-top p {
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.global-status-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  padding: 0.55rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 55%, var(--bg));
+  font-size: 0.88rem;
+}
+
+.global-status-item {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#global-st-message {
+  max-width: 22rem;
+  flex: 1 1 8rem;
+  min-width: 6rem;
 }
 
 main {
   max-width: 1320px;
   margin: 0 auto;
   padding: 1rem 1.5rem 2rem;
+}
+
+main:has(#panel-config.active) {
+  max-width: 1680px;
+}
+
+.config-page {
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+.config-toolbar-card {
+  margin-bottom: 1rem;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.35fr) minmax(260px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.config-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.config-col .card {
+  margin-bottom: 1rem;
+}
+
+.config-col-actions .card {
+  min-height: 12rem;
+}
+
+.config-col-actions .action-list-section {
+  margin-top: 0.25rem;
+}
+
+.config-footer-card {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 1200px) {
+  .config-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .config-col-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .global-status-item {
+    max-width: 100%;
+  }
 }
 
 .ui-columns {
