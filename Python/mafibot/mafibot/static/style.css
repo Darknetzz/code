@@ -81,6 +81,27 @@ main {
   min-height: 12rem;
 }
 
+.card-log .log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.card-log .log-header h2 {
+  margin: 0;
+}
+
+.card-log #log-path-hint {
+  margin: 0 0 0.35rem;
+}
+
+button.small {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.55rem;
+}
+
 .card-log #log-output {
   flex: 1;
   min-height: 220px;

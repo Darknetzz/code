@@ -577,13 +577,62 @@ function tickCooldownCountdowns() {
   });
 }
 
-function appendLog(message) {
+function formatLogLine(raw) {
+  if (!raw) return "";
+  const uiMatch = raw.match(/^\d{4}-\d{2}-\d{2}T[\d:.]+ UI: (.*)$/);
+  if (uiMatch) {
+    return `[${new Date().toLocaleTimeString()}] ${uiMatch[1]}`;
+  }
+  const isoMatch = raw.match(
+    /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),?\d* \w+ mafibot[^:]*: (.*)$/
+  );
+  if (isoMatch) {
+    const d = new Date(isoMatch[1].replace(" ", "T"));
+    const ts = Number.isNaN(d.getTime())
+      ? isoMatch[1]
+      : d.toLocaleTimeString();
+    return `[${ts}] ${isoMatch[2]}`;
+  }
+  return raw;
+}
+
+function appendLog(message, { fromServer = false } = {}) {
   const el = $("log-output");
   const line = document.createElement("p");
   line.className = "log-line";
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  line.textContent = formatLogLine(message) || message;
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
+  if (!fromServer && message?.trim()) {
+    api("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: message.trim() }),
+    }).catch(() => {});
+  }
+}
+
+function renderLogLines(lines) {
+  const el = $("log-output");
+  el.replaceChildren();
+  for (const raw of lines) {
+    appendLog(raw, { fromServer: true });
+  }
+}
+
+async function loadPersistedLogs() {
+  try {
+    const data = await api("/api/logs?limit=400");
+    const hint = $("log-path-hint");
+    if (hint && data.path) {
+      hint.textContent = `Saved to ${data.path}`;
+    }
+    if (data.lines?.length) {
+      renderLogLines(data.lines);
+    }
+  } catch (e) {
+    console.warn("load logs", e);
+  }
 }
 
 function setBadge(state) {
@@ -694,7 +743,7 @@ function connectWs() {
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
-      if (msg.type === "log") appendLog(msg.message);
+      if (msg.type === "log") appendLog(msg.message, { fromServer: true });
       else if (msg.type === "status") {
         applyStatus(msg);
         if (msg.state === "completed" || msg.state === "stopped" || msg.state === "failed") {
@@ -1252,6 +1301,17 @@ function setupActions() {
     }
   });
 
+  $("btn-clear-log")?.addEventListener("click", async () => {
+    if (!confirm("Clear saved log file?")) return;
+    try {
+      await api("/api/logs", { method: "DELETE" });
+      $("log-output").replaceChildren();
+      appendLog("Log cleared", { fromServer: true });
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
   $("btn-stop").addEventListener("click", async () => {
     try {
       await api("/api/stop", { method: "POST" });
@@ -1427,6 +1487,7 @@ async function init() {
   setupActions();
   window.MafibotConfigPanel?.setupConfigPanelExtras();
   connectWs();
+  await loadPersistedLogs();
   await loadHealth();
   await loadProfiles();
   const initial = $("run-profile").value || "ranker";
