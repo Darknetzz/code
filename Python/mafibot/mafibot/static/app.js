@@ -783,8 +783,10 @@ function applyStatus(st) {
     errEl.classList.add("hidden");
   }
   const busy = ["running", "login", "discover"].includes(st.state);
-  $("btn-open-login")?.disabled = busy;
-  $("btn-discover")?.disabled = busy;
+  const loginBtn = $("btn-open-login");
+  const discoverBtn = $("btn-discover");
+  if (loginBtn) loginBtn.disabled = busy;
+  if (discoverBtn) discoverBtn.disabled = busy;
 }
 
 function connectWs() {
