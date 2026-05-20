@@ -1151,6 +1151,7 @@ function renderSessionHistoryList(rows) {
     li.appendChild(btn);
     list.appendChild(li);
   });
+  if (typeof enhanceSessionHistoryButtons === "function") enhanceSessionHistoryButtons(list);
 }
 
 function renderLiveSessionCard(metrics) {
@@ -1550,7 +1551,7 @@ function renderActionList(enabledOrder) {
               : ""
           }
           <button type="button" class="action-help-btn" data-action-help="${id}" title="What does this do?" aria-label="Help: ${meta.label}">?</button>
-          <div class="action-reorder">
+          <div class="action-reorder button-group" role="group" aria-label="Reorder">
             <button type="button" data-dir="up" title="Move up">↑</button>
             <button type="button" data-dir="down" title="Move down">↓</button>
           </div>
@@ -1567,6 +1568,7 @@ function renderActionList(enabledOrder) {
   mountActionOptionPanels();
   updateActionOptionsVisibility();
   ensureTravelForDrugs();
+  if (typeof enhanceActionListButtons === "function") enhanceActionListButtons(list);
 }
 
 function getEnabledActionOrderFromUI() {
@@ -1976,6 +1978,7 @@ function setupActions() {
 
 async function init() {
   setupTabs();
+  if (typeof initMafibotIcons === "function") initMafibotIcons();
   ensureTravelCityList();
   ensureCrimeUi();
   setupCrimeOptionsHandlers();

@@ -31,10 +31,12 @@
 
   <main>
     <nav class="tabs" role="tablist">
-      <button type="button" class="tab-btn active" data-tab="run">Run</button>
-      <button type="button" class="tab-btn" data-tab="sessions">Sessions</button>
-      <button type="button" class="tab-btn" data-tab="config">Config</button>
-      <button type="button" class="tab-btn" data-tab="login">Login</button>
+      <div class="button-group tabs-group" role="presentation">
+        <button type="button" class="tab-btn active" data-tab="run">Run</button>
+        <button type="button" class="tab-btn" data-tab="sessions">Sessions</button>
+        <button type="button" class="tab-btn" data-tab="config">Config</button>
+        <button type="button" class="tab-btn" data-tab="login">Login</button>
+      </div>
     </nav>
 
     <section id="panel-run" class="tab-panel active" role="tabpanel">
@@ -76,9 +78,11 @@
         <p class="tos-note">Bind localhost only. If you expose the UI beyond this machine, see Login → Dashboard access token.</p>
         <p class="run-activity muted" id="run-activity-text-hint">Use Start to run the selected profile. Live status updates in the column below and in the bar above.</p>
         <div class="btn-row">
-          <button type="button" class="primary" id="btn-start-run">Start</button>
-          <button type="button" class="danger" id="btn-stop" disabled>Stop</button>
-          <button type="button" id="btn-discover">Discover pages</button>
+          <div class="button-group" role="group" aria-label="Session controls">
+            <button type="button" class="primary" id="btn-start-run">Start</button>
+            <button type="button" class="danger" id="btn-stop" disabled>Stop</button>
+            <button type="button" id="btn-discover">Discover pages</button>
+          </div>
         </div>
       </div>
 
@@ -127,7 +131,7 @@
           <div class="card card-log">
             <div class="log-header">
               <h2>Log</h2>
-              <div class="log-header-actions">
+              <div class="log-header-actions button-group" role="group" aria-label="Log file">
                 <button type="button" id="btn-open-log" class="small">Open log file</button>
                 <button type="button" id="btn-clear-log" class="small">Clear</button>
               </div>
@@ -188,9 +192,11 @@
           </div>
           <p class="tos-note">Built-in profiles are read-only until you save; that creates a personal copy. Delete removes only your copy.</p>
           <div class="btn-row profile-actions">
-            <button type="button" id="btn-profile-new">New</button>
-            <button type="button" id="btn-profile-duplicate">Duplicate</button>
-            <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
+            <div class="button-group" role="group" aria-label="Profile file">
+              <button type="button" id="btn-profile-new">New</button>
+              <button type="button" id="btn-profile-duplicate">Duplicate</button>
+              <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
+            </div>
           </div>
           <p class="config-dir-hint health-meta" id="cfg-dir-hint"></p>
         </div>
@@ -678,19 +684,23 @@ Las Vegas</textarea>
                 </tbody>
               </table>
             </div>
-            <div class="btn-row preset-row">
+            <div class="preset-row">
               <span class="field-label">Load preset</span>
-              <button type="button" data-preset="early_ranker">Early game</button>
-              <button type="button" data-preset="ranker">Rank grind</button>
-              <button type="button" data-preset="okonom_full">Economy</button>
-              <button type="button" data-preset="wartime_angriper">War assist</button>
+              <div class="button-group" role="group" aria-label="Load preset">
+                <button type="button" data-preset="early_ranker">Early game</button>
+                <button type="button" data-preset="ranker">Rank grind</button>
+                <button type="button" data-preset="okonom_full">Economy</button>
+                <button type="button" data-preset="wartime_angriper">War assist</button>
+              </div>
             </div>
           </div>
           <div class="card">
             <h2>JSON</h2>
             <div class="btn-row">
-              <button type="button" id="btn-export-profile">Export JSON</button>
-              <button type="button" id="btn-import-profile">Import JSON</button>
+              <div class="button-group" role="group" aria-label="Profile JSON">
+                <button type="button" id="btn-export-profile">Export JSON</button>
+                <button type="button" id="btn-import-profile">Import JSON</button>
+              </div>
             </div>
             <pre class="json-preview-wrap" aria-label="Profile JSON preview"><code id="cfg-json-preview" class="json-preview hl-json"></code></pre>
           </div>
@@ -768,9 +778,11 @@ Las Vegas</textarea>
         <h2>Browser session</h2>
         <p>Logged in: <strong id="session-logged-in">unknown</strong></p>
         <div class="btn-row">
-          <button type="button" class="primary" id="btn-open-login">Open login browser</button>
-          <button type="button" id="btn-login-done">Done (close browser)</button>
-          <button type="button" id="btn-refresh-session">Refresh session</button>
+          <div class="button-group" role="group" aria-label="Browser session">
+            <button type="button" class="primary" id="btn-open-login">Open login browser</button>
+            <button type="button" id="btn-login-done">Done (close browser)</button>
+            <button type="button" id="btn-refresh-session">Refresh session</button>
+          </div>
         </div>
       </div>
         </aside>
@@ -789,6 +801,7 @@ Las Vegas</textarea>
   </dialog>
 
   <script src="/json_highlight.js"></script>
+  <script src="/icons.js"></script>
   <script src="/config_panel.js"></script>
   <script src="/app.js"></script>
 </body>

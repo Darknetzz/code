@@ -514,9 +514,12 @@ main:has(#panel-config.active) {
 }
 
 .card-log .log-header-actions {
-  display: flex;
-  gap: 0.35rem;
   flex-shrink: 0;
+}
+
+.card-log .log-header-actions.button-group > button {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.55rem;
 }
 
 button.small {
@@ -542,28 +545,15 @@ button.small {
   }
 }
 
-.tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.5rem;
-}
-
 .tab-btn {
-  background: transparent;
-  border: 1px solid transparent;
   color: var(--muted);
   padding: 0.5rem 1rem;
-  border-radius: 6px;
   cursor: pointer;
   font-size: 0.95rem;
 }
 
 .tab-btn.active {
   color: var(--text);
-  border-color: var(--border);
-  background: var(--surface);
 }
 
 .tab-panel {
@@ -766,6 +756,137 @@ input[type="checkbox"]:disabled {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
+  align-items: center;
+}
+
+.button-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+}
+
+.button-group > button {
+  margin: 0;
+  border-radius: 0 !important;
+  border: none !important;
+  border-right: 1px solid var(--border) !important;
+  box-shadow: none;
+}
+
+.button-group > button:last-child {
+  border-right: none !important;
+}
+
+.button-group > button.primary {
+  border-right: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)) !important;
+}
+
+.button-group > button.danger:not(:last-child) {
+  border-right: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border)) !important;
+}
+
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.btn-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem;
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.icon-sm {
+  width: 1em;
+  height: 1em;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.preset-row .field-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.tabs-group {
+  flex-wrap: nowrap;
+}
+
+.tabs-group > .tab-btn {
+  border-radius: 0 !important;
+  border: none !important;
+  border-right: 1px solid var(--border) !important;
+  background: transparent;
+}
+
+.tabs-group > .tab-btn:last-child {
+  border-right: none !important;
+}
+
+.tabs-group > .tab-btn.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+button.session-history-item.btn-with-icon {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+}
+
+.session-history-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.session-history-icon {
+  margin-top: 0.15rem;
+  color: var(--muted);
 }
 
 button {
@@ -1249,23 +1370,26 @@ button:disabled {
   background: var(--surface);
 }
 
-.action-help-btn:hover {
+.action-help-btn:hover,
+.action-settings-btn:hover {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
 }
 
-.action-reorder {
-  display: flex;
-  gap: 0.25rem;
+.action-item-controls .button-group {
+  flex-shrink: 0;
 }
 
-.action-reorder button,
-.action-item-controls .action-reorder button {
-  padding: 0.2rem 0.45rem;
+.action-reorder.button-group {
+  border-radius: 4px;
+}
+
+.action-reorder.button-group > button,
+.action-item-controls .action-reorder.button-group > button {
+  padding: 0.35rem;
   min-width: 2rem;
-  font-size: 0.85rem;
-  line-height: 1.2;
+  min-height: 2rem;
 }
 
 .action-help-dialog {
@@ -1556,17 +1680,6 @@ button:disabled {
   flex: 1;
   line-height: 1.25;
   padding-top: 0.05rem;
-}
-
-.preset-row {
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.preset-row .field-label {
-  margin-right: 0.25rem;
 }
 
 .json-preview-wrap {
