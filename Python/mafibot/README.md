@@ -135,6 +135,7 @@ Set `scheduler` to `soonest_ready` to prefer runnable actions by cooldown timing
 - Non-loopback bind requires `mafibot.py ui --insecure-bind`.
 - Optional `stop_webhook_url` in profile JSON posts to a Discord-compatible webhook when the session stops (captcha, ban, logout).
 - Last session stats are written to `last_session.json` under your config dir and shown in the Run tab.
+- The Run tab log is appended to `logs/mafibot.log` (rotating, ~2 MB × 5 files) and reloaded when you open the UI.
 
 ## How it works
 
