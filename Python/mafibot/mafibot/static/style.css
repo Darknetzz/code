@@ -971,10 +971,15 @@ button:disabled {
 
 .config-section {
   margin: 0.75rem 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0 0.75rem;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 80%, transparent);
+  overflow: hidden;
+}
+
+.config-section[open] {
+  padding-bottom: 0.75rem;
 }
 
 .config-section > summary {
@@ -985,9 +990,27 @@ button:disabled {
   line-height: 1.25;
   cursor: pointer;
   font-weight: 600;
-  padding: 0.35rem 0;
+  margin: 0 -0.75rem 0.65rem;
+  padding: 0.55rem 0.75rem;
   list-style: none;
   list-style-type: none;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  transition: background 0.15s ease;
+}
+
+.config-section > summary:hover {
+  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
+}
+
+.config-section:not([open]) > summary {
+  margin-bottom: 0;
+  border-bottom: none;
+  border-radius: 7px;
+}
+
+.config-section[open] > summary {
+  border-radius: 7px 7px 0 0;
 }
 
 .config-section > summary::-webkit-details-marker {
@@ -1006,8 +1029,9 @@ button:disabled {
   height: 0.45rem;
   margin-left: auto;
   align-self: center;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  opacity: 0.85;
   transform: rotate(-45deg);
   transition: transform 0.15s ease;
   flex-shrink: 0;
