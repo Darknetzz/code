@@ -36,15 +36,15 @@ Build a one-file `mafibot.exe` with PyInstaller (bundles Python, the bot, UI ass
 
 ```powershell
 cd Python\mafibot
-python -m venv .venv-build
-.\.venv-build\Scripts\Activate.ps1
-pip install -r requirements.txt pyinstaller
-pip install -e ..\webbot
-$env:PLAYWRIGHT_BROWSERS_PATH = "0"
-python -m playwright install chromium
-pyinstaller mafibot.spec
+.\build.ps1
 # → dist\mafibot.exe
 ```
+
+`build.ps1` creates `.venv-build`, installs deps + webbot, installs Chromium into the bundle path, and runs `pyinstaller mafibot.spec`. Rebuild only the exe after the venv exists: `.\build.ps1 -SkipVenvSetup`. Skip re-downloading Chromium: `.\build.ps1 -SkipVenvSetup -SkipPlaywrightInstall`.
+
+Manual equivalent (no script): activate `.venv-build`, set `$env:PLAYWRIGHT_BROWSERS_PATH = "0"`, run `playwright install chromium`, then `pyinstaller mafibot.spec`.
+
+**Do not use `pybin` for this project** — it does not apply the checked-in `mafibot.spec` (webbot path, UI static/profiles, Playwright browser bundle, runtime hook). Use `build.ps1` or `pyinstaller mafibot.spec` directly.
 
 Config, login cookies, and custom profiles still live under `%APPDATA%\mafibot` (same as the Python install). The packaged build uses bundled Chromium by default; system Chrome is not required on the target PC.
 
