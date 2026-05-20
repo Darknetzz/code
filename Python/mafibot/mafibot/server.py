@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from mafibot import __version__
@@ -91,7 +92,14 @@ app = FastAPI(
 @app.middleware("http")
 async def ui_token_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/"):
-        _check_ui_token(request)
+        expected = _ui_token_expected()
+        if expected:
+            token = request.headers.get("X-Mafibot-Token", "").strip()
+            if token != expected:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or missing X-Mafibot-Token"},
+                )
     return await call_next(request)
 
 

@@ -712,6 +712,7 @@ function applyStatus(st) {
     idleEl.classList.toggle("hidden", !st.idle_detail);
   }
   const parseEl = $("st-parse-error");
+  const playbookEl = $("st-parse-playbook");
   if (parseEl) {
     if (st.parse_error?.detail) {
       parseEl.textContent = st.parse_error.detail;
@@ -721,6 +722,14 @@ function applyStatus(st) {
       parseEl.classList.remove("hidden");
     } else {
       parseEl.classList.add("hidden");
+    }
+  }
+  if (playbookEl) {
+    if (st.parse_playbook) {
+      playbookEl.textContent = st.parse_playbook;
+      playbookEl.classList.remove("hidden");
+    } else {
+      playbookEl.classList.add("hidden");
     }
   }
   const errEl = $("st-error");
@@ -901,6 +910,67 @@ async function loadLastSessionMetrics() {
     empty.classList.remove("hidden");
     $("last-session-table")?.classList.add("hidden");
     empty.textContent = `Could not load: ${e.message}`;
+  }
+  await loadSessionHistory();
+}
+
+async function loadSessionHistory() {
+  const list = $("session-history-list");
+  if (!list) return;
+  try {
+    const rows = await api("/api/session/metrics/history?limit=12");
+    list.replaceChildren();
+    if (!rows.length) {
+      const li = document.createElement("li");
+      li.className = "cooldown-empty muted";
+      li.textContent = "No history yet";
+      list.appendChild(li);
+      return;
+    }
+    rows.forEach((m) => {
+      const li = document.createElement("li");
+      const money =
+        m.money_start != null && m.money_end != null
+          ? `${formatKr(m.money_start)} → ${formatKr(m.money_end)}`
+          : "—";
+      li.textContent = `${m.profile} · ${m.ended_at || m.started_at} · ${money}`;
+      list.appendChild(li);
+    });
+  } catch (e) {
+    list.replaceChildren();
+    const li = document.createElement("li");
+    li.className = "cooldown-empty muted";
+    li.textContent = e.message;
+    list.appendChild(li);
+  }
+}
+
+async function loadPreflight() {
+  const panel = $("preflight-panel");
+  if (!panel) return;
+  try {
+    const pf = await api("/api/preflight");
+    panel.replaceChildren();
+    panel.classList.remove("hidden");
+    const title = document.createElement("p");
+    title.className = pf.ok ? "muted small" : "tos-note";
+    title.textContent = pf.ok ? "Pre-flight: OK" : "Pre-flight: issues";
+    panel.appendChild(title);
+    pf.checks.forEach((c) => {
+      const p = document.createElement("p");
+      p.className = "small";
+      p.textContent = `${c.ok ? "✓" : "✗"} ${c.id}: ${c.message}`;
+      panel.appendChild(p);
+    });
+    pf.warnings.forEach((w) => {
+      const p = document.createElement("p");
+      p.className = "small muted";
+      p.textContent = `⚠ ${w}`;
+      panel.appendChild(p);
+    });
+  } catch (e) {
+    panel.textContent = `Pre-flight unavailable: ${e.message}`;
+    panel.classList.remove("hidden");
   }
 }
 
@@ -1360,6 +1430,7 @@ function setupActions() {
           dry_run: $("run-dry-run").checked,
           headless: $("run-headless").checked,
           accept_tos: true,
+          skip_preflight: $("run-skip-preflight")?.checked || false,
         }),
       });
       appendLog("Run started");
@@ -1563,6 +1634,7 @@ async function init() {
   const st = await api("/api/run/status");
   applyStatus(st);
   await loadLastSessionMetrics();
+  await loadPreflight();
   const savedToken = sessionStorage.getItem("mafibot_ui_token");
   if (savedToken && $("ui-token")) $("ui-token").value = savedToken;
   setInterval(() => {

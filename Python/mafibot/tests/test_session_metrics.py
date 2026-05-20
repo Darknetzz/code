@@ -15,3 +15,14 @@ def test_session_metrics_roundtrip(tmp_path, monkeypatch):
     loaded = sm.load_last_session_summary()
     assert loaded and loaded.profile == "ranker"
     assert loaded.money_end == 1000
+    history = sm.load_session_history(limit=5)
+    assert len(history) == 1
+    assert history[0].profile == "ranker"
+
+
+def test_record_hotel_skip():
+    m = SessionMetrics()
+    m.record_hotel_skip("insufficient_funds")
+    m.record_hotel_skip("hotel_full")
+    assert m.hotel_skip_insufficient_funds == 1
+    assert m.hotel_skip_hotel_full == 1

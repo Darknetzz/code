@@ -1,0 +1,2 @@
+[console_scripts]
+mafibot = mafibot.cli:main

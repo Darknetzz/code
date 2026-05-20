@@ -50,3 +50,15 @@ def test_soonest_ready_prefers_earlier_cooldown_end():
     runnable = [(ship, "")]
     picked = pick_soonest_ready(runnable, state, ["crime", "ship"])
     assert picked and picked[0].name == "ship"
+
+
+def test_soonest_ready_unknown_cooldown_deprioritized():
+    from mafibot.scheduler import _cooldown_ready_at
+
+    state = GameState(
+        crime_ready=False,
+        ship_ready=True,
+        active_cooldowns=[],
+    )
+    assert _cooldown_ready_at(state, "crime") == datetime.max
+    assert _cooldown_ready_at(state, "ship") is not None
