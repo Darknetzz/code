@@ -569,6 +569,8 @@ const ECONOMY_ACTION_IDS = new Set([
 
 let ws = null;
 let elapsedTimer = null;
+/** Preserved from loaded profile JSON; build is set in-game, not via dashboard. */
+let preservedProfileBuild = "ranker";
 let lastStatus = null;
 let profileCatalog = [];
 
@@ -1640,7 +1642,7 @@ function actionFlagsFromOrder(order) {
 }
 
 function applyProfileDocument(doc) {
-  $("cfg-build").value = doc.build || "ranker";
+  preservedProfileBuild = doc.build || "ranker";
   if ($("cfg-scheduler")) $("cfg-scheduler").value = doc.scheduler || "priority";
   $("cfg-stay-in-hotel").checked = !!doc.stay_in_hotel;
   $("cfg-book-before").checked = !!doc.book_hotel_before_action;
@@ -1678,7 +1680,7 @@ function profilePayload() {
   const flags = actionFlagsFromOrder(actionOrder);
   const base = {
     name,
-    build: $("cfg-build").value,
+    build: preservedProfileBuild,
     scheduler: $("cfg-scheduler")?.value || "priority",
     stay_in_hotel: $("cfg-stay-in-hotel").checked,
     book_hotel_before_action: $("cfg-book-before").checked,

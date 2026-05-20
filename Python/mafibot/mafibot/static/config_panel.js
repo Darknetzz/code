@@ -340,7 +340,10 @@
       body.appendChild(tr);
     };
 
-    addRow("Build", payload.build || "—");
+    addRow(
+      "Spesialisering",
+      "Set in-game (Hjem → Spesialisering) — not configured here"
+    );
     addRow("Scheduler", payload.scheduler || "—");
 
     if (!order.length) {

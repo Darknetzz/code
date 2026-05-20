@@ -36,7 +36,10 @@ class PlayWindow(BaseModel):
 
 class BotProfile(BaseModel):
     name: str = DEFAULT_PROFILE_NAME
-    build: BuildStyle = "ranker"
+    build: BuildStyle = Field(
+        default="ranker",
+        description="Legacy JSON field only; specialization is chosen in-game (Hjem → Spesialisering), not in this UI.",
+    )
     aggression: float = Field(default=0.3, ge=0.0, le=1.0)
     economy_order: list[str] = Field(
         default_factory=lambda: [
