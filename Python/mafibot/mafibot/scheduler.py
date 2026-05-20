@@ -9,6 +9,7 @@ from mafibot.config import BotProfile
 from mafibot.hotel_stay import action_requires_leave_hotel
 from mafibot.profile_options import hospital_enabled, needs_hospital_visit
 from mafibot.scheduler_weights import action_priority_boosts, reorder_by_boosts
+from mafibot.selectors import action_display_label
 from mafibot.state import GameState
 
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
@@ -92,24 +93,24 @@ async def action_block_reason(
         return "in hospital"
     if not await action.can_run(state, profile):
         if action.name == "crime" and not state.crime_ready:
-            return "crime on cooldown"
+            return f"{action_display_label('crime')} on cooldown"
         if action.name == "travel" and not state.travel_ready:
-            return "travel on cooldown"
+            return f"{action_display_label('travel')} on cooldown"
         if action.name == "business" and not state.work_ready:
-            return "business not ready"
+            return f"{action_display_label('business')} not ready"
         if action.name == "ship" and not state.ship_ready:
-            return "ship not ready"
+            return f"{action_display_label('ship')} not ready"
         if action.name == "minions" and not state.minions_ready:
-            return "minions on cooldown"
+            return f"{action_display_label('minions')} on cooldown"
         if action.name == "missions":
             if state.missions_in_progress:
-                return "mission in progress"
+                return f"{action_display_label('missions')} in progress"
             if not state.missions_ready:
-                return "missions on cooldown"
+                return f"{action_display_label('missions')} on cooldown"
         if action.name == "organized_crime" and not state.organized_crime_ready:
-            return "organized crime on cooldown"
+            return f"{action_display_label('organized_crime')} on cooldown"
         if action.name == "market" and not state.market_ready:
-            return "market on cooldown"
+            return f"{action_display_label('market')} on cooldown"
         if profile.stay_in_hotel and action_requires_leave_hotel(action.name) and state.in_hotel:
             if state.hotel_blocks_actions:
                 pass
@@ -149,7 +150,7 @@ def pick_soonest_ready(
         return None
     if len(runnable) == 1:
         action, hint = runnable[0]
-        return action, f"soonest: {action.name}{hint}"
+        return action, f"soonest: {action_display_label(action.name)}{hint}"
 
     order = order_names or []
 
@@ -164,4 +165,4 @@ def pick_soonest_ready(
 
     runnable_sorted = sorted(runnable, key=sort_key)
     action, hint = runnable_sorted[0]
-    return action, f"soonest: {action.name}{hint}"
+    return action, f"soonest: {action_display_label(action.name)}{hint}"

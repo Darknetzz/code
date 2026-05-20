@@ -1,40 +1,41 @@
 const $ = (id) => document.getElementById(id);
 
-/** All gameplay actions the brain can schedule (hotel handled separately). */
+/** All gameplay actions the brain can schedule (hotel handled separately).
+ *  label: keep in sync with selectors.ACTION_DISPLAY_LABELS */
 const ACTION_CATALOG = [
   {
     id: "hospital",
-    label: "Hospital (Sykehus)",
+    label: "Sykehus",
     description:
       "Opens the Sykehus tab and heals when Helse is below your threshold. Runs before other actions while injured. Can run in the hotel.",
   },
   {
     id: "crime",
-    label: "Crime (Kriminalitet)",
+    label: "Kriminalitet",
     description:
       "Opens Kriminalitet when ready. Enable Enkel, Tung, and/or Stjel (or All). Pick specific crimes per section; bot rotates when multiple are enabled. Leaves hotel first.",
   },
   {
     id: "business",
-    label: "Business (Mine bedrifter)",
+    label: "Mine bedrifter",
     description:
       "Opens Mine bedrifter in the sidebar and clicks income/work buttons (hent, inntekt) when business income is ready. Can run while still in the hotel.",
   },
   {
     id: "ship",
-    label: "Ship (Mitt rederi)",
+    label: "Mitt rederi",
     description:
       "Opens Mitt rederi and sends the ship when ready. Configure routes per current port (destinations vary by location) or fallback harbors. Can run in the hotel.",
   },
   {
     id: "travel",
-    label: "Travel (Flyplass)",
+    label: "Flyplass",
     description:
       "Opens Flyplass and starts travel when available. Must leave the hotel first, then re-books afterward.",
   },
   {
     id: "drugs",
-    label: "Drugs",
+    label: "Narkotika",
     description:
       "Buy in Kabul, sell in New York/Oslo/Detroit/Rio/Las Vegas (configurable). Requires Travel enabled before Drugs in the list. Bot flies to the right city first.",
   },
@@ -46,43 +47,43 @@ const ACTION_CATALOG = [
   },
   {
     id: "messages",
-    label: "Messages",
+    label: "Meldinger",
     description:
       "Opens Meldinger, may open inbox threads, and tries to reply. Runs when you have unread messages or after social_interval_minutes (default 45). Max 8 replies per hour. Stays in hotel.",
   },
   {
     id: "family",
-    label: "Family",
+    label: "Familie",
     description:
       "Opens Familie on a timer (social_interval_minutes). Accepts invites (Godta/Aksepter) if shown; otherwise just visits the page. Stays in hotel.",
   },
   {
     id: "minions",
-    label: "Minions (Undersåtter)",
+    label: "Undersåtter",
     description:
       "Opens Undersåtter when enabled and cooldown is clear. Good for rank progression. Can run in the hotel.",
   },
   {
     id: "missions",
-    label: "Missions (Oppdrag)",
+    label: "Oppdrag",
     description:
       "Starts a mission when Oppdrag shows Klar. Skips if already on a mission. Can run in the hotel.",
   },
   {
     id: "organized_crime",
-    label: "Organized crime",
+    label: "Organisert Kriminalitet",
     description:
       "Opens Organisert Kriminalitet and clicks Utfør when ready. Must leave the hotel first.",
   },
   {
     id: "market",
-    label: "Market (Marked)",
+    label: "Marked",
     description:
       "Opens Marked for buy/sell when enabled. Rate-limited per hour. Must leave the hotel first.",
   },
   {
     id: "murder",
-    label: "Murder (combat)",
+    label: "Skyt",
     description:
       "Opens murder/skyt, fills a target username from your list, then shoots if aggression allows. Will not run without targets or with blank names. Must leave the hotel. High ban risk.",
   },
@@ -91,6 +92,11 @@ const ACTION_CATALOG = [
 const ACTION_LABEL_BY_ID = Object.fromEntries(
   ACTION_CATALOG.map((a) => [a.id, a.label])
 );
+
+function displayActionLabel(nameOrId) {
+  if (!nameOrId) return "";
+  return ACTION_LABEL_BY_ID[nameOrId] || nameOrId;
+}
 
 function formatRankpoeng(n) {
   if (n == null || Number.isNaN(n)) return "—";
@@ -767,7 +773,7 @@ function updateGlobalStatusBar(st) {
   setGlobalStatusField("global-st-elapsed", elapsed ? `Elapsed: ${elapsed}` : "");
   setGlobalStatusField(
     "global-st-action",
-    st.last_action ? `Action: ${st.last_action}` : ""
+    st.last_action ? `Action: ${displayActionLabel(st.last_action)}` : ""
   );
   setGlobalStatusField("global-st-message", st.last_message || "");
   setGlobalStatusField(
@@ -833,7 +839,7 @@ function applyStatus(st) {
     flags.textContent = f.length ? f.join(", ") : "—";
   }
   renderActiveCooldowns(g.active_cooldowns);
-  $("st-action").textContent = st.last_action || "—";
+  $("st-action").textContent = displayActionLabel(st.last_action) || "—";
   $("st-message").textContent = st.last_message || "—";
   const idleEl = $("st-idle");
   if (idleEl) {
@@ -1102,7 +1108,7 @@ function sessionHistorySummary(row) {
   const crime = row.action_counts?.crime;
   const rp =
     row.rank_points_gained != null ? ` · +${formatRankpoeng(row.rank_points_gained)} RP` : "";
-  const crimeBit = crime ? ` · ${crime} crime` : "";
+  const crimeBit = crime ? ` · ${crime} ${displayActionLabel("crime")}` : "";
   const dur = formatSessionDuration(row.started_at, row.ended_at);
   return `${row.profile || "—"} · ${formatSessionWhen(row.ended_at || row.started_at)} · ${dur} · ${money}${crimeBit}${rp}`;
 }

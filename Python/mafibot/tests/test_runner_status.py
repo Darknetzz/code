@@ -33,7 +33,7 @@ def test_status_serialization():
         profile="ranker",
         dry_run=True,
         started_at=0.0,
-        last_action="crime",
+        last_action="Kriminalitet",
         last_message="picked",
     )
     resp = _status_response(runner)
@@ -41,7 +41,7 @@ def test_status_serialization():
     assert data.state == "running"
     assert data.profile == "ranker"
     assert data.dry_run is True
-    assert data.last_action == "crime"
+    assert data.last_action == "Kriminalitet"
 
 
 def test_status_includes_active_cooldowns():
@@ -52,7 +52,9 @@ def test_status_includes_active_cooldowns():
         GameState(
             crime_ready=False,
             active_cooldowns=[
-                ActionCooldown(id="crime", label="Crime", ready_at=ready_at, raw="5 min")
+                ActionCooldown(
+                    id="crime", label="Kriminalitet", ready_at=ready_at, raw="5 min"
+                )
             ],
         )
     )

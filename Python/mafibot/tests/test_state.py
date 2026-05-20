@@ -71,6 +71,7 @@ async def test_crime_cooldown():
     assert not state.crime_ready
     assert len(state.active_cooldowns) == 1
     assert state.active_cooldowns[0].id == "crime"
+    assert state.active_cooldowns[0].label == "Kriminalitet"
     assert state.active_cooldowns[0].ready_at is not None
 
 

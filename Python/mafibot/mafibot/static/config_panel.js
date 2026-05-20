@@ -297,12 +297,12 @@
   }
 
   function actionLabel(id) {
+    if (typeof ACTION_LABEL_BY_ID !== "undefined" && ACTION_LABEL_BY_ID[id]) {
+      return ACTION_LABEL_BY_ID[id];
+    }
     if (typeof ACTION_CATALOG !== "undefined") {
       const meta = ACTION_CATALOG.find((a) => a.id === id);
-      if (meta) {
-        const short = meta.label.match(/^([^(]+)/);
-        return short ? short[1].trim() : meta.label;
-      }
+      if (meta) return meta.label;
     }
     return String(id).replace(/_/g, " ");
   }
@@ -362,13 +362,13 @@
     }
 
     if (!payload.combat_enabled) {
-      addRow("Murder", "Off");
+      addRow("Skyt", "Off");
     } else {
       const mode = payload.murder_mode || "—";
       const targets = (payload.murder_targets || []).length;
       const detail =
         mode === "static_targets" ? `${mode} · ${targets} target${targets === 1 ? "" : "s"}` : mode;
-      addRow("Murder", detail);
+      addRow("Skyt", detail);
     }
 
     addRow("Aggression", Number(payload.aggression ?? 0).toFixed(2));

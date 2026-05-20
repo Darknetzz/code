@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 mafibot/__init__.py
+mafibot/_frozen.py
 mafibot/action_targets.py
 mafibot/alerts.py
 mafibot/assist_alerts.py

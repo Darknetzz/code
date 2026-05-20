@@ -42,6 +42,7 @@ from mafibot.scheduler import (
     pick_runnable_actions,
     pick_soonest_ready,
 )
+from mafibot.selectors import action_display_label
 from mafibot.session import capture_failure
 from mafibot.session_metrics import (
     current_session_metrics,
@@ -130,9 +131,10 @@ def _notify_status(
     message: str,
     reason: str | None = None,
 ) -> None:
+    display_name = action_display_label(action_name) if action_name else None
     for handler in list(_status_callbacks):
         try:
-            handler(state, action_name, message, reason)
+            handler(state, display_name, message, reason)
         except Exception:
             log.debug("status callback failed", exc_info=True)
 
@@ -319,7 +321,7 @@ async def explain_idle(state: GameState, profile: BotProfile) -> str:
             continue
         reason = await action_block_reason(action, state, profile)
         if reason:
-            parts.append(f"{name}: {reason}")
+            parts.append(f"{action_display_label(name)}: {reason}")
     if not parts:
         return "nothing ready"
     return "; ".join(parts[:6])
@@ -375,7 +377,7 @@ async def pick_next_action(
                     and state.in_hotel
                 ):
                     hint = " (will leave hotel first)"
-                return action, f"selected: {action.name}{hint}"
+                return action, f"selected: {action_display_label(action.name)}{hint}"
 
     allowed = set(names)
     fallback_actions = [
@@ -391,7 +393,7 @@ async def pick_next_action(
     else:
         for action in fallback_actions:
             if await action.can_run(state, profile):
-                return action, f"fallback: {action.name}"
+                return action, f"fallback: {action_display_label(action.name)}"
 
     ctx.last_idle_detail = await explain_idle(state, profile)
     return None, f"nothing ready — {ctx.last_idle_detail}"
@@ -499,7 +501,12 @@ async def run_once(
         after_state = state
     if metrics and after_state.rank_points is not None:
         metrics.rank_end = after_state.rank_points
-    _notify_status(after_state, action.name, result.message, f"done: {action.name}")
+    _notify_status(
+        after_state,
+        action.name,
+        result.message,
+        f"done: {action_display_label(action.name)}",
+    )
     await page_reading_pause(page)
     await between_actions(page, policy)
     return result
