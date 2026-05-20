@@ -16,8 +16,10 @@
       </p>
     </div>
     <div id="global-status-bar" class="global-status-bar" aria-live="polite">
-      <span id="global-status-dot" class="run-status-dot stopped" aria-hidden="true"></span>
-      <span id="global-status-badge" class="badge idle">idle</span>
+      <span id="global-status-badge" class="badge idle">
+        <span class="badge-dot" aria-hidden="true"></span>
+        <span class="badge-label">idle</span>
+      </span>
       <span class="global-status-item hidden" id="global-st-profile" title="Active profile"></span>
       <span class="global-status-item muted hidden" id="global-st-elapsed" title="Session elapsed"></span>
       <span class="global-status-item hidden" id="global-st-action" title="Last action"></span>

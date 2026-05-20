@@ -710,25 +710,32 @@ async function loadPersistedLogs() {
   }
 }
 
+function ensureBadgeStructure(badge) {
+  if (!badge || badge.querySelector(".badge-label")) return;
+  badge.replaceChildren();
+  const dot = document.createElement("span");
+  dot.className = "badge-dot";
+  dot.setAttribute("aria-hidden", "true");
+  const label = document.createElement("span");
+  label.className = "badge-label";
+  badge.append(dot, label);
+}
+
 function setBadge(state) {
   const s = (state || "idle").toLowerCase();
+  const text = state || "idle";
   for (const id of ["status-badge", "global-status-badge"]) {
     const badge = $(id);
     if (!badge) continue;
-    badge.textContent = state || "idle";
+    ensureBadgeStructure(badge);
     badge.className = `badge ${s}`;
+    const label = badge.querySelector(".badge-label");
+    if (label) label.textContent = text;
   }
 }
 
 function updateRunControls(state) {
   const busy = ["running", "login", "discover"].includes(state);
-  const label = state || "idle";
-  for (const id of ["global-status-dot"]) {
-    const dot = $(id);
-    if (!dot) continue;
-    dot.classList.toggle("running", busy);
-    dot.classList.toggle("stopped", !busy);
-  }
   const startBtn = $("btn-start-run");
   const stopBtn = $("btn-stop");
   if (startBtn) startBtn.disabled = busy;
