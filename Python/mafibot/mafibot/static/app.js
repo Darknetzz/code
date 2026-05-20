@@ -864,6 +864,7 @@ function applyStatus(st) {
   if (loginBtn) loginBtn.disabled = busy;
   if (discoverBtn) discoverBtn.disabled = busy;
   updateLiveSessionMetrics(st.session_metrics, st.state);
+  updateSessionsLiveFromStatus(st);
 }
 
 function connectWs() {
@@ -878,7 +879,10 @@ function connectWs() {
       else if (msg.type === "status") {
         applyStatus(msg);
         if (msg.state === "completed" || msg.state === "stopped" || msg.state === "failed") {
-          loadLastSessionMetrics();
+          sessionDetailSelectedIndex = null;
+          loadSessionsPage();
+        } else {
+          updateSessionsLiveFromStatus(msg);
         }
       }
     } catch (e) {
@@ -892,6 +896,7 @@ function connectWs() {
 
 async function loadHealth() {
   const h = await api("/api/health");
+  mafibotConfigDir = h.config_dir || "";
   const line = $("health-meta-line");
   if (line) {
     line.textContent = `v${h.version} · ${h.config_dir}`;
@@ -930,10 +935,17 @@ function formatSessionDuration(startIso, endIso) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-function renderLastSessionMetrics(m) {
-  const empty = $("last-session-empty");
-  const table = $("last-session-table");
-  const body = $("last-session-body");
+let sessionHistoryRows = [];
+let sessionDetailLatest = null;
+let sessionDetailSelectedIndex = null;
+let mafibotConfigDir = "";
+
+function renderSessionDetail(m) {
+  const empty = $("session-detail-empty");
+  const table = $("session-detail-table");
+  const body = $("session-detail-body");
+  const title = $("session-detail-title");
+  const showLatestBtn = $("btn-session-show-latest");
   if (!empty || !table || !body) return;
 
   const showEmpty = (message) => {
@@ -950,9 +962,21 @@ function renderLastSessionMetrics(m) {
   };
 
   if (!m) {
-    showEmpty("No previous session recorded.");
+    if (title) title.textContent = "Session details";
+    showLatestBtn?.classList.add("hidden");
+    showEmpty("No session recorded yet. Start a run from the Run tab.");
     return;
   }
+
+  if (title) {
+    const when = formatSessionWhen(m.ended_at || m.started_at);
+    title.textContent = m.profile ? `${m.profile} · ${when}` : "Session details";
+  }
+  const viewingHistory =
+    sessionDetailSelectedIndex != null &&
+    sessionDetailLatest &&
+    sessionHistoryRows[sessionDetailSelectedIndex] !== sessionDetailLatest;
+  showLatestBtn?.classList.toggle("hidden", !viewingHistory);
 
   showTable();
 
@@ -1037,65 +1061,173 @@ function renderLastSessionMetrics(m) {
   }
 }
 
-async function loadLastSessionMetrics() {
-  const empty = $("last-session-empty");
-  if (!empty) return;
+function sessionHistorySummary(row) {
+  const money =
+    row.money_start != null && row.money_end != null
+      ? `${formatKr(row.money_start)} → ${formatKr(row.money_end)}`
+      : "—";
+  const crime = row.action_counts?.crime;
+  const rp =
+    row.rank_points_gained != null ? ` · +${formatRankpoeng(row.rank_points_gained)} RP` : "";
+  const crimeBit = crime ? ` · ${crime} crime` : "";
+  const dur = formatSessionDuration(row.started_at, row.ended_at);
+  return `${row.profile || "—"} · ${formatSessionWhen(row.ended_at || row.started_at)} · ${dur} · ${money}${crimeBit}${rp}`;
+}
 
-  const metricsPromise = api("/api/session/metrics").catch((e) => ({ error: e }));
-  const historyPromise = api("/api/session/metrics/history?limit=12").catch((e) => ({
-    error: e,
-  }));
-
-  const mResult = await metricsPromise;
-  if (mResult?.error) {
-    empty.classList.remove("hidden");
-    $("last-session-table")?.classList.add("hidden");
-    empty.textContent = `Could not load session: ${mResult.error.message}`;
-  } else {
-    try {
-      renderLastSessionMetrics(mResult);
-    } catch (e) {
-      empty.classList.remove("hidden");
-      $("last-session-table")?.classList.add("hidden");
-      empty.textContent = `Could not display session: ${e.message}`;
-    }
-  }
-
-  const hResult = await historyPromise;
+function renderSessionHistoryList(rows) {
   const list = $("session-history-list");
   if (!list) return;
-  if (hResult?.error) {
-    list.replaceChildren();
-    const li = document.createElement("li");
-    li.className = "cooldown-empty muted";
-    li.textContent = `Could not load: ${hResult.error.message}`;
-    list.appendChild(li);
-    return;
-  }
-  const rows = Array.isArray(hResult) ? hResult : [];
   list.replaceChildren();
   if (!rows.length) {
     const li = document.createElement("li");
     li.className = "cooldown-empty muted";
-    li.textContent = "No history yet";
+    li.textContent = "No history yet — completed sessions appear here.";
     list.appendChild(li);
     return;
   }
-  rows.forEach((row) => {
+  rows.forEach((row, index) => {
     const li = document.createElement("li");
-    const money =
-      row.money_start != null && row.money_end != null
-        ? `${formatKr(row.money_start)} → ${formatKr(row.money_end)}`
-        : "—";
-    const crime = row.action_counts?.crime;
-    const rp =
-      row.rank_points_gained != null
-        ? ` · +${formatRankpoeng(row.rank_points_gained)} RP`
-        : "";
-    const crimeBit = crime ? ` · ${crime} crime` : "";
-    li.textContent = `${row.profile} · ${row.ended_at || row.started_at} · ${money}${crimeBit}${rp}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "session-history-item";
+    if (sessionDetailSelectedIndex === index) btn.classList.add("selected");
+    btn.dataset.index = String(index);
+    const head = document.createElement("span");
+    head.className = "session-history-item-head";
+    head.textContent = row.profile || "—";
+    if (row.dry_run) {
+      const tag = document.createElement("span");
+      tag.className = "config-pill session-pill session-pill-muted";
+      tag.textContent = "dry";
+      head.appendChild(document.createTextNode(" "));
+      head.appendChild(tag);
+    }
+    const meta = document.createElement("span");
+    meta.className = "session-history-item-meta muted";
+    meta.textContent = sessionHistorySummary(row);
+    btn.append(head, meta);
+    btn.addEventListener("click", () => {
+      sessionDetailSelectedIndex = index;
+      renderSessionDetail(row);
+      list.querySelectorAll(".session-history-item").forEach((el, i) => {
+        el.classList.toggle("selected", i === index);
+      });
+    });
+    li.appendChild(btn);
     list.appendChild(li);
   });
+}
+
+function renderLiveSessionCard(metrics) {
+  const card = $("sessions-live-card");
+  const body = $("sessions-live-body");
+  if (!card || !body) return;
+  if (!metrics) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  body.replaceChildren();
+  const addRow = (label, value) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    const td = document.createElement("td");
+    if (value instanceof Node) td.appendChild(value);
+    else td.textContent = value;
+    tr.append(th, td);
+    body.appendChild(tr);
+  };
+  addRow("Profile", metrics.profile || "—");
+  addRow("Started", formatSessionWhen(metrics.started_at));
+  addRow("Actions ok", String(metrics.actions_run ?? 0));
+  if (metrics.rank_start != null || metrics.rank_end != null) {
+    const gained =
+      metrics.rank_points_gained ??
+      (metrics.rank_start != null && metrics.rank_end != null
+        ? metrics.rank_end - metrics.rank_start
+        : null);
+    addRow("Rankpoeng", rankpoengSummaryNode(metrics.rank_start, metrics.rank_end, gained));
+  }
+  const counts = Object.entries(metrics.action_counts || {});
+  if (counts.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "session-action-counts-wrap";
+    const ul = document.createElement("ul");
+    ul.className = "action-counts-list action-counts-list--compact";
+    renderActionCountsList(Object.fromEntries(counts), ul);
+    wrap.appendChild(ul);
+    addRow("Activity", wrap);
+  }
+}
+
+function updateSessionsLiveFromStatus(st) {
+  if (st?.state === "running" && st.session_metrics) {
+    renderLiveSessionCard(st.session_metrics);
+  } else {
+    renderLiveSessionCard(null);
+  }
+}
+
+function selectLatestSavedSession() {
+  sessionDetailSelectedIndex = null;
+  renderSessionDetail(sessionDetailLatest);
+  $("session-history-list")
+    ?.querySelectorAll(".session-history-item")
+    .forEach((el) => el.classList.remove("selected"));
+}
+
+async function loadSessionsPage() {
+  const empty = $("session-detail-empty");
+  if (!empty) return;
+
+  const hint = $("sessions-storage-hint");
+  if (hint && mafibotConfigDir) {
+    hint.textContent = `Stored in ${mafibotConfigDir}/sessions_history.ndjson (and last_session.json).`;
+  }
+
+  const metricsPromise = api("/api/session/metrics").catch((e) => ({ error: e }));
+  const historyPromise = api("/api/session/metrics/history?limit=50").catch((e) => ({
+    error: e,
+  }));
+
+  const mResult = await metricsPromise;
+  sessionDetailLatest = mResult?.error ? null : mResult;
+
+  const hResult = await historyPromise;
+  if (hResult?.error) {
+    sessionHistoryRows = [];
+    const list = $("session-history-list");
+    if (list) {
+      list.replaceChildren();
+      const li = document.createElement("li");
+      li.className = "cooldown-empty muted";
+      li.textContent = `Could not load history: ${hResult.error.message}`;
+      list.appendChild(li);
+    }
+    return;
+  }
+  sessionHistoryRows = Array.isArray(hResult) ? hResult : [];
+  renderSessionHistoryList(sessionHistoryRows);
+
+  try {
+    if (sessionDetailSelectedIndex != null && sessionHistoryRows[sessionDetailSelectedIndex]) {
+      renderSessionDetail(sessionHistoryRows[sessionDetailSelectedIndex]);
+    } else if (mResult?.error) {
+      empty.classList.remove("hidden");
+      $("session-detail-table")?.classList.add("hidden");
+      empty.textContent = `Could not load latest session: ${mResult.error.message}`;
+    } else {
+      renderSessionDetail(sessionDetailLatest);
+    }
+  } catch (e) {
+    empty.classList.remove("hidden");
+    $("session-detail-table")?.classList.add("hidden");
+    empty.textContent = `Could not display session: ${e.message}`;
+  }
+
+  updateSessionsLiveFromStatus(lastStatus);
 }
 
 async function loadPreflight() {
@@ -1581,8 +1713,12 @@ function setupTabs() {
       if (fab) {
         fab.setAttribute("aria-hidden", btn.dataset.tab === "config" ? "false" : "true");
       }
+      if (btn.dataset.tab === "sessions") {
+        loadSessionsPage();
+      }
     });
   });
+  $("btn-session-show-latest")?.addEventListener("click", () => selectLatestSavedSession());
 }
 
 function setupActions() {
@@ -1814,7 +1950,6 @@ async function init() {
   await loadCredentialsStatus();
   const st = await api("/api/run/status");
   applyStatus(st);
-  await loadLastSessionMetrics();
   await loadPreflight();
   const savedToken = sessionStorage.getItem("mafibot_ui_token");
   if (savedToken && $("ui-token")) $("ui-token").value = savedToken;

@@ -30,6 +30,7 @@
   <main>
     <nav class="tabs" role="tablist">
       <button type="button" class="tab-btn active" data-tab="run">Run</button>
+      <button type="button" class="tab-btn" data-tab="sessions">Sessions</button>
       <button type="button" class="tab-btn" data-tab="config">Config</button>
       <button type="button" class="tab-btn" data-tab="login">Login</button>
     </nav>
@@ -78,18 +79,6 @@
           <button type="button" id="btn-discover">Discover pages</button>
         </div>
       </div>
-
-      <div class="card card-last-session">
-        <h2>Last session</h2>
-        <p id="last-session-empty" class="last-session-empty muted">Loading…</p>
-        <table class="config-overview-table last-session-table hidden" id="last-session-table">
-          <tbody id="last-session-body"></tbody>
-        </table>
-        <h3 class="subsection-title">Recent sessions</h3>
-        <ul id="session-history-list" class="cooldown-list muted small">
-          <li class="cooldown-empty">Loading…</li>
-        </ul>
-      </div>
         </div>
 
         <aside class="ui-col-side" aria-label="Live monitoring">
@@ -137,6 +126,39 @@
             <div id="log-output"></div>
           </div>
         </aside>
+      </div>
+    </section>
+
+    <section id="panel-sessions" class="tab-panel" role="tabpanel">
+      <div class="sessions-page">
+        <div class="card sessions-live-card hidden" id="sessions-live-card">
+          <h2>Current session</h2>
+          <p class="tos-note">Updates while autopilot is running.</p>
+          <table class="config-overview-table last-session-table">
+            <tbody id="sessions-live-body"></tbody>
+          </table>
+        </div>
+
+        <div class="sessions-layout">
+          <div class="card card-session-detail">
+            <div class="session-detail-header">
+              <h2 id="session-detail-title">Session details</h2>
+              <button type="button" class="small hidden" id="btn-session-show-latest">Show latest saved</button>
+            </div>
+            <p id="session-detail-empty" class="last-session-empty muted">Loading…</p>
+            <table class="config-overview-table last-session-table hidden" id="session-detail-table">
+              <tbody id="session-detail-body"></tbody>
+            </table>
+          </div>
+
+          <div class="card card-session-history">
+            <h2>Session history</h2>
+            <p id="sessions-storage-hint" class="tos-note muted">Loading storage path…</p>
+            <ul id="session-history-list" class="session-history-list" aria-label="Past sessions">
+              <li class="cooldown-empty muted">Loading…</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
 
