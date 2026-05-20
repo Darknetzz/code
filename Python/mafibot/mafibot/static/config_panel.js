@@ -340,10 +340,7 @@
       body.appendChild(tr);
     };
 
-    addRow(
-      "Spesialisering",
-      "Set in-game (Hjem → Spesialisering) — not configured here"
-    );
+    addRow("Spesialisering", "In-game only");
     addRow("Scheduler", payload.scheduler || "—");
 
     if (!order.length) {
