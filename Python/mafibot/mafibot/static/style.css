@@ -550,34 +550,8 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
-.action-options-section {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
-}
-
-.action-options-heading {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-}
-
-.action-options-panel {
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
-.action-options-panel summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 0.35rem;
-}
-
-.action-options-panel[open] summary {
-  margin-bottom: 0.5rem;
+.action-options-host {
+  display: none;
 }
 
 .action-list-heading {
@@ -599,15 +573,45 @@ button:disabled {
 
 .action-list-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.45rem 0.6rem;
+  flex-direction: column;
+  align-items: stretch;
   border-bottom: 1px solid var(--border);
 }
 
 .action-list-item:last-child {
   border-bottom: none;
+}
+
+.action-list-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.action-item-options {
+  padding: 0 0.6rem 0.65rem;
+  border-top: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--surface) 40%, var(--bg));
+}
+
+.action-item-options.hidden,
+.action-item-options:not(.is-open) {
+  display: none;
+}
+
+.action-item-options-panel {
+  padding-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.action-item-options-panel > div:first-child {
+  margin-top: 0;
+}
+
+.action-item-options-panel .tos-note {
+  margin-bottom: 0.35rem;
 }
 
 .action-check {
@@ -632,6 +636,35 @@ button:disabled {
   align-items: center;
   gap: 0.35rem;
   flex-shrink: 0;
+}
+
+.action-settings-btn {
+  width: 1.65rem;
+  height: 1.65rem;
+  min-width: 1.65rem;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--muted);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.action-settings-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.action-settings-btn[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.action-settings-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .action-help-btn {

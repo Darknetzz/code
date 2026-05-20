@@ -179,19 +179,14 @@
           <p class="tos-note">Checked actions run in list order. Unchecked actions are skipped.</p>
           <ul id="cfg-action-list" class="action-list"></ul>
         </div>
-        <div id="action-options-section" class="action-options-section hidden">
-          <h3 class="action-options-heading">Per-action settings</h3>
-          <details id="action-options-hospital" class="action-options-panel hidden">
-            <summary>Hospital (Sykehus)</summary>
-            <div>
+        <div id="action-options-host" class="action-options-host" hidden aria-hidden="true">
+<div id="action-options-hospital" class="action-item-options-panel"><div>
               <label for="cfg-hospital-threshold">Use hospital when health below (%)</label>
               <input type="number" id="cfg-hospital-threshold" min="1" max="99" value="80" />
             </div>
-            <p class="tos-note">Enable <strong>Hospital</strong> in the action list above. While Helse is below this value, hospital is tried first.</p>
-          </details>
-          <details id="action-options-crime" class="action-options-panel hidden">
-            <summary>Crime</summary>
-            <div>
+            <p class="tos-note">While Helse is below this value, hospital is tried first.</p>
+          </div>
+          <div id="action-options-crime" class="action-item-options-panel"><div>
               <label for="cfg-crime-min-health">Min health % (crime only)</label>
               <input type="number" id="cfg-crime-min-health" min="0" max="100" placeholder="profile default" />
             </div>
@@ -237,17 +232,13 @@
               <input type="text" id="cfg-crime-buttons" placeholder="utfør, begå" />
             </div>
             <p class="tos-note">Enable one or more actions (or All). Empty sub-options = any crime in that section. Stjel + specific user needs a username.</p>
-          </details>
-          <details id="action-options-work" class="action-options-panel hidden">
-            <summary>Work</summary>
-            <div class="checkbox-row">
+          </div>
+          <div id="action-options-work" class="action-item-options-panel"><div class="checkbox-row">
               <input type="checkbox" id="cfg-work-ready-only" checked />
               <label for="cfg-work-ready-only">Only when work timer ready</label>
             </div>
-          </details>
-          <details id="action-options-minions" class="action-options-panel hidden">
-            <summary>Minions</summary>
-            <p class="tos-note">Enable <strong>Minions</strong> in the action list above.</p>
+          </div>
+          <div id="action-options-minions" class="action-item-options-panel"><p class="tos-note">Enable <strong>Minions</strong> in the action list above.</p>
             <div class="checkbox-row">
               <input type="checkbox" id="cfg-minions-train-when-ready" checked />
               <label for="cfg-minions-train-when-ready">Train only when ready</label>
@@ -260,10 +251,8 @@
                 <option value="disabled">Disabled</option>
               </select>
             </div>
-          </details>
-          <details id="action-options-missions" class="action-options-panel hidden">
-            <summary>Missions</summary>
-            <p class="tos-note">Enable <strong>Missions</strong> in the action list. Auto progress delegates to crime/market/minions by mission hint.</p>
+          </div>
+          <div id="action-options-missions" class="action-item-options-panel"><p class="tos-note">Enable <strong>Missions</strong> in the action list. Auto progress delegates to crime/market/minions by mission hint.</p>
             <div class="checkbox-row">
               <input type="checkbox" id="cfg-missions-auto-start" checked />
               <label for="cfg-missions-auto-start">Auto-start new missions</label>
@@ -280,10 +269,8 @@
                 <option value="off">Off</option>
               </select>
             </div>
-          </details>
-          <details id="action-options-organized-crime" class="action-options-panel hidden">
-            <summary>Organized crime</summary>
-            <p class="tos-note">Enable <strong>Organized crime</strong> in the action list.</p>
+          </div>
+          <div id="action-options-organized-crime" class="action-item-options-panel"><p class="tos-note">Enable <strong>Organized crime</strong> in the action list.</p>
             <div>
               <label for="cfg-org-crime-min-health">Min health % (optional)</label>
               <input type="number" id="cfg-org-crime-min-health" min="0" max="100" placeholder="profile default" />
@@ -297,10 +284,8 @@
                 <option value="hard">Hard</option>
               </select>
             </div>
-          </details>
-          <details id="action-options-market" class="action-options-panel hidden">
-            <summary>Market</summary>
-            <p class="tos-note">Enable <strong>Market</strong> in the action list.</p>
+          </div>
+          <div id="action-options-market" class="action-item-options-panel"><p class="tos-note">Enable <strong>Market</strong> in the action list.</p>
             <div>
               <label for="cfg-market-mode">Mode</label>
               <select id="cfg-market-mode">
@@ -325,17 +310,13 @@
               <span class="field-label">Sell items</span>
               <div id="cfg-market-sell-items" class="city-checkbox-list"></div>
             </div>
-          </details>
-          <details id="action-options-business" class="action-options-panel hidden">
-            <summary>Business</summary>
-            <div class="checkbox-row">
+          </div>
+          <div id="action-options-business" class="action-item-options-panel"><div class="checkbox-row">
               <input type="checkbox" id="cfg-business-income-only" checked />
               <label for="cfg-business-income-only">Only when income ready</label>
             </div>
-          </details>
-          <details id="action-options-ship" class="action-options-panel hidden">
-            <summary>Ship</summary>
-            <div class="checkbox-row">
+          </div>
+          <div id="action-options-ship" class="action-item-options-panel"><div class="checkbox-row">
               <input type="checkbox" id="cfg-ship-in-port" checked />
               <label for="cfg-ship-in-port">Only when ship in port / ready</label>
             </div>
@@ -352,10 +333,8 @@
               <label for="cfg-ship-rotate">Rotate through destinations for each port</label>
             </div>
             <p class="tos-note">Routes match your current city (header). Use when harbors differ per port. Empty routes + empty fallback = first send button on page.</p>
-          </details>
-          <details id="action-options-travel" class="action-options-panel hidden">
-            <summary>Travel</summary>
-            <div>
+          </div>
+          <div id="action-options-travel" class="action-item-options-panel"><div>
               <span class="field-label" id="cfg-travel-label">Preferred destinations</span>
               <div id="cfg-travel-destinations-list" class="city-checkbox-list" role="group" aria-labelledby="cfg-travel-label"></div>
             </div>
@@ -372,10 +351,8 @@
               <div id="cfg-travel-rotate-pool" class="city-checkbox-list" role="group"></div>
             </div>
             <p class="tos-note">None checked for destinations = first available flight. Rotation ignored when drugs needs a specific city.</p>
-          </details>
-          <details id="action-options-drugs" class="action-options-panel hidden">
-            <summary>Drugs</summary>
-            <p class="tos-note">Requires <strong>Travel</strong> enabled above Drugs in the list. Buy only in Kabul; sell only in listed cities.</p>
+          </div>
+          <div id="action-options-drugs" class="action-item-options-panel"><p class="tos-note">Requires <strong>Travel</strong> enabled above Drugs in the list. Buy only in Kabul; sell only in listed cities.</p>
             <div>
               <label for="cfg-drugs-prefer">Prefer</label>
               <select id="cfg-drugs-prefer">
@@ -398,10 +375,8 @@ Rio
 Las Vegas</textarea>
               </div>
             </div>
-          </details>
-          <details id="action-options-bank" class="action-options-panel hidden">
-            <summary>Bank</summary>
-            <div class="checkbox-row">
+          </div>
+          <div id="action-options-bank" class="action-item-options-panel"><div class="checkbox-row">
               <input type="checkbox" id="cfg-bank-auto" />
               <label for="cfg-bank-auto">Auto deposit/withdraw to keep wallet near target</label>
             </div>
@@ -416,10 +391,8 @@ Las Vegas</textarea>
               </div>
             </div>
             <p class="tos-note">When auto is off, bank only clicks generic innskudd/uttak. When on, bot transfers only if wallet is outside target ± tolerance.</p>
-          </details>
-          <details id="action-options-messages" class="action-options-panel hidden">
-            <summary>Messages</summary>
-            <div class="grid-2">
+          </div>
+          <div id="action-options-messages" class="action-item-options-panel"><div class="grid-2">
               <div>
                 <label for="cfg-messages-interval">Check interval (minutes)</label>
                 <input type="number" id="cfg-messages-interval" min="1" step="1" value="45" />
@@ -433,10 +406,8 @@ Las Vegas</textarea>
               <input type="checkbox" id="cfg-messages-unread-only" />
               <label for="cfg-messages-unread-only">Only when unread messages</label>
             </div>
-          </details>
-          <details id="action-options-family" class="action-options-panel hidden">
-            <summary>Family</summary>
-            <div>
+          </div>
+          <div id="action-options-family" class="action-item-options-panel"><div>
               <label for="cfg-family-interval">Visit interval (minutes)</label>
               <input type="number" id="cfg-family-interval" min="1" step="1" value="45" />
             </div>
@@ -444,10 +415,8 @@ Las Vegas</textarea>
               <input type="checkbox" id="cfg-family-auto-accept" checked />
               <label for="cfg-family-auto-accept">Auto-accept invites</label>
             </div>
-          </details>
-          <details id="action-options-murder" class="action-options-panel hidden">
-            <summary>Murder</summary>
-            <div id="cfg-murder-targets-wrap">
+          </div>
+          <div id="action-options-murder" class="action-item-options-panel"><div id="cfg-murder-targets-wrap">
               <label for="cfg-murder-targets">Target usernames (one per line)</label>
               <textarea id="cfg-murder-targets" rows="3" placeholder="rival_player"></textarea>
             </div>
@@ -476,7 +445,7 @@ Las Vegas</textarea>
               <label for="cfg-murder-shoot">Actually shoot (not just fill target)</label>
             </div>
             <p class="tos-note">Murder will not run with an empty target list (except report/retaliate modes). Requires aggression ≥ 0.5 for static targets.</p>
-          </details>
+          </div>
         </div>
         </details>
 

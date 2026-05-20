@@ -1047,19 +1047,60 @@ function ensureTravelForDrugs() {
   }
 }
 
-function updateActionOptionsVisibility() {
-  let anyVisible = false;
-  for (const [actionId, panelId] of Object.entries(ACTION_OPTION_PANELS)) {
+function getActionOptionsHost() {
+  return $("action-options-host");
+}
+
+/** Park panels in the hidden host before the list is rebuilt. */
+function stashActionOptionPanels() {
+  const host = getActionOptionsHost();
+  if (!host) return;
+  for (const panelId of Object.values(ACTION_OPTION_PANELS)) {
     const panel = $(panelId);
-    if (!panel) continue;
-    const on = isActionEnabledInUI(actionId);
-    panel.classList.toggle("hidden", !on);
-    if (on) anyVisible = true;
+    if (panel && panel.parentElement !== host) {
+      host.appendChild(panel);
+    }
   }
-  $("action-options-section").classList.toggle("hidden", !anyVisible);
+}
+
+function mountActionOptionPanels() {
+  const list = $("cfg-action-list");
+  for (const [actionId, panelId] of Object.entries(ACTION_OPTION_PANELS)) {
+    const li = list.querySelector(`.action-list-item[data-action="${actionId}"]`);
+    const panel = $(panelId);
+    const mount = li?.querySelector(".action-item-options-mount");
+    if (li && panel && mount) {
+      mount.appendChild(panel);
+    }
+  }
+}
+
+function setActionOptionsOpen(li, open) {
+  const wrap = li?.querySelector(".action-item-options");
+  const btn = li?.querySelector(".action-settings-btn");
+  if (!wrap) return;
+  wrap.classList.toggle("is-open", !!open);
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function updateActionOptionsVisibility() {
+  const list = $("cfg-action-list");
+  for (const actionId of Object.keys(ACTION_OPTION_PANELS)) {
+    const li = list.querySelector(`.action-list-item[data-action="${actionId}"]`);
+    if (!li) continue;
+    const on = isActionEnabledInUI(actionId);
+    const wrap = li.querySelector(".action-item-options");
+    const btn = li.querySelector(".action-settings-btn");
+    if (wrap) {
+      wrap.classList.toggle("hidden", !on);
+      if (!on) setActionOptionsOpen(li, false);
+    }
+    if (btn) btn.disabled = !on;
+  }
 }
 
 function renderActionList(enabledOrder) {
+  stashActionOptionPanels();
   const list = $("cfg-action-list");
   list.innerHTML = "";
   const enabledSet = new Set(enabledOrder);
@@ -1083,21 +1124,35 @@ function renderActionList(enabledOrder) {
     const li = document.createElement("li");
     li.className = "action-list-item";
     li.dataset.action = id;
+    const hasOptions = Object.prototype.hasOwnProperty.call(ACTION_OPTION_PANELS, id);
     li.innerHTML = `
-      <label class="action-check">
-        <input type="checkbox" data-action-check ${enabledSet.has(id) ? "checked" : ""} />
-        <span>${meta.label}</span>
-      </label>
-      <div class="action-item-controls">
-        <button type="button" class="action-help-btn" data-action-help="${id}" title="What does this do?" aria-label="Help: ${meta.label}">?</button>
-        <div class="action-reorder">
-          <button type="button" data-dir="up" title="Move up">↑</button>
-          <button type="button" data-dir="down" title="Move down">↓</button>
+      <div class="action-list-item-row">
+        <label class="action-check">
+          <input type="checkbox" data-action-check ${enabledSet.has(id) ? "checked" : ""} />
+          <span>${meta.label}</span>
+        </label>
+        <div class="action-item-controls">
+          ${
+            hasOptions
+              ? `<button type="button" class="action-settings-btn" data-action-settings="${id}" title="Settings" aria-label="Settings: ${meta.label}" aria-expanded="false">⚙</button>`
+              : ""
+          }
+          <button type="button" class="action-help-btn" data-action-help="${id}" title="What does this do?" aria-label="Help: ${meta.label}">?</button>
+          <div class="action-reorder">
+            <button type="button" data-dir="up" title="Move up">↑</button>
+            <button type="button" data-dir="down" title="Move down">↓</button>
+          </div>
         </div>
       </div>
+      ${
+        hasOptions
+          ? `<div class="action-item-options hidden"><div class="action-item-options-mount"></div></div>`
+          : ""
+      }
     `;
     list.appendChild(li);
   }
+  mountActionOptionPanels();
   updateActionOptionsVisibility();
   ensureTravelForDrugs();
 }
@@ -1131,6 +1186,18 @@ function setupActionListHandlers() {
     }
   });
   $("cfg-action-list").addEventListener("click", (ev) => {
+    const settingsBtn = ev.target.closest(".action-settings-btn");
+    if (settingsBtn) {
+      ev.preventDefault();
+      if (settingsBtn.disabled) return;
+      const li = settingsBtn.closest(".action-list-item");
+      const wrap = li?.querySelector(".action-item-options");
+      if (wrap) {
+        const open = !wrap.classList.contains("is-open");
+        setActionOptionsOpen(li, open);
+      }
+      return;
+    }
     const helpBtn = ev.target.closest("[data-action-help]");
     if (helpBtn) {
       ev.preventDefault();
