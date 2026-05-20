@@ -460,14 +460,28 @@ main:has(#panel-sessions.active) {
 
 .ui-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 540px);
+  gap: 1.25rem;
   align-items: start;
 }
 
 .ui-col-main,
 .ui-col-side {
   min-width: 0;
+}
+
+.ui-col-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ui-col-main .card {
+  margin-bottom: 1rem;
+}
+
+.ui-col-main .card:last-child {
+  margin-bottom: 0;
 }
 
 .ui-col-side {
@@ -486,6 +500,10 @@ main:has(#panel-sessions.active) {
 
 .ui-col-side .card:last-child {
   margin-bottom: 0;
+}
+
+.card-live-status .status-grid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
 }
 
 .card-log {
