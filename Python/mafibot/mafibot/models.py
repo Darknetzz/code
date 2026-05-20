@@ -152,3 +152,12 @@ class HealthResponse(BaseModel):
     config_dir: str
     profiles_dir: str
     profile_dir: str
+
+
+class LogAppendRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class LogLinesResponse(BaseModel):
+    path: str
+    lines: list[str] = Field(default_factory=list)

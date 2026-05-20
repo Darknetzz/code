@@ -39,11 +39,14 @@ This tool is for personal/educational use at your own risk.
 
 
 def _setup_logging(verbose: bool) -> None:
+    from mafibot.session_log import configure_session_file_logging
+
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    configure_session_file_logging()
 
 
 def _require_tos(accept_tos: bool) -> None:

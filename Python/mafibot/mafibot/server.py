@@ -32,6 +32,8 @@ from mafibot.models import (
     DiscoverRequest,
     GameStateResponse,
     HealthResponse,
+    LogAppendRequest,
+    LogLinesResponse,
     LoginRequest,
     ProfileCreateRequest,
     ProfileListItem,
@@ -42,6 +44,13 @@ from mafibot.models import (
     SessionStatusResponse,
 )
 from mafibot.runner import MafibotRunner, get_runner, run_state_blocks_start
+from mafibot.session_log import (
+    append_ui_log_line,
+    clear_session_log,
+    configure_session_file_logging,
+    get_log_path,
+    read_recent_log_lines,
+)
 from mafibot.session_metrics import load_last_session_summary
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -64,6 +73,7 @@ def _check_ui_token(request: Request) -> None:
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
+    configure_session_file_logging()
     _ensure_runner_hooks()
     yield
 
@@ -146,6 +156,27 @@ def _ensure_runner_hooks() -> None:
         runner.add_log_handler(_runner_log_handler)
         runner.add_status_handler(_runner_status_handler)
         _runner_hooked = True
+
+
+@app.get("/api/logs", response_model=LogLinesResponse)
+def api_get_logs(limit: int = 400) -> LogLinesResponse:
+    capped = max(1, min(limit, 2000))
+    return LogLinesResponse(
+        path=str(get_log_path()),
+        lines=read_recent_log_lines(limit=capped),
+    )
+
+
+@app.post("/api/logs")
+def api_append_log(req: LogAppendRequest) -> dict:
+    append_ui_log_line(req.message)
+    return {"ok": True}
+
+
+@app.delete("/api/logs")
+def api_clear_logs() -> dict:
+    clear_session_log()
+    return {"ok": True}
 
 
 @app.get("/api/health", response_model=HealthResponse)
