@@ -978,9 +978,47 @@ button:disabled {
 }
 
 .config-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   cursor: pointer;
   font-weight: 600;
   padding: 0.35rem 0;
+  list-style: none;
+}
+
+.config-section > summary::-webkit-details-marker,
+.config-section > summary::marker {
+  display: none;
+  content: "";
+}
+
+.config-section > summary::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.config-section[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.config-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.config-section-icon svg {
+  display: block;
 }
 
 .preset-row {
