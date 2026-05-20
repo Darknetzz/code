@@ -721,14 +721,24 @@ function ensureBadgeStructure(badge) {
   badge.append(dot, label);
 }
 
-function setBadge(state) {
+function statusHasError(st) {
+  if (!st) return false;
+  const s = (st.state || "idle").toLowerCase();
+  if (s === "failed") return true;
+  if (st.error) return true;
+  const pe = st.parse_error;
+  if (pe && (pe.detail || pe.message)) return true;
+  return false;
+}
+
+function setBadge(state, hasError = false) {
   const s = (state || "idle").toLowerCase();
   const text = state || "idle";
   for (const id of ["status-badge", "global-status-badge"]) {
     const badge = $(id);
     if (!badge) continue;
     ensureBadgeStructure(badge);
-    badge.className = `badge ${s}`;
+    badge.className = `badge ${s}${hasError ? " has-error" : ""}`;
     const label = badge.querySelector(".badge-label");
     if (label) label.textContent = text;
   }
@@ -785,7 +795,7 @@ function updateGlobalStatusBar(st) {
 
 function applyStatus(st) {
   lastStatus = st;
-  setBadge(st.state);
+  setBadge(st.state, statusHasError(st));
   updateRunControls(st.state);
   $("st-profile").textContent = st.profile || "—";
   const elapsedText = formatElapsed(st.elapsed_sec);

@@ -813,10 +813,15 @@ button:disabled {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 35%, transparent);
 }
 
-.badge.failed .badge-dot,
 .badge.stopped .badge-dot {
+  background: var(--muted);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.badge.failed .badge-dot,
+.badge.has-error .badge-dot {
   background: var(--danger);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 .run-activity,
