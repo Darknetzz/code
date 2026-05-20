@@ -1076,15 +1076,19 @@ function sessionHistorySummary(row) {
 
 function renderSessionHistoryList(rows) {
   const list = $("session-history-list");
+  const empty = $("session-history-empty");
   if (!list) return;
   list.replaceChildren();
   if (!rows.length) {
-    const li = document.createElement("li");
-    li.className = "cooldown-empty muted";
-    li.textContent = "No history yet — completed sessions appear here.";
-    list.appendChild(li);
+    list.classList.add("hidden");
+    if (empty) {
+      empty.classList.remove("hidden");
+      empty.textContent = "No history yet — completed sessions appear here.";
+    }
     return;
   }
+  list.classList.remove("hidden");
+  if (empty) empty.classList.add("hidden");
   rows.forEach((row, index) => {
     const li = document.createElement("li");
     const btn = document.createElement("button");
@@ -1206,12 +1210,11 @@ async function loadSessionsPage() {
   if (hResult?.error) {
     sessionHistoryRows = [];
     const list = $("session-history-list");
-    if (list) {
-      list.replaceChildren();
-      const li = document.createElement("li");
-      li.className = "cooldown-empty muted";
-      li.textContent = `Could not load history: ${hResult.error.message}`;
-      list.appendChild(li);
+    const empty = $("session-history-empty");
+    list?.classList.add("hidden");
+    if (empty) {
+      empty.classList.remove("hidden");
+      empty.textContent = `Could not load history: ${hResult.error.message}`;
     }
     return;
   }

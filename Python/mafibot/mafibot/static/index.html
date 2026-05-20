@@ -153,10 +153,11 @@
 
           <div class="card card-session-history">
             <h2>Session history</h2>
-            <p id="sessions-storage-hint" class="tos-note muted">Loading storage path…</p>
-            <ul id="session-history-list" class="session-history-list" aria-label="Past sessions">
-              <li class="cooldown-empty muted">Loading…</li>
-            </ul>
+            <div class="session-history-inner">
+              <p id="sessions-storage-hint" class="sessions-storage-hint muted">Loading storage path…</p>
+              <p id="session-history-empty" class="session-history-empty muted">Loading…</p>
+              <ul id="session-history-list" class="session-history-list hidden" aria-label="Past sessions"></ul>
+            </div>
           </div>
         </div>
       </div>

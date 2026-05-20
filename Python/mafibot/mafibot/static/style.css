@@ -118,6 +118,32 @@ main:has(#panel-sessions.active) {
   min-width: 0;
 }
 
+.card-session-history {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-session-history h2 {
+  flex-shrink: 0;
+}
+
+.session-history-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 65%, var(--surface));
+}
+
+.session-history-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
 @media (max-width: 900px) {
   .sessions-layout {
     grid-template-columns: 1fr;
@@ -139,13 +165,18 @@ main:has(#panel-sessions.active) {
 
 .session-history-list {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: min(70vh, 640px);
+  max-height: min(50vh, 520px);
   overflow-y: auto;
+  min-width: 0;
+}
+
+.session-history-list.hidden {
+  display: none;
 }
 
 .session-history-item {
