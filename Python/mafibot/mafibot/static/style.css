@@ -972,7 +972,7 @@ button:disabled {
 .config-section {
   margin: 0.75rem 0;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 80%, transparent);
 }
