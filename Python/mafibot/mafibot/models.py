@@ -91,6 +91,8 @@ class RunRequest(BaseModel):
     accept_tos: bool = False
     headless: bool = False
     channel: str | None = "chrome"
+    skip_preflight: bool = False
+    require_verification: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -116,6 +118,9 @@ class SessionMetricsResponse(BaseModel):
     actions_skipped: int = 0
     parse_failures: int = 0
     hotel_book_failures: int = 0
+    hotel_skip_insufficient_funds: int = 0
+    hotel_skip_hotel_full: int = 0
+    hotel_skip_wallet_low: int = 0
     samples_in_hotel: int = 0
     samples_out_hotel: int = 0
     money_start: int | None = None
@@ -124,6 +129,20 @@ class SessionMetricsResponse(BaseModel):
     rank_end: int | None = None
     stop_reason: str | None = None
     hotel_time_percent: float | None = None
+
+
+class PreflightCheckResponse(BaseModel):
+    id: str
+    ok: bool
+    message: str
+    hint: str = ""
+
+
+class PreflightResponse(BaseModel):
+    ok: bool
+    checks: list[PreflightCheckResponse] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    verification: dict | None = None
 
 
 class RunStatusResponse(BaseModel):
@@ -136,8 +155,10 @@ class RunStatusResponse(BaseModel):
     last_reason: str | None = None
     idle_detail: str | None = None
     parse_error: dict[str, str | None] | None = None
+    parse_playbook: str | None = None
     error: str | None = None
     game: GameStateResponse = Field(default_factory=GameStateResponse)
+    dry_run_decisions: list[dict[str, str | None]] = Field(default_factory=list)
 
 
 class SessionStatusResponse(BaseModel):

@@ -18,6 +18,7 @@ from mafibot.brain import get_last_idle_detail, get_last_parse_error
 from mafibot.auth import ensure_session, is_logged_in
 from mafibot.config import BotProfile, load_bot_profile
 from mafibot.discover import run_discovery
+from mafibot.preflight import run_preflight_checks
 from mafibot.session import SessionConfig, mafia_session
 
 log = logging.getLogger("mafibot.runner")
@@ -242,9 +243,16 @@ class MafibotRunner:
         accept_tos: bool = True,
         headless: bool = False,
         channel: str | None = "chrome",
+        skip_preflight: bool = False,
+        require_verification: bool = False,
     ) -> None:
         if not accept_tos:
             raise ValueError("accept_tos is required")
+        if not skip_preflight:
+            pf = run_preflight_checks(require_verification=require_verification)
+            if not pf.ok:
+                failed = [c.message for c in pf.checks if not c.ok]
+                raise ValueError(f"Preflight failed: {'; '.join(failed)}")
         async with self._lock:
             if run_state_blocks_start(self._status.state):
                 raise RuntimeError("A task is already in progress")

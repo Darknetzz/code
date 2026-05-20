@@ -48,6 +48,10 @@
           <label for="run-accept-tos">I accept ToS risk (section 7 — automation may ban account)</label>
         </div>
         <div class="checkbox-row">
+          <input type="checkbox" id="run-skip-preflight" />
+          <label for="run-skip-preflight">Skip pre-flight checks</label>
+        </div>
+        <div class="checkbox-row">
           <input type="checkbox" id="run-discover-compare" />
           <label for="run-discover-compare">Discover: compare HTML to previous run</label>
         </div>
@@ -69,6 +73,10 @@
         <table class="config-overview-table last-session-table hidden" id="last-session-table">
           <tbody id="last-session-body"></tbody>
         </table>
+        <h3 class="subsection-title">Recent sessions</h3>
+        <ul id="session-history-list" class="cooldown-list muted small">
+          <li class="cooldown-empty">Loading…</li>
+        </ul>
       </div>
         </div>
 
@@ -97,6 +105,8 @@
           <div><dt>Idle reason</dt><dd id="st-idle" class="hidden">—</dd></div>
         </dl>
         <p id="st-parse-error" class="hidden tos-note"></p>
+        <p id="st-parse-playbook" class="hidden muted small"></p>
+        <div id="preflight-panel" class="preflight-panel hidden" aria-live="polite"></div>
         <h3 class="subsection-title">Active cooldowns</h3>
         <ul id="st-cooldowns" class="cooldown-list" aria-live="polite">
           <li class="cooldown-empty muted">None</li>
@@ -575,8 +585,10 @@ Las Vegas</textarea>
         <details class="config-section">
           <summary><span class="config-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span><span class="config-section-label">Notifications</span></summary>
         <div>
-          <label for="cfg-stop-webhook-notify">Stop / assist webhook URL</label>
+          <label for="cfg-stop-webhook-notify">Stop webhook URL</label>
           <input type="url" id="cfg-stop-webhook-notify" class="form-input" placeholder="https://discord.com/api/webhooks/..." />
+          <label for="cfg-assist-webhook-notify">Assist webhook URL (war/kidnap; optional)</label>
+          <input type="url" id="cfg-assist-webhook-notify" class="form-input" placeholder="falls back to stop webhook" />
           <p class="tos-note">Sent when the bot stops or for assist events below. Assist alerts are notify-only (no auto-play).</p>
         </div>
         <div class="checkbox-row">

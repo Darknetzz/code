@@ -12,7 +12,8 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.staticfiles import StaticFiles
 
 from mafibot import __version__
-from mafibot.brain import get_last_idle_detail
+from mafibot.brain import get_dry_run_decisions, get_last_idle_detail
+from mafibot.preflight import parse_error_playbook, run_preflight_checks
 from mafibot.config import BotProfile, get_config_dir, get_profile_dir, get_profiles_dir
 from mafibot.config_store import (
     clear_credentials,
@@ -35,6 +36,8 @@ from mafibot.models import (
     LogAppendRequest,
     LogLinesResponse,
     LoginRequest,
+    PreflightResponse,
+    PreflightCheckResponse,
     ProfileCreateRequest,
     ProfileListItem,
     ProfileRenameRequest,
@@ -51,7 +54,7 @@ from mafibot.session_log import (
     get_log_path,
     read_recent_log_lines,
 )
-from mafibot.session_metrics import load_last_session_summary
+from mafibot.session_metrics import load_last_session_summary, load_session_history
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _ws_clients: list[WebSocket] = []
@@ -98,6 +101,7 @@ def _status_response(runner: MafibotRunner) -> RunStatusResponse:
     if idle is None and st.last_message and st.last_message.startswith("nothing ready"):
         idle = st.last_message
     metrics = load_last_session_summary()
+    playbook = parse_error_playbook(st.parse_error) if st.parse_error else None
     return RunStatusResponse(
         state=st.state.value,
         profile=st.profile,
@@ -108,8 +112,10 @@ def _status_response(runner: MafibotRunner) -> RunStatusResponse:
         last_reason=st.last_reason,
         idle_detail=idle,
         parse_error=st.parse_error,
+        parse_playbook=playbook or None,
         error=st.error,
         game=GameStateResponse(**st.game.__dict__),
+        dry_run_decisions=get_dry_run_decisions() if st.dry_run else [],
     )
 
 
@@ -194,6 +200,32 @@ def api_health() -> HealthResponse:
         profiles_dir=str(get_profiles_dir()),
         profile_dir=str(get_profile_dir()),
     )
+
+
+@app.get("/api/preflight", response_model=PreflightResponse)
+def api_preflight(require_verification: bool = False) -> PreflightResponse:
+    result = run_preflight_checks(require_verification=require_verification)
+    return PreflightResponse(
+        ok=result.ok,
+        checks=[
+            PreflightCheckResponse(
+                id=c.id, ok=c.ok, message=c.message, hint=c.hint
+            )
+            for c in result.checks
+        ],
+        warnings=result.warnings,
+        verification=result.to_dict().get("verification"),
+    )
+
+
+@app.get("/api/session/metrics/history", response_model=list[SessionMetricsResponse])
+def api_session_metrics_history(limit: int = 30) -> list[SessionMetricsResponse]:
+    capped = max(1, min(limit, 200))
+    out: list[SessionMetricsResponse] = []
+    for raw in load_session_history(limit=capped):
+        pct = raw.hotel_time_percent
+        out.append(SessionMetricsResponse(**raw.to_dict(), hotel_time_percent=pct))
+    return out
 
 
 @app.get("/api/session/metrics", response_model=SessionMetricsResponse | None)
@@ -309,6 +341,8 @@ async def api_start_run(req: RunRequest) -> dict:
             accept_tos=req.accept_tos,
             headless=req.headless,
             channel=req.channel,
+            skip_preflight=req.skip_preflight,
+            require_verification=req.require_verification,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

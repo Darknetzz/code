@@ -23,6 +23,8 @@ from mafibot.auth import ensure_session, is_logged_in
 from mafibot.brain import clear_stop, request_stop, run_session
 from mafibot.config import BASE_URL, get_config_dir, load_bot_profile
 from mafibot.discover import run_discovery
+from mafibot.fixtures import promote_discovery_fixtures
+from mafibot.preflight import run_preflight_checks
 from mafibot.verify_pages import run_verification, verification_exit_code
 from mafibot.session import SessionConfig, mafia_session
 
@@ -61,6 +63,37 @@ def version() -> None:
     """Show version and config paths."""
     console.print(f"mafibot {__version__}")
     console.print(f"Config: {get_config_dir()}")
+
+
+@app.command("check")
+def check_cmd(
+    require_verification: bool = typer.Option(
+        False,
+        "--require-verification",
+        help="Fail if latest discovery verification did not pass",
+    ),
+) -> None:
+    """Pre-flight: config dir, pages.json, discovery verification."""
+    _setup_logging(False)
+    try:
+        import playwright  # noqa: F401
+
+        console.print("[green]playwright[/green] installed")
+    except ImportError:
+        console.print("[red]playwright not installed[/red]")
+        raise typer.Exit(1) from None
+
+    result = run_preflight_checks(require_verification=require_verification)
+    for check in result.checks:
+        mark = "[green]ok[/green]" if check.ok else "[red]fail[/red]"
+        console.print(f"  {mark} {check.id}: {check.message}")
+        if check.hint and not check.ok:
+            console.print(f"       [dim]{check.hint}[/dim]")
+    for warning in result.warnings:
+        console.print(f"  [yellow]warn[/yellow] {warning}")
+    if not result.ok:
+        raise typer.Exit(1)
+    console.print("[green]All checks passed.[/green]")
 
 
 @app.command()
@@ -134,6 +167,25 @@ def verify_pages(
         raise typer.Exit(1)
 
 
+@app.command("promote-fixtures")
+def promote_fixtures_cmd(
+    discovery_dir: Path | None = typer.Option(
+        None,
+        "--discovery-dir",
+        help="Discovery run folder (default: latest)",
+    ),
+) -> None:
+    """Copy latest discovery HTML into tests/fixtures/discovered (redacted)."""
+    _setup_logging(False)
+    try:
+        dest, copied = promote_discovery_fixtures(discovery_dir)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    console.print(f"[green]Promoted {len(copied)} pages to[/green] {dest}")
+    console.print("[dim]Run: python -m pytest tests/ -q[/dim]")
+
+
 @app.command()
 def run(
     profile: str = typer.Option("ranker", "--profile", "-p"),
@@ -142,10 +194,23 @@ def run(
     accept_tos: bool = typer.Option(False, "--accept-tos"),
     headless: bool = typer.Option(False, "--headless"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    skip_preflight: bool = typer.Option(False, "--skip-preflight"),
+    require_verification: bool = typer.Option(
+        False,
+        "--require-verification",
+        help="Require passing verify-pages on latest discovery",
+    ),
 ) -> None:
     """Run autopilot session."""
     _require_tos(accept_tos)
     _setup_logging(verbose)
+    if not skip_preflight:
+        pf = run_preflight_checks(require_verification=require_verification)
+        if not pf.ok:
+            for check in pf.checks:
+                if not check.ok:
+                    console.print(f"[red]Preflight {check.id}:[/red] {check.message}")
+            raise typer.Exit(1)
     bot_profile = load_bot_profile(profile)
 
     async def _main() -> None:
@@ -210,6 +275,10 @@ def ui(
     token = __import__("os").getenv("MAFIBOT_UI_TOKEN", "").strip()
     if token:
         console.print("[dim]UI token auth enabled (MAFIBOT_UI_TOKEN).[/dim]")
+    elif host in ("127.0.0.1", "localhost", "::1"):
+        console.print(
+            "[yellow]MAFIBOT_UI_TOKEN is not set — API is open on localhost.[/yellow]"
+        )
     console.print(f"Mafibot UI: http://{host}:{port}/")
     console.print("[dim]Localhost only — do not expose without auth.[/dim]")
     uvicorn.run("mafibot.server:app", host=host, port=port, reload=False)

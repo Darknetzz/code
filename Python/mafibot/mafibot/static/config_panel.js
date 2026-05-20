@@ -98,9 +98,16 @@
     return (notify?.value || "").trim();
   }
 
-  function setWebhookUrlInUi(url) {
+  function assistWebhookUrlFromUi() {
+    const assist = $c("cfg-assist-webhook-notify");
+    return (assist?.value || "").trim();
+  }
+
+  function setWebhookUrlInUi(stopUrl, assistUrl) {
     const notify = $c("cfg-stop-webhook-notify");
-    if (notify) notify.value = url || "";
+    if (notify) notify.value = stopUrl || "";
+    const assist = $c("cfg-assist-webhook-notify");
+    if (assist) assist.value = assistUrl || "";
   }
 
   function loadExtendedProfileFields(doc) {
@@ -140,7 +147,7 @@
     if ($c("cfg-pause-restricted")) {
       $c("cfg-pause-restricted").checked = doc.pause_on_restricted_status !== false;
     }
-    setWebhookUrlInUi(doc.stop_webhook_url || "");
+    setWebhookUrlInUi(doc.stop_webhook_url || "", doc.assist_webhook_url || "");
     if ($c("cfg-assist-war")) $c("cfg-assist-war").checked = !!doc.assist_webhook_on_war;
     if ($c("cfg-assist-kidnap")) $c("cfg-assist-kidnap").checked = !!doc.assist_webhook_on_kidnap;
     if ($c("cfg-minions-train-when-ready")) {
@@ -204,6 +211,7 @@
     );
     payload.pause_on_restricted_status = !!$c("cfg-pause-restricted")?.checked;
     payload.stop_webhook_url = webhookUrlFromUi();
+    payload.assist_webhook_url = assistWebhookUrlFromUi();
     payload.assist_webhook_on_war = !!$c("cfg-assist-war")?.checked;
     payload.assist_webhook_on_kidnap = !!$c("cfg-assist-kidnap")?.checked;
     payload.minions_train_when_ready = !!$c("cfg-minions-train-when-ready")?.checked;
