@@ -48,15 +48,20 @@ from mafibot.session_metrics import (
     finish_session_metrics,
     start_session_metrics,
 )
+from mafibot.session_context import SessionContext
 from mafibot.state import GameState, ParseError, parse_game_state
 
 log = logging.getLogger("mafibot")
 
-_cancel = asyncio.Event()
-_hotel_disabled_for_session = False
+_session: SessionContext | None = None
 _ROTATION_EXCLUDE = frozenset({"leave_hotel", "book_hotel", "hotel"})
-_last_idle_detail: str | None = None
-_last_parse_error: dict[str, str | None] | None = None
+
+
+def _active_session() -> SessionContext:
+    global _session
+    if _session is None:
+        _session = SessionContext()
+    return _session
 
 
 @dataclass
@@ -96,14 +101,18 @@ async def _maybe_distraction_pause(
 
 
 def get_last_parse_error() -> dict[str, str | None] | None:
-    return _last_parse_error
+    return _active_session().last_parse_error
 
 StatusCallback = Callable[["GameState", str | None, str, str | None], None]
 _status_callbacks: list[StatusCallback] = []
 
 
 def get_last_idle_detail() -> str | None:
-    return _last_idle_detail
+    return _active_session().last_idle_detail
+
+
+def get_dry_run_decisions() -> list[dict[str, str | None]]:
+    return [d.to_dict() for d in _active_session().dry_run_decisions]
 
 
 def add_status_callback(handler: StatusCallback) -> None:
@@ -129,32 +138,63 @@ def _notify_status(
 
 
 def request_stop() -> None:
-    _cancel.set()
+    _active_session().request_stop()
 
 
 def clear_stop() -> None:
-    global _hotel_disabled_for_session
-    _cancel.clear()
-    _hotel_disabled_for_session = False
+    global _session
+    if _session is not None:
+        _session.clear_stop()
+    else:
+        SessionContext().clear_stop()
     reset_assist_alerts()
 
 
 def _effective_stay_in_hotel(profile: BotProfile) -> bool:
-    return profile.stay_in_hotel and not _hotel_disabled_for_session
+    return profile.stay_in_hotel and not _active_session().hotel_disabled_for_session
 
 
 def _maybe_disable_hotel_for_session(profile: BotProfile) -> None:
-    global _hotel_disabled_for_session
     if not profile.hotel_fallback_when_blocked:
         return
     metrics = current_session_metrics()
     if metrics and metrics.hotel_book_failures >= 3:
-        _hotel_disabled_for_session = True
+        _active_session().hotel_disabled_for_session = True
         log.warning("hotel booking failed repeatedly — disabling stay_in_hotel for this session")
 
 
 def is_stop_requested() -> bool:
-    return _cancel.is_set()
+    return _active_session().is_stop_requested()
+
+
+def _record_hotel_book_outcome(result: ActionResult) -> None:
+    metrics = current_session_metrics()
+    if metrics is None or result.success:
+        return
+    msg = result.message.lower()
+    if "insufficient_funds" in msg:
+        metrics.record_hotel_skip("insufficient_funds")
+    elif "hotel_full" in msg:
+        metrics.record_hotel_skip("hotel_full")
+    elif "low_wallet" in msg or "wallet" in msg:
+        metrics.record_hotel_skip("wallet_low")
+
+
+def _blocked_state_wait_sec(state: GameState, profile: BotProfile) -> float | None:
+    """Long human-paced wait when jailed or hospitalized with nothing to do."""
+    if state.in_jail:
+        return random_wait_seconds(
+            profile.jail_wait_min_sec,
+            profile.jail_wait_max_sec,
+            distribution="triangular",
+        )
+    if state.in_hospital:
+        return random_wait_seconds(
+            profile.hospital_idle_wait_min_sec,
+            profile.hospital_idle_wait_max_sec,
+            distribution="triangular",
+        )
+    return None
 
 
 def _policy_from_profile(profile: BotProfile) -> HumanPolicy:
@@ -201,6 +241,7 @@ async def _book_hotel_with_retry(
     quick: bool = False,
 ) -> ActionResult:
     result = await _book_hotel(page, profile, policy, dry_run=dry_run, quick=quick)
+    _record_hotel_book_outcome(result)
     if result.success or dry_run:
         return result
     metrics = current_session_metrics()
@@ -209,6 +250,7 @@ async def _book_hotel_with_retry(
     log.warning("hotel book failed, retry once: %s", result.message)
     await sleep_wait(1.0, 2.5, distribution="uniform", label="hotel_book_retry")
     retry = await _book_hotel(page, profile, policy, dry_run=dry_run, quick=quick)
+    _record_hotel_book_outcome(retry)
     if not retry.success:
         await capture_failure(page, "hotel_book_failed")
         if metrics:
@@ -289,26 +331,26 @@ async def pick_next_action(
     *,
     dry_run: bool = False,
 ) -> tuple[Action | None, str]:
-    global _last_idle_detail
+    ctx = _active_session()
 
     if state.needs_stop:
-        _last_idle_detail = "stop: captcha, ban, or logged out"
-        return None, _last_idle_detail
+        ctx.last_idle_detail = "stop: captcha, ban, or logged out"
+        return None, ctx.last_idle_detail
 
     if state.in_jail:
-        _last_idle_detail = "idle: in jail"
-        return None, _last_idle_detail
+        ctx.last_idle_detail = "idle: in jail"
+        return None, ctx.last_idle_detail
 
     maybe_assist_alerts(state, profile)
 
     if gameplay_paused(profile, state):
         if state.kidnapped:
-            _last_idle_detail = "idle: kidnapped"
+            ctx.last_idle_detail = "idle: kidnapped"
         elif state.feriemodus:
-            _last_idle_detail = "idle: feriemodus"
+            ctx.last_idle_detail = "idle: feriemodus"
         else:
-            _last_idle_detail = "idle: startbeskyttelse"
-        return None, _last_idle_detail
+            ctx.last_idle_detail = "idle: startbeskyttelse"
+        return None, ctx.last_idle_detail
 
     names = _ordered_action_names(profile, state)
     candidates: list[Action] = []
@@ -351,8 +393,8 @@ async def pick_next_action(
             if await action.can_run(state, profile):
                 return action, f"fallback: {action.name}"
 
-    _last_idle_detail = await explain_idle(state, profile)
-    return None, f"nothing ready — {_last_idle_detail}"
+    ctx.last_idle_detail = await explain_idle(state, profile)
+    return None, f"nothing ready — {ctx.last_idle_detail}"
 
 
 def _seconds_until_play_window(profile: BotProfile) -> float | None:
@@ -386,7 +428,6 @@ async def run_once(
         await ensure_game_shell(page, policy)
         state = await parse_game_state(page)
     except ParseError as exc:
-        global _last_parse_error
         log.error("parse failed: %s", exc)
         shot = await capture_failure(page, "parse_error")
         if shot and not exc.screenshot_path:
@@ -394,7 +435,7 @@ async def run_once(
         if metrics:
             metrics.parse_failures += 1
         detail = exc.to_dict()
-        _last_parse_error = detail
+        _active_session().last_parse_error = detail
         _notify_status(
             GameState(),
             None,
@@ -413,12 +454,22 @@ async def run_once(
     if state.needs_stop:
         reason = "captcha, ban, or logged out"
         log.warning("session stop: %s", reason)
-        notify_session_stop(profile, reason)
+        notify_session_stop(profile.stop_webhook_url, profile.name, reason)
         return None
 
     action, reason = await pick_next_action(state, profile, dry_run=dry_run)
     log.info("decision: %s", reason)
     _notify_status(state, action.name if action else None, reason, reason)
+
+    if dry_run:
+        hotel_note = ""
+        if _effective_stay_in_hotel(profile):
+            hotel_note = "book→action→book"
+        _active_session().record_dry_run(
+            action.name if action else None,
+            reason,
+            hotel_steps=hotel_note,
+        )
 
     if action is None:
         if _effective_stay_in_hotel(profile) and profile.book_hotel_when_idle and not dry_run:
@@ -479,7 +530,8 @@ async def run_session(
     max_minutes: int | None = None,
     dry_run: bool = False,
 ) -> None:
-    clear_stop()
+    global _session
+    _session = SessionContext()
     reset_rotation_state()
     metrics = start_session_metrics(profile.name, dry_run=dry_run)
     policy = _policy_from_profile(profile)
@@ -494,18 +546,19 @@ async def run_session(
         await _book_hotel_with_retry(page, profile, policy)
         log.info("session start: ensured hotel check-in")
 
+    cancel = _active_session().cancel
     while datetime.now() < deadline and not is_stop_requested():
         if not in_play_window(profile):
             wait_sec = _seconds_until_play_window(profile) or 600.0
             log.info("outside play window — sleeping %.0fs", wait_sec)
             if not dry_run:
                 if not await sleep_with_idle_activity(
-                    page, wait_sec, pacing.active_policy or policy, cancel=_cancel
+                    page, wait_sec, pacing.active_policy or policy, cancel=cancel
                 ):
                     break
             else:
                 try:
-                    await asyncio.wait_for(_cancel.wait(), timeout=wait_sec)
+                    await asyncio.wait_for(cancel.wait(), timeout=wait_sec)
                     break
                 except asyncio.TimeoutError:
                     pass
@@ -516,7 +569,7 @@ async def run_session(
             log.info("idle break %.2f min (human AFK)", idle_sec / 60.0)
             if not dry_run:
                 if not await sleep_with_idle_activity(
-                    page, idle_sec, pacing.active_policy or policy, cancel=_cancel
+                    page, idle_sec, pacing.active_policy or policy, cancel=cancel
                 ):
                     break
             else:
@@ -525,7 +578,7 @@ async def run_session(
             pacing.warmup_cycles_remaining = random.randint(2, 3)
             continue
 
-        if not dry_run and not await _maybe_distraction_pause(page, pacing, _cancel):
+        if not dry_run and not await _maybe_distraction_pause(page, pacing, cancel):
             break
 
         try:
@@ -543,20 +596,31 @@ async def run_session(
                 state = await parse_game_state(page)
                 if state.needs_stop:
                     stop_reason = "captcha, ban, or logged out"
-                    notify_session_stop(profile, stop_reason)
+                    notify_session_stop(
+                        profile.stop_webhook_url, profile.name, stop_reason
+                    )
                     break
             except ParseError:
-                pass
+                state = None
             wait = cycle_wait_nothing_todo(pacing.active_policy or policy)
+            if state is not None:
+                blocked_wait = _blocked_state_wait_sec(state, profile)
+                if blocked_wait is not None:
+                    wait = blocked_wait
+                    log.info(
+                        "blocked state wait %.2fs (%s)",
+                        wait,
+                        "jail" if state.in_jail else "hospital",
+                    )
             log.info("waiting %.2fs (cooldown / nothing to do)", wait)
             if dry_run:
                 try:
-                    await asyncio.wait_for(_cancel.wait(), timeout=wait)
+                    await asyncio.wait_for(cancel.wait(), timeout=wait)
                     break
                 except asyncio.TimeoutError:
                     pass
             elif not await wait_with_idle_activity(
-                page, wait, pacing.active_policy or policy, _cancel
+                page, wait, pacing.active_policy or policy, cancel
             ):
                 break
             continue
@@ -565,12 +629,12 @@ async def run_session(
         log.info("waiting %.2fs before next action", wait)
         if dry_run:
             try:
-                await asyncio.wait_for(_cancel.wait(), timeout=wait)
+                await asyncio.wait_for(cancel.wait(), timeout=wait)
                 break
             except asyncio.TimeoutError:
                 pass
         elif not await wait_with_idle_activity(
-            page, wait, pacing.active_policy or policy, _cancel
+            page, wait, pacing.active_policy or policy, cancel
         ):
             break
 

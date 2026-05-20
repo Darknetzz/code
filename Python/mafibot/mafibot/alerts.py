@@ -1,38 +1,63 @@
-"""Optional out-of-band notifications when the bot must stop."""
+"""Optional out-of-band notifications (Discord-compatible webhooks)."""
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from urllib import request
 from urllib.error import URLError
-
-from mafibot.config import BotProfile
 
 log = logging.getLogger("mafibot.alerts")
 
 
-def notify_session_stop(profile: BotProfile, reason: str) -> None:
-    url = (profile.stop_webhook_url or "").strip()
+def post_webhook(
+    url: str,
+    message: str,
+    *,
+    retries: int = 2,
+    timeout: float = 10.0,
+) -> bool:
+    """POST JSON {content: message} to a webhook URL."""
+    url = (url or "").strip()
     if not url:
-        return
-    body = (
-        '{"content":'
-        + _json_escape(f"Mafibot [{profile.name}] stopped: {reason[:500]}")
-        + "}"
-    ).encode("utf-8")
+        return False
+    body = json.dumps({"content": message[:1900]}).encode("utf-8")
     req = request.Request(
         url,
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with request.urlopen(req, timeout=10) as resp:
-            if resp.status >= 400:
-                log.warning("webhook returned %s", resp.status)
-    except URLError as exc:
-        log.warning("stop webhook failed: %s", exc)
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            with request.urlopen(req, timeout=timeout) as resp:
+                if resp.status >= 400:
+                    log.warning("webhook returned %s", resp.status)
+                    return False
+                return True
+        except URLError as exc:
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+    log.warning("webhook failed: %s", last_exc)
+    return False
 
 
-def _json_escape(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+def notify_webhook(url: str, message: str) -> None:
+    post_webhook(url, message)
+
+
+def notify_session_stop(stop_url: str, profile_name: str, reason: str) -> None:
+    url = (stop_url or "").strip()
+    if not url:
+        return
+    notify_webhook(url, f"Mafibot [{profile_name}] stopped: {reason[:500]}")
+
+
+def notify_assist(assist_url: str, profile_name: str, reason: str) -> None:
+    url = (assist_url or "").strip()
+    if not url:
+        return
+    notify_webhook(url, f"Mafibot [{profile_name}] assist: {reason[:500]}")

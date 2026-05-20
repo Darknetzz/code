@@ -76,7 +76,10 @@ def _cooldown_ready_at(state: GameState, action_id: str) -> datetime | None:
     }
     if ready_map.get(action_id, True):
         return datetime.now()
-    return None
+    for cd in state.active_cooldowns:
+        if cd.id == action_id and cd.ready_at is not None:
+            return cd.ready_at
+    return datetime.max
 
 
 async def action_block_reason(

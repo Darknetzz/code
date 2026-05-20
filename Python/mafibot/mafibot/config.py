@@ -56,6 +56,10 @@ class BotProfile(BaseModel):
         default="",
         description="Optional Discord-compatible webhook URL when session stops (captcha/ban/logout)",
     )
+    assist_webhook_url: str = Field(
+        default="",
+        description="Optional webhook for assist alerts (war/kidnap); falls back to stop_webhook_url",
+    )
     stay_in_hotel: bool = True
     book_hotel_before_action: bool = True
     book_hotel_after_every_action: bool = True
@@ -130,6 +134,26 @@ class BotProfile(BaseModel):
     )
     assist_webhook_on_war: bool = False
     assist_webhook_on_kidnap: bool = False
+    jail_wait_min_sec: float = Field(
+        default=300.0,
+        ge=60.0,
+        description="Min sleep when in jail (nothing to do)",
+    )
+    jail_wait_max_sec: float = Field(
+        default=900.0,
+        ge=120.0,
+        description="Max sleep when in jail",
+    )
+    hospital_idle_wait_min_sec: float = Field(
+        default=120.0,
+        ge=30.0,
+        description="Min sleep when in hospital and no actions runnable",
+    )
+    hospital_idle_wait_max_sec: float = Field(
+        default=300.0,
+        ge=60.0,
+        description="Max sleep when in hospital and idle",
+    )
     # Messages
     messages_interval_minutes: int = 0
     messages_only_when_unread: bool = False
