@@ -455,8 +455,12 @@
     tab.textContent = configDirty ? `${base} *` : base;
     const saveBtn = document.getElementById("btn-save-profile");
     if (saveBtn) {
+      saveBtn.disabled = !configDirty;
       saveBtn.classList.toggle("config-save-fab-btn--dirty", configDirty);
-      saveBtn.textContent = configDirty ? "Save profile *" : "Save profile";
+      saveBtn.textContent = configDirty ? "Save changes" : "Save profile";
+      saveBtn.title = configDirty
+        ? "Write unsaved profile changes to disk"
+        : "No unsaved changes";
     }
   }
 

@@ -1829,6 +1829,8 @@ function setupActions() {
   });
 
   $("btn-save-profile").addEventListener("click", async () => {
+    const btn = $("btn-save-profile");
+    if (btn?.disabled) return;
     try {
       await saveCurrentProfile();
     } catch (e) {
