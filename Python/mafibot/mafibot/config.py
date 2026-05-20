@@ -281,7 +281,9 @@ def get_pages_config_path() -> Path:
 
 
 def bundled_profiles_dir() -> Path:
-    return Path(__file__).resolve().parent / "profiles"
+    from mafibot._frozen import bundle_root
+
+    return bundle_root() / "profiles"
 
 
 def load_bot_profile(name: str | None = None) -> BotProfile:

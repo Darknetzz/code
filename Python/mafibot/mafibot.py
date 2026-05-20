@@ -12,11 +12,12 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-# Ensure sibling webbot package is importable when running from repo
+# Ensure sibling webbot package is importable when running from repo (not frozen)
 _REPO_ROOT = Path(__file__).resolve().parent
-_WEBBOT = _REPO_ROOT.parent / "webbot"
-if _WEBBOT.is_dir() and str(_WEBBOT) not in sys.path:
-    sys.path.insert(0, str(_WEBBOT))
+if not getattr(sys, "frozen", False):
+    _WEBBOT = _REPO_ROOT.parent / "webbot"
+    if _WEBBOT.is_dir() and str(_WEBBOT) not in sys.path:
+        sys.path.insert(0, str(_WEBBOT))
 
 from mafibot import __version__
 from mafibot.auth import ensure_session, is_logged_in
@@ -234,7 +235,16 @@ def run(
 @app.command()
 def codegen() -> None:
     """Launch Playwright codegen on mafiaspillet.no (uses mafibot profile)."""
+    from mafibot._frozen import is_frozen
     from mafibot.config import get_profile_dir
+
+    if is_frozen():
+        console.print(
+            "[red]codegen is not available in the packaged executable.[/red]\n"
+            "[dim]Use a dev install: python -m playwright codegen "
+            f"{BASE_URL}[/dim]"
+        )
+        raise typer.Exit(1)
 
     profile = get_profile_dir()
     profile.mkdir(parents=True, exist_ok=True)

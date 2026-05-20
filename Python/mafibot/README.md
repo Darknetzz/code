@@ -28,6 +28,38 @@ python -m playwright install chromium
 
 Optional credentials (auto-fill login): copy `.env.example` to `.env` and set `MAFIA_USER` / `MAFIA_PASS`. A saved session from `login` is usually enough; do not commit `.env`.
 
+## Windows executable (single .exe)
+
+Build a one-file `mafibot.exe` with PyInstaller (bundles Python, the bot, UI assets, default profiles, and Playwright Chromium). Expect **~200MB+** output and a slower first launch while the bundle extracts to `%TEMP%`.
+
+**Build machine (Windows):**
+
+```powershell
+cd Python\mafibot
+python -m venv .venv-build
+.\.venv-build\Scripts\Activate.ps1
+pip install -r requirements.txt pyinstaller
+pip install -e ..\webbot
+$env:PLAYWRIGHT_BROWSERS_PATH = "0"
+python -m playwright install chromium
+pyinstaller mafibot.spec
+# → dist\mafibot.exe
+```
+
+Config, login cookies, and custom profiles still live under `%APPDATA%\mafibot` (same as the Python install). The packaged build uses bundled Chromium by default; system Chrome is not required on the target PC.
+
+**Smoke tests after build:**
+
+```powershell
+.\dist\mafibot.exe version
+.\dist\mafibot.exe check
+.\dist\mafibot.exe login
+.\dist\mafibot.exe ui
+.\dist\mafibot.exe run --accept-tos --dry-run -v
+```
+
+`codegen` is disabled in the `.exe` (use a dev Python install for Playwright codegen). GitHub Actions can produce the same artifact on demand — see `.github/workflows/mafibot-exe.yml`.
+
 ## Quick start
 
 ```bash

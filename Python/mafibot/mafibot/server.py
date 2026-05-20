@@ -63,7 +63,10 @@ from mafibot.session_metrics import (
     load_session_history,
 )
 
-_STATIC_DIR = Path(__file__).parent / "static"
+def _static_dir() -> Path:
+    from mafibot._frozen import bundle_root
+
+    return bundle_root() / "static"
 _ws_clients: list[WebSocket] = []
 _runner_hooked = False
 
@@ -468,4 +471,4 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             _ws_clients.remove(websocket)
 
 
-app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
+app.mount("/", StaticFiles(directory=str(_static_dir()), html=True), name="static")
