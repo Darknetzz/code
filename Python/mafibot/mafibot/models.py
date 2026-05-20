@@ -42,6 +42,20 @@ class ReportEntryResponse(BaseModel):
     incoming_shot: bool = False
 
 
+class MinionInfoResponse(BaseModel):
+    id: str | None = None
+    name: str
+    alive: bool = True
+    training: str | None = None
+
+
+class MinionsScanResponse(BaseModel):
+    total: int = 0
+    alive: int = 0
+    dead: int = 0
+    minions: list[MinionInfoResponse] = Field(default_factory=list)
+
+
 class GameStateResponse(BaseModel):
     logged_in: bool = False
     in_hotel: bool = False

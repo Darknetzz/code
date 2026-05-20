@@ -123,7 +123,14 @@ CRIME_ACTION_LABELS = ("utfør", "stjel", "begå", "gjør")
 TRAVEL_ACTION_LABELS = ("reise", "fly", "avgang")
 BUSINESS_ACTION_LABELS = ("hent", "inntekt", "samle inntekt")
 MINIONS_ACTION_LABELS = ("utfør", "samle", "bruk", "folk")
-MINIONS_TRAIN_LABELS = ("trene", "tren", "trening", "tren undersåtter")
+MINIONS_TRAIN_LABELS = (
+    "trene",
+    "tren",
+    "trening",
+    "tren undersåtter",
+    "tren alle",
+    "tren alle!",
+)
 MISSIONS_ACTION_LABELS = ("start", "oppdrag", "utfør", "dra på oppdrag")
 ORG_CRIME_ACTION_LABELS = ("utfør", "begå", "deltak", "start")
 

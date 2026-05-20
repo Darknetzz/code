@@ -37,6 +37,8 @@ from mafibot.models import (
     LogAppendRequest,
     LogLinesResponse,
     LoginRequest,
+    MinionInfoResponse,
+    MinionsScanResponse,
     PreflightResponse,
     PreflightCheckResponse,
     ProfileCreateRequest,

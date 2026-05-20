@@ -25,6 +25,7 @@ BuildStyle = Literal["ranker", "okonom", "angriper"]
 SchedulerMode = Literal["priority", "soonest_ready"]
 MissionsMode = Literal["off", "start_only", "auto_progress"]
 MinionsAction = Literal["disabled", "train", "collect_reports_only"]
+MinionTrainingType = Literal["angrep", "beskyttelse", "intelligens"]
 MurderMode = Literal["static_targets", "report_stream", "retaliate_only"]
 OrganizedCrimeDifficulty = Literal["auto", "lett", "medium", "hard"]
 
@@ -231,6 +232,11 @@ class BotProfile(BaseModel):
     minions_enabled: bool = False
     minions_action: MinionsAction = "train"
     minions_train_when_ready: bool = True
+    minions_default_training: MinionTrainingType = "angrep"
+    minions_training: dict[str, str] = Field(
+        default_factory=dict,
+        description="Per-minion training by name (angrep/beskyttelse/intelligens)",
+    )
     # Missions (Oppdrag)
     missions_enabled: bool = False
     missions_auto_start: bool = True
