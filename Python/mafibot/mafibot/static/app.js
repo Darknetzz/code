@@ -949,46 +949,56 @@ function renderLastSessionMetrics(m) {
 async function loadLastSessionMetrics() {
   const empty = $("last-session-empty");
   if (!empty) return;
-  try {
-    const m = await api("/api/session/metrics");
-    renderLastSessionMetrics(m);
-  } catch (e) {
+
+  const metricsPromise = api("/api/session/metrics").catch((e) => ({ error: e }));
+  const historyPromise = api("/api/session/metrics/history?limit=12").catch((e) => ({
+    error: e,
+  }));
+
+  const mResult = await metricsPromise;
+  if (mResult?.error) {
     empty.classList.remove("hidden");
     $("last-session-table")?.classList.add("hidden");
-    empty.textContent = `Could not load: ${e.message}`;
+    empty.textContent = `Could not load session: ${mResult.error.message}`;
+  } else {
+    try {
+      renderLastSessionMetrics(mResult);
+    } catch (e) {
+      empty.classList.remove("hidden");
+      $("last-session-table")?.classList.add("hidden");
+      empty.textContent = `Could not display session: ${e.message}`;
+    }
   }
-  await loadSessionHistory();
-}
 
-async function loadSessionHistory() {
+  const hResult = await historyPromise;
   const list = $("session-history-list");
   if (!list) return;
-  try {
-    const rows = await api("/api/session/metrics/history?limit=12");
-    list.replaceChildren();
-    if (!rows.length) {
-      const li = document.createElement("li");
-      li.className = "cooldown-empty muted";
-      li.textContent = "No history yet";
-      list.appendChild(li);
-      return;
-    }
-    rows.forEach((m) => {
-      const li = document.createElement("li");
-      const money =
-        m.money_start != null && m.money_end != null
-          ? `${formatKr(m.money_start)} → ${formatKr(m.money_end)}`
-          : "—";
-      li.textContent = `${m.profile} · ${m.ended_at || m.started_at} · ${money}`;
-      list.appendChild(li);
-    });
-  } catch (e) {
+  if (hResult?.error) {
     list.replaceChildren();
     const li = document.createElement("li");
     li.className = "cooldown-empty muted";
-    li.textContent = e.message;
+    li.textContent = `Could not load: ${hResult.error.message}`;
     list.appendChild(li);
+    return;
   }
+  const rows = Array.isArray(hResult) ? hResult : [];
+  list.replaceChildren();
+  if (!rows.length) {
+    const li = document.createElement("li");
+    li.className = "cooldown-empty muted";
+    li.textContent = "No history yet";
+    list.appendChild(li);
+    return;
+  }
+  rows.forEach((row) => {
+    const li = document.createElement("li");
+    const money =
+      row.money_start != null && row.money_end != null
+        ? `${formatKr(row.money_start)} → ${formatKr(row.money_end)}`
+        : "—";
+    li.textContent = `${row.profile} · ${row.ended_at || row.started_at} · ${money}`;
+    list.appendChild(li);
+  });
 }
 
 async function loadPreflight() {

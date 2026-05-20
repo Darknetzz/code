@@ -56,7 +56,11 @@ from mafibot.session_log import (
     open_log_in_default_app,
     read_recent_log_lines,
 )
-from mafibot.session_metrics import load_last_session_summary, load_session_history
+from mafibot.session_metrics import (
+    SessionMetrics,
+    load_last_session_summary,
+    load_session_history,
+)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _ws_clients: list[WebSocket] = []
@@ -233,14 +237,14 @@ def api_preflight(require_verification: bool = False) -> PreflightResponse:
     )
 
 
+def _metrics_to_response(raw: SessionMetrics) -> SessionMetricsResponse:
+    return SessionMetricsResponse.model_validate(raw.to_dict())
+
+
 @app.get("/api/session/metrics/history", response_model=list[SessionMetricsResponse])
 def api_session_metrics_history(limit: int = 30) -> list[SessionMetricsResponse]:
     capped = max(1, min(limit, 200))
-    out: list[SessionMetricsResponse] = []
-    for raw in load_session_history(limit=capped):
-        pct = raw.hotel_time_percent
-        out.append(SessionMetricsResponse(**raw.to_dict(), hotel_time_percent=pct))
-    return out
+    return [_metrics_to_response(raw) for raw in load_session_history(limit=capped)]
 
 
 @app.get("/api/session/metrics", response_model=SessionMetricsResponse | None)
@@ -248,12 +252,7 @@ def api_session_metrics() -> SessionMetricsResponse | None:
     raw = load_last_session_summary()
     if raw is None:
         return None
-    total = raw.samples_in_hotel + raw.samples_out_hotel
-    pct = (100.0 * raw.samples_in_hotel / total) if total else None
-    return SessionMetricsResponse(
-        **raw.to_dict(),
-        hotel_time_percent=pct,
-    )
+    return _metrics_to_response(raw)
 
 
 @app.get("/api/profiles/schema")

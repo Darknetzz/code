@@ -62,6 +62,29 @@ def test_api_requires_token_when_set(monkeypatch):
         monkeypatch.delenv("MAFIBOT_UI_TOKEN", raising=False)
 
 
+def test_session_metrics_with_saved_summary(tmp_path, monkeypatch):
+    from mafibot import session_metrics as sm
+
+    cfg = tmp_path / "mafibot"
+    cfg.mkdir()
+    monkeypatch.setattr(sm, "get_config_dir", lambda: cfg)
+    sm.save_last_session_summary(
+        sm.SessionMetrics(
+            profile="ranker",
+            started_at="2026-05-20T10:00:00",
+            ended_at="2026-05-20T11:00:00",
+            actions_run=3,
+            samples_in_hotel=10,
+            samples_out_hotel=2,
+        )
+    )
+    r = client.get("/api/session/metrics")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["profile"] == "ranker"
+    assert data["hotel_time_percent"] is not None
+
+
 def test_websocket_rejects_bad_token(monkeypatch):
     monkeypatch.setenv("MAFIBOT_UI_TOKEN", "secret-token")
     try:
