@@ -40,7 +40,7 @@ def test_soonest_ready_prefers_earlier_cooldown_end():
         crime_ready=False,
         ship_ready=True,
         active_cooldowns=[
-            ActionCooldown(id="crime", label="Crime", ready_at=soon),
+            ActionCooldown(id="crime", label="Kriminalitet", ready_at=soon),
         ],
     )
     crime = next(a for a in all_actions() if a.name == "crime")

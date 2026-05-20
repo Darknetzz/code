@@ -21,7 +21,13 @@ async def main() -> None:
     async with mafia_session(SessionConfig(headless=True)) as (_ctx, page):
         await page.goto("https://mafiaspillet.no/ms.php", wait_until="domcontentloaded")
         await goto_page(page, "minions", prefer_tab=True)
-        await page.wait_for_timeout(2500)
+        frame = page.frame(name="hovedinnhold")
+        if frame is not None:
+            await frame.goto(
+                "https://mafiaspillet.no/game.php?p=folk",
+                wait_until="domcontentloaded",
+            )
+        await page.wait_for_timeout(3000)
         html = await capture_page_html(page)
         out.write_text(html, encoding="utf-8")
         print(f"Wrote {out} ({len(html)} bytes)")
