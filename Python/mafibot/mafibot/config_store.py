@@ -141,15 +141,13 @@ def save_profile_document(doc: BotProfileDocument) -> BotProfileDocument:
 
 def get_credentials_status() -> CredentialsStatus:
     path = _env_path()
-    has_user = False
-    has_password = False
-    if path.is_file():
-        text = path.read_text(encoding="utf-8")
-        has_user = bool(re.search(r"^MAFIA_USER=\S", text, re.M))
-        has_password = bool(re.search(r"^MAFIA_PASS=\S", text, re.M))
+    pairs = _read_env_pairs() if path.is_file() else {}
+    user = pairs.get("MAFIA_USER", "").strip()
+    password = pairs.get("MAFIA_PASS", "").strip()
     return CredentialsStatus(
-        has_user=has_user,
-        has_password=has_password,
+        has_user=bool(user),
+        has_password=bool(password),
+        user=user,
         env_path=str(path),
     )
 
@@ -173,6 +171,17 @@ def save_credentials(update: CredentialsUpdate) -> CredentialsStatus:
         pairs["MAFIA_USER"] = update.user.strip()
     if update.password:
         pairs["MAFIA_PASS"] = update.password
+    lines = [f"{k}={v}" for k, v in sorted(pairs.items()) if k in ("MAFIA_USER", "MAFIA_PASS")]
+    content = "\n".join(lines) + ("\n" if lines else "")
+    _env_path().write_text(content, encoding="utf-8")
+    return get_credentials_status()
+
+
+def clear_credentials() -> CredentialsStatus:
+    get_config_dir().mkdir(parents=True, exist_ok=True)
+    pairs = _read_env_pairs()
+    pairs.pop("MAFIA_USER", None)
+    pairs.pop("MAFIA_PASS", None)
     lines = [f"{k}={v}" for k, v in sorted(pairs.items()) if k in ("MAFIA_USER", "MAFIA_PASS")]
     content = "\n".join(lines) + ("\n" if lines else "")
     _env_path().write_text(content, encoding="utf-8")

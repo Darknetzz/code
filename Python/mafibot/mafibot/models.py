@@ -80,6 +80,7 @@ class CredentialsUpdate(BaseModel):
 class CredentialsStatus(BaseModel):
     has_user: bool = False
     has_password: bool = False
+    user: str = ""
     env_path: str = ""
 
 

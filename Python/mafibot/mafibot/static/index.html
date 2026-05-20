@@ -20,6 +20,8 @@
     </nav>
 
     <section id="panel-run" class="tab-panel active" role="tabpanel">
+      <div class="ui-columns">
+        <div class="ui-col-main">
       <div class="card">
         <h2>Autopilot</h2>
         <div class="grid-2">
@@ -58,6 +60,13 @@
       </div>
 
       <div class="card">
+        <h2>Last session</h2>
+        <p id="last-session-summary" class="health-meta">—</p>
+      </div>
+        </div>
+
+        <aside class="ui-col-side" aria-label="Live monitoring">
+          <div class="card">
         <h2>Live status</h2>
         <p>State: <span id="status-badge" class="badge idle">idle</span></p>
         <dl class="status-grid" id="status-fields">
@@ -82,20 +91,19 @@
           <li class="cooldown-empty muted">None</li>
         </ul>
         <p id="st-error" class="hidden" style="color: var(--danger);"></p>
-      </div>
+          </div>
 
-      <div class="card">
-        <h2>Last session</h2>
-        <p id="last-session-summary" class="health-meta">—</p>
-      </div>
-
-      <div class="card">
-        <h2>Log</h2>
-        <div id="log-output"></div>
+          <div class="card card-log">
+            <h2>Log</h2>
+            <div id="log-output"></div>
+          </div>
+        </aside>
       </div>
     </section>
 
     <section id="panel-config" class="tab-panel" role="tabpanel">
+      <div class="ui-columns">
+        <div class="ui-col-main">
       <div class="card">
         <h2>Bot profile</h2>
         <div class="profile-toolbar">
@@ -114,15 +122,6 @@
             <button type="button" id="btn-profile-duplicate">Duplicate</button>
             <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
           </div>
-        </div>
-        <div id="cfg-validation-banner" class="config-validation hidden" role="alert"></div>
-        <pre id="cfg-summary" class="config-summary muted" aria-live="polite">—</pre>
-        <div class="btn-row preset-row">
-          <span class="field-label">Load preset</span>
-          <button type="button" data-preset="early_ranker">Early game</button>
-          <button type="button" data-preset="ranker">Rank grind</button>
-          <button type="button" data-preset="okonom_full">Economy</button>
-          <button type="button" data-preset="wartime_angriper">War assist</button>
         </div>
         <details class="config-section" open>
           <summary>Profile &amp; scheduler</summary>
@@ -602,22 +601,40 @@ Las Vegas</textarea>
           <label for="cfg-assist-kidnap">Webhook when kidnapped (assist)</label>
         </div>
         </details>
-        <details class="config-section">
-          <summary>Advanced (JSON)</summary>
-        <div class="btn-row">
-          <button type="button" id="btn-export-profile">Export JSON</button>
-          <button type="button" id="btn-import-profile">Import JSON</button>
-        </div>
-        <textarea id="cfg-json-preview" rows="8" class="json-preview" readonly placeholder="Export to see JSON"></textarea>
-        </details>
         <p class="health-meta" id="cfg-dir-hint"></p>
         <div class="btn-row">
           <button type="button" class="primary" id="btn-save-profile">Save profile</button>
         </div>
       </div>
+        </div>
+        <aside class="ui-col-side" aria-label="Profile overview">
+          <div class="card">
+            <h2>Overview</h2>
+            <div id="cfg-validation-banner" class="config-validation hidden" role="alert"></div>
+            <pre id="cfg-summary" class="config-summary muted" aria-live="polite">—</pre>
+            <div class="btn-row preset-row">
+              <span class="field-label">Load preset</span>
+              <button type="button" data-preset="early_ranker">Early game</button>
+              <button type="button" data-preset="ranker">Rank grind</button>
+              <button type="button" data-preset="okonom_full">Economy</button>
+              <button type="button" data-preset="wartime_angriper">War assist</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2>JSON</h2>
+            <div class="btn-row">
+              <button type="button" id="btn-export-profile">Export JSON</button>
+              <button type="button" id="btn-import-profile">Import JSON</button>
+            </div>
+            <textarea id="cfg-json-preview" rows="10" class="json-preview" readonly placeholder="Export to see JSON"></textarea>
+          </div>
+        </aside>
+      </div>
     </section>
 
     <section id="panel-login" class="tab-panel" role="tabpanel">
+      <div class="ui-columns">
+        <div class="ui-col-main">
       <div class="card">
         <h2>Credentials (.env)</h2>
         <p class="tos-note">Optional if you log in manually in the persistent browser profile.</p>
@@ -645,7 +662,8 @@ Las Vegas</textarea>
           <button type="button" id="btn-save-ui-token">Save UI token</button>
         </div>
       </div>
-
+        </div>
+        <aside class="ui-col-side" aria-label="Browser session">
       <div class="card">
         <h2>Browser session</h2>
         <p>Logged in: <strong id="session-logged-in">unknown</strong></p>
@@ -654,6 +672,8 @@ Las Vegas</textarea>
           <button type="button" id="btn-login-done">Done (close browser)</button>
           <button type="button" id="btn-refresh-session">Refresh session</button>
         </div>
+      </div>
+        </aside>
       </div>
     </section>
   </main>

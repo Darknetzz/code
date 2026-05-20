@@ -15,6 +15,7 @@ from mafibot import __version__
 from mafibot.brain import get_last_idle_detail
 from mafibot.config import BotProfile, get_config_dir, get_profile_dir, get_profiles_dir
 from mafibot.config_store import (
+    clear_credentials,
     create_profile,
     delete_profile,
     get_credentials_status,
@@ -237,6 +238,11 @@ def api_get_credentials() -> CredentialsStatus:
 @app.put("/api/credentials", response_model=CredentialsStatus)
 def api_put_credentials(body: CredentialsUpdate) -> CredentialsStatus:
     return save_credentials(body)
+
+
+@app.delete("/api/credentials", response_model=CredentialsStatus)
+def api_delete_credentials() -> CredentialsStatus:
+    return clear_credentials()
 
 
 @app.get("/api/session", response_model=SessionStatusResponse)

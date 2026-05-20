@@ -40,9 +40,63 @@ header p {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 1rem 1.5rem 2rem;
+}
+
+.ui-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.ui-col-main,
+.ui-col-side {
+  min-width: 0;
+}
+
+.ui-col-side {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ui-col-side .card {
+  margin-bottom: 1rem;
+}
+
+.ui-col-side .card:last-child {
+  margin-bottom: 0;
+}
+
+.card-log {
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.card-log #log-output {
+  flex: 1;
+  min-height: 220px;
+  max-height: min(50vh, 420px);
+}
+
+@media (max-width: 900px) {
+  .ui-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-col-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 .tabs {
