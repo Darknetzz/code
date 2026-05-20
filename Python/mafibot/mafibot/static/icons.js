@@ -66,6 +66,17 @@ function enhanceButton(button, iconName, opts = {}) {
   button.dataset.iconEnhanced = "1";
 }
 
+/** Update label text without removing icon markup (for tabs/buttons enhanced earlier). */
+function setButtonLabel(button, label) {
+  if (!button) return;
+  const labelEl = button.querySelector(".btn-label");
+  if (labelEl) {
+    labelEl.textContent = label;
+    return;
+  }
+  button.textContent = label;
+}
+
 function initMafibotIcons() {
   const byId = [
     ["btn-start-run", "play", { label: "Start" }],

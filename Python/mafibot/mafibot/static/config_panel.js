@@ -450,14 +450,24 @@
 
   function updateConfigTabDirtyIndicator() {
     const tab = document.querySelector('.tab-btn[data-tab="config"]');
-    if (!tab) return;
-    const base = "Config";
-    tab.textContent = configDirty ? `${base} *` : base;
+    if (tab) {
+      const label = configDirty ? "Config *" : "Config";
+      if (typeof setButtonLabel === "function") {
+        setButtonLabel(tab, label);
+      } else {
+        tab.textContent = label;
+      }
+    }
     const saveBtn = document.getElementById("btn-save-profile");
     if (saveBtn) {
       saveBtn.disabled = !configDirty;
       saveBtn.classList.toggle("config-save-fab-btn--dirty", configDirty);
-      saveBtn.textContent = configDirty ? "Save changes" : "Save profile";
+      const saveLabel = configDirty ? "Save changes" : "Save profile";
+      if (typeof setButtonLabel === "function") {
+        setButtonLabel(saveBtn, saveLabel);
+      } else {
+        saveBtn.textContent = saveLabel;
+      }
       saveBtn.title = configDirty
         ? "Write unsaved profile changes to disk"
         : "No unsaved changes";

@@ -550,10 +550,7 @@ button.small {
   padding: 0.5rem 1rem;
   cursor: pointer;
   font-size: 0.95rem;
-}
-
-.tab-btn.active {
-  color: var(--text);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tab-panel {
@@ -863,9 +860,28 @@ input[type="checkbox"]:disabled {
   border-right: none !important;
 }
 
-.tabs-group > .tab-btn.active {
-  background: var(--surface);
+.tabs-group > .tab-btn:hover:not(.active) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   color: var(--text);
+}
+
+.tabs-group > .tab-btn.active {
+  background: var(--accent);
+  border-right-color: color-mix(in srgb, var(--accent) 70%, var(--border)) !important;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 55%, #000);
+  z-index: 1;
+  position: relative;
+}
+
+.tabs-group > .tab-btn.active .icon {
+  color: #fff;
+  opacity: 1;
+}
+
+.tabs-group > .tab-btn.active + .tab-btn {
+  border-left: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
 button.session-history-item.btn-with-icon {
