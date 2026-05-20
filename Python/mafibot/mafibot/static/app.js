@@ -637,6 +637,9 @@ function renderActiveCooldowns(cooldowns) {
     const eta = document.createElement("span");
     eta.className = "cooldown-eta";
     eta.dataset.readyAt = cd.ready_at || "";
+    if (cd.ready_at) {
+      eta.title = `Ready at ${formatDateTimeYmd(cd.ready_at)}`;
+    }
     eta.textContent = formatCooldownRemaining(cd.remaining_sec);
     li.append(label, eta);
     list.appendChild(li);
@@ -655,19 +658,15 @@ function tickCooldownCountdowns() {
 
 function formatLogLine(raw) {
   if (!raw) return "";
-  const uiMatch = raw.match(/^\d{4}-\d{2}-\d{2}T[\d:.]+ UI: (.*)$/);
+  const uiMatch = raw.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+) UI: (.*)$/);
   if (uiMatch) {
-    return `[${new Date().toLocaleTimeString()}] ${uiMatch[1]}`;
+    return `[${formatDateTimeYmd(uiMatch[1])}] ${uiMatch[2]}`;
   }
   const isoMatch = raw.match(
     /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),?\d* \w+ mafibot[^:]*: (.*)$/
   );
   if (isoMatch) {
-    const d = new Date(isoMatch[1].replace(" ", "T"));
-    const ts = Number.isNaN(d.getTime())
-      ? isoMatch[1]
-      : d.toLocaleTimeString();
-    return `[${ts}] ${isoMatch[2]}`;
+    return `[${formatDateTimeYmd(isoMatch[1])}] ${isoMatch[2]}`;
   }
   return raw;
 }
@@ -917,11 +916,34 @@ function formatKr(amount) {
   return `${Number(amount).toLocaleString("nb-NO")} kr`;
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+/** Parse ISO or `YYYY-MM-DD HH:mm:ss` timestamps from API/logs. */
+function parseDateLike(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const d = new Date(text.includes("T") ? text : text.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Calendar date only: YYYY-MM-DD */
+function formatDateYmd(value) {
+  const d = parseDateLike(value);
+  if (!d) return value || "—";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Date and time: YYYY-MM-DD HH:mm:ss */
+function formatDateTimeYmd(value) {
+  const d = parseDateLike(value);
+  if (!d) return value || "—";
+  return `${formatDateYmd(value)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
 function formatSessionWhen(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  return formatDateTimeYmd(iso);
 }
 
 function formatSessionDuration(startIso, endIso) {

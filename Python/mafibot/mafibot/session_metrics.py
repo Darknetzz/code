@@ -108,11 +108,15 @@ def load_session_history(*, limit: int = 50) -> list[SessionMetrics]:
     return list(reversed(out))
 
 
+def _session_timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def start_session_metrics(profile: str, *, dry_run: bool = False) -> SessionMetrics:
     global _metrics
     _metrics = SessionMetrics(
         profile=profile,
-        started_at=datetime.now().isoformat(timespec="seconds"),
+        started_at=_session_timestamp(),
         dry_run=dry_run,
     )
     return _metrics
@@ -131,7 +135,7 @@ def finish_session_metrics(
     global _metrics
     if _metrics is None:
         return None
-    _metrics.ended_at = datetime.now().isoformat(timespec="seconds")
+    _metrics.ended_at = _session_timestamp()
     _metrics.stop_reason = stop_reason
     if money_end is not None:
         _metrics.money_end = money_end
