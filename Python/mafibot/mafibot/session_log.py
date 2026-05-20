@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 from collections import deque
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -74,3 +76,21 @@ def clear_session_log() -> None:
     path = get_log_path()
     if path.is_file():
         path.write_text("", encoding="utf-8")
+
+
+def open_log_in_default_app() -> Path:
+    """Open the session log file in the OS default editor/viewer."""
+    configure_session_file_logging()
+    path = get_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        path.touch()
+    if sys.platform == "win32":
+        import os
+
+        os.startfile(path)  # type: ignore[attr-defined,no-untyped-call]
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
+    return path

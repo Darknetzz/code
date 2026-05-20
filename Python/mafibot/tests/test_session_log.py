@@ -37,3 +37,18 @@ def test_clear_session_log(log_dir: Path) -> None:
     sl.append_ui_log_line("line one")
     sl.clear_session_log()
     assert sl.read_recent_log_lines() == []
+
+
+def test_open_log_in_default_app(log_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+
+    def fake_startfile(path: str) -> None:
+        opened.append(path)
+
+    monkeypatch.setattr(sl.sys, "platform", "win32")
+    import os
+
+    monkeypatch.setattr(os, "startfile", fake_startfile)
+    path = sl.open_log_in_default_app()
+    assert path.is_file()
+    assert opened and Path(opened[0]) == path

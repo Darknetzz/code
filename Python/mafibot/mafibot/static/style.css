@@ -98,8 +98,10 @@ main {
   margin: 0;
 }
 
-.card-log #log-path-hint {
-  margin: 0 0 0.35rem;
+.card-log .log-header-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 button.small {

@@ -53,6 +53,7 @@ from mafibot.session_log import (
     clear_session_log,
     configure_session_file_logging,
     get_log_path,
+    open_log_in_default_app,
     read_recent_log_lines,
 )
 from mafibot.session_metrics import load_last_session_summary, load_session_history
@@ -191,6 +192,12 @@ def api_append_log(req: LogAppendRequest) -> dict:
 def api_clear_logs() -> dict:
     clear_session_log()
     return {"ok": True}
+
+
+@app.post("/api/logs/open")
+def api_open_log_file() -> dict:
+    path = open_log_in_default_app()
+    return {"ok": True, "path": str(path)}
 
 
 @app.get("/api/health", response_model=HealthResponse)

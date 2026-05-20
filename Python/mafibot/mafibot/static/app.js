@@ -623,9 +623,9 @@ function renderLogLines(lines) {
 async function loadPersistedLogs() {
   try {
     const data = await api("/api/logs?limit=400");
-    const hint = $("log-path-hint");
-    if (hint && data.path) {
-      hint.textContent = `Saved to ${data.path}`;
+    const openBtn = $("btn-open-log");
+    if (openBtn && data.path) {
+      openBtn.title = data.path;
     }
     if (data.lines?.length) {
       renderLogLines(data.lines);
@@ -1434,6 +1434,14 @@ function setupActions() {
         }),
       });
       appendLog("Run started");
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  $("btn-open-log")?.addEventListener("click", async () => {
+    try {
+      await api("/api/logs/open", { method: "POST" });
     } catch (e) {
       alert(e.message);
     }

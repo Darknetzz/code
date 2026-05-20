@@ -36,6 +36,13 @@ def test_run_requires_tos():
     assert r.status_code == 400
 
 
+def test_open_log_file():
+    r = client.post("/api/logs/open")
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert "mafibot.log" in r.json().get("path", "")
+
+
 def test_preflight_endpoint():
     r = client.get("/api/preflight")
     assert r.status_code == 200
