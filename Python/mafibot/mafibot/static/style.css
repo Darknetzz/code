@@ -8,6 +8,7 @@
   --accent-hover: #5a9fff;
   --danger: #f85149;
   --success: #3fb950;
+  --warn: #d29922;
   --toggle-width: 2.75rem;
   --toggle-height: 1.5rem;
   --toggle-pad: 2px;
@@ -91,6 +92,7 @@ main {
 
 main:has(#panel-config.active) {
   max-width: 1680px;
+  padding-bottom: 4.75rem;
 }
 
 .config-page {
@@ -128,8 +130,110 @@ main:has(#panel-config.active) {
   margin-top: 0.25rem;
 }
 
-.config-footer-card {
-  margin-top: 0.5rem;
+.config-dir-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+#panel-config:not(.active) .config-save-fab {
+  display: none;
+}
+
+.config-save-fab {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  z-index: 150;
+}
+
+.config-save-fab-btn {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 999px;
+  box-shadow:
+    0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.config-save-fab-btn.config-save-fab-btn--dirty {
+  box-shadow:
+    0 0 0 2px var(--warn),
+    0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.preflight-panel {
+  margin-top: 0.65rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.76rem;
+  line-height: 1.38;
+  background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.preflight-title {
+  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.preflight-title--ok {
+  color: var(--success);
+}
+
+.preflight-title--fail {
+  color: var(--danger);
+}
+
+.preflight-check {
+  margin: 0.12rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  align-items: baseline;
+}
+
+.preflight-check-icon {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.preflight-check--ok .preflight-check-icon {
+  color: var(--success);
+}
+
+.preflight-check--fail .preflight-check-icon {
+  color: var(--danger);
+}
+
+.preflight-check-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.74rem;
+  color: var(--accent);
+}
+
+.preflight-check-msg {
+  color: var(--muted);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preflight-warn {
+  margin: 0.35rem 0 0;
+  color: var(--warn);
+}
+
+.preflight-warn-icon {
+  margin-right: 0.25rem;
+}
+
+.preflight-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.76rem;
 }
 
 @media (max-width: 1200px) {

@@ -453,6 +453,11 @@
     if (!tab) return;
     const base = "Config";
     tab.textContent = configDirty ? `${base} *` : base;
+    const saveBtn = document.getElementById("btn-save-profile");
+    if (saveBtn) {
+      saveBtn.classList.toggle("config-save-fab-btn--dirty", configDirty);
+      saveBtn.textContent = configDirty ? "Save profile *" : "Save profile";
+    }
   }
 
   function setupConfigPanelExtras() {

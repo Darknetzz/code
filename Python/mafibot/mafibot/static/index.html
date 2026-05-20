@@ -155,6 +155,7 @@
             <button type="button" id="btn-profile-duplicate">Duplicate</button>
             <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
           </div>
+          <p class="config-dir-hint health-meta" id="cfg-dir-hint"></p>
         </div>
         <div id="cfg-validation-banner" class="config-validation hidden" role="alert"></div>
         <p class="config-flow-hint tos-note">Profile and actions in the center column; session, hotel, and pacing in the side columns.</p>
@@ -664,11 +665,8 @@ Las Vegas</textarea>
           </div>
         </div>
 
-        <div class="card config-footer-card">
-          <p class="health-meta" id="cfg-dir-hint"></p>
-          <div class="btn-row">
-            <button type="button" class="primary" id="btn-save-profile">Save profile</button>
-          </div>
+        <div class="config-save-fab" aria-hidden="true">
+          <button type="button" class="primary config-save-fab-btn" id="btn-save-profile">Save profile</button>
         </div>
       </div>
     </section>

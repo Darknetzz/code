@@ -820,7 +820,14 @@ async function loadHealth() {
     line.textContent = `v${h.version} · ${h.config_dir}`;
     line.title = `Config: ${h.config_dir}`;
   }
-  $("cfg-dir-hint").textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
+  const hint = $("cfg-dir-hint");
+  if (hint) {
+    hint.textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
+  }
+  const saveBtn = $("btn-save-profile");
+  if (saveBtn) {
+    saveBtn.title = hint?.textContent || "Save profile to disk";
+  }
 }
 
 function formatKr(amount) {
@@ -1011,23 +1018,39 @@ async function loadPreflight() {
     panel.replaceChildren();
     panel.classList.remove("hidden");
     const title = document.createElement("p");
-    title.className = pf.ok ? "muted small" : "tos-note";
+    title.className = `preflight-title ${pf.ok ? "preflight-title--ok" : "preflight-title--fail"}`;
     title.textContent = pf.ok ? "Pre-flight: OK" : "Pre-flight: issues";
     panel.appendChild(title);
     pf.checks.forEach((c) => {
-      const p = document.createElement("p");
-      p.className = "small";
-      p.textContent = `${c.ok ? "✓" : "✗"} ${c.id}: ${c.message}`;
-      panel.appendChild(p);
+      const row = document.createElement("p");
+      row.className = `preflight-check ${c.ok ? "preflight-check--ok" : "preflight-check--fail"}`;
+      const icon = document.createElement("span");
+      icon.className = "preflight-check-icon";
+      icon.textContent = c.ok ? "✓" : "✗";
+      const id = document.createElement("span");
+      id.className = "preflight-check-id";
+      id.textContent = c.id;
+      const msg = document.createElement("span");
+      msg.className = "preflight-check-msg";
+      msg.textContent = c.message;
+      row.append(icon, id, msg);
+      panel.appendChild(row);
     });
     pf.warnings.forEach((w) => {
       const p = document.createElement("p");
-      p.className = "small muted";
-      p.textContent = `⚠ ${w}`;
+      p.className = "preflight-warn";
+      const icon = document.createElement("span");
+      icon.className = "preflight-warn-icon";
+      icon.textContent = "⚠";
+      p.append(icon, document.createTextNode(w));
       panel.appendChild(p);
     });
   } catch (e) {
-    panel.textContent = `Pre-flight unavailable: ${e.message}`;
+    panel.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "preflight-error";
+    p.textContent = `Pre-flight unavailable: ${e.message}`;
+    panel.appendChild(p);
     panel.classList.remove("hidden");
   }
 }
@@ -1466,6 +1489,10 @@ function setupTabs() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       $(`panel-${btn.dataset.tab}`).classList.add("active");
+      const fab = document.querySelector(".config-save-fab");
+      if (fab) {
+        fab.setAttribute("aria-hidden", btn.dataset.tab === "config" ? "false" : "true");
+      }
     });
   });
 }
