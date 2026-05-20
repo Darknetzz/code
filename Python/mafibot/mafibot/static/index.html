@@ -619,7 +619,15 @@ Las Vegas</textarea>
           <div class="card">
             <h2>Overview</h2>
             <div id="cfg-validation-banner" class="config-validation hidden" role="alert"></div>
-            <pre id="cfg-summary" class="config-summary muted" aria-live="polite">—</pre>
+            <div class="config-overview" aria-live="polite">
+              <table class="config-overview-table">
+                <tbody id="cfg-summary-body">
+                  <tr>
+                    <td colspan="2" class="config-overview-empty muted">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <div class="btn-row preset-row">
               <span class="field-label">Load preset</span>
               <button type="button" data-preset="early_ranker">Early game</button>
@@ -674,8 +682,8 @@ Las Vegas</textarea>
         </div>
         <div class="grid-2" style="margin-top: 1rem;">
           <div>
-            <label for="ui-token">UI token (MAFIBOT_UI_TOKEN)</label>
-            <input type="password" id="ui-token" autocomplete="off" />
+            <label for="ui-token">UI token</label>
+            <input type="password" id="ui-token" autocomplete="off" placeholder="same as MAFIBOT_UI_TOKEN on server" />
           </div>
         </div>
         <div class="btn-row">

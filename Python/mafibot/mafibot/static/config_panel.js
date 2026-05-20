@@ -288,20 +288,104 @@
     return warnings;
   }
 
+  function actionLabel(id) {
+    if (typeof ACTION_CATALOG !== "undefined") {
+      const meta = ACTION_CATALOG.find((a) => a.id === id);
+      if (meta) {
+        const short = meta.label.match(/^([^(]+)/);
+        return short ? short[1].trim() : meta.label;
+      }
+    }
+    return String(id).replace(/_/g, " ");
+  }
+
+  function pill(text, on) {
+    const span = document.createElement("span");
+    span.className = `config-pill${on ? " on" : " off"}`;
+    span.textContent = text;
+    return span;
+  }
+
   function renderConfigSummary(payload) {
-    const el = $c("cfg-summary");
-    if (!el) return;
-    const order = payload.economy_order || [];
-    const social = payload.social_enabled ? "messages/family" : "off";
-    const lines = [
-      `Actions: ${order.join(" → ") || "(none)"}`,
-      `Scheduler: ${payload.scheduler} | Hotel-first: ${payload.stay_in_hotel ? "yes" : "no"}`,
-      `Murder: ${payload.combat_enabled ? payload.murder_mode : "off"} | Aggression: ${payload.aggression}`,
-      `Session: ${payload.max_session_minutes} min | Play ${payload.play_window?.start_hour}:00–${payload.play_window?.end_hour}:00`,
-      `Boosts: HH=${payload.scheduler_happy_hour_boost ? "on" : "off"} city=${payload.scheduler_city_income_boost ? "on" : "off"}`,
-      `Social: ${social}`,
-    ];
-    el.textContent = lines.join("\n");
+    const body = $c("cfg-summary-body");
+    if (!body) return;
+
+    body.replaceChildren();
+
+    const order =
+      typeof getEnabledActionOrderFromUI === "function"
+        ? getEnabledActionOrderFromUI()
+        : payload.economy_order || [];
+
+    const addRow = (label, value) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = label;
+      const td = document.createElement("td");
+      if (value instanceof Node) {
+        td.appendChild(value);
+      } else {
+        td.textContent = value;
+      }
+      tr.append(th, td);
+      body.appendChild(tr);
+    };
+
+    addRow("Build", payload.build || "—");
+    addRow("Scheduler", payload.scheduler || "—");
+
+    if (!order.length) {
+      addRow("Actions", "(none enabled)");
+    } else {
+      const ol = document.createElement("ol");
+      ol.className = "config-overview-actions";
+      order.forEach((id, index) => {
+        const li = document.createElement("li");
+        const step = document.createElement("span");
+        step.className = "config-overview-step";
+        step.textContent = String(index + 1);
+        const name = document.createElement("span");
+        name.textContent = actionLabel(id);
+        li.append(step, name);
+        ol.appendChild(li);
+      });
+      addRow("Actions", ol);
+    }
+
+    if (!payload.combat_enabled) {
+      addRow("Murder", "Off");
+    } else {
+      const mode = payload.murder_mode || "—";
+      const targets = (payload.murder_targets || []).length;
+      const detail =
+        mode === "static_targets" ? `${mode} · ${targets} target${targets === 1 ? "" : "s"}` : mode;
+      addRow("Murder", detail);
+    }
+
+    addRow("Aggression", Number(payload.aggression ?? 0).toFixed(2));
+    addRow("Session", `${payload.max_session_minutes ?? "—"} min`);
+    const pw = payload.play_window;
+    addRow(
+      "Play window",
+      pw ? `${pw.start_hour}:00 – ${pw.end_hour}:00` : "—"
+    );
+
+    addRow("Safety", pill("Hotel-first", !!payload.stay_in_hotel));
+
+    const boosts = document.createElement("span");
+    boosts.className = "config-overview-pills";
+    boosts.append(
+      pill("Happy Hour", !!payload.scheduler_happy_hour_boost),
+      pill("City income", !!payload.scheduler_city_income_boost)
+    );
+    addRow("Boosts", boosts);
+    addRow("Social", payload.social_enabled ? "Messages, Family" : "Off");
+
+    if (payload.market_enabled && payload.market_mode && payload.market_mode !== "none") {
+      addRow("Market", payload.market_mode);
+    }
+
     const preview = $c("cfg-json-preview");
     if (preview) preview.value = JSON.stringify(payload, null, 2);
   }
@@ -311,11 +395,19 @@
     if (!banner) return;
     if (!warnings.length) {
       banner.classList.add("hidden");
-      banner.textContent = "";
+      banner.replaceChildren();
       return;
     }
     banner.classList.remove("hidden");
-    banner.textContent = warnings.join(" ");
+    banner.replaceChildren();
+    const list = document.createElement("ul");
+    list.className = "config-validation-list";
+    for (const w of warnings) {
+      const li = document.createElement("li");
+      li.textContent = w;
+      list.appendChild(li);
+    }
+    banner.appendChild(list);
   }
 
   function setConfigSnapshotFromPayload(payload) {

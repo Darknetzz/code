@@ -673,15 +673,102 @@ button:disabled {
   line-height: 1.45;
 }
 
-.config-summary {
+.config-overview {
   margin: 0.5rem 0 0.75rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 6px;
+}
+
+.config-overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.config-overview-table th,
+.config-overview-table td {
+  padding: 0.45rem 0;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+.config-overview-table tr:last-child th,
+.config-overview-table tr:last-child td {
+  border-bottom: none;
+}
+
+.config-overview-table th {
+  width: 36%;
+  padding-right: 0.65rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: left;
+}
+
+.config-overview-table td {
+  color: var(--text);
+}
+
+.config-overview-empty {
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+.config-overview-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.config-overview-actions li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.12rem 0;
+}
+
+.config-overview-step {
+  flex-shrink: 0;
+  min-width: 1.1rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.config-overview-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.config-pill {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
   border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 0.82rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  background: var(--bg);
+}
+
+.config-pill.on {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.config-pill.off {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.config-validation-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  line-height: 1.45;
+}
+
+.config-validation-list li + li {
+  margin-top: 0.25rem;
 }
 
 .config-section {
