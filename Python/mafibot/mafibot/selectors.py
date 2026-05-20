@@ -189,6 +189,29 @@ def load_pages_map() -> dict[str, str]:
     return dict(DEFAULT_SIDES)
 
 
+# Dashboard / live-status labels (keep in sync with mafibot/static/app.js ACTION_CATALOG)
+ACTION_DISPLAY_LABELS: dict[str, str] = {
+    "hospital": GAME_TABS["hospital"],
+    "crime": GAME_TABS["crime"],
+    "business": "Mine bedrifter",
+    "ship": "Mitt rederi",
+    "travel": GAME_TABS["travel"],
+    "drugs": "Narkotika",
+    "bank": "Bank",
+    "messages": GAME_TABS["messages"],
+    "family": GAME_TABS["family"],
+    "minions": GAME_TABS["minions"],
+    "missions": GAME_TABS["missions"],
+    "organized_crime": GAME_TABS["organized_crime"],
+    "market": GAME_TABS["market"],
+    "murder": "Skyt",
+}
+
+
+def action_display_label(action_id: str) -> str:
+    return ACTION_DISPLAY_LABELS.get(action_id, action_id)
+
+
 def tab_label_for(logical: str) -> str | None:
     return GAME_TABS.get(logical)
 

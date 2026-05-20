@@ -12,6 +12,7 @@ from mafibot.game_cities import GAME_CITIES
 from mafibot.page_capture import collect_page_text, html_to_plain_text
 from mafibot.state_parsers import ParsedExtendedState, ReportEntry, parse_extended_state
 from mafibot.selectors import (
+    action_display_label,
     BAN_PATTERN,
     BUSINESS_INCOME_PATTERN,
     CAPTCHA_PATTERN,
@@ -124,19 +125,19 @@ class ActionCooldown:
     raw: str = ""
 
 
-# id, display label, Norwegian page keyword
-_ACTION_COOLDOWN_SPECS: tuple[tuple[str, str, str], ...] = (
-    ("crime", "Crime", "kriminalitet"),
-    ("travel", "Travel", "flyplass"),
-    ("business", "Business", "bedrift"),
-    ("ship", "Ship", "rederi"),
-    ("drugs", "Drugs", "narkotika"),
-    ("murder", "Murder", "skyt"),
-    ("hospital", "Hospital", "sykehus"),
-    ("minions", "Minions", "folk"),
-    ("missions", "Missions", "oppdrag"),
-    ("organized_crime", "Org crime", "organisert"),
-    ("market", "Market", "marked"),
+# id, Norwegian page keyword (display label from selectors.action_display_label)
+_ACTION_COOLDOWN_SPECS: tuple[tuple[str, str], ...] = (
+    ("crime", "kriminalitet"),
+    ("travel", "flyplass"),
+    ("business", "bedrift"),
+    ("ship", "rederi"),
+    ("drugs", "narkotika"),
+    ("murder", "skyt"),
+    ("hospital", "sykehus"),
+    ("minions", "folk"),
+    ("missions", "oppdrag"),
+    ("organized_crime", "organisert"),
+    ("market", "marked"),
 )
 
 
@@ -335,14 +336,15 @@ def _action_is_on_cooldown(state: GameState, action_id: str) -> bool:
 def collect_active_cooldowns(state: GameState, text: str) -> list[ActionCooldown]:
     """Return only actions that are not ready (on cooldown)."""
     active: list[ActionCooldown] = []
-    for action_id, label, keyword in _ACTION_COOLDOWN_SPECS:
+    for action_id, keyword in _ACTION_COOLDOWN_SPECS:
         if not _action_is_on_cooldown(state, action_id):
             continue
         block = _cooldown_block(text, keyword)
         hint = block or text
         ready_at, raw = _estimate_ready_at(hint)
+        label = action_display_label(action_id)
         if action_id == "crime" and state.in_jail:
-            label = "Crime (jail)"
+            label = f"{label} (fengsel)"
         active.append(
             ActionCooldown(id=action_id, label=label, ready_at=ready_at, raw=raw)
         )
