@@ -649,7 +649,7 @@ Las Vegas</textarea>
               <button type="button" id="btn-export-profile">Export JSON</button>
               <button type="button" id="btn-import-profile">Import JSON</button>
             </div>
-            <textarea id="cfg-json-preview" rows="10" class="json-preview" readonly placeholder="Export to see JSON"></textarea>
+            <pre class="json-preview-wrap" aria-label="Profile JSON preview"><code id="cfg-json-preview" class="json-preview hl-json"></code></pre>
           </div>
         </aside>
       </div>
@@ -740,6 +740,7 @@ Las Vegas</textarea>
     </div>
   </dialog>
 
+  <script src="/json_highlight.js"></script>
   <script src="/config_panel.js"></script>
   <script src="/app.js"></script>
 </body>

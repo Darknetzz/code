@@ -387,7 +387,14 @@
     }
 
     const preview = $c("cfg-json-preview");
-    if (preview) preview.value = JSON.stringify(payload, null, 2);
+    if (preview) {
+      const json = JSON.stringify(payload, null, 2);
+      if (typeof setJsonPreview === "function") {
+        setJsonPreview(preview, json);
+      } else {
+        preview.textContent = json;
+      }
+    }
   }
 
   function showValidationBanner(warnings) {
@@ -476,7 +483,12 @@
       navigator.clipboard.writeText(text).then(
         () => appendLog("Profile JSON copied to clipboard"),
         () => {
-          $c("cfg-json-preview").value = text;
+          const preview = $c("cfg-json-preview");
+          if (preview && typeof setJsonPreview === "function") {
+            setJsonPreview(preview, text);
+          } else if (preview) {
+            preview.textContent = text;
+          }
           appendLog("Copy failed — see JSON preview");
         }
       );
