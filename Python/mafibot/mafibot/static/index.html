@@ -52,9 +52,13 @@
           <label for="run-discover-compare">Discover: compare HTML to previous run</label>
         </div>
         <p class="tos-note">Bind localhost only. Set MAFIBOT_UI_TOKEN on the server and save the token under Login if exposing beyond localhost.</p>
+        <p class="run-activity" id="run-activity" aria-live="polite">
+          <span id="run-activity-dot" class="run-status-dot stopped" aria-hidden="true"></span>
+          <span id="run-activity-text">Bot stopped</span>
+        </p>
         <div class="btn-row">
           <button type="button" class="primary" id="btn-start-run">Start</button>
-          <button type="button" class="danger" id="btn-stop">Stop</button>
+          <button type="button" class="danger" id="btn-stop" disabled>Stop</button>
           <button type="button" id="btn-discover">Discover pages</button>
         </div>
       </div>
@@ -68,7 +72,11 @@
         <aside class="ui-col-side" aria-label="Live monitoring">
           <div class="card">
         <h2>Live status</h2>
-        <p>State: <span id="status-badge" class="badge idle">idle</span></p>
+        <p class="run-state-line">
+          <span id="run-status-dot" class="run-status-dot stopped" aria-hidden="true"></span>
+          <span class="run-state-label">State:</span>
+          <span id="status-badge" class="badge idle">idle</span>
+        </p>
         <dl class="status-grid" id="status-fields">
           <div><dt>Profile</dt><dd id="st-profile">—</dd></div>
           <div><dt>Elapsed</dt><dd id="st-elapsed">—</dd></div>
@@ -638,6 +646,17 @@ Las Vegas</textarea>
       <div class="card">
         <h2>Credentials (.env)</h2>
         <p class="tos-note">Optional if you log in manually in the persistent browser profile.</p>
+        <div id="cred-saved" class="cred-saved hidden" aria-live="polite">
+          <p class="cred-saved-user"><strong id="cred-saved-name"></strong></p>
+          <p class="cred-saved-status">
+            <span class="cred-check" aria-hidden="true">✓</span> Logged in
+          </p>
+          <p id="cred-env-path" class="health-meta"></p>
+          <div class="btn-row">
+            <button type="button" id="btn-cred-logout">Log out</button>
+          </div>
+        </div>
+        <div id="cred-form">
         <div class="grid-2">
           <div>
             <label for="cred-user">Username</label>
@@ -651,6 +670,7 @@ Las Vegas</textarea>
         <p id="cred-status" class="health-meta"></p>
         <div class="btn-row">
           <button type="button" class="primary" id="btn-save-creds">Save credentials</button>
+        </div>
         </div>
         <div class="grid-2" style="margin-top: 1rem;">
           <div>

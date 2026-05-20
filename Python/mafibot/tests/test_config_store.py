@@ -9,6 +9,7 @@ import pytest
 from mafibot.config_store import (
     create_profile,
     delete_profile,
+    clear_credentials,
     get_credentials_status,
     list_profile_names,
     list_profiles_meta,
@@ -58,6 +59,7 @@ def test_credentials_write(isolated_config):
     st = save_credentials(CredentialsUpdate(user="alice", password="secret"))
     assert st.has_user
     assert st.has_password
+    assert st.user == "alice"
     env = cfg / ".env"
     assert env.is_file()
     text = env.read_text(encoding="utf-8")
@@ -116,3 +118,11 @@ def test_credentials_merge_password_only(isolated_config):
     text = (cfg / ".env").read_text(encoding="utf-8")
     assert "MAFIA_USER=bob" in text
     assert "MAFIA_PASS=p2" in text
+
+
+def test_clear_credentials(isolated_config):
+    save_credentials(CredentialsUpdate(user="alice", password="secret"))
+    st = clear_credentials()
+    assert not st.has_user
+    assert not st.has_password
+    assert st.user == ""

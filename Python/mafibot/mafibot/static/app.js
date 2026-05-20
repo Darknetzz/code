@@ -592,9 +592,29 @@ function setBadge(state) {
   badge.className = `badge ${(state || "idle").toLowerCase()}`;
 }
 
+function updateRunControls(state) {
+  const busy = ["running", "login", "discover"].includes(state);
+  const label = state || "idle";
+  for (const id of ["run-status-dot", "run-activity-dot"]) {
+    const dot = $(id);
+    if (!dot) continue;
+    dot.classList.toggle("running", busy);
+    dot.classList.toggle("stopped", !busy);
+  }
+  const activityText = $("run-activity-text");
+  if (activityText) {
+    activityText.textContent = busy ? `Bot active (${label})` : "Bot stopped";
+  }
+  const startBtn = $("btn-start-run");
+  const stopBtn = $("btn-stop");
+  if (startBtn) startBtn.disabled = busy;
+  if (stopBtn) stopBtn.disabled = !busy;
+}
+
 function applyStatus(st) {
   lastStatus = st;
   setBadge(st.state);
+  updateRunControls(st.state);
   $("st-profile").textContent = st.profile || "—";
   $("st-elapsed").textContent = formatElapsed(st.elapsed_sec);
   const g = st.game || {};
@@ -662,7 +682,6 @@ function applyStatus(st) {
     errEl.classList.add("hidden");
   }
   const busy = ["running", "login", "discover"].includes(st.state);
-  $("btn-start-run").disabled = busy;
   $("btn-open-login").disabled = busy;
   $("btn-discover").disabled = busy;
 }
@@ -1054,14 +1073,28 @@ function profilePayload() {
     : payload;
 }
 
-async function loadCredentialsStatus() {
-  const st = await api("/api/credentials");
+function applyCredentialsUi(st) {
+  const configured = st.has_user && st.has_password;
+  $("cred-form")?.classList.toggle("hidden", configured);
+  $("cred-saved")?.classList.toggle("hidden", !configured);
+  if (configured) {
+    $("cred-saved-name").textContent = st.user || "—";
+    $("cred-env-path").textContent = st.env_path;
+    $("cred-user").value = st.user || "";
+    return;
+  }
+  if (st.user) $("cred-user").value = st.user;
   const parts = [];
   if (st.has_user) parts.push("user set");
   if (st.has_password) parts.push("password set");
   $("cred-status").textContent = parts.length
     ? `${parts.join(", ")} · ${st.env_path}`
     : `No credentials saved · ${st.env_path}`;
+}
+
+async function loadCredentialsStatus() {
+  const st = await api("/api/credentials");
+  applyCredentialsUi(st);
 }
 
 async function refreshSession() {
@@ -1214,7 +1247,7 @@ function setupActions() {
 
   $("btn-save-creds").addEventListener("click", async () => {
     try {
-      await api("/api/credentials", {
+      const st = await api("/api/credentials", {
         method: "PUT",
         body: JSON.stringify({
           user: $("cred-user").value,
@@ -1222,8 +1255,21 @@ function setupActions() {
         }),
       });
       $("cred-pass").value = "";
-      await loadCredentialsStatus();
+      applyCredentialsUi(st);
       appendLog("Credentials saved");
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  $("btn-cred-logout")?.addEventListener("click", async () => {
+    if (!confirm("Remove saved credentials from .env?")) return;
+    try {
+      const st = await api("/api/credentials", { method: "DELETE" });
+      $("cred-user").value = "";
+      $("cred-pass").value = "";
+      applyCredentialsUi(st);
+      appendLog("Credentials cleared");
     } catch (e) {
       alert(e.message);
     }
