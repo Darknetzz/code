@@ -660,29 +660,58 @@ function updateRunControls(state) {
   if (stopBtn) stopBtn.disabled = !busy;
 }
 
-function setGlobalStatusField(id, text) {
+function setGlobalStatusField(id, text, { visible = true } = {}) {
   const el = $(id);
-  if (el) el.textContent = text;
+  if (!el) return;
+  const show = visible && Boolean(String(text || "").trim());
+  el.textContent = show ? text : "";
+  el.classList.toggle("hidden", !show);
+}
+
+function updateGlobalStatusBar(st) {
+  const g = st.game || {};
+  const elapsed =
+    st.elapsed_sec != null && !Number.isNaN(st.elapsed_sec)
+      ? formatElapsed(st.elapsed_sec)
+      : "";
+  setGlobalStatusField(
+    "global-st-profile",
+    st.profile ? `Profile: ${st.profile}` : ""
+  );
+  setGlobalStatusField("global-st-elapsed", elapsed ? `Elapsed: ${elapsed}` : "");
+  setGlobalStatusField(
+    "global-st-action",
+    st.last_action ? `Action: ${st.last_action}` : ""
+  );
+  setGlobalStatusField("global-st-message", st.last_message || "");
+  setGlobalStatusField(
+    "global-st-money",
+    g.money != null ? `${formatKr(g.money)} kr` : ""
+  );
+  const hasDetail = [
+    st.profile,
+    elapsed,
+    st.last_action,
+    st.last_message,
+    g.money != null ? g.money : null,
+  ].some((v) => v != null && v !== "");
+  const hint = $("global-status-idle-hint");
+  if (hint) {
+    hint.classList.toggle("hidden", hasDetail || st.state !== "idle");
+  }
 }
 
 function applyStatus(st) {
   lastStatus = st;
   setBadge(st.state);
   updateRunControls(st.state);
-  const profileText = st.profile || "—";
-  $("st-profile").textContent = profileText;
-  setGlobalStatusField("global-st-profile", profileText ? `Profile: ${profileText}` : "—");
+  $("st-profile").textContent = st.profile || "—";
   const elapsedText = formatElapsed(st.elapsed_sec);
   $("st-elapsed").textContent = elapsedText;
-  setGlobalStatusField("global-st-elapsed", elapsedText !== "—" ? elapsedText : "");
   const g = st.game || {};
   $("st-hotel").textContent = g.in_hotel ? "yes" : "no";
-  const moneyText = g.money != null ? String(g.money) : "—";
-  $("st-money").textContent = moneyText;
-  setGlobalStatusField(
-    "global-st-money",
-    g.money != null ? `${formatKr(g.money)} kr` : ""
-  );
+  $("st-money").textContent = g.money != null ? String(g.money) : "—";
+  updateGlobalStatusBar(st);
   $("st-health").textContent = g.health_percent != null ? `${g.health_percent}%` : "—";
   $("st-location").textContent = g.location || "—";
   $("st-crime").textContent = g.crime_ready ? "yes" : "no";
@@ -718,15 +747,8 @@ function applyStatus(st) {
     flags.textContent = f.length ? f.join(", ") : "—";
   }
   renderActiveCooldowns(g.active_cooldowns);
-  const actionText = st.last_action || "—";
-  $("st-action").textContent = actionText;
-  setGlobalStatusField(
-    "global-st-action",
-    st.last_action ? `Action: ${st.last_action}` : ""
-  );
-  const messageText = st.last_message || "—";
-  $("st-message").textContent = messageText;
-  setGlobalStatusField("global-st-message", st.last_message || "");
+  $("st-action").textContent = st.last_action || "—";
+  $("st-message").textContent = st.last_message || "—";
   const idleEl = $("st-idle");
   if (idleEl) {
     idleEl.textContent = st.idle_detail || "—";
