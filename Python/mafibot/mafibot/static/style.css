@@ -45,10 +45,18 @@ body {
   font-size: 1.35rem;
 }
 
-.site-header-top p {
+.site-header-meta {
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+}
+
+.site-header-tagline {
+  color: var(--text);
 }
 
 .global-status-bar {

@@ -813,8 +813,11 @@ function connectWs() {
 
 async function loadHealth() {
   const h = await api("/api/health");
-  $("health-version").textContent = `v${h.version}`;
-  $("health-paths").textContent = `config: ${h.config_dir}`;
+  const line = $("health-meta-line");
+  if (line) {
+    line.textContent = `v${h.version} · ${h.config_dir}`;
+    line.title = `Config: ${h.config_dir}`;
+  }
   $("cfg-dir-hint").textContent = `Profiles dir: ${h.profiles_dir} · Browser profile: ${h.profile_dir}`;
 }
 
