@@ -720,6 +720,51 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.action-counts-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.action-counts-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.action-count-label {
+  color: var(--text);
+}
+
+.action-count-n {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.action-counts-list--compact {
+  margin: 0;
+  gap: 0.2rem;
+}
+
+.action-counts-list--compact li {
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+}
+
+.session-action-counts-wrap {
+  max-width: 100%;
+}
+
 #log-output {
   height: 220px;
   overflow-y: auto;

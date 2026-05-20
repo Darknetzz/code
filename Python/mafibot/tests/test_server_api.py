@@ -76,6 +76,9 @@ def test_session_metrics_with_saved_summary(tmp_path, monkeypatch):
             actions_run=3,
             samples_in_hotel=10,
             samples_out_hotel=2,
+            rank_start=100_000,
+            rank_end=100_500,
+            action_counts={"crime": 12, "missions": 4},
         )
     )
     r = client.get("/api/session/metrics")
@@ -83,6 +86,8 @@ def test_session_metrics_with_saved_summary(tmp_path, monkeypatch):
     data = r.json()
     assert data["profile"] == "ranker"
     assert data["hotel_time_percent"] is not None
+    assert data["rank_points_gained"] == 500
+    assert data["action_counts"]["crime"] == 12
 
 
 def test_websocket_rejects_bad_token(monkeypatch):

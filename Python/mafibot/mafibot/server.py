@@ -58,6 +58,7 @@ from mafibot.session_log import (
 )
 from mafibot.session_metrics import (
     SessionMetrics,
+    current_session_metrics,
     load_last_session_summary,
     load_session_history,
 )
@@ -113,7 +114,10 @@ def _status_response(runner: MafibotRunner) -> RunStatusResponse:
     idle = get_last_idle_detail()
     if idle is None and st.last_message and st.last_message.startswith("nothing ready"):
         idle = st.last_message
-    metrics = load_last_session_summary()
+    live_metrics = current_session_metrics()
+    session_metrics = (
+        _metrics_to_response(live_metrics) if live_metrics is not None else None
+    )
     playbook = parse_error_playbook(st.parse_error) if st.parse_error else None
     return RunStatusResponse(
         state=st.state.value,
@@ -129,6 +133,7 @@ def _status_response(runner: MafibotRunner) -> RunStatusResponse:
         error=st.error,
         game=GameStateResponse(**st.game.__dict__),
         dry_run_decisions=get_dry_run_decisions() if st.dry_run else [],
+        session_metrics=session_metrics,
     )
 
 

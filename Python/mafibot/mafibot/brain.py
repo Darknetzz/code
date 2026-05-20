@@ -482,6 +482,7 @@ async def run_once(
         log.info("dry-run: %s (hotel wrap simulated)", action.name)
         if metrics:
             metrics.actions_run += 1
+            metrics.record_action(action.name)
         return ActionResult(True, f"dry-run: {action.name}")
 
     result = await execute_with_hotel_stay(page, action, profile, policy, dry_run=False)
@@ -489,12 +490,15 @@ async def run_once(
     if metrics:
         if result.success:
             metrics.actions_run += 1
+            metrics.record_action(action.name)
         else:
             metrics.actions_failed += 1
     try:
         after_state = await parse_game_state(page)
     except ParseError:
         after_state = state
+    if metrics and after_state.rank_points is not None:
+        metrics.rank_end = after_state.rank_points
     _notify_status(after_state, action.name, result.message, f"done: {action.name}")
     await page_reading_pause(page)
     await between_actions(page, policy)
@@ -508,9 +512,10 @@ def _log_session_summary(profile: BotProfile, metrics) -> None:
     pct = (
         100.0 * metrics.samples_in_hotel / hotel_total if hotel_total else 0.0
     )
+    rank_delta = metrics.rank_points_gained
     log.info(
         "session summary profile=%s actions=%s failed=%s skipped=%s parse_err=%s "
-        "hotel_fail=%s in_hotel=%.0f%% money %s→%s",
+        "hotel_fail=%s in_hotel=%.0f%% money %s→%s rankpoeng %s→%s (+%s) counts=%s",
         profile.name,
         metrics.actions_run,
         metrics.actions_failed,
@@ -520,6 +525,10 @@ def _log_session_summary(profile: BotProfile, metrics) -> None:
         pct,
         metrics.money_start,
         metrics.money_end,
+        metrics.rank_start,
+        metrics.rank_end,
+        rank_delta if rank_delta is not None else "?",
+        metrics.action_counts,
     )
 
 

@@ -94,6 +94,82 @@ const ACTION_CATALOG = [
   },
 ];
 
+const ACTION_LABEL_BY_ID = Object.fromEntries(
+  ACTION_CATALOG.map((a) => [a.id, a.label])
+);
+
+function formatRankpoeng(n) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString("nb-NO");
+}
+
+function rankpoengSummaryNode(start, end, gained) {
+  const span = document.createElement("span");
+  span.textContent = `${formatRankpoeng(start)} → ${formatRankpoeng(end)}`;
+  if (gained != null && gained !== 0) {
+    const deltaEl = document.createElement("span");
+    deltaEl.className = `last-session-delta ${gained > 0 ? "positive" : "negative"}`;
+    deltaEl.textContent = ` (${gained > 0 ? "+" : ""}${formatRankpoeng(gained)})`;
+    span.appendChild(deltaEl);
+  }
+  return span;
+}
+
+function renderActionCountsList(counts, listEl) {
+  if (!listEl) return;
+  const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
+  listEl.replaceChildren();
+  if (!entries.length) {
+    listEl.classList.add("hidden");
+    return;
+  }
+  listEl.classList.remove("hidden");
+  for (const [id, n] of entries) {
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.className = "action-count-label";
+    label.textContent = ACTION_LABEL_BY_ID[id] || id;
+    const num = document.createElement("span");
+    num.className = "action-count-n";
+    num.textContent = String(n);
+    li.append(label, num);
+    listEl.appendChild(li);
+  }
+}
+
+function appendActionCountsRow(addRow, counts) {
+  const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "session-action-counts-wrap";
+  const ul = document.createElement("ul");
+  ul.className = "action-counts-list action-counts-list--compact";
+  renderActionCountsList(Object.fromEntries(entries), ul);
+  wrap.appendChild(ul);
+  addRow("Activity", wrap);
+}
+
+function updateLiveSessionMetrics(metrics, state) {
+  const show = metrics && state === "running";
+  $("st-session-activity-title")?.classList.toggle("hidden", !show);
+  $("st-session-activity-fields")?.classList.toggle("hidden", !show);
+  const list = $("st-action-counts");
+  if (!show) {
+    list?.classList.add("hidden");
+    return;
+  }
+  const gained =
+    metrics.rank_points_gained ??
+    (metrics.rank_start != null && metrics.rank_end != null
+      ? metrics.rank_end - metrics.rank_start
+      : null);
+  const rankCell = $("st-rankpoeng");
+  if (rankCell) {
+    rankCell.replaceChildren(rankpoengSummaryNode(metrics.rank_start, metrics.rank_end, gained));
+  }
+  renderActionCountsList(metrics.action_counts, list);
+}
+
 /** Actions with extra config panels (shown only when enabled in the list). */
 const ACTION_OPTION_PANELS = {
   hospital: "action-options-hospital",
@@ -787,6 +863,7 @@ function applyStatus(st) {
   const discoverBtn = $("btn-discover");
   if (loginBtn) loginBtn.disabled = busy;
   if (discoverBtn) discoverBtn.disabled = busy;
+  updateLiveSessionMetrics(st.session_metrics, st.state);
 }
 
 function connectWs() {
@@ -935,8 +1012,13 @@ function renderLastSessionMetrics(m) {
   }
 
   if (m.rank_start != null || m.rank_end != null) {
-    addRow("Rank", `${m.rank_start ?? "—"} → ${m.rank_end ?? "—"}`);
+    const gained =
+      m.rank_points_gained ??
+      (m.rank_start != null && m.rank_end != null ? m.rank_end - m.rank_start : null);
+    addRow("Rankpoeng", rankpoengSummaryNode(m.rank_start, m.rank_end, gained));
   }
+
+  appendActionCountsRow(addRow, m.action_counts);
 
   if (m.hotel_time_percent != null) {
     addRow("Time in hotel", `${m.hotel_time_percent.toFixed(0)}%`);
@@ -1005,7 +1087,13 @@ async function loadLastSessionMetrics() {
       row.money_start != null && row.money_end != null
         ? `${formatKr(row.money_start)} → ${formatKr(row.money_end)}`
         : "—";
-    li.textContent = `${row.profile} · ${row.ended_at || row.started_at} · ${money}`;
+    const crime = row.action_counts?.crime;
+    const rp =
+      row.rank_points_gained != null
+        ? ` · +${formatRankpoeng(row.rank_points_gained)} RP`
+        : "";
+    const crimeBit = crime ? ` · ${crime} crime` : "";
+    li.textContent = `${row.profile} · ${row.ended_at || row.started_at} · ${money}${crimeBit}${rp}`;
     list.appendChild(li);
   });
 }

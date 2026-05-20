@@ -129,6 +129,8 @@ class SessionMetricsResponse(BaseModel):
     rank_end: int | None = None
     stop_reason: str | None = None
     hotel_time_percent: float | None = None
+    rank_points_gained: int | None = None
+    action_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class PreflightCheckResponse(BaseModel):
@@ -159,6 +161,7 @@ class RunStatusResponse(BaseModel):
     error: str | None = None
     game: GameStateResponse = Field(default_factory=GameStateResponse)
     dry_run_decisions: list[dict[str, str | None]] = Field(default_factory=list)
+    session_metrics: SessionMetricsResponse | None = None
 
 
 class SessionStatusResponse(BaseModel):

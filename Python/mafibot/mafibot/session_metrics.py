@@ -31,6 +31,11 @@ class SessionMetrics:
     rank_start: int | None = None
     rank_end: int | None = None
     stop_reason: str | None = None
+    action_counts: dict[str, int] = field(default_factory=dict)
+
+    def record_action(self, name: str) -> None:
+        """Increment counter for a successfully completed action."""
+        self.action_counts[name] = self.action_counts.get(name, 0) + 1
 
     def record_hotel_sample(self, in_hotel: bool) -> None:
         if in_hotel:
@@ -53,9 +58,16 @@ class SessionMetrics:
             return None
         return 100.0 * self.samples_in_hotel / total
 
+    @property
+    def rank_points_gained(self) -> int | None:
+        if self.rank_start is None or self.rank_end is None:
+            return None
+        return self.rank_end - self.rank_start
+
     def to_dict(self) -> dict:
         data = asdict(self)
         data["hotel_time_percent"] = self.hotel_time_percent
+        data["rank_points_gained"] = self.rank_points_gained
         return data
 
     @classmethod
