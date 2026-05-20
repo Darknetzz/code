@@ -456,6 +456,15 @@ button:disabled {
   padding: 0.1rem 0;
 }
 
+.config-flow-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-left: 3px solid var(--accent, #5b8def);
+  background: color-mix(in srgb, var(--accent, #5b8def) 8%, transparent);
+}
+
 .tos-note {
   font-size: 0.85rem;
   color: var(--muted);
@@ -879,15 +888,51 @@ button:disabled {
   margin-right: 0.25rem;
 }
 
-.json-preview {
-  width: 100%;
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
+.json-preview-wrap {
   margin-top: 0.5rem;
-  padding: 0.5rem;
+  width: 100%;
+  min-height: 28rem;
+  max-height: min(72vh, 560px);
+  overflow: auto;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: #0d1117;
+}
+
+.json-preview-wrap code.json-preview {
+  display: block;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
   color: var(--text);
-  resize: vertical;
+  tab-size: 2;
+}
+
+.hl-json .json-key {
+  color: #79c0ff;
+}
+
+.hl-json .json-string {
+  color: #a5d6ff;
+}
+
+.hl-json .json-number {
+  color: #56d364;
+}
+
+.hl-json .json-bool {
+  color: #ff7b72;
+}
+
+.hl-json .json-null {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.hl-json .json-placeholder {
+  color: var(--muted);
+  font-style: italic;
 }

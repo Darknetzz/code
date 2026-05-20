@@ -138,8 +138,9 @@
             <button type="button" class="danger" id="btn-profile-delete" disabled>Delete</button>
           </div>
         </div>
+        <p class="config-flow-hint tos-note">Set up profile and actions first, then session timing, hotel, and pacing below.</p>
         <details class="config-section" open>
-          <summary>Profile &amp; scheduler</summary>
+          <summary>Profile</summary>
         <div class="grid-2">
           <div>
             <label for="cfg-build">Build</label>
@@ -171,138 +172,15 @@
           <label for="cfg-scheduler-city-income">Boost business after city income windows</label>
         </div>
         </details>
-        <details class="config-section">
-          <summary>Session</summary>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-max-session-minutes">Max session (minutes)</label>
-            <input type="number" id="cfg-max-session-minutes" min="1" value="120" />
-          </div>
-          <div>
-            <label for="cfg-play-start">Play window start (hour 0–23)</label>
-            <input type="number" id="cfg-play-start" min="0" max="23" value="8" />
-          </div>
-          <div>
-            <label for="cfg-play-end">Play window end (hour 0–23)</label>
-            <input type="number" id="cfg-play-end" min="0" max="23" value="23" />
-          </div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-idle-chance">Idle break chance (0–1)</label>
-            <input type="number" id="cfg-idle-chance" min="0" max="1" step="0.05" value="0.1" />
-          </div>
-          <div>
-            <label for="cfg-idle-min">Idle break min (minutes)</label>
-            <input type="number" id="cfg-idle-min" min="1" step="0.5" value="5" />
-          </div>
-          <div>
-            <label for="cfg-idle-max">Idle break max (minutes)</label>
-            <input type="number" id="cfg-idle-max" min="1" step="0.5" value="15" />
-          </div>
-        </div>
-        </details>
-        <details class="config-section" open>
-          <summary>Hotel &amp; safety</summary>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-stay-in-hotel" checked />
-          <label for="cfg-stay-in-hotel">Stay in hotel</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-book-before" checked />
-          <label for="cfg-book-before">Book hotel before action</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-book-after" checked />
-          <label for="cfg-book-after">Book hotel after every action</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-book-idle" checked />
-          <label for="cfg-book-idle">Book hotel when idle</label>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-hotel-min-wallet">Hotel min wallet (kr)</label>
-            <input type="number" id="cfg-hotel-min-wallet" min="0" step="100" value="500" />
-          </div>
-          <div>
-            <label for="cfg-hotel-max-cost">Max nightly hotel cost (kr)</label>
-            <input type="number" id="cfg-hotel-max-cost" min="0" step="100" placeholder="no limit" />
-          </div>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-hotel-book-broke" />
-          <label for="cfg-hotel-book-broke">Book hotel when wallet below min</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-hotel-fallback" checked />
-          <label for="cfg-hotel-fallback">Disable hotel-first after repeated book failures</label>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-max-book-sec">Max seconds before book hotel</label>
-            <input type="number" id="cfg-max-book-sec" step="0.1" min="0" max="10" value="2" />
-          </div>
-          <div>
-            <label for="cfg-min-health">Min health %</label>
-            <input type="number" id="cfg-min-health" min="1" max="100" value="35" />
-          </div>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cfg-pause-restricted" checked />
-          <label for="cfg-pause-restricted">Pause when feriemodus, kidnapped, or startbeskyttelse</label>
-        </div>
-        </details>
-        <details class="config-section" open>
-          <summary>Human pacing</summary>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-jitter-min">Cooldown jitter min (sec)</label>
-            <input type="number" id="cfg-jitter-min" step="0.1" value="30" />
-          </div>
-          <div>
-            <label for="cfg-jitter-max">Cooldown jitter max (sec)</label>
-            <input type="number" id="cfg-jitter-max" step="0.1" value="120" />
-          </div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-click-min">Min seconds between clicks</label>
-            <input type="number" id="cfg-click-min" step="0.1" value="2.8" />
-          </div>
-          <div>
-            <label for="cfg-tab-wait">Min seconds after tab change</label>
-            <input type="number" id="cfg-tab-wait" step="0.1" value="3.5" />
-          </div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="cfg-post-wait-min">Post-action wait min (sec)</label>
-            <input type="number" id="cfg-post-wait-min" step="0.1" value="8" />
-          </div>
-          <div>
-            <label for="cfg-post-wait-max">Post-action wait max (sec)</label>
-            <input type="number" id="cfg-post-wait-max" step="0.1" value="25" />
-          </div>
-          <div>
-            <label for="cfg-nothing-wait-min">Nothing-to-do wait min (sec)</label>
-            <input type="number" id="cfg-nothing-wait-min" step="0.1" value="45" />
-          </div>
-          <div>
-            <label for="cfg-nothing-wait-max">Nothing-to-do wait max (sec)</label>
-            <input type="number" id="cfg-nothing-wait-max" step="0.1" value="180" />
-          </div>
-        </div>
-        </details>
         <details class="config-section" open>
           <summary>Actions</summary>
         <div class="action-list-section">
-          <label class="action-list-heading">Actions (priority top → bottom)</label>
+          <label class="action-list-heading">Priority (top runs first)</label>
           <p class="tos-note">Checked actions run in list order. Unchecked actions are skipped.</p>
           <ul id="cfg-action-list" class="action-list"></ul>
         </div>
         <div id="action-options-section" class="action-options-section hidden">
-          <h3 class="action-options-heading">Action options</h3>
+          <h3 class="action-options-heading">Per-action settings</h3>
           <details id="action-options-hospital" class="action-options-panel hidden">
             <summary>Hospital (Sykehus)</summary>
             <div>
@@ -599,6 +477,131 @@ Las Vegas</textarea>
             </div>
             <p class="tos-note">Murder will not run with an empty target list (except report/retaliate modes). Requires aggression ≥ 0.5 for static targets.</p>
           </details>
+        </div>
+        </details>
+
+        <details class="config-section">
+          <summary>Session</summary>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-max-session-minutes">Max session (minutes)</label>
+            <input type="number" id="cfg-max-session-minutes" min="1" value="120" />
+          </div>
+          <div>
+            <label for="cfg-play-start">Play window start (hour 0–23)</label>
+            <input type="number" id="cfg-play-start" min="0" max="23" value="8" />
+          </div>
+          <div>
+            <label for="cfg-play-end">Play window end (hour 0–23)</label>
+            <input type="number" id="cfg-play-end" min="0" max="23" value="23" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-idle-chance">Idle break chance (0–1)</label>
+            <input type="number" id="cfg-idle-chance" min="0" max="1" step="0.05" value="0.1" />
+          </div>
+          <div>
+            <label for="cfg-idle-min">Idle break min (minutes)</label>
+            <input type="number" id="cfg-idle-min" min="1" step="0.5" value="5" />
+          </div>
+          <div>
+            <label for="cfg-idle-max">Idle break max (minutes)</label>
+            <input type="number" id="cfg-idle-max" min="1" step="0.5" value="15" />
+          </div>
+        </div>
+        </details>
+        <details class="config-section" open>
+          <summary>Hotel &amp; safety</summary>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-stay-in-hotel" checked />
+          <label for="cfg-stay-in-hotel">Stay in hotel</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-before" checked />
+          <label for="cfg-book-before">Book hotel before action</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-after" checked />
+          <label for="cfg-book-after">Book hotel after every action</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-book-idle" checked />
+          <label for="cfg-book-idle">Book hotel when idle</label>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-hotel-min-wallet">Hotel min wallet (kr)</label>
+            <input type="number" id="cfg-hotel-min-wallet" min="0" step="100" value="500" />
+          </div>
+          <div>
+            <label for="cfg-hotel-max-cost">Max nightly hotel cost (kr)</label>
+            <input type="number" id="cfg-hotel-max-cost" min="0" step="100" placeholder="no limit" />
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-hotel-book-broke" />
+          <label for="cfg-hotel-book-broke">Book hotel when wallet below min</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-hotel-fallback" checked />
+          <label for="cfg-hotel-fallback">Disable hotel-first after repeated book failures</label>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-max-book-sec">Max seconds before book hotel</label>
+            <input type="number" id="cfg-max-book-sec" step="0.1" min="0" max="10" value="2" />
+          </div>
+          <div>
+            <label for="cfg-min-health">Min health %</label>
+            <input type="number" id="cfg-min-health" min="1" max="100" value="35" />
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-pause-restricted" checked />
+          <label for="cfg-pause-restricted">Pause when feriemodus, kidnapped, or startbeskyttelse</label>
+        </div>
+        </details>
+        <details class="config-section" open>
+          <summary>Human pacing</summary>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-jitter-min">Cooldown jitter min (sec)</label>
+            <input type="number" id="cfg-jitter-min" step="0.1" value="30" />
+          </div>
+          <div>
+            <label for="cfg-jitter-max">Cooldown jitter max (sec)</label>
+            <input type="number" id="cfg-jitter-max" step="0.1" value="120" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-click-min">Min seconds between clicks</label>
+            <input type="number" id="cfg-click-min" step="0.1" value="2.8" />
+          </div>
+          <div>
+            <label for="cfg-tab-wait">Min seconds after tab change</label>
+            <input type="number" id="cfg-tab-wait" step="0.1" value="3.5" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="cfg-post-wait-min">Post-action wait min (sec)</label>
+            <input type="number" id="cfg-post-wait-min" step="0.1" value="8" />
+          </div>
+          <div>
+            <label for="cfg-post-wait-max">Post-action wait max (sec)</label>
+            <input type="number" id="cfg-post-wait-max" step="0.1" value="25" />
+          </div>
+          <div>
+            <label for="cfg-nothing-wait-min">Nothing-to-do wait min (sec)</label>
+            <input type="number" id="cfg-nothing-wait-min" step="0.1" value="45" />
+          </div>
+          <div>
+            <label for="cfg-nothing-wait-max">Nothing-to-do wait max (sec)</label>
+            <input type="number" id="cfg-nothing-wait-max" step="0.1" value="180" />
+          </div>
+        </div>
         </details>
         <details class="config-section">
           <summary>Notifications</summary>
