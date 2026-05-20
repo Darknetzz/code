@@ -6,6 +6,14 @@
     { id: "bil", label: "Bil" },
   ];
 
+  const MINION_TRAINING_OPTIONS = [
+    { id: "angrep", label: "Angrep" },
+    { id: "beskyttelse", label: "Beskyttelse" },
+    { id: "intelligens", label: "Intelligens" },
+  ];
+
+  let minionsRoster = [];
+
   const travelRotateInputs = new Map();
   let travelRotateBuilt = false;
   const marketBuyInputs = new Map();
@@ -93,6 +101,129 @@
     );
   }
 
+  function updateMinionsSummary(scan) {
+    const el = $c("cfg-minions-summary");
+    if (!el) return;
+    if (!scan || !scan.total) {
+      el.textContent = "Undersåtter: — (refresh from game while logged in)";
+      return;
+    }
+    el.textContent = `Undersåtter: ${scan.total} total (${scan.alive} alive, ${scan.dead} dead)`;
+  }
+
+  function renderMinionsRoster(minions, trainingMap) {
+    const container = $c("cfg-minions-roster");
+    if (!container) return;
+    container.replaceChildren();
+    const list = minions || [];
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "tos-note";
+      p.textContent = "No minions listed. Refresh from game while logged in.";
+      container.appendChild(p);
+      return;
+    }
+    const table = document.createElement("table");
+    table.className = "minions-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    for (const label of ["Name", "Status", "Treningstype"]) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    const map = trainingMap || {};
+    const defaultTrain = $c("cfg-minions-default-training")?.value || "angrep";
+    for (const m of list) {
+      const tr = document.createElement("tr");
+      tr.dataset.minionName = m.name;
+      const nameTd = document.createElement("td");
+      nameTd.textContent = m.name;
+      tr.appendChild(nameTd);
+      const statusTd = document.createElement("td");
+      statusTd.textContent = m.alive ? "Lever" : "Død";
+      statusTd.className = m.alive ? "minion-alive" : "minion-dead";
+      tr.appendChild(statusTd);
+      const trainTd = document.createElement("td");
+      if (m.alive) {
+        const sel = document.createElement("select");
+        sel.dataset.minionTraining = "1";
+        const want = map[m.name] || m.training || defaultTrain;
+        for (const opt of MINION_TRAINING_OPTIONS) {
+          const o = document.createElement("option");
+          o.value = opt.id;
+          o.textContent = opt.label;
+          if (opt.id === want) o.selected = true;
+          sel.appendChild(o);
+        }
+        sel.addEventListener("change", () => markConfigDirty());
+        trainTd.appendChild(sel);
+      } else {
+        trainTd.textContent = "—";
+      }
+      tr.appendChild(trainTd);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  function loadMinionsFromDoc(doc) {
+    const def = $c("cfg-minions-default-training");
+    if (def) def.value = doc.minions_default_training || "angrep";
+    renderMinionsRoster(minionsRoster, doc.minions_training || {});
+    if (minionsRoster.length) {
+      updateMinionsSummary({
+        total: minionsRoster.length,
+        alive: minionsRoster.filter((m) => m.alive).length,
+        dead: minionsRoster.filter((m) => !m.alive).length,
+      });
+    } else {
+      updateMinionsSummary(null);
+    }
+  }
+
+  function getMinionsTrainingFromUi() {
+    const training = {};
+    const container = $c("cfg-minions-roster");
+    if (!container) return training;
+    for (const row of container.querySelectorAll("tr[data-minion-name]")) {
+      const name = row.dataset.minionName;
+      const sel = row.querySelector("select[data-minion-training]");
+      if (name && sel?.value) training[name] = sel.value;
+    }
+    return training;
+  }
+
+  async function refreshMinionsFromGame() {
+    const btn = $c("btn-minions-refresh");
+    if (btn) btn.disabled = true;
+    try {
+      const scan = await api("/api/minions/scan");
+      minionsRoster = scan.minions || [];
+      const training = getMinionsTrainingFromUi();
+      const def = $c("cfg-minions-default-training")?.value || "angrep";
+      for (const m of minionsRoster) {
+        if (m.alive && !training[m.name]) {
+          training[m.name] = m.training || def;
+        }
+      }
+      renderMinionsRoster(minionsRoster, training);
+      updateMinionsSummary(scan);
+      markConfigDirty();
+      appendLog(
+        `Undersåtter: ${scan.total} (${scan.alive} alive, ${scan.dead} dead)`
+      );
+    } catch (e) {
+      alert(e.message || String(e));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function webhookUrlFromUi() {
     const notify = $c("cfg-stop-webhook-notify");
     return (notify?.value || "").trim();
@@ -153,6 +284,8 @@
     if ($c("cfg-minions-train-when-ready")) {
       $c("cfg-minions-train-when-ready").checked = doc.minions_train_when_ready !== false;
     }
+    minionsRoster = [];
+    loadMinionsFromDoc(doc);
     if ($c("cfg-missions-auto-start")) {
       $c("cfg-missions-auto-start").checked = doc.missions_auto_start !== false;
     }
@@ -215,6 +348,9 @@
     payload.assist_webhook_on_war = !!$c("cfg-assist-war")?.checked;
     payload.assist_webhook_on_kidnap = !!$c("cfg-assist-kidnap")?.checked;
     payload.minions_train_when_ready = !!$c("cfg-minions-train-when-ready")?.checked;
+    payload.minions_default_training =
+      $c("cfg-minions-default-training")?.value || "angrep";
+    payload.minions_training = getMinionsTrainingFromUi();
     payload.missions_auto_start = !!$c("cfg-missions-auto-start")?.checked;
     payload.missions_prioritize_when_incomplete = !!$c("cfg-missions-prioritize")?.checked;
     const orgHpRaw = $c("cfg-org-crime-min-health")?.value.trim();
@@ -486,6 +622,12 @@
       updateMurderTargetsVisibility();
       markConfigDirty();
     });
+    $c("cfg-minions-default-training")?.addEventListener("change", () =>
+      markConfigDirty()
+    );
+    $c("btn-minions-refresh")?.addEventListener("click", () => {
+      refreshMinionsFromGame();
+    });
 
     document.querySelectorAll(".preset-row [data-preset]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -565,6 +707,7 @@
   /** Called from app.js after defining loadProfileForm body */
   window.MafibotConfigPanel = {
     loadExtendedProfileFields,
+    loadMinionsFromDoc,
     appendExtendedProfileFields,
     collectConfigWarnings,
     renderConfigSummary,

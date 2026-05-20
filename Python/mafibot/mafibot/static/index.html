@@ -364,6 +364,20 @@
                 <option value="disabled">Disabled</option>
               </select>
             </div>
+            <p id="cfg-minions-summary" class="tos-note">Undersåtter: — (refresh from game while logged in)</p>
+            <div class="btn-row">
+              <button type="button" id="btn-minions-refresh" class="btn-secondary">Refresh from game</button>
+            </div>
+            <div>
+              <label for="cfg-minions-default-training">Default training (new minions)</label>
+              <select id="cfg-minions-default-training">
+                <option value="angrep">Angrep</option>
+                <option value="beskyttelse">Beskyttelse</option>
+                <option value="intelligens">Intelligens</option>
+              </select>
+            </div>
+            <div id="cfg-minions-roster" class="minions-roster"></div>
+            <p class="tos-note">Matches the game table: set Treningstype per undersått, then the bot applies it before Tren alle.</p>
           </div>
           <div id="action-options-missions" class="action-item-options-panel"><p class="tos-note">Auto progress delegates to crime/market/minions by mission hint.</p>
             <div class="checkbox-row">

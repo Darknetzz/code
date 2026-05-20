@@ -343,6 +343,34 @@ async def api_session() -> SessionStatusResponse:
     )
 
 
+@app.get("/api/minions/scan", response_model=MinionsScanResponse)
+async def api_minions_scan() -> MinionsScanResponse:
+    from mafibot.minions_page import ensure_folk_train_page, parse_minions_page
+
+    runner = get_runner()
+    if runner.page is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Browser not open. Log in or start a session first.",
+        )
+    await ensure_folk_train_page(runner.page)
+    roster = await parse_minions_page(runner.page)
+    return MinionsScanResponse(
+        total=roster.total,
+        alive=roster.alive_count,
+        dead=roster.dead_count,
+        minions=[
+            MinionInfoResponse(
+                id=m.id,
+                name=m.name,
+                alive=m.alive,
+                training=m.training,
+            )
+            for m in roster.minions
+        ],
+    )
+
+
 @app.get("/api/run/status", response_model=RunStatusResponse)
 def api_run_status() -> RunStatusResponse:
     return _status_response(get_runner())
