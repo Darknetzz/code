@@ -1794,8 +1794,6 @@ async function refreshSession() {
       game: { ...(lastStatus?.game || {}), ...s.game, logged_in: s.logged_in },
       state: lastStatus?.state || "idle",
     });
-  } else {
-    applyUserSession(s, lastCredentialsStatus);
   }
 }
 

@@ -96,7 +96,7 @@ LOGIN_HEADING = re.compile(r"logg\s+inn", re.I)
 GAME_SHELL_PATTERN = re.compile(r"ms\.php", re.I)
 LOGGED_IN_PATTERN = re.compile(r"Penger:\s*[\d\s]+", re.I)
 PLAYER_NAME_PATTERN = re.compile(
-    r'class="header-item-username"[\s\S]{0,800}?<span>([^<]+)</span>',
+    r"header-item-username[\s\S]{0,800}?<span>([^<]+)</span>",
     re.I,
 )
 POENG_PATTERN = re.compile(r"Poeng:\s*(\d+)", re.I)
