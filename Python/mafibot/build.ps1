@@ -30,7 +30,7 @@ if (-not $SkipVenvSetup) {
 
     Write-Host "==> Installing dependencies" -ForegroundColor Cyan
     Invoke-VenvPython -Args @("-m", "pip", "install", "--upgrade", "pip")
-    Invoke-VenvPython -Args @("-m", "pip", "install", "-r", "requirements.txt", "pyinstaller")
+    Invoke-VenvPython -Args @("-m", "pip", "install", "-r", "requirements.txt", "pyinstaller", "msvc-runtime")
     Invoke-VenvPython -Args @("-m", "pip", "install", "-e", (Join-Path $Root ".." "webbot"))
 }
 
@@ -39,6 +39,9 @@ if (-not $SkipPlaywrightInstall) {
     $env:PLAYWRIGHT_BROWSERS_PATH = "0"
     Invoke-VenvPython -Args @("-m", "playwright", "install", "chromium")
 }
+
+Write-Host "==> Ensuring msvc-runtime (greenlet / Playwright DLLs in frozen exe)" -ForegroundColor Cyan
+Invoke-VenvPython -Args @("-m", "pip", "install", "msvc-runtime")
 
 Write-Host "==> Running PyInstaller (mafibot.spec)" -ForegroundColor Cyan
 $env:PLAYWRIGHT_BROWSERS_PATH = "0"

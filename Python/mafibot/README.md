@@ -42,7 +42,7 @@ cd Python\mafibot
 
 `build.ps1` creates `.venv-build`, installs deps + webbot, installs Chromium into the bundle path, and runs `pyinstaller mafibot.spec`. Rebuild only the exe after the venv exists: `.\build.ps1 -SkipVenvSetup`. Skip re-downloading Chromium: `.\build.ps1 -SkipVenvSetup -SkipPlaywrightInstall`.
 
-Manual equivalent (no script): activate `.venv-build`, set `$env:PLAYWRIGHT_BROWSERS_PATH = "0"`, run `playwright install chromium`, then `pyinstaller mafibot.spec`.
+Manual equivalent (no script): activate `.venv-build`, `pip install -r requirements.txt pyinstaller msvc-runtime`, set `$env:PLAYWRIGHT_BROWSERS_PATH = "0"`, run `playwright install chromium`, then `pyinstaller mafibot.spec`. (`msvc-runtime` bundles VC++ DLLs that Playwright’s `greenlet` dependency needs inside the frozen `.exe`.)
 
 **Do not use `pybin` for this project** — it does not apply the checked-in `mafibot.spec` (webbot path, UI static/profiles, Playwright browser bundle, runtime hook). Use `build.ps1` or `pyinstaller mafibot.spec` directly.
 
