@@ -618,8 +618,9 @@ function formatCooldownRemaining(sec) {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
-function renderActiveCooldowns(cooldowns) {
-  const list = $("st-cooldowns");
+function renderActiveCooldowns(cooldowns, listId = "st-cooldowns") {
+  const list = $(listId);
+  if (!list) return;
   list.replaceChildren();
   const active = (cooldowns || []).filter((cd) => cd && cd.id);
   if (!active.length) {

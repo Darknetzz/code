@@ -25,6 +25,7 @@ from mafibot.selectors import (
     KLAR_TAB_PATTERN,
     LOGGED_IN_PATTERN,
     LOGIN_HEADING,
+    PLAYER_NAME_PATTERN,
     MONEY_PATTERN,
     POENG_PATTERN,
     RANK_PATTERN,
@@ -366,6 +367,7 @@ async def parse_game_state(page: Page) -> GameState:
 
     try:
         body_text = await collect_page_text(page)
+        page_html = await page.content()
     except Exception as exc:
         raise ParseError(
             f"Could not read page body: {exc}",
@@ -385,6 +387,9 @@ async def parse_game_state(page: Page) -> GameState:
     state.logged_in = bool(LOGGED_IN_PATTERN.search(text)) or (
         state.in_game_shell and not state.on_login_page
     )
+    name_m = PLAYER_NAME_PATTERN.search(page_html)
+    if name_m:
+        state.player_name = name_m.group(1).strip()
     state.captcha = bool(CAPTCHA_PATTERN.search(text))
     state.in_jail = bool(JAIL_PATTERN.search(text))
     state.in_hospital = bool(HOSPITAL_PATTERN.search(text))
@@ -472,5 +477,8 @@ async def parse_from_html(html: str, page_url: str = "") -> GameState:
 
         async def inner_text(self) -> str:
             return html_to_plain_text(self._html)
+
+        async def content(self) -> str:
+            return self._html
 
     return await parse_game_state(_FakePage())  # type: ignore[arg-type]

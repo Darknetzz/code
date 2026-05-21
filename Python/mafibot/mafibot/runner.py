@@ -68,6 +68,8 @@ class GameStateSnapshot:
     crime_tung_ready: bool = True
     crime_stjel_ready: bool = True
     player_name: str | None = None
+    rank_points: int | None = None
+    bank_balance: int | None = None
     attack: int | None = None
     protection: int | None = None
     rank_name: str | None = None
@@ -124,9 +126,12 @@ class GameStateSnapshot:
             crime_enkel_ready=getattr(state, "crime_enkel_ready", state.crime_ready),
             crime_tung_ready=getattr(state, "crime_tung_ready", state.crime_ready),
             crime_stjel_ready=getattr(state, "crime_stjel_ready", state.crime_ready),
+            player_name=getattr(state, "player_name", None),
+            rank_points=getattr(state, "rank_points", None),
+            bank_balance=getattr(state, "bank_balance", None),
+            rank_name=getattr(state, "rank_name", None),
             attack=getattr(state, "attack", None),
             protection=getattr(state, "protection", None),
-            rank_name=getattr(state, "rank_name", None),
             happy_hour_active=getattr(state, "happy_hour_active", False),
             happy_hour_buffs=list(getattr(state, "happy_hour_buffs", []) or []),
             mission_number=getattr(state, "mission_number", None),

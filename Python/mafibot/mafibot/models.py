@@ -68,6 +68,8 @@ class GameStateResponse(BaseModel):
     crime_tung_ready: bool = True
     crime_stjel_ready: bool = True
     player_name: str | None = None
+    rank_points: int | None = None
+    bank_balance: int | None = None
     attack: int | None = None
     protection: int | None = None
     rank_name: str | None = None

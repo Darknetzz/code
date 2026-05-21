@@ -1182,13 +1182,15 @@ button:disabled {
   color: var(--muted);
 }
 
-.login-subsection {
+.login-subsection,
+.user-subsection {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
 }
 
-.login-subsection .subsection-title {
+.login-subsection .subsection-title,
+.user-subsection .subsection-title {
   margin-top: 0;
 }
 

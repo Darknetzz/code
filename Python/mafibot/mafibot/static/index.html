@@ -35,7 +35,7 @@
         <button type="button" class="tab-btn active" data-tab="run">Run</button>
         <button type="button" class="tab-btn" data-tab="sessions">Sessions</button>
         <button type="button" class="tab-btn" data-tab="config">Config</button>
-        <button type="button" class="tab-btn" data-tab="login">Login</button>
+        <button type="button" class="tab-btn" data-tab="user">User</button>
       </div>
     </nav>
 
@@ -75,7 +75,7 @@
           <input type="checkbox" id="run-discover-compare" />
           <label for="run-discover-compare">Discover: compare HTML to previous run</label>
         </div>
-        <p class="tos-note">Bind localhost only. If you expose the UI beyond this machine, see Login → Dashboard access token.</p>
+        <p class="tos-note">Bind localhost only. If you expose the UI beyond this machine, see User → Dashboard access token.</p>
         <p class="run-activity muted" id="run-activity-text-hint">Use Start to run the selected profile. Live status updates in the column below and in the bar above.</p>
         <div class="btn-row">
           <div class="button-group" role="group" aria-label="Session controls">
@@ -717,16 +717,48 @@ Las Vegas</textarea>
       </div>
     </section>
 
-    <section id="panel-login" class="tab-panel" role="tabpanel">
+    <section id="panel-user" class="tab-panel" role="tabpanel">
       <div class="ui-columns">
         <div class="ui-col-main">
+      <div class="card">
+        <h2>Account</h2>
+        <dl class="status-grid" aria-label="Account status">
+          <div><dt>Mafiaspillet user (.env)</dt><dd id="user-env-username">—</dd></div>
+          <div><dt>Credentials saved</dt><dd id="user-creds-configured">—</dd></div>
+          <div><dt>Browser open</dt><dd id="user-browser-open">—</dd></div>
+          <div><dt>Logged in (game)</dt><dd id="user-logged-in">—</dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Character</h2>
+        <p class="tos-note">Live stats from the open browser. Use <strong>Refresh</strong> in Sign in after you log in.</p>
+        <dl class="status-grid" aria-label="In-game character">
+          <div><dt>Player</dt><dd id="user-player">—</dd></div>
+          <div><dt>Rank</dt><dd id="user-rank">—</dd></div>
+          <div><dt>Rankpoeng</dt><dd id="user-rankpoeng">—</dd></div>
+          <div><dt>Penger</dt><dd id="user-money">—</dd></div>
+          <div><dt>Bank</dt><dd id="user-bank">—</dd></div>
+          <div><dt>Helse</dt><dd id="user-health">—</dd></div>
+          <div><dt>Location</dt><dd id="user-location">—</dd></div>
+          <div><dt>In hotel</dt><dd id="user-hotel">—</dd></div>
+          <div><dt>Kriminalitet klar</dt><dd id="user-crime">—</dd></div>
+          <div><dt>Happy Hour</dt><dd id="user-happy-hour">—</dd></div>
+          <div><dt>Oppdrag</dt><dd id="user-mission">—</dd></div>
+          <div><dt>Combat stats</dt><dd id="user-combat">—</dd></div>
+          <div><dt>Status flags</dt><dd id="user-flags">—</dd></div>
+        </dl>
+        <h3 class="subsection-title">Cooldowns</h3>
+        <ul id="user-cooldowns" class="cooldown-list" aria-live="polite">
+          <li class="cooldown-empty muted">Refresh session to load</li>
+        </ul>
+      </div>
       <div class="card">
         <h2>Credentials (.env)</h2>
         <p class="tos-note">Optional if you log in manually in the persistent browser profile.</p>
         <div id="cred-saved" class="cred-saved hidden" aria-live="polite">
           <p class="cred-saved-user"><strong id="cred-saved-name"></strong></p>
           <p class="cred-saved-status">
-            <span class="cred-check" aria-hidden="true">✓</span> Logged in
+            <span class="cred-check" aria-hidden="true">✓</span> Credentials saved
           </p>
           <p id="cred-env-path" class="health-meta"></p>
           <div class="btn-row">
@@ -749,7 +781,7 @@ Las Vegas</textarea>
           <button type="button" class="primary" id="btn-save-creds">Save credentials</button>
         </div>
         </div>
-        <div class="login-subsection">
+        <div class="user-subsection">
           <h3 class="subsection-title">Dashboard access token</h3>
           <p class="tos-note">
             Optional shared secret that protects the dashboard API (start/stop bot, profiles, credentials).
@@ -777,12 +809,12 @@ Las Vegas</textarea>
         </div>
       </div>
         </div>
-        <aside class="ui-col-side" aria-label="Browser session">
+        <aside class="ui-col-side" aria-label="Sign in">
       <div class="card">
-        <h2>Browser session</h2>
-        <p>Logged in: <strong id="session-logged-in">unknown</strong></p>
+        <h2>Sign in</h2>
+        <p class="tos-note">Opens a headed browser with the saved profile. Sign in on mafiaspillet.no, then click Done.</p>
         <div class="btn-row">
-          <div class="button-group" role="group" aria-label="Browser session">
+          <div class="button-group" role="group" aria-label="Sign in">
             <button type="button" class="primary" id="btn-open-login">Open login browser</button>
             <button type="button" id="btn-login-done">Done (close browser)</button>
             <button type="button" id="btn-refresh-session">Refresh session</button>
