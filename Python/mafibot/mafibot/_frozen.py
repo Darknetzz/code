@@ -14,7 +14,8 @@ def is_frozen() -> bool:
 def bundle_root() -> Path:
     """Directory containing packaged mafibot package assets (static, profiles)."""
     if is_frozen():
-        return Path(getattr(sys, "_MEIPASS", Path.cwd()))
+        # mafibot.spec datas land under mafibot/{static,profiles} inside _MEIPASS.
+        return Path(getattr(sys, "_MEIPASS", Path.cwd())) / "mafibot"
     return Path(__file__).resolve().parent
 
 
