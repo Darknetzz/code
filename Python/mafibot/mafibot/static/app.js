@@ -578,6 +578,7 @@ let elapsedTimer = null;
 /** Preserved from loaded profile JSON; build is set in-game, not via dashboard. */
 let preservedProfileBuild = "ranker";
 let lastStatus = null;
+let lastCredentialsStatus = null;
 let profileCatalog = [];
 
 function api(path, options = {}) {
@@ -794,6 +795,69 @@ function updateGlobalStatusBar(st) {
   }
 }
 
+function renderGameCharacterFields(g, prefix) {
+  const p = prefix || "st-";
+  const set = (id, text) => {
+    const el = $(`${p}${id}`);
+    if (el) el.textContent = text;
+  };
+  set("player", g.player_name || "—");
+  const rankParts = [];
+  if (g.rank_name) rankParts.push(g.rank_name);
+  set("rank", rankParts.length ? rankParts.join(" · ") : "—");
+  set(
+    "rankpoeng",
+    g.rank_points != null ? formatRankpoeng(g.rank_points) : "—"
+  );
+  set("money", g.money != null ? formatKr(g.money) : "—");
+  set("bank", g.bank_balance != null ? formatKr(g.bank_balance) : "—");
+  set("health", g.health_percent != null ? `${g.health_percent}%` : "—");
+  set("location", g.location || "—");
+  set("hotel", g.in_hotel ? "yes" : "no");
+  set("crime", g.crime_ready ? "yes" : "no");
+  set(
+    "happy-hour",
+    g.happy_hour_active
+      ? (g.happy_hour_buffs || []).join(", ") || "active"
+      : "no"
+  );
+  const missionParts = [];
+  if (g.mission_number != null) missionParts.push(`#${g.mission_number}`);
+  if (g.mission_progress_current != null && g.mission_progress_total != null) {
+    missionParts.push(`${g.mission_progress_current}/${g.mission_progress_total}`);
+  }
+  if (g.mission_requirement_hint) missionParts.push(g.mission_requirement_hint);
+  set("mission", missionParts.length ? missionParts.join(" · ") : "—");
+  const a = g.attack != null ? `A${g.attack}` : "";
+  const prot = g.protection != null ? `P${g.protection}` : "";
+  set("combat", [a, prot].filter(Boolean).join(" / ") || "—");
+  const f = [];
+  if (g.feriemodus) f.push("ferie");
+  if (g.kidnapped) f.push("kidnappet");
+  if (g.startbeskyttelse) f.push("startbeskyttelse");
+  if (g.family_war_active) f.push("krig");
+  set("flags", f.length ? f.join(", ") : "—");
+}
+
+function applyUserSession(session, creds) {
+  const g = session?.game || {};
+  if ($("user-logged-in")) {
+    $("user-logged-in").textContent = session?.logged_in ? "yes" : "no";
+  }
+  if ($("user-browser-open")) {
+    $("user-browser-open").textContent = session?.browser_open ? "yes" : "no";
+  }
+  if ($("user-env-username")) {
+    $("user-env-username").textContent = creds?.user || "—";
+  }
+  if ($("user-creds-configured")) {
+    const configured = creds?.has_user && creds?.has_password;
+    $("user-creds-configured").textContent = configured ? "yes" : "no";
+  }
+  renderGameCharacterFields(g, "user-");
+  renderActiveCooldowns(g.active_cooldowns, "user-cooldowns");
+}
+
 function applyStatus(st) {
   lastStatus = st;
   setBadge(st.state, statusHasError(st));
@@ -802,44 +866,14 @@ function applyStatus(st) {
   const elapsedText = formatElapsed(st.elapsed_sec);
   $("st-elapsed").textContent = elapsedText;
   const g = st.game || {};
-  $("st-hotel").textContent = g.in_hotel ? "yes" : "no";
-  $("st-money").textContent = g.money != null ? String(g.money) : "—";
   updateGlobalStatusBar(st);
-  $("st-health").textContent = g.health_percent != null ? `${g.health_percent}%` : "—";
-  $("st-location").textContent = g.location || "—";
-  $("st-crime").textContent = g.crime_ready ? "yes" : "no";
-  const hh = $("st-happy-hour");
-  if (hh) {
-    hh.textContent = g.happy_hour_active
-      ? (g.happy_hour_buffs || []).join(", ") || "active"
-      : "no";
+  renderGameCharacterFields(g, "st-");
+  renderGameCharacterFields(g, "user-");
+  renderActiveCooldowns(g.active_cooldowns, "st-cooldowns");
+  renderActiveCooldowns(g.active_cooldowns, "user-cooldowns");
+  if ($("user-logged-in")) {
+    $("user-logged-in").textContent = g.logged_in ? "yes" : "no";
   }
-  const miss = $("st-mission");
-  if (miss) {
-    const parts = [];
-    if (g.mission_number != null) parts.push(`#${g.mission_number}`);
-    if (g.mission_progress_current != null && g.mission_progress_total != null) {
-      parts.push(`${g.mission_progress_current}/${g.mission_progress_total}`);
-    }
-    if (g.mission_requirement_hint) parts.push(g.mission_requirement_hint);
-    miss.textContent = parts.length ? parts.join(" · ") : "—";
-  }
-  const combat = $("st-combat");
-  if (combat) {
-    const a = g.attack != null ? `A${g.attack}` : "";
-    const p = g.protection != null ? `P${g.protection}` : "";
-    combat.textContent = [a, p].filter(Boolean).join(" / ") || "—";
-  }
-  const flags = $("st-flags");
-  if (flags) {
-    const f = [];
-    if (g.feriemodus) f.push("ferie");
-    if (g.kidnapped) f.push("kidnappet");
-    if (g.startbeskyttelse) f.push("startbeskyttelse");
-    if (g.family_war_active) f.push("krig");
-    flags.textContent = f.length ? f.join(", ") : "—";
-  }
-  renderActiveCooldowns(g.active_cooldowns);
   $("st-action").textContent = displayActionLabel(st.last_action) || "—";
   $("st-message").textContent = st.last_message || "—";
   const idleEl = $("st-idle");
@@ -1723,6 +1757,7 @@ function profilePayload() {
 }
 
 function applyCredentialsUi(st) {
+  lastCredentialsStatus = st;
   const configured = st.has_user && st.has_password;
   $("cred-form")?.classList.toggle("hidden", configured);
   $("cred-saved")?.classList.toggle("hidden", !configured);
@@ -1739,6 +1774,10 @@ function applyCredentialsUi(st) {
   $("cred-status").textContent = parts.length
     ? `${parts.join(", ")} · ${st.env_path}`
     : `No credentials saved · ${st.env_path}`;
+  if ($("user-env-username")) $("user-env-username").textContent = st.user || "—";
+  if ($("user-creds-configured")) {
+    $("user-creds-configured").textContent = configured ? "yes" : "no";
+  }
 }
 
 async function loadCredentialsStatus() {
@@ -1748,8 +1787,16 @@ async function loadCredentialsStatus() {
 
 async function refreshSession() {
   const s = await api("/api/session");
-  $("session-logged-in").textContent = s.logged_in ? "yes" : "no";
-  if (s.game) applyStatus({ ...lastStatus, game: s.game, state: lastStatus?.state || "idle" });
+  applyUserSession(s, lastCredentialsStatus);
+  if (s.game) {
+    applyStatus({
+      ...lastStatus,
+      game: { ...(lastStatus?.game || {}), ...s.game, logged_in: s.logged_in },
+      state: lastStatus?.state || "idle",
+    });
+  } else {
+    applyUserSession(s, lastCredentialsStatus);
+  }
 }
 
 function setupTabs() {
@@ -1765,6 +1812,12 @@ function setupTabs() {
       }
       if (btn.dataset.tab === "sessions") {
         loadSessionsPage();
+      }
+      if (btn.dataset.tab === "user") {
+        refreshSession().catch((e) => console.warn(e));
+        if (!lastCredentialsStatus) {
+          loadCredentialsStatus().catch((e) => console.warn(e));
+        }
       }
     });
   });
