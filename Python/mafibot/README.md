@@ -93,7 +93,7 @@ The dashboard has three tabs:
 
 - **Run** — pick profile, start/stop autopilot, live status and log (WebSocket)
 - **Config** — edit and save bot profile JSON under your config `profiles/` dir
-- **Login** — store `.env` credentials, open a headed login browser, run discover
+- **User** — account info, `.env` credentials, sign-in browser, dashboard token
 
 **Security:** the server binds to `127.0.0.1` by default. Do not expose port 8766 on your LAN or the public internet without authentication; anyone who can reach it can start the bot and read/write credentials on disk.
 
@@ -167,7 +167,7 @@ Set `scheduler` to `soonest_ready` to prefer runnable actions by cooldown timing
 
 ### Dashboard security and alerts
 
-- Set `MAFIBOT_UI_TOKEN` in the environment before `mafibot.py ui`; the Login tab can store the same token for API/WebSocket calls (`X-Mafibot-Token`).
+- Set `MAFIBOT_UI_TOKEN` in the environment before `mafibot.py ui`; the User tab can store the same token for API/WebSocket calls (`X-Mafibot-Token`).
 - Non-loopback bind requires `mafibot.py ui --insecure-bind`.
 - Optional `stop_webhook_url` in profile JSON posts to a Discord-compatible webhook when the session stops (captcha, ban, logout).
 - Last session stats are written to `last_session.json` under your config dir and shown in the Run tab.

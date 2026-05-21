@@ -132,7 +132,7 @@ def parse_error_playbook(parse_error: dict[str, str | None] | None) -> str:
     hints = {
         "parse_failed": "Re-run discover and verify-pages; update selectors.py for changed labels.",
         "body_read_failed": "Browser may have lost the page — refresh login or restart the session.",
-        "not_logged_in": "Complete mafibot.py login or use the Login tab.",
+        "not_logged_in": "Complete mafibot.py login or use the User tab.",
     }
     base = hints.get(code, hints["parse_failed"])
     shot = parse_error.get("screenshot_path")

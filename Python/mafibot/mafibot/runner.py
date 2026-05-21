@@ -372,7 +372,7 @@ class MafibotRunner:
                 self._page = page
                 self._log(f"Starting autopilot profile={profile.name} dry_run={dry_run}")
                 if not await is_logged_in(page):
-                    self._log("Not logged in — waiting for session (run Login tab first)")
+                    self._log("Not logged in — waiting for session (use User tab to sign in)")
                     await ensure_session(page, manual=True)
                 await brain.run_session(page, profile, max_minutes=max_minutes, dry_run=dry_run)
             if self._cancel.is_set():

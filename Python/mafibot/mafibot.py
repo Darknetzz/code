@@ -270,7 +270,7 @@ def ui(
         help="Allow binding to non-loopback addresses (not recommended)",
     ),
 ) -> None:
-    """Start local web dashboard (Run / Config / Login)."""
+    """Start local web dashboard (Run / Config / User)."""
     if host not in ("127.0.0.1", "localhost", "::1") and not insecure_bind:
         console.print(
             "[red]Refusing to bind to non-loopback host. "
