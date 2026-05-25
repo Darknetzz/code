@@ -86,6 +86,9 @@ av1 "C:\Videos\Input" --log-dir "C:\MyLogs" --log-type json
 # Keep .mkv extension when converting in-place
 av1 "C:\Videos\movie.mp4" --delete-original --keep-mkv
 
+# Custom output basename and skip rename back to original name
+av1 "C:\Videos\movie.mp4" --output-prepend "draft_" --output-append "_v2" --no-rename
+
 # Override ffmpeg/ffprobe paths
 av1 "C:\Videos\Input" --ffmpeg "C:\custom\ffmpeg.exe" --ffprobe "C:\custom\ffprobe.exe"
 
@@ -109,6 +112,9 @@ Options:
   --dry-run                   Show planned actions without converting
   -r, --recursive             Process subdirectories recursively
   --keep-mkv                  Keep .mkv extension instead of matching original filename
+  --no-rename                 Keep encoded output filename; do not restore original basename
+  --output-prepend TEXT       Text prepended to output basename (before -CODEC.mkv)
+  --output-append TEXT        Text appended to source stem (before -CODEC.mkv)
   --log-type TEXT             Log format: 'txt' (default), 'html', 'json', or 'none'
   --log-dir TEXT              Directory for logs (default: %TEMP%/av1-logs)
   --ffmpeg TEXT               Path to ffmpeg executable (overrides AV1_FFMPEG_PATH)
@@ -133,7 +139,10 @@ Options:
    <tr><td>-o, --overwrite</td><td>Overwrite existing output files without prompting.</td></tr>
    <tr><td>--dry-run</td><td>Preview conversion plan without encoding.</td></tr>
    <tr><td>-r, --recursive</td><td>Process subdirectories recursively, preserving structure.</td></tr>
-   <tr><td>--keep-mkv</td><td>Keep .mkv extension instead of matching original filename.</td></tr>
+   <tr><td>--keep-mkv</td><td>Keep .mkv extension instead of matching original filename (implies no post-conversion rename).</td></tr>
+   <tr><td>--no-rename</td><td>Keep the encoded output name (e.g. <code>movie-AV1.mkv</code>); do not rename back to the original basename.</td></tr>
+   <tr><td>--output-prepend</td><td>Prepend text to the output basename (e.g. <code>draft_</code> → <code>draft_movie-AV1.mkv</code>).</td></tr>
+   <tr><td>--output-append</td><td>Append text to the source stem before <code>-CODEC.mkv</code> (e.g. <code>_v2</code> → <code>movie_v2-AV1.mkv</code>).</td></tr>
    <tr><td>--log-type &lt;TEXT&gt;</td><td>Log format: 'txt', 'html', 'json', or 'none' to disable.</td></tr>
    <tr><td>--log-dir &lt;TEXT&gt;</td><td>Directory for logs (default: %TEMP%/av1-logs).</td></tr>
    <tr><td>--ffmpeg &lt;TEXT&gt;</td><td>Path to ffmpeg executable (overrides env or PATH).</td></tr>
@@ -187,6 +196,9 @@ $env:AV1_LOG_TYPE = "json"                   # Default log format (default: txt)
 $env:AV1_LOG_DIR = "C:\Logs"                 # Default log directory (default: %TEMP%/av1-logs)
 $env:AV1_NO_COLOR = "1"                      # Disable colored output (default: enabled)
 $env:AV1_NO_PROMPT = "1"                     # Suppress interactive prompts (default: enabled)
+$env:AV1_OUTPUT_PREPEND = "draft_"           # Default prepend for output basename
+$env:AV1_OUTPUT_APPEND = "_small"             # Default append for output stem
+$env:AV1_NO_RENAME = "1"                      # Same as --no-rename (skip restore to original basename)
 ```
 
 Example: Automation script with custom defaults

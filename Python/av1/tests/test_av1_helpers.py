@@ -57,6 +57,34 @@ def test_build_output_paths_uses_codec_suffix(tmp_path):
     assert out_dir.exists()
 
 
+def test_compose_output_basename_with_affixes():
+    assert av1._compose_output_basename("movie", "av1") == "movie-AV1.mkv"
+    assert av1._compose_output_basename("movie", "av1", prepend="draft_", append="_v2") == "draft_movie_v2-AV1.mkv"
+
+
+def test_sanitize_output_name_affix_rejects_unsafe_text():
+    for bad in ("bad/name", "..", "a<b"):
+        try:
+            av1._sanitize_output_name_affix(bad, label="test")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for {bad!r}")
+
+
+def test_build_output_paths_honors_prepend_append(tmp_path):
+    source = tmp_path / "clip.mkv"
+    out_dir = tmp_path / "out"
+    _, output_path, _ = av1._build_output_paths(
+        str(source),
+        str(out_dir),
+        "hevc",
+        output_prepend="x_",
+        output_append="_small",
+    )
+    assert output_path.endswith("x_clip_small-HEVC.mkv")
+
+
 def test_vaapi_command_does_not_include_svt_flags(monkeypatch):
     monkeypatch.setenv("AV1_VAAPI_DEVICE", "/dev/dri/test")
     command, pix_fmt = av1._build_ffmpeg_command(

@@ -143,7 +143,7 @@ SIZE_PRESETS: dict[str, dict[str, object]] = {
 #   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK, AV1_CPU_THREADS,
 #   AV1_NO_COLOR, AV1_NO_PROMPT, AV1_HIDE_FILENAMES, AV1_LOG_TYPE, AV1_LOG_DIR,
 #   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING,
-#   AV1_FFMPEG_STALL_TIMEOUT
+#   AV1_FFMPEG_STALL_TIMEOUT, AV1_OUTPUT_PREPEND, AV1_OUTPUT_APPEND, AV1_NO_RENAME
 
 def _env_bool(val: str) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
@@ -745,6 +745,9 @@ def _print_startup_summary(
     force: bool,
     delete_original: bool,
     rename_original: bool,
+    no_rename: bool,
+    output_prepend: str,
+    output_append: str,
     overwrite: bool,
     dry_run: bool,
     recursive: bool,
@@ -797,6 +800,12 @@ def _print_startup_summary(
         options.append("delete-original")
     if rename_original:
         options.append("rename-original")
+    if no_rename:
+        options.append("no-rename")
+    if output_prepend:
+        options.append(f"output-prepend={output_prepend!r}")
+    if output_append:
+        options.append(f"output-append={output_append!r}")
     if overwrite:
         options.append("overwrite")
     if dry_run:
@@ -1894,6 +1903,36 @@ def resolve_output_dir(output_dir: Optional[str], input_path: Optional[str] = No
     return os.getcwd()
 
 
+_INVALID_OUTPUT_AFFIX_CHARS = frozenset('<>:"/\\|?*')
+
+
+def _sanitize_output_name_affix(affix: Optional[str], *, label: str) -> str:
+    """Validate and normalize --output-prepend/--output-append (or env equivalents)."""
+    if affix is None:
+        return ""
+    text = str(affix).strip()
+    if not text:
+        return ""
+    if any(ch in _INVALID_OUTPUT_AFFIX_CHARS for ch in text):
+        raise ValueError(f"{label} contains invalid filename characters")
+    if os.sep in text or (os.altsep and os.altsep in text):
+        raise ValueError(f"{label} must not contain path separators")
+    if ".." in text:
+        raise ValueError(f"{label} must not contain '..'")
+    return text
+
+
+def _compose_output_basename(
+    stem: str,
+    codec: str,
+    *,
+    prepend: str = "",
+    append: str = "",
+) -> str:
+    """Build output filename: {prepend}{stem}{append}-{CODEC}.mkv"""
+    return f"{prepend}{stem}{append}-{codec.upper()}.mkv"
+
+
 def resolve_original_output_path(input_path: str, output_path: str) -> Optional[str]:
     """Return the final original-name target when it is safe to rename in place."""
     input_dir = os.path.abspath(os.path.dirname(input_path) or os.getcwd())
@@ -1950,20 +1989,40 @@ def maybe_rename_output_to_original(output_path: str, original_name_path: str) -
         cprint(f"Could not rename to original name: {e}", "warning")
 
 
-def _build_output_paths(input_path: str, output_dir: Optional[str], codec: str) -> tuple[str, str, str]:
+def _build_output_paths(
+    input_path: str,
+    output_dir: Optional[str],
+    codec: str,
+    *,
+    output_prepend: str = "",
+    output_append: str = "",
+) -> tuple[str, str, str]:
     """Resolve output directory and the final/temp output paths for a conversion."""
     filename = os.path.basename(input_path)
     resolved_output_dir = resolve_output_dir(output_dir, input_path) or os.getcwd()
     if resolved_output_dir != (os.path.dirname(input_path) or os.getcwd()):
         os.makedirs(resolved_output_dir, exist_ok=True)
 
-    output_name = os.path.splitext(filename)[0] + f"-{codec.upper()}.mkv"
+    stem = os.path.splitext(filename)[0]
+    output_name = _compose_output_basename(
+        stem,
+        codec,
+        prepend=output_prepend,
+        append=output_append,
+    )
     output_path = os.path.join(resolved_output_dir, output_name)
     temp_output = f"{output_path}.temp.mkv"
     return resolved_output_dir, output_path, temp_output
 
 
-def _finalize_output_file(input_path: str, output_path: str, keep_mkv: bool, delete_original: bool) -> bool:
+def _finalize_output_file(
+    input_path: str,
+    output_path: str,
+    keep_mkv: bool,
+    delete_original: bool,
+    *,
+    no_rename: bool = False,
+) -> bool:
     """Handle original deletion and optional rename back to the original filename."""
     auto_delete_flag = maybe_delete_original(input_path, auto_delete=delete_original)
     if auto_delete_flag:
@@ -1971,7 +2030,7 @@ def _finalize_output_file(input_path: str, output_path: str, keep_mkv: bool, del
 
     original_deleted = not os.path.exists(input_path)
     original_name_path = resolve_original_output_path(input_path, output_path)
-    if original_deleted and original_name_path and not keep_mkv:
+    if original_deleted and original_name_path and not keep_mkv and not no_rename:
         maybe_rename_output_to_original(output_path, original_name_path)
     return delete_original
 
@@ -2341,6 +2400,9 @@ class ConversionRetryOptions:
     overwrite: bool
     dry_run: bool
     keep_mkv: bool
+    no_rename: bool
+    output_prepend: str
+    output_append: str
     show_progress: bool
     batch_index: Optional[int]
     batch_total: Optional[int]
@@ -2372,6 +2434,9 @@ def _retry_convert_single_file(options: ConversionRetryOptions) -> tuple[bool, i
         cpu_threads=options.cpu_threads,
         prompt_av1=options.prompt_av1,
         reencode_av1=options.reencode_av1,
+        no_rename=options.no_rename,
+        output_prepend=options.output_prepend,
+        output_append=options.output_append,
         max_output_bytes=options.max_output_bytes,
         min_shrink_percent=options.min_shrink_percent,
         max_video_width=options.max_video_width,
@@ -2507,6 +2572,9 @@ def convert_single_file(
     prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
+    no_rename: bool = False,
+    output_prepend: str = "",
+    output_append: str = "",
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
     max_video_width: Optional[int] = None,
@@ -2569,6 +2637,8 @@ def convert_single_file(
         input_path,
         output_dir,
         ACTIVE_ENCODER["codec"],
+        output_prepend=output_prepend,
+        output_append=output_append,
     )
     
     # Check disk space before proceeding (skip in dry run)
@@ -2719,6 +2789,9 @@ def convert_single_file(
         overwrite=overwrite,
         dry_run=dry_run,
         keep_mkv=keep_mkv,
+        no_rename=no_rename,
+        output_prepend=output_prepend,
+        output_append=output_append,
         show_progress=show_progress,
         batch_index=batch_index,
         batch_total=batch_total,
@@ -2946,9 +3019,13 @@ def convert_single_file(
                         ),
                         log_only=_SUPPRESS_OUTPUT,
                     )
-                    delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
+                    delete_original = _finalize_output_file(
+                        input_path, output_path, keep_mkv, delete_original, no_rename=no_rename
+                    )
                 else:
-                    delete_original = _finalize_output_file(input_path, output_path, keep_mkv, delete_original)
+                    delete_original = _finalize_output_file(
+                        input_path, output_path, keep_mkv, delete_original, no_rename=no_rename
+                    )
                 
                 return delete_original, size_saved, bitrate_decision, media_info
             else:
@@ -3091,6 +3168,9 @@ def process_batch_files(
     prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
+    no_rename: bool = False,
+    output_prepend: str = "",
+    output_append: str = "",
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
     max_video_width: Optional[int] = None,
@@ -3241,6 +3321,9 @@ def process_batch_files(
                     cpu_threads=cpu_threads,
                     prompt_av1=prompt_av1,
                     reencode_av1=reencode_av1,
+                    no_rename=no_rename,
+                    output_prepend=output_prepend,
+                    output_append=output_append,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
                     max_video_width=max_video_width,
@@ -3408,6 +3491,9 @@ def convert_videos(
     prompt_av1: bool = False,
     reencode_av1: bool = False,
     *,
+    no_rename: bool = False,
+    output_prepend: str = "",
+    output_append: str = "",
     max_output_bytes: Optional[int] = None,
     min_shrink_percent: Optional[float] = None,
     max_video_width: Optional[int] = None,
@@ -3438,6 +3524,9 @@ def convert_videos(
                     cpu_threads=cpu_threads,
                     prompt_av1=prompt_av1,
                     reencode_av1=reencode_av1,
+                    no_rename=no_rename,
+                    output_prepend=output_prepend,
+                    output_append=output_append,
                     max_output_bytes=max_output_bytes,
                     min_shrink_percent=min_shrink_percent,
                     max_video_width=max_video_width,
@@ -3480,6 +3569,9 @@ def convert_videos(
             cpu_threads=cpu_threads,
             prompt_av1=prompt_av1,
             reencode_av1=reencode_av1,
+            no_rename=no_rename,
+            output_prepend=output_prepend,
+            output_append=output_append,
             max_output_bytes=max_output_bytes,
             min_shrink_percent=min_shrink_percent,
             max_video_width=max_video_width,
@@ -3696,7 +3788,30 @@ def main(
         help="Automatically rename output back to the original filename/extension when in-place renaming is possible (skip rename prompts for this run).",
         rich_help_panel="File Handling",
     ),
-    keep_mkv: bool = typer.Option(False, "--keep-mkv", help="Keep the converted file as .mkv instead of renaming it back to the original extension when possible. Default: restore the original filename/extension in place when safe.", rich_help_panel="File Handling"),
+    no_rename: bool = typer.Option(
+        False,
+        "--no-rename",
+        help="Keep the encoded output filename (e.g. movie-AV1.mkv, including --output-prepend/--output-append); do not rename back to the original basename after conversion.",
+        rich_help_panel="File Handling",
+    ),
+    output_prepend: Optional[str] = typer.Option(
+        None,
+        "--output-prepend",
+        help="Text prepended to the output basename before -CODEC.mkv (e.g. 'draft_' -> draft_movie-AV1.mkv).",
+        rich_help_panel="File Handling",
+    ),
+    output_append: Optional[str] = typer.Option(
+        None,
+        "--output-append",
+        help="Text appended to the source basename before -CODEC.mkv (e.g. '_small' -> movie_small-AV1.mkv).",
+        rich_help_panel="File Handling",
+    ),
+    keep_mkv: bool = typer.Option(
+        False,
+        "--keep-mkv",
+        help="Keep the converted file as .mkv instead of renaming it back to the original extension when possible. Implies --no-rename for the post-conversion rename step.",
+        rich_help_panel="File Handling",
+    ),
     log_type: str = typer.Option("txt", "--log-type", help="Log output format: 'txt', 'html', 'json', or 'none'. Default: txt.", rich_help_panel="Logging"),
     log_dir: Optional[str] = typer.Option(None, "--log-dir", help="Directory for log files. Default: %TEMP%/av1-logs.", rich_help_panel="Logging"),
     ffmpeg: Optional[str] = typer.Option(None, "--ffmpeg", help="Path to the ffmpeg executable. Default: use the bundled/configured ffmpeg resolution logic or environment settings.", rich_help_panel="FFmpeg"),
@@ -3786,6 +3901,9 @@ def main(
 
             [yellow]Remove stale temp files (same as `av1 clean`)[/]:
                 $ av1 --clean "C:\\Videos" -r
+
+            [yellow]Custom output name, no rename back to original[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --output-prepend "draft_" --output-append "_v2" --no-rename
     """
     # If version flag triggered, callback already exited.
 
@@ -3815,6 +3933,12 @@ def main(
             incompatible.append("--delete-original / -d")
         if rename_original:
             incompatible.append("--rename-original / -R")
+        if no_rename:
+            incompatible.append("--no-rename")
+        if output_prepend is not None:
+            incompatible.append("--output-prepend")
+        if output_append is not None:
+            incompatible.append("--output-append")
         if overwrite:
             incompatible.append("--overwrite / -o")
         if keep_mkv:
@@ -3913,9 +4037,29 @@ def main(
     if force:
         delete_original = True
         rename_original = True
+    effective_no_rename = bool(no_rename or keep_mkv)
     if keep_mkv and rename_original:
         cprint("--rename-original/--force cannot be combined with --keep-mkv.", "error")
         raise typer.Exit(code=1)
+    if effective_no_rename and rename_original:
+        cprint("--rename-original/--force cannot be combined with --no-rename or --keep-mkv.", "error")
+        raise typer.Exit(code=1)
+
+    try:
+        resolved_output_prepend = _sanitize_output_name_affix(
+            output_prepend if output_prepend is not None else os.getenv("AV1_OUTPUT_PREPEND"),
+            label="--output-prepend / AV1_OUTPUT_PREPEND",
+        )
+        resolved_output_append = _sanitize_output_name_affix(
+            output_append if output_append is not None else os.getenv("AV1_OUTPUT_APPEND"),
+            label="--output-append / AV1_OUTPUT_APPEND",
+        )
+    except ValueError as exc:
+        cprint(str(exc), "error")
+        raise typer.Exit(code=1)
+
+    if not effective_no_rename and _env_bool(os.getenv("AV1_NO_RENAME", "")):
+        effective_no_rename = True
     effective_max_video_width = MAX_VIDEO_WIDTH
     if max_width is not None:
         if max_width < 64:
@@ -3976,6 +4120,9 @@ def main(
         force=force,
         delete_original=delete_original,
         rename_original=rename_original,
+        no_rename=effective_no_rename,
+        output_prepend=resolved_output_prepend,
+        output_append=resolved_output_append,
         overwrite=overwrite,
         dry_run=dry_run,
         recursive=recursive,
@@ -4035,6 +4182,9 @@ def main(
                 cpu_threads=effective_cpu_threads,
                 prompt_av1=prompt_av1,
                 reencode_av1=reencode_av1,
+                no_rename=effective_no_rename,
+                output_prepend=resolved_output_prepend,
+                output_append=resolved_output_append,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
                 max_video_width=effective_max_video_width,
@@ -4053,6 +4203,9 @@ def main(
                 cpu_threads=effective_cpu_threads,
                 prompt_av1=prompt_av1,
                 reencode_av1=reencode_av1,
+                no_rename=effective_no_rename,
+                output_prepend=resolved_output_prepend,
+                output_append=resolved_output_append,
                 max_output_bytes=max_output_bytes,
                 min_shrink_percent=min_shrink_percent,
                 max_video_width=effective_max_video_width,
