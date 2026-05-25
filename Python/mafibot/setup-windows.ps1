@@ -1,62 +1,112 @@
 # Create an isolated .venv for mafibot (avoids broken %AppData%\Roaming\Python user-site packages).
 # Run from repo root:  .\setup-windows.ps1
 #
-# Playwright needs greenlet; on Windows + Python 3.14 the user-site wheel often fails with:
-#   DLL load failed while importing _greenlet
-# Prefer Python 3.12 from https://www.python.org/downloads/
+# Playwright needs greenlet. On Windows, Python 3.14 is unreliable — use 3.12.
 
 param(
     [string]$VenvDir = ".venv",
-    [switch]$SkipPlaywrightBrowsers
+    [string]$PythonExe = "",
+    [switch]$SkipPlaywrightBrowsers,
+    [switch]$AllowPython314
 )
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 Set-Location $Root
 
-function Find-Python312 {
-    $candidates = @(
-        { & py -3.12 -c "import sys; print(sys.executable)" 2>$null },
-        { & py -3.11 -c "import sys; print(sys.executable)" 2>$null },
-        { & python3.12 -c "import sys; print(sys.executable)" 2>$null },
-        { & python -c "import sys; print(sys.executable)" 2>$null }
-    )
-    foreach ($fn in $candidates) {
+function Get-PythonVersion {
+    param([string]$Exe)
+    & $Exe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+}
+
+function Find-BestPython {
+    if ($PythonExe -and (Test-Path $PythonExe)) {
+        return (Resolve-Path $PythonExe).Path
+    }
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    foreach ($launcher in @(
+            { & py -3.12 -c "import sys; print(sys.executable)" 2>$null },
+            { & py -3.11 -c "import sys; print(sys.executable)" 2>$null },
+            { & python3.12 -c "import sys; print(sys.executable)" 2>$null }
+        )) {
         try {
-            $path = (& $fn).Trim()
+            $p = (& $launcher).Trim()
+            if ($p) { $candidates.Add($p) }
+        } catch { }
+    }
+
+    $searchDirs = @(
+        "$env:LOCALAPPDATA\Programs\Python",
+        "${env:ProgramFiles}\Python312",
+        "${env:ProgramFiles(x86)}\Python312"
+    )
+    foreach ($dir in $searchDirs) {
+        if (-not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Recurse -Filter "python.exe" -ErrorAction SilentlyContinue |
+            ForEach-Object { $candidates.Add($_.FullName) }
+    }
+
+    $seen = @{}
+    foreach ($path in $candidates) {
+        if (-not $path -or -not (Test-Path $path)) { continue }
+        if ($seen[$path]) { continue }
+        $seen[$path] = $true
+        try {
+            $ver = Get-PythonVersion -Exe $path
+            if ($ver -eq "3.12" -or $ver -eq "3.11") { return $path }
+        } catch { }
+    }
+
+    if ($AllowPython314) {
+        try {
+            $path = (& python -c "import sys; print(sys.executable)").Trim()
             if ($path -and (Test-Path $path)) { return $path }
         } catch { }
     }
+
     return $null
 }
 
-function Test-GreenletImport {
-    param([string]$PythonExe)
-    & $PythonExe -c "import greenlet; from playwright.async_api import Page; print('ok')" 2>&1 | Out-Null
-    return $LASTEXITCODE -eq 0
+function Test-PlaywrightImport {
+    param([string]$Exe)
+    $code = @'
+import msvc_runtime
+import greenlet
+from playwright.async_api import Page
+print("ok")
+'@
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $out = & $Exe -s -c $code 2>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    return @{ Ok = ($code -eq 0); Output = ($out -join "`n") }
 }
 
 Write-Host "==> mafibot Windows setup" -ForegroundColor Cyan
 
-$basePython = Find-Python312
+$basePython = Find-BestPython
 if (-not $basePython) {
-    Write-Host "No Python found. Install Python 3.12 and re-run." -ForegroundColor Red
+    Write-Host @"
+No suitable Python found (need 3.11 or 3.12).
+
+1. Download Python 3.12: https://www.python.org/downloads/release/python-31210/
+   (check "Add python.exe to PATH" and "py launcher")
+2. Re-run:  .\setup-windows.ps1
+   Or:     .\setup-windows.ps1 -PythonExe "C:\Path\To\Python312\python.exe"
+
+To force Python 3.14 (not recommended):  .\setup-windows.ps1 -AllowPython314
+"@ -ForegroundColor Red
     exit 1
 }
 
-$ver = & $basePython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+$ver = Get-PythonVersion -Exe $basePython
 Write-Host "Using base interpreter: $basePython ($ver)" -ForegroundColor DarkGray
 
-if ($ver -eq "3.14") {
-    Write-Host @"
-
-WARNING: Python 3.14 is not recommended for Playwright/greenlet on Windows.
-Install Python 3.12 (python.org), then either:
-  py -3.12 -m venv .venv
-or re-run this script after 'py' launcher sees 3.12.
-
-Continuing anyway; import test may fail.
-"@ -ForegroundColor Yellow
+if ($ver -eq "3.14" -and -not $AllowPython314) {
+    Write-Host "Refusing Python 3.14 (greenlet often fails). Install 3.12 or pass -AllowPython314." -ForegroundColor Red
+    exit 1
 }
 
 $venvPython = Join-Path (Join-Path (Join-Path $Root $VenvDir) "Scripts") "python.exe"
@@ -75,11 +125,12 @@ function Invoke-Venv {
 Write-Host "==> Upgrading pip" -ForegroundColor Cyan
 Invoke-Venv -Args @("-m", "pip", "install", "--upgrade", "pip")
 
-Write-Host "==> Installing MSVC runtime helper (Windows greenlet DLLs)" -ForegroundColor Cyan
-Invoke-Venv -Args @("-m", "pip", "install", "msvc-runtime")
-
-Write-Host "==> Installing mafibot dependencies" -ForegroundColor Cyan
+Write-Host "==> Installing dependencies (incl. msvc-runtime on Windows)" -ForegroundColor Cyan
 Invoke-Venv -Args @("-m", "pip", "install", "-r", "requirements.txt")
+
+Write-Host "==> Reinstalling greenlet + playwright (no cache)" -ForegroundColor Cyan
+Invoke-Venv -Args @("-m", "pip", "install", "--force-reinstall", "--no-cache-dir", "greenlet", "playwright")
+
 $webbot = Join-Path (Join-Path $Root "..") "webbot"
 if (Test-Path $webbot) {
     Invoke-Venv -Args @("-m", "pip", "install", "-e", $webbot)
@@ -91,30 +142,26 @@ if (-not $SkipPlaywrightBrowsers) {
     Invoke-Venv -Args @("-m", "playwright", "install", "chromium")
 }
 
-Write-Host "==> Verifying playwright import" -ForegroundColor Cyan
-if (-not (Test-GreenletImport -PythonExe $venvPython)) {
+Write-Host "==> Verifying playwright import (-s = no user-site)" -ForegroundColor Cyan
+$check = Test-PlaywrightImport -Exe $venvPython
+if (-not $check.Ok) {
+    Write-Host "Import failed:" -ForegroundColor Red
+    Write-Host $check.Output -ForegroundColor Red
     Write-Host @"
 
-FAILED: greenlet/playwright still cannot load in the venv.
+Next steps:
+  Remove-Item -Recurse -Force .venv
+  Install Python 3.12 from python.org
+  .\setup-windows.ps1 -PythonExe "C:\Users\Kriss\AppData\Local\Programs\Python\Python312\python.exe"
 
-1. Install Python 3.12 from https://www.python.org/downloads/
-2. Delete this folder and re-run:
-     Remove-Item -Recurse -Force .venv
-     py -3.12 .\setup-windows.ps1
-
-3. Optional: remove broken user-site packages (only affects global python):
-     python -m pip uninstall -y greenlet playwright
-
-Always run mafibot with the venv:
-     .\.venv\Scripts\Activate.ps1
-     python .\mafibot.py --help
-"@ -ForegroundColor Red
+Then always:
+  .\.venv\Scripts\Activate.ps1
+  python .\mafibot.py --help
+"@ -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host ""
-Write-Host 'OK - use the venv for every command:' -ForegroundColor Green
+Write-Host "OK - venv is ready:" -ForegroundColor Green
 Write-Host '  .\.venv\Scripts\Activate.ps1' -ForegroundColor White
 Write-Host '  python .\mafibot.py ui' -ForegroundColor White
-Write-Host ''
-Write-Host 'Do NOT use bare python outside the venv; it still loads Roaming Python314 user packages.' -ForegroundColor DarkGray

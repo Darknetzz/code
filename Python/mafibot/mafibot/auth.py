@@ -7,6 +7,10 @@ import logging
 import os
 import re
 
+from mafibot._windows import ensure_msvc_runtime
+
+ensure_msvc_runtime()
+
 from playwright.async_api import Page
 
 from mafibot.config import BASE_URL, GAME_URL, load_dotenv_if_present

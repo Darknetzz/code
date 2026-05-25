@@ -14,7 +14,7 @@ Commands that start automation require `--accept-tos`. This project is for **per
 
 ## Requirements
 
-- **Python 3.11 or 3.12** (recommended on Windows). Python 3.14 often breaks Playwright’s `greenlet` dependency (`DLL load failed while importing _greenlet`).
+- **Python 3.11 or 3.12** on Windows (required for reliable Playwright). Python 3.14 often breaks `greenlet` (`DLL load failed while importing _greenlet`). The package declares `requires-python <3.14`.
 - Google Chrome (recommended; Playwright uses the `chrome` channel)
 - Sibling package [Python/webbot](../webbot/) in this repo (imported automatically when you run `mafibot.py` from `Python/mafibot/`)
 
@@ -59,7 +59,9 @@ Your traceback shows `...\AppData\Roaming\Python\Python314\site-packages\` — t
 1. Run `.\setup-windows.ps1` (creates `.venv` isolated from Roaming packages).
 2. **Always** activate before mafibot: `.\.venv\Scripts\Activate.ps1` then `python .\mafibot.py …`
 3. Check: `python -c "import sys; print(sys.executable)"` must point to `...\mafibot\.venv\Scripts\python.exe`, not `Python314`.
-4. If setup fails the import test, install [Python 3.12](https://www.python.org/downloads/), delete `.venv`, run `py -3.12 .\setup-windows.ps1`.
+4. If setup fails the import test, install [Python 3.12](https://www.python.org/downloads/), delete `.venv`, then:
+   `.\setup-windows.ps1 -PythonExe "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"`
+5. Manual check (must print `ok`): `.\.venv\Scripts\python.exe -s -c "import msvc_runtime; from playwright.async_api import Page; print('ok')"`
 5. Optional cleanup of broken user-site packages: `python -m pip uninstall -y greenlet playwright` (only affects non-venv `python`).
 
 ## Windows executable (single .exe)
