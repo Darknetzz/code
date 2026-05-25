@@ -3803,7 +3803,7 @@ def main(
     output_append: Optional[str] = typer.Option(
         None,
         "--output-append",
-        help="Text appended to the source basename before -CODEC.mkv (e.g. '_small' -> movie_small-AV1.mkv).",
+        help="Text appended to the source basename before -CODEC.mkv (e.g. '_small' -> movie_small-AV1.mkv). Implies --no-rename.",
         rich_help_panel="File Handling",
     ),
     keep_mkv: bool = typer.Option(
@@ -3902,8 +3902,8 @@ def main(
             [yellow]Remove stale temp files (same as `av1 clean`)[/]:
                 $ av1 --clean "C:\\Videos" -r
 
-            [yellow]Custom output name, no rename back to original[/]:
-                $ av1 "C:\\Videos\\movie.mp4" --output-prepend "draft_" --output-append "_v2" --no-rename
+            [yellow]Custom output name (--output-append implies --no-rename)[/]:
+                $ av1 "C:\\Videos\\movie.mp4" --output-prepend "draft_" --output-append "_v2"
     """
     # If version flag triggered, callback already exited.
 
@@ -4037,13 +4037,6 @@ def main(
     if force:
         delete_original = True
         rename_original = True
-    effective_no_rename = bool(no_rename or keep_mkv)
-    if keep_mkv and rename_original:
-        cprint("--rename-original/--force cannot be combined with --keep-mkv.", "error")
-        raise typer.Exit(code=1)
-    if effective_no_rename and rename_original:
-        cprint("--rename-original/--force cannot be combined with --no-rename or --keep-mkv.", "error")
-        raise typer.Exit(code=1)
 
     try:
         resolved_output_prepend = _sanitize_output_name_affix(
@@ -4058,8 +4051,18 @@ def main(
         cprint(str(exc), "error")
         raise typer.Exit(code=1)
 
+    effective_no_rename = bool(no_rename or keep_mkv or resolved_output_append)
     if not effective_no_rename and _env_bool(os.getenv("AV1_NO_RENAME", "")):
         effective_no_rename = True
+    if keep_mkv and rename_original:
+        cprint("--rename-original/--force cannot be combined with --keep-mkv.", "error")
+        raise typer.Exit(code=1)
+    if effective_no_rename and rename_original:
+        cprint(
+            "--rename-original/--force cannot be combined with --no-rename, --keep-mkv, or --output-append.",
+            "error",
+        )
+        raise typer.Exit(code=1)
     effective_max_video_width = MAX_VIDEO_WIDTH
     if max_width is not None:
         if max_width < 64:
