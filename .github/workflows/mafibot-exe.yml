@@ -22,7 +22,7 @@ jobs:
 
       - name: Install package, webbot, and PyInstaller
         run: |
-          pip install -r requirements.txt pyinstaller
+          pip install -r requirements.txt pyinstaller msvc-runtime
           pip install -e ../webbot
 
       - name: Install Playwright Chromium (bundled path)

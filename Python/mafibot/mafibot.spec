@@ -1,13 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Build: pyinstaller mafibot.spec  (from Python/mafibot, after playwright install)."""
 
+import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 spec_dir = Path(SPECPATH)
 
+binaries = []
 hiddenimports = [
+    "greenlet",
+    "greenlet._greenlet",
     "webbot",
     "webbot.browser",
     "webbot.human",
@@ -38,10 +42,28 @@ datas = [
 ]
 datas += collect_data_files("playwright", include_py_files=False)
 
+# Playwright imports greenlet; on Windows the .pyd needs MSVC runtime DLLs in the bundle.
+_g_datas, _g_bins, _g_hidden = collect_all("greenlet")
+datas += _g_datas
+binaries += _g_bins
+hiddenimports += _g_hidden
+
+if sys.platform == "win32":
+    try:
+        import msvc_runtime
+    except ImportError as exc:
+        raise SystemExit(
+            "Windows build requires msvc-runtime (pip install msvc-runtime). "
+            "It bundles VC++ DLLs needed by greenlet/Playwright in the frozen exe."
+        ) from exc
+    msvc_dir = Path(msvc_runtime.__file__).resolve().parent
+    for dll in msvc_dir.glob("*.dll"):
+        binaries.append((str(dll), "."))
+
 a = Analysis(
     ["mafibot.py"],
     pathex=[str(spec_dir.parent / "webbot")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -64,7 +86,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=["_greenlet.pyd"],
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
