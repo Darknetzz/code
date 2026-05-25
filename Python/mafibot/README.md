@@ -14,19 +14,53 @@ Commands that start automation require `--accept-tos`. This project is for **per
 
 ## Requirements
 
-- Python 3.10+
+- **Python 3.11 or 3.12** (recommended on Windows). Python 3.14 often breaks Playwright’s `greenlet` dependency (`DLL load failed while importing _greenlet`).
 - Google Chrome (recommended; Playwright uses the `chrome` channel)
 - Sibling package [Python/webbot](../webbot/) in this repo (imported automatically when you run `mafibot.py` from `Python/mafibot/`)
 
 ## Install
 
-```bash
-cd Python/mafibot
+Use a **virtual environment** so `pip` and `python` refer to the same interpreter (and **not** broken packages under `%AppData%\Roaming\Python`):
+
+```powershell
+cd Python\mafibot
+.\setup-windows.ps1
+.\.venv\Scripts\Activate.ps1
+python .\mafibot.py ui
+```
+
+Manual equivalent:
+
+```powershell
+cd Python\mafibot
+py -3.12 -m venv .venv   # prefer 3.12, not 3.14
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install msvc-runtime
 pip install -r requirements.txt
+pip install -e .
 python -m playwright install chromium
 ```
 
+On Windows, if import still fails with a `greenlet` DLL error, install the MSVC runtime helper and reinstall greenlet with the **same** `python` you use to run mafibot:
+
+```powershell
+python -m pip install msvc-runtime
+python -m pip install --force-reinstall greenlet playwright
+python -c "from playwright.async_api import Page; print('ok')"
+```
+
 Optional credentials (auto-fill login): copy `.env.example` to `.env` and set `MAFIA_USER` / `MAFIA_PASS`. A saved session from `login` is usually enough; do not commit `.env`.
+
+### Troubleshooting: `DLL load failed while importing _greenlet`
+
+Your traceback shows `...\AppData\Roaming\Python\Python314\site-packages\` — that is a **per-user** install on **Python 3.14**. Global `python` will keep using it until you use a venv.
+
+1. Run `.\setup-windows.ps1` (creates `.venv` isolated from Roaming packages).
+2. **Always** activate before mafibot: `.\.venv\Scripts\Activate.ps1` then `python .\mafibot.py …`
+3. Check: `python -c "import sys; print(sys.executable)"` must point to `...\mafibot\.venv\Scripts\python.exe`, not `Python314`.
+4. If setup fails the import test, install [Python 3.12](https://www.python.org/downloads/), delete `.venv`, run `py -3.12 .\setup-windows.ps1`.
+5. Optional cleanup of broken user-site packages: `python -m pip uninstall -y greenlet playwright` (only affects non-venv `python`).
 
 ## Windows executable (single .exe)
 
