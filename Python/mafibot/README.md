@@ -14,7 +14,7 @@ Commands that start automation require `--accept-tos`. This project is for **per
 
 ## Requirements
 
-- **Python 3.11 or 3.12** on Windows (required for reliable Playwright). Python 3.14 often breaks `greenlet` (`DLL load failed while importing _greenlet`). The package declares `requires-python <3.14`.
+- **Python 3.11 or 3.12** on Windows (recommended). Python 3.14 can work if [VC++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe) is installed and you use an isolated `.venv`; without it, `greenlet` often fails (`DLL load failed`). The package declares `requires-python <3.14` because 3.14 is not routinely tested.
 - Google Chrome (recommended; Playwright uses the `chrome` channel)
 - Sibling package [Python/webbot](../webbot/) in this repo (imported automatically when you run `mafibot.py` from `Python/mafibot/`)
 
@@ -49,7 +49,7 @@ python -m pip install --force-reinstall greenlet playwright
 python -s -c "import greenlet; from playwright.async_api import Page; print('ok')"
 ```
 
-Avoid the `msvc-runtime` pip package on Python 3.14 — it often fails the same way. Use Python 3.12 instead.
+Prefer the official **VC++ Redistributable** installer over the `msvc-runtime` pip package (the pip wheel can also fail with `DLL load failed` on some 3.14 setups).
 
 Optional credentials (auto-fill login): copy `.env.example` to `.env` and set `MAFIA_USER` / `MAFIA_PASS`. A saved session from `login` is usually enough; do not commit `.env`.
 
