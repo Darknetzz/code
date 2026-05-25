@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "playwright>=1.40.0,<2",
-    "msvc-runtime>=14.44; sys_platform == 'win32'",
     "typer>=0.9.0",
     "rich>=13.0.0",
     "pydantic>=2.0.0",

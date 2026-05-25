@@ -42,13 +42,14 @@ pip install -e .
 python -m playwright install chromium
 ```
 
-On Windows, if import still fails with a `greenlet` DLL error, install the MSVC runtime helper and reinstall greenlet with the **same** `python` you use to run mafibot:
+On Windows, install the official **[Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe)** if `greenlet` or Playwright fails with `DLL load failed`. Then reinstall with the **same** `python` you use for mafibot:
 
 ```powershell
-python -m pip install msvc-runtime
 python -m pip install --force-reinstall greenlet playwright
-python -c "from playwright.async_api import Page; print('ok')"
+python -s -c "import greenlet; from playwright.async_api import Page; print('ok')"
 ```
+
+Avoid the `msvc-runtime` pip package on Python 3.14 — it often fails the same way. Use Python 3.12 instead.
 
 Optional credentials (auto-fill login): copy `.env.example` to `.env` and set `MAFIA_USER` / `MAFIA_PASS`. A saved session from `login` is usually enough; do not commit `.env`.
 
@@ -56,13 +57,13 @@ Optional credentials (auto-fill login): copy `.env.example` to `.env` and set `M
 
 Your traceback shows `...\AppData\Roaming\Python\Python314\site-packages\` — that is a **per-user** install on **Python 3.14**. Global `python` will keep using it until you use a venv.
 
-1. Run `.\setup-windows.ps1` (creates `.venv` isolated from Roaming packages).
-2. **Always** activate before mafibot: `.\.venv\Scripts\Activate.ps1` then `python .\mafibot.py …`
-3. Check: `python -c "import sys; print(sys.executable)"` must point to `...\mafibot\.venv\Scripts\python.exe`, not `Python314`.
-4. If setup fails the import test, install [Python 3.12](https://www.python.org/downloads/), delete `.venv`, then:
+1. Install [VC++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe) (one-time, system-wide).
+2. **Do not use Python 3.14** — install [Python 3.12](https://www.python.org/downloads/), delete `.venv`, recreate with 3.12:
    `.\setup-windows.ps1 -PythonExe "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"`
-5. Manual check (must print `ok`): `.\.venv\Scripts\python.exe -s -c "import msvc_runtime; from playwright.async_api import Page; print('ok')"`
-5. Optional cleanup of broken user-site packages: `python -m pip uninstall -y greenlet playwright` (only affects non-venv `python`).
+3. Uninstall broken pip helper if present: `.\.venv\Scripts\python.exe -m pip uninstall -y msvc-runtime`
+4. **Always** activate before mafibot: `.\.venv\Scripts\Activate.ps1` then `python .\mafibot.py …`
+5. Manual check (must print `ok`): `.\.venv\Scripts\python.exe -s -c "import greenlet; from playwright.async_api import Page; print('ok')"`
+6. Optional: `python -m pip uninstall -y greenlet playwright` on **global** Python only (Roaming user-site cleanup).
 
 ## Windows executable (single .exe)
 

@@ -71,7 +71,10 @@ function Find-BestPython {
 function Test-PlaywrightImport {
     param([string]$Exe)
     $code = @'
-import msvc_runtime
+try:
+    import msvc_runtime
+except ImportError:
+    pass
 import greenlet
 from playwright.async_api import Page
 print("ok")
@@ -125,11 +128,12 @@ function Invoke-Venv {
 Write-Host "==> Upgrading pip" -ForegroundColor Cyan
 Invoke-Venv -Args @("-m", "pip", "install", "--upgrade", "pip")
 
-Write-Host "==> Installing dependencies (incl. msvc-runtime on Windows)" -ForegroundColor Cyan
+Write-Host "==> Installing dependencies" -ForegroundColor Cyan
 Invoke-Venv -Args @("-m", "pip", "install", "-r", "requirements.txt")
 
 Write-Host "==> Reinstalling greenlet + playwright (no cache)" -ForegroundColor Cyan
 Invoke-Venv -Args @("-m", "pip", "install", "--force-reinstall", "--no-cache-dir", "greenlet", "playwright")
+Invoke-Venv -Args @("-m", "pip", "uninstall", "-y", "msvc-runtime") 2>$null | Out-Null
 
 $webbot = Join-Path (Join-Path $Root "..") "webbot"
 if (Test-Path $webbot) {
