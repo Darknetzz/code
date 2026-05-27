@@ -70,7 +70,14 @@ BuildHotkeyTable() {
     lines := [header, sep]
     for row in CASE_TRANSFORM_ROWS
         lines.Push(Format("{:-14}  {:14}  {}", row[1], row[2], row[3]))
-    return lines.Join("`n")
+    return JoinLines(lines)
+}
+
+JoinLines(lines, delim := "`n") {
+    out := ""
+    for line in lines
+        out .= (out = "" ? "" : delim) line
+    return out
 }
 
 AddSpacer(gui, height) {
