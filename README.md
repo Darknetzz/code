@@ -1,11 +1,12 @@
 # code
 
-Scripts and CLI tools in various languages (Go, Lua, PHP, PowerShell, Python, Rust, Shell).
+Scripts and CLI tools in various languages (AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell).
 
 ## Index
 
 | Directory |
 |-----------|
+| [AutoHotkey](AutoHotkey/) |
 | [Go](Go/) |
 | [Lua](Lua/) |
 | [PHP](PHP/) |

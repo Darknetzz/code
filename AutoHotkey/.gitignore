@@ -1,0 +1,9 @@
+# Local config and runtime files
+config/local.ini
+*.local.ahk
+clipboard.txt
+Thumbs.db
+
+# Bundled tools (install separately, do not commit)
+includes/python/
+includes/msedgedriver.exe
