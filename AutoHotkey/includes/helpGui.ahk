@@ -2,6 +2,13 @@
 
 global helpGui := ""
 
+; VS Code–style dark palette
+GUI_BG     := "1e1e1e"
+GUI_PANEL  := "252526"
+GUI_TEXT   := "cccccc"
+GUI_DIM    := "858585"
+GUI_ACCENT := "569cd6"
+
 CASE_TRANSFORM_ROWS := [
     ["UPPERCASE", "Win+Ctrl+U", "hello → HELLO"],
     ["lowercase", "Win+Ctrl+L", "HELLO → hello"],
@@ -13,38 +20,68 @@ CASE_TRANSFORM_ROWS := [
 InitHelpGui() {
     global helpGui
 
-    helpGui := Gui("+Resize -MaximizeBox", "AutoHotkey — " A_ScriptName)
-    helpGui.BackColor := "1e1e1e"
-    helpGui.SetFont("s10 cFFFFFF", "Segoe UI")
+    helpGui := Gui("+Resize -MaximizeBox", "AutoHotkey")
+    helpGui.BackColor := GUI_BG
+    helpGui.MarginX := 20
+    helpGui.MarginY := 16
     helpGui.OnEvent("Close", (*) => helpGui.Hide())
 
-    helpGui.Add("Text", "w460 Center", "Hotkeys stay active while this window is hidden.")
-    helpGui.Add("Text", "w460 Center cA0A0A0", "Win+Ctrl+H — show this panel again")
+    helpGui.SetFont("s14 bold c" GUI_TEXT, "Segoe UI")
+    helpGui.Add("Text", "w440", "AutoHotkey")
 
-    helpGui.Add("GroupBox", "w460 Section", "Case transforms (select text first)")
-    hotkeyList := helpGui.Add("ListView", "w440 h118 -Hdr", ["Action", "Hotkey", "Example"])
-    hotkeyList.ModifyCol(1, 100)
-    hotkeyList.ModifyCol(2, 110)
-    hotkeyList.ModifyCol(3, 210)
-    for row in CASE_TRANSFORM_ROWS
-        hotkeyList.Add(, row[1], row[2], row[3])
+    helpGui.SetFont("s9 c" GUI_DIM, "Segoe UI")
+    helpGui.Add("Text", "w440", "Hotkeys work while this window is hidden · Win+Ctrl+H to reopen")
 
-    helpGui.Add("GroupBox", "w460 Section", "Script")
-    reloadBtn := helpGui.Add("Button", "x20 yp+10 w100", "Reload")
-    editBtn := helpGui.Add("Button", "x+10 yp w100", "Edit")
-    hideBtn := helpGui.Add("Button", "x+10 yp w100", "Hide")
-    exitBtn := helpGui.Add("Button", "x+10 yp w100", "Exit")
+    AddSpacer(helpGui, 6)
 
-    reloadBtn.OnEvent("Click", ReloadMain)
-    editBtn.OnEvent("Click", EditMain)
-    hideBtn.OnEvent("Click", (*) => helpGui.Hide())
-    exitBtn.OnEvent("Click", (*) => ExitApp())
+    helpGui.SetFont("s10 bold c" GUI_TEXT, "Segoe UI")
+    helpGui.Add("Text", "w440 Section", "Case transforms")
 
-    helpGui.Add("Text", "w460 Section c808080", "Path: " AHK_ROOT)
-    helpGui.Show("AutoSize Center")
+    helpGui.SetFont("s9 c" GUI_DIM, "Segoe UI")
+    helpGui.Add("Text", "xs w440", "Select text in any app, then press a shortcut.")
+
+    hotkeyPanel := helpGui.Add("Edit", "ReadOnly -E0x200 w440 h132 Background" GUI_PANEL " c" GUI_TEXT, BuildHotkeyTable())
+    hotkeyPanel.SetFont("s9", "Cascadia Mono")
+
+    AddSpacer(helpGui, 8)
+
+    helpGui.SetFont("s10 bold c" GUI_TEXT, "Segoe UI")
+    helpGui.Add("Text", "w440 Section", "Script")
+
+    AddActionLink(helpGui, "Reload", ReloadMain, "xs")
+    AddActionLink(helpGui, "Edit", EditMain, "x+24 yp")
+    AddActionLink(helpGui, "Hide", (*) => helpGui.Hide(), "x+24 yp")
+    AddActionLink(helpGui, "Exit", (*) => ExitApp(), "x+24 yp cE06C75")
+
+    AddSpacer(helpGui, 10)
+
+    helpGui.SetFont("s8 c" GUI_DIM, "Segoe UI")
+    helpGui.Add("Text", "w440 Section", AHK_ROOT)
+
+    helpGui.Show("w480 AutoSize Center")
 
     if ShouldStartSilent()
         helpGui.Hide()
+}
+
+BuildHotkeyTable() {
+    sep := "────────────────────────────────────────────────────────"
+    header := Format("{:-14}  {:14}  {}", "Action", "Hotkey", "Example")
+    lines := [header, sep]
+    for row in CASE_TRANSFORM_ROWS
+        lines.Push(Format("{:-14}  {:14}  {}", row[1], row[2], row[3]))
+    return lines.Join("`n")
+}
+
+AddSpacer(gui, height) {
+    gui.Add("Text", "h" height " w1", "")
+}
+
+AddActionLink(gui, label, callback, options := "") {
+    gui.SetFont("s10 c" GUI_ACCENT " underline", "Segoe UI")
+    link := gui.Add("Text", options " h22 +0x200", label)
+    link.OnEvent("Click", callback)
+    return link
 }
 
 ShouldStartSilent() {
