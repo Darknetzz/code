@@ -5,8 +5,10 @@
 
 #Include includes\env.ahk
 #Include includes\functions.ahk
+#Include includes\stringCase.ahk
 
 ; Global hotkeys
+#Include hotkeys\case-transform.ahk
 ; #Include hotkeys\example.ahk
 
 ; Per-app scripts (#HotIf WinActive ...)

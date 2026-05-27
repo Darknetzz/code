@@ -24,6 +24,20 @@ AutoHotkey/
 3. Add scripts under `hotkeys/` or `apps/`, then `#Include` them from `main.ahk`.
 4. Run `main.ahk` (double-click or add to Startup).
 
+## Case transforms
+
+Select text, then press a hotkey to copy, transform, and paste in place. Original clipboard content is restored after ~150ms.
+
+| Action | Hotkey | Example |
+|--------|--------|---------|
+| UPPERCASE | Win+Ctrl+U | `hello` → `HELLO` |
+| lowercase | Win+Ctrl+L | `HELLO` → `hello` |
+| Title Case | Win+Ctrl+T | `hello world` → `Hello World` |
+| rAnDoM cAsE | Win+Ctrl+R | `hello` → `hElLo` (varies) |
+| slug | Win+Ctrl+S | `Hello World!` → `hello-world` |
+
+Logic: [`includes/stringCase.ahk`](includes/stringCase.ahk). Hotkeys: [`hotkeys/case-transform.ahk`](hotkeys/case-transform.ahk).
+
 ## Conventions
 
 - **One concern per file** — e.g. `hotkeys/media.ahk`, `apps/cursor.ahk`.
