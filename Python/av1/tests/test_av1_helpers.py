@@ -104,6 +104,7 @@ def test_vaapi_command_does_not_include_svt_flags(monkeypatch):
     assert pix_fmt == "nv12"
     assert "-vaapi_device" in command
     assert "hwupload" in command[command.index("-vf") + 1]
+    assert "setsar=1" in command[command.index("-vf") + 1]
     assert "-svtav1-params" not in command
     assert "-preset" not in command
 
@@ -124,6 +125,7 @@ def test_cpu_command_includes_svt_thread_setting():
     )
 
     assert pix_fmt == "yuv420p"
+    assert "setsar=1" in command[command.index("-vf") + 1]
     assert "-svtav1-params" in command
     assert "lp=6" in command
     assert "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR" in command
@@ -136,6 +138,49 @@ def test_request_cancel_encoding_sets_cancelled_flag():
         assert av1._USER_CANCELLED is True
     finally:
         av1._USER_CANCELLED = False
+
+
+def test_parse_rotation_from_stream_tags_and_side_data():
+    assert av1._parse_rotation_from_stream({"tags": {"rotate": "90"}}) == 90
+    assert av1._parse_rotation_from_stream({"tags": {"rotate": "270"}}) == 270
+    assert av1._parse_rotation_from_stream(
+        {"side_data_list": [{"side_data_type": "Display Matrix", "rotation": -90}]}
+    ) == 270
+    assert av1._parse_rotation_from_stream({"width": 1920, "height": 1080}) == 0
+
+
+def test_display_dimensions_swaps_for_portrait_metadata():
+    assert av1._display_dimensions(1920, 1080, 90) == (1080, 1920)
+    assert av1._display_dimensions(1920, 1080, 0) == (1920, 1080)
+
+
+def test_video_filter_chain_bakes_rotation_and_square_pixels():
+    vf = av1._build_video_filter_chain("cpu", 1920, "yuv420p", rotation=90)
+    assert vf.startswith("transpose=1,")
+    assert "setsar=1" in vf
+    assert "force_original_aspect_ratio=decrease" in vf
+
+
+def test_ffmpeg_command_bakes_portrait_metadata(monkeypatch):
+    command, _ = av1._build_ffmpeg_command(
+        ffmpeg_cmd="ffmpeg",
+        input_path="portrait.mp4",
+        output_path="output.mkv",
+        temp_output="output.mkv.temp.mkv",
+        encoder_name="libsvtav1",
+        hw_type="cpu",
+        codec="av1",
+        target_bitrate_int=2_000_000,
+        effective_cpu_threads=4,
+        effective_max_width=1920,
+        audio_channels=2,
+        rotation=90,
+    )
+    assert "-noautorotate" in command
+    assert "-metadata:s:v:0" in command
+    assert "rotate=0" in command
+    vf = command[command.index("-vf") + 1]
+    assert vf.startswith("transpose=1,")
 
 
 def test_inspect_transcoding_need_uses_active_codec(monkeypatch):

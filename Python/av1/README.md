@@ -215,6 +215,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 
 - **Pixel format**: `nv12` for hardware encoders, `yuv420p` for CPU (automatically selected).
 - **Scaling**: `min(1920, iw)` caps width at 1920px while preserving aspect ratio, so lower-resolution sources are not upscaled; override with `--max-width` or `AV1_MAX_VIDEO_WIDTH`.
+- **Portrait / rotation**: Phone videos with `rotate` metadata or a display matrix are physically uprighted during encode (`transpose` + `setsar=1`, rotation tag cleared) so players do not stretch or double-rotate AV1 output.
 - **HEVC compatibility**: Outputs tagged `hvc1` for broader device compatibility.
 - **Output container**: `.mkv` with `+faststart` flag for faster playback start.
 - **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv` (requires FFmpeg with WMV/ASF support).

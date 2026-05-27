@@ -367,8 +367,8 @@ def _format_bitrate_display(bitrate: Optional[int]) -> str:
 
 def _build_media_info(stream_info: dict) -> str:
     """Build a compact media metadata summary for logs and status output."""
-    width = stream_info.get("width")
-    height = stream_info.get("height")
+    width = stream_info.get("display_width") or stream_info.get("width")
+    height = stream_info.get("display_height") or stream_info.get("height")
     duration = stream_info.get("duration")
     fps = stream_info.get("fps")
     bitrate = stream_info.get("bitrate")
@@ -1158,20 +1158,85 @@ def _parse_ffprobe_fraction(value: str) -> Optional[float]:
         return None
 
 
+def _parse_rotation_from_stream(stream: dict) -> int:
+    """Return clockwise rotation metadata from stream tags or display matrix side data."""
+    tags = stream.get("tags") or {}
+    rotate_raw = str(tags.get("rotate", "")).strip()
+    if rotate_raw.isdigit():
+        degrees = int(rotate_raw) % 360
+        if degrees in (90, 180, 270):
+            return degrees
+
+    for side in stream.get("side_data_list") or []:
+        side_type = str(side.get("side_data_type", "")).lower()
+        if "display matrix" not in side_type:
+            continue
+        try:
+            degrees = int(round(float(side.get("rotation", 0))))
+        except (TypeError, ValueError):
+            continue
+        degrees %= 360
+        if degrees < 0:
+            degrees += 360
+        if degrees in (90, 180, 270):
+            return degrees
+    return 0
+
+
+def _display_dimensions(
+    width: Optional[int],
+    height: Optional[int],
+    rotation: int,
+) -> tuple[Optional[int], Optional[int]]:
+    """Map coded width/height to the upright display size for 90/270° phone videos."""
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        return width, height
+    if rotation in (90, 270):
+        return height, width
+    return width, height
+
+
+def _rotation_filter_for_metadata(rotation: int) -> str:
+    """Filter prefix that bakes rotation metadata into pixel data (transpose=1 is 90° CW)."""
+    if rotation == 90:
+        return "transpose=1"
+    if rotation == 270:
+        return "transpose=2"
+    if rotation == 180:
+        return "transpose=2,transpose=2"
+    return ""
+
+
+def _compose_vf_filter(*parts: str) -> str:
+    return ",".join(part for part in parts if part)
+
+
 def get_video_stream_info(file_path: str) -> dict:
     """
     Returns video stream metadata:
-      codec, bitrate (bits/s), width, height, fps, duration
+      codec, bitrate (bits/s), width, height, display_width, display_height,
+      rotation (0/90/180/270), fps, duration
     Bitrate falls back to file_size/duration estimate when stream bitrate is unavailable.
     """
-    info = {"codec": None, "bitrate": None, "width": None, "height": None, "fps": None, "duration": None}
+    info = {
+        "codec": None,
+        "bitrate": None,
+        "width": None,
+        "height": None,
+        "display_width": None,
+        "display_height": None,
+        "rotation": 0,
+        "fps": None,
+        "duration": None,
+    }
     try:
         cmd = [
             FFPROBE_CMD, "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=codec_name,bit_rate,width,height,avg_frame_rate,r_frame_rate:format=duration,bit_rate",
+            "-show_format",
+            "-show_streams",
             "-of", "json",
-            file_path
+            file_path,
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=PROGRESS_TIMEOUT, **SUBPROCESS_TEXT_KWARGS)
         if result.returncode != 0 or not result.stdout.strip():
@@ -1197,6 +1262,14 @@ def get_video_stream_info(file_path: str) -> dict:
             info["width"] = width
         if isinstance(height, int) and height > 0:
             info["height"] = height
+
+        rotation = _parse_rotation_from_stream(stream)
+        info["rotation"] = rotation
+        display_width, display_height = _display_dimensions(width, height, rotation)
+        if isinstance(display_width, int) and display_width > 0:
+            info["display_width"] = display_width
+        if isinstance(display_height, int) and display_height > 0:
+            info["display_height"] = display_height
 
         # FPS (prefer avg_frame_rate, fallback to r_frame_rate)
         fps = _parse_ffprobe_fraction(str(stream.get("avg_frame_rate", "")))
@@ -2233,13 +2306,16 @@ def probe_inputs(input_paths: list[str], recursive: bool = False) -> None:
             cprint(f"Skipping invalid video file: {_sp}", "warning", log_body=f"Skipping invalid video file: {_lp}")
             continue
         stream_info = get_video_stream_info(file_path)
-        width = stream_info.get("width")
-        height = stream_info.get("height")
+        width = stream_info.get("display_width") or stream_info.get("width")
+        height = stream_info.get("display_height") or stream_info.get("height")
+        rotation = int(stream_info.get("rotation") or 0)
         resolution = (
             f"{width}x{height}"
             if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0
             else "unknown"
         )
+        if rotation:
+            resolution = f"{resolution} (metadata rotate {rotation}°)"
         file_size = None
         try:
             file_size = os.path.getsize(file_path)
@@ -2458,16 +2534,20 @@ def _select_pixel_format(hw_type: str) -> str:
     return "yuv420p" if hw_type == "cpu" else "nv12"
 
 
-def _build_video_filter_chain(hw_type: str, max_video_width: int, pix_fmt: str) -> str:
+def _build_video_filter_chain(hw_type: str, max_video_width: int, pix_fmt: str, rotation: int = 0) -> str:
     """Build the scaling/filter chain for the selected encoder family."""
     if hw_type == "vaapi":
-        return f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
-    if hw_type == "amd":
-        return (
+        scale = (
+            f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt},hwupload"
+        )
+    elif hw_type == "amd":
+        scale = (
             f"scale='trunc(min({max_video_width},iw)/64)*64':'trunc(trunc(min({max_video_width},iw)/64)*64*ih/iw/16)*16',"
             f"format={pix_fmt}"
         )
-    return f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+    else:
+        scale = f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,format={pix_fmt}"
+    return _compose_vf_filter(_rotation_filter_for_metadata(rotation), scale, "setsar=1")
 
 
 def _append_encoder_rate_control_args(
@@ -2524,6 +2604,7 @@ def _build_ffmpeg_command(
     effective_cpu_threads: int,
     effective_max_width: int,
     audio_channels: Optional[int],
+    rotation: int = 0,
 ) -> tuple[list[str], str]:
     """Build the ffmpeg command and return it with the selected pixel format."""
     pix_fmt = _select_pixel_format(hw_type)
@@ -2531,8 +2612,12 @@ def _build_ffmpeg_command(
     if hw_type == "vaapi":
         command.extend(["-vaapi_device", os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")])
 
+    if rotation:
+        command.append("-noautorotate")
     command.extend(["-i", input_path])
-    command.extend(["-vf", _build_video_filter_chain(hw_type, effective_max_width, pix_fmt)])
+    command.extend(["-vf", _build_video_filter_chain(hw_type, effective_max_width, pix_fmt, rotation)])
+    if rotation:
+        command.extend(["-metadata:s:v:0", "rotate=0"])
     if output_path.lower().endswith((".mp4", ".m4v", ".mov")):
         command.extend(["-movflags", "+faststart"])
 
@@ -2665,9 +2750,16 @@ def convert_single_file(
     stream_info = get_video_stream_info(input_path)
     width = stream_info.get("width")
     height = stream_info.get("height")
+    rotation = int(stream_info.get("rotation") or 0)
+    display_width = stream_info.get("display_width")
+    display_height = stream_info.get("display_height")
     fps = stream_info.get("fps")
     duration = stream_info.get("duration")
-    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+    if isinstance(display_width, int) and isinstance(display_height, int) and display_width > 0 and display_height > 0:
+        res_str = f"{display_width}x{display_height}"
+        if rotation:
+            res_str = f"{res_str} (rotate {rotation}° baked)"
+    elif isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
         res_str = f"{width}x{height}"
     else:
         res_str = "unknown"
@@ -2691,15 +2783,22 @@ def convert_single_file(
 
         if isinstance(input_bitrate, int) and input_bitrate > 0:
             recommended_bitrate = None
-            if isinstance(width, int) and isinstance(height, int) and isinstance(fps, (int, float)) and fps > 0:
-                recommended_bitrate = get_recommended_bitrate(width, height, float(fps))
+            bitrate_width = display_width if isinstance(display_width, int) else width
+            bitrate_height = display_height if isinstance(display_height, int) else height
+            if (
+                isinstance(bitrate_width, int)
+                and isinstance(bitrate_height, int)
+                and isinstance(fps, (int, float))
+                and fps > 0
+            ):
+                recommended_bitrate = get_recommended_bitrate(bitrate_width, bitrate_height, float(fps))
 
             if recommended_bitrate and input_bitrate <= int(recommended_bitrate * RECOMMENDED_BITRATE_MARGIN):
                 # Already efficient for this resolution/FPS: keep source bitrate.
                 target_bitrate_int = input_bitrate
                 bitrate_decision = (
                     f"kept {input_bitrate/1_000_000:.2f}M "
-                    f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {width}x{height} {float(fps):.2f}fps)"
+                    f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {bitrate_width}x{bitrate_height} {float(fps):.2f}fps)"
                 )
             else:
                 target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
@@ -2756,6 +2855,7 @@ def convert_single_file(
         effective_cpu_threads=effective_cpu_threads,
         effective_max_width=effective_max_width,
         audio_channels=audio_channels,
+        rotation=rotation,
     )
 
     if not _SUPPRESS_OUTPUT:
