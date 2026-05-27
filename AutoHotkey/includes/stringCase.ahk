@@ -1,27 +1,39 @@
 ; Copy selection → transform → paste; restore clipboard after a short delay.
 
 TransformSelection(transformFn) {
+    ReleaseHotkeyModifiers()
     saved := ClipboardAll()
     try {
         A_Clipboard := ""
-        SendMode "Input"
-        Send "^c"
-        ; Second param 1 = wait until clipboard *has* data (default waits for empty!)
-        if !ClipWait(2, 1)
-            return
+        SendInput "^c"
+        if !ClipWait(2)
+            return ShowTransformTip("Could not copy selection — select text first.")
         text := A_Clipboard
         if (text = "")
-            return
+            return ShowTransformTip("Selection was empty.")
         A_Clipboard := transformFn(text)
-        Sleep 30
-        Send "^v"
+        Sleep 50
+        SendInput "^v"
     } finally {
-        SetTimer(RestoreClipboard.Bind(saved), -250)
+        SetTimer(RestoreClipboard.Bind(saved), -300)
     }
+}
+
+; Win/Ctrl may still be down when the hotkey fires — release before Send ^c / ^v.
+ReleaseHotkeyModifiers() {
+    for key in ["LWin", "RWin", "Control", "Alt", "Shift"]
+        if GetKeyState(key, "P")
+            Send "{" key " up}"
+    Sleep 50
 }
 
 RestoreClipboard(saved, *) {
     A_Clipboard := saved
+}
+
+ShowTransformTip(message) {
+    ToolTip message
+    SetTimer(() => ToolTip(), -2500)
 }
 
 ToTitleEachWord(text) {

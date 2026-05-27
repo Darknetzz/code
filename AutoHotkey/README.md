@@ -36,7 +36,9 @@ Defined in [`includes/helpGui.ahk`](includes/helpGui.ahk). Closing the window hi
 
 ## Case transforms
 
-Select text, then press a hotkey to copy, transform, and paste in place. Original clipboard content is restored after ~150ms.
+Select text in the app you care about (browser, editor, etc.), then press a hotkey to copy, transform, and paste in place. Keep that app focused — not the AHK help window. Original clipboard content is restored after ~300ms.
+
+If a shortcut seems dead, reload the script; Win+Ctrl combos require modifiers to be released before copy (handled automatically).
 
 | Action | Hotkey | Example |
 |--------|--------|---------|

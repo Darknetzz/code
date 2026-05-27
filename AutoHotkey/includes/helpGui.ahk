@@ -30,7 +30,8 @@ InitHelpGui() {
     helpGui.Add("Text", "w440", "AutoHotkey")
 
     helpGui.SetFont("s9 c" GUI_DIM, "Segoe UI")
-    helpGui.Add("Text", "w440", "Hotkeys work while this window is hidden · Win+Ctrl+H to reopen")
+    helpGui.Add("Text", "w440", "Select text in the target app, then press a shortcut (not this window)")
+    helpGui.Add("Text", "w440 c" GUI_DIM, "Win+Ctrl+H — show this panel again")
 
     AddSpacer(helpGui, 6)
 
