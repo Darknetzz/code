@@ -22,7 +22,17 @@ AutoHotkey/
 1. Install [AutoHotkey v2](https://www.autohotkey.com/).
 2. Copy `config/local.example.ini` to `config/local.ini` and edit if needed.
 3. Add scripts under `hotkeys/` or `apps/`, then `#Include` them from `main.ahk`.
-4. Run `main.ahk` (double-click or add to Startup).
+4. Run `main.ahk` (double-click or add to Startup). A help panel opens with hotkey reference and Reload / Edit / Hide / Exit.
+
+   Silent startup (no window): `main.ahk --silent` or `main.ahk -s`
+
+## Help panel
+
+| Action | Hotkey |
+|--------|--------|
+| Show help panel | Win+Ctrl+H |
+
+Defined in [`includes/helpGui.ahk`](includes/helpGui.ahk). Closing the window hides it; hotkeys keep running. Use **Exit** to quit the script.
 
 ## Case transforms
 

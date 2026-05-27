@@ -13,3 +13,6 @@
 
 ; Per-app scripts (#HotIf WinActive ...)
 ; #Include apps\example.ahk
+
+#Include includes\helpGui.ahk
+InitHelpGui()
