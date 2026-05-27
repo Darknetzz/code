@@ -4,16 +4,19 @@ TransformSelection(transformFn) {
     saved := ClipboardAll()
     try {
         A_Clipboard := ""
+        SendMode "Input"
         Send "^c"
-        if !ClipWait(1)
+        ; Second param 1 = wait until clipboard *has* data (default waits for empty!)
+        if !ClipWait(2, 1)
             return
         text := A_Clipboard
         if (text = "")
             return
         A_Clipboard := transformFn(text)
+        Sleep 30
         Send "^v"
     } finally {
-        SetTimer(RestoreClipboard.Bind(saved), -150)
+        SetTimer(RestoreClipboard.Bind(saved), -250)
     }
 }
 
