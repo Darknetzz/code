@@ -1,16 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_submodules
-
-hiddenimports = []
-hiddenimports += collect_submodules('rich._unicode_data')
 
 
 a = Analysis(
-    ['av1.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\av1\\av1.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=hiddenimports,
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
