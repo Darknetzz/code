@@ -1,16 +1,23 @@
 param(
-    [string[]]$Projects = @("av1", "pytree", "otherproj")
+    [string[]]$Projects = @("av1", "pytree", "pylink", "appkey-generator", "calculate-aspect-ratio", "pygallery")
 )
+
+$pythonRoot = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath "Python"
 
 foreach ($proj in $Projects) {
     Write-Host "====================================="
     Write-Host "Building Python project: $proj"
     Write-Host "====================================="
 
-    $projPath = Join-Path -Path $PSScriptRoot -ChildPath $proj
+    $projPath = Join-Path -Path $pythonRoot -ChildPath $proj
+    $entryScript = Join-Path -Path $projPath -ChildPath "$proj.py"
 
     if (-not (Test-Path $projPath)) {
         Write-Warning "Project path '$projPath' does not exist. Skipping."
+        continue
+    }
+    if (-not (Test-Path $entryScript)) {
+        Write-Warning "Entry script '$entryScript' does not exist. Skipping."
         continue
     }
 
@@ -22,7 +29,7 @@ foreach ($proj in $Projects) {
         exit 1
     }
 
-    pybin.exe build
+    pybin.exe $entryScript
     if ($LastExitCode -ne 0) {
         Write-Host "Build failed for $proj" -ForegroundColor Red
     } else {

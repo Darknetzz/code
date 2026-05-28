@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['calculate-aspect-ratio.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\calculate-aspect-ratio\\calculate-aspect-ratio.py'],
     pathex=[],
     binaries=[],
     datas=[],
