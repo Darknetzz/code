@@ -1,9 +1,16 @@
 param(
-    [string[]]$Projects = @("rustdl", "pathman", "darkshell", "n64romconvert-1.0.2"),
+    [string[]]$Projects,
     [switch]$Force
 )
 
-$rustRoot = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath "Rust"
+. (Join-Path -Path $PSScriptRoot -ChildPath 'build-common.ps1')
+
+$rustRoot = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath 'Rust'
+
+if (-not $Projects -or $Projects.Count -eq 0) {
+    $Projects = Get-DiscoveredRustProjectNames -RustRoot $rustRoot
+    Write-Host "Discovered $($Projects.Count) Rust project(s) with Cargo.toml: $($Projects -join ', ')" -ForegroundColor Cyan
+}
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Write-Host "Error: 'cargo' not found in PATH. Install Rust via https://rustup.rs/ and try again." -ForegroundColor Red
@@ -49,15 +56,15 @@ function Get-RustSourceFiles {
     param([string]$ProjectPath)
 
     $paths = @(
-        (Join-Path $ProjectPath "Cargo.toml"),
-        (Join-Path $ProjectPath "Cargo.lock"),
-        (Join-Path $ProjectPath "build.rs")
+        (Join-Path $ProjectPath 'Cargo.toml'),
+        (Join-Path $ProjectPath 'Cargo.lock'),
+        (Join-Path $ProjectPath 'build.rs')
     )
 
     $dirs = @(
-        (Join-Path $ProjectPath "src"),
-        (Join-Path $ProjectPath "build"),
-        (Join-Path $ProjectPath ".cargo")
+        (Join-Path $ProjectPath 'src'),
+        (Join-Path $ProjectPath 'build'),
+        (Join-Path $ProjectPath '.cargo')
     )
 
     $files = foreach ($path in $paths) {
@@ -113,7 +120,7 @@ foreach ($proj in $Projects) {
     Write-Host "====================================="
 
     $projPath = Join-Path -Path $rustRoot -ChildPath $proj
-    $cargoToml = Join-Path -Path $projPath -ChildPath "Cargo.toml"
+    $cargoToml = Join-Path -Path $projPath -ChildPath 'Cargo.toml'
 
     if (-not (Test-Path -LiteralPath $projPath)) {
         Write-Warning "Project path '$projPath' does not exist. Skipping."

@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['av1-verify.py'],
+    ['D:\\Kriss\\Documents\\Git\\code\\Python\\av1\\av1-verify.py'],
     pathex=[],
     binaries=[],
     datas=[],

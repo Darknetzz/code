@@ -1,54 +1,20 @@
 param(
-    [string[]]$Projects = @("av1", "pytree", "pylink", "appkey-generator", "calculate-aspect-ratio", "pygallery"),
+    [string[]]$Projects,
     [switch]$Force
 )
 
-$pythonRoot = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath "Python"
+. (Join-Path -Path $PSScriptRoot -ChildPath 'build-common.ps1')
+
+$pythonRoot = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath 'Python'
+
+if (-not $Projects -or $Projects.Count -eq 0) {
+    $Projects = Get-DiscoveredPythonProjectNames -PythonRoot $pythonRoot
+    Write-Host "Discovered $($Projects.Count) Python project(s) with dist/: $($Projects -join ', ')" -ForegroundColor Cyan
+}
 
 if (-not (Get-Command pybin.exe -ErrorAction SilentlyContinue)) {
     Write-Host "Error: 'pybin.exe' not found in PATH. Please ensure it is installed and try again." -ForegroundColor Red
     exit 1
-}
-
-function Get-ProjectExePath {
-    param(
-        [string]$ProjectPath,
-        [string]$EntryScript
-    )
-    $stem = [System.IO.Path]::GetFileNameWithoutExtension($EntryScript)
-    Join-Path -Path $ProjectPath -ChildPath "dist\$stem.exe"
-}
-
-function Test-ProjectNeedsBuild {
-    param(
-        [string]$ProjectPath,
-        [string]$ExePath
-    )
-
-    if (-not (Test-Path -LiteralPath $ExePath)) {
-        return $true
-    }
-
-    $exeTime = (Get-Item -LiteralPath $ExePath).LastWriteTimeUtc
-    $excludeTopLevel = @('dist', 'build', '__pycache__', '.venv', '.venv-build')
-
-    $sourceFiles = Get-ChildItem -Path $ProjectPath -Recurse -File | Where-Object {
-        $relative = $_.FullName.Substring($ProjectPath.Length).TrimStart('\', '/')
-        $parts = $relative -split '[\\/]'
-        if ($parts[0] -in $excludeTopLevel) { return $false }
-        if ($parts -contains '__pycache__') { return $false }
-        if ($_.Extension -eq '.pyc' -or $_.Name -like '*.spec.bak') { return $false }
-
-        ($_.Extension -in '.py', '.spec') -or ($_.Name -eq 'requirements.txt')
-    }
-
-    foreach ($sourceFile in $sourceFiles) {
-        if ($sourceFile.LastWriteTimeUtc -gt $exeTime) {
-            return $true
-        }
-    }
-
-    return $false
 }
 
 foreach ($proj in $Projects) {
@@ -57,32 +23,66 @@ foreach ($proj in $Projects) {
     Write-Host "====================================="
 
     $projPath = Join-Path -Path $pythonRoot -ChildPath $proj
-    $entryScript = Join-Path -Path $projPath -ChildPath "$proj.py"
 
-    if (-not (Test-Path $projPath)) {
+    if (-not (Test-Path -LiteralPath $projPath)) {
         Write-Warning "Project path '$projPath' does not exist. Skipping."
         continue
     }
-    if (-not (Test-Path $entryScript)) {
-        Write-Warning "Entry script '$entryScript' does not exist. Skipping."
+
+    $customBuild = Join-Path -Path $projPath -ChildPath 'build.ps1'
+    if (Test-Path -LiteralPath $customBuild) {
+        $entryScripts = Get-PythonEntryScripts -ProjectPath $projPath -ProjectName $proj
+        $needsBuild = $Force
+        if (-not $needsBuild) {
+            foreach ($entryScript in $entryScripts) {
+                $exePath = Get-PythonExePath -ProjectPath $projPath -EntryScript $entryScript
+                if (Test-PythonTargetNeedsBuild -ProjectPath $projPath -ExePath $exePath) {
+                    $needsBuild = $true
+                    break
+                }
+            }
+        }
+
+        if (-not $needsBuild) {
+            Write-Host "Up to date, skipping custom build: $proj" -ForegroundColor DarkGray
+            continue
+        }
+
+        Push-Location $projPath
+        & $customBuild
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed for $proj (custom build.ps1)" -ForegroundColor Red
+        } else {
+            Write-Host "Build succeeded for $proj (custom build.ps1)" -ForegroundColor Green
+        }
+        Pop-Location
         continue
     }
 
-    $exePath = Get-ProjectExePath -ProjectPath $projPath -EntryScript $entryScript
-
-    if (-not $Force -and -not (Test-ProjectNeedsBuild -ProjectPath $projPath -ExePath $exePath)) {
-        Write-Host "Up to date, skipping: $exePath" -ForegroundColor DarkGray
+    $entryScripts = Get-PythonEntryScripts -ProjectPath $projPath -ProjectName $proj
+    if ($entryScripts.Count -eq 0) {
+        Write-Warning "No entry scripts found for '$proj'. Skipping."
         continue
     }
 
-    Push-Location $projPath
+    foreach ($entryScript in $entryScripts) {
+        $stem = [System.IO.Path]::GetFileName($entryScript)
+        Write-Host "--- $stem ---"
 
-    pybin.exe $entryScript
-    if ($LastExitCode -ne 0) {
-        Write-Host "Build failed for $proj" -ForegroundColor Red
-    } else {
-        Write-Host "Build succeeded for $proj" -ForegroundColor Green
+        $exePath = Get-PythonExePath -ProjectPath $projPath -EntryScript $entryScript
+
+        if (-not $Force -and -not (Test-PythonTargetNeedsBuild -ProjectPath $projPath -ExePath $exePath)) {
+            Write-Host "Up to date, skipping: $exePath" -ForegroundColor DarkGray
+            continue
+        }
+
+        Push-Location $projPath
+        pybin.exe $entryScript
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed for $proj ($stem)" -ForegroundColor Red
+        } else {
+            Write-Host "Build succeeded for $proj ($stem)" -ForegroundColor Green
+        }
+        Pop-Location
     }
-
-    Pop-Location
 }
