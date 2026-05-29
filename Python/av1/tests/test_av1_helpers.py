@@ -183,6 +183,68 @@ def test_ffmpeg_command_bakes_portrait_metadata(monkeypatch):
     assert vf.startswith("transpose=1,")
 
 
+def test_assess_quality_impact_flags_downscale():
+    noticeable, reasons = av1.assess_noticeable_quality_impact(
+        stream_info={
+            "display_width": 3840,
+            "display_height": 2160,
+            "width": 3840,
+            "height": 2160,
+            "fps": 30.0,
+            "bitrate": 20_000_000,
+        },
+        target_bitrate_int=13_000_000,
+        pre_cap_bitrate_int=13_000_000,
+        effective_max_width=1920,
+        cap_notes=[],
+        manual_bitrate=False,
+    )
+    assert noticeable
+    assert any("3840" in r for r in reasons)
+
+
+def test_assess_quality_impact_skips_default_reduction_at_1080p():
+    noticeable, reasons = av1.assess_noticeable_quality_impact(
+        stream_info={
+            "display_width": 1920,
+            "display_height": 1080,
+            "width": 1920,
+            "height": 1080,
+            "fps": 30.0,
+            "bitrate": 12_000_000,
+        },
+        target_bitrate_int=int(12_000_000 * av1.BITRATE_REDUCTION_FACTOR),
+        pre_cap_bitrate_int=int(12_000_000 * av1.BITRATE_REDUCTION_FACTOR),
+        effective_max_width=1920,
+        cap_notes=[],
+        manual_bitrate=False,
+    )
+    assert not noticeable
+    assert not reasons
+
+
+def test_assess_quality_impact_flags_aggressive_cap():
+    pre = 4_000_000
+    capped = 2_000_000
+    noticeable, reasons = av1.assess_noticeable_quality_impact(
+        stream_info={
+            "display_width": 1920,
+            "display_height": 1080,
+            "width": 1920,
+            "height": 1080,
+            "fps": 30.0,
+            "bitrate": 8_000_000,
+        },
+        target_bitrate_int=capped,
+        pre_cap_bitrate_int=pre,
+        effective_max_width=1920,
+        cap_notes=["≥50% shrink"],
+        manual_bitrate=False,
+    )
+    assert noticeable
+    assert any("File-size limits" in r for r in reasons)
+
+
 def test_inspect_transcoding_need_uses_active_codec(monkeypatch):
     payload = {
         "streams": [

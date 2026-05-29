@@ -116,6 +116,9 @@ VIDEO_BITRATE_ESTIMATE_FACTOR = 0.9  # Factor to estimate video-only bitrate fro
 RECOMMENDED_BITRATE_MARGIN = 1.15  # Consider within +15% of recommended as "at target"
 RECOMMENDED_BITRATE_MIN = 400_000  # Clamp recommended bitrate floor
 RECOMMENDED_BITRATE_MAX = 20_000_000  # Clamp recommended bitrate ceiling
+QUALITY_IMPACT_RECOMMENDED_RATIO = 0.85  # Target below this fraction of recommended → noticeable
+QUALITY_IMPACT_CAP_REDUCTION_RATIO = 0.80  # Cap lowered bitrate by more than 20% → noticeable
+QUALITY_IMPACT_EXTRA_INPUT_CUT_RATIO = 0.55  # More aggressive than default 0.65 reduction → noticeable
 PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 FFMPEG_STALL_TIMEOUT = 300  # Abort ffmpeg if it emits no progress/output for this many seconds
@@ -196,6 +199,7 @@ _NO_PROMPT = False  # Suppress interactive prompts
 _HIDE_FILENAMES = False  # Redact media filenames from console output when True
 _STARTUP_SUMMARY_EMITTED = False  # Avoid duplicate startup summaries on internal re-entry
 _AUTO_REENCODE_AV1 = False  # Remember "all" choice when confirming AV1 re-encodes
+_AUTO_CONFIRM_QUALITY_RISK = False  # Remember "all" when confirming noticeable quality impact
 _AUTO_OVERWRITE_EXISTING = False  # Remember "all" for deleting existing outputs before encode
 _AUTO_RENAME_TO_ORIGINAL = False  # Remember "all" for restoring original filename after delete
 _ACTIVE_FFMPEG_PROCESS: Optional[subprocess.Popen] = None  # Child process to stop on Ctrl+C
@@ -1885,6 +1889,153 @@ def inspect_transcoding_need(file_path: str) -> str:
         return "invalid"
 
 # ============================================================================ #
+#              FUNCTIONS: noticeable quality impact assessment                 #
+# ============================================================================ #
+def _output_dimensions_for_scale(
+    *,
+    display_width: Optional[int],
+    display_height: Optional[int],
+    width: Optional[int],
+    height: Optional[int],
+    max_width: int,
+) -> tuple[Optional[int], Optional[int]]:
+    """Return encoded width/height after the scale filter (approximate)."""
+    src_w = display_width if isinstance(display_width, int) and display_width > 0 else width
+    src_h = display_height if isinstance(display_height, int) and display_height > 0 else height
+    if not isinstance(src_w, int) or not isinstance(src_h, int) or src_w <= 0 or src_h <= 0:
+        return None, None
+    out_w = min(src_w, max_width)
+    out_h = max(1, int(round(src_h * out_w / src_w)))
+    return out_w, out_h
+
+
+def assess_noticeable_quality_impact(
+    *,
+    stream_info: dict,
+    target_bitrate_int: int,
+    pre_cap_bitrate_int: int,
+    effective_max_width: int,
+    cap_notes: list[str],
+    manual_bitrate: bool,
+) -> tuple[bool, list[str]]:
+    """
+    Return whether settings are likely to produce visible quality loss, with short reasons.
+    Skips bitrate heuristics when the user set --bitrate explicitly.
+    """
+    reasons: list[str] = []
+    if target_bitrate_int <= 0:
+        return False, reasons
+
+    display_width = stream_info.get("display_width")
+    display_height = stream_info.get("display_height")
+    width = stream_info.get("width")
+    height = stream_info.get("height")
+    fps = stream_info.get("fps")
+    input_bitrate = stream_info.get("bitrate")
+
+    src_w = display_width if isinstance(display_width, int) and display_width > 0 else width
+    if isinstance(src_w, int) and src_w > effective_max_width:
+        out_w, out_h = _output_dimensions_for_scale(
+            display_width=display_width if isinstance(display_width, int) else None,
+            display_height=display_height if isinstance(display_height, int) else None,
+            width=width if isinstance(width, int) else None,
+            height=height if isinstance(height, int) else None,
+            max_width=effective_max_width,
+        )
+        if out_w and out_h:
+            reasons.append(
+                f"Resolution will be reduced from {src_w}px to ~{out_w}x{out_h} "
+                f"(max width {effective_max_width}px)"
+            )
+        else:
+            reasons.append(
+                f"Resolution will be downscaled (source wider than {effective_max_width}px max width)"
+            )
+
+    if not manual_bitrate:
+        out_w, out_h = _output_dimensions_for_scale(
+            display_width=display_width if isinstance(display_width, int) else None,
+            display_height=display_height if isinstance(display_height, int) else None,
+            width=width if isinstance(width, int) else None,
+            height=height if isinstance(height, int) else None,
+            max_width=effective_max_width,
+        )
+        if (
+            isinstance(out_w, int)
+            and isinstance(out_h, int)
+            and isinstance(fps, (int, float))
+            and fps > 0
+        ):
+            recommended = get_recommended_bitrate(out_w, out_h, float(fps))
+            floor_bps = int(recommended * QUALITY_IMPACT_RECOMMENDED_RATIO)
+            if target_bitrate_int < floor_bps:
+                reasons.append(
+                    f"Target video bitrate {_format_bitrate_display(target_bitrate_int)} is well below "
+                    f"~{_format_bitrate_display(recommended)} recommended for {out_w}x{out_h} "
+                    f"@ {float(fps):.2f} fps"
+                )
+
+        if isinstance(input_bitrate, int) and input_bitrate > 0:
+            extra_cut_floor = int(input_bitrate * QUALITY_IMPACT_EXTRA_INPUT_CUT_RATIO)
+            if target_bitrate_int < extra_cut_floor:
+                reasons.append(
+                    f"Target bitrate {_format_bitrate_display(target_bitrate_int)} is much lower than "
+                    f"source {_format_bitrate_display(input_bitrate)}"
+                )
+
+        if (
+            pre_cap_bitrate_int > 0
+            and target_bitrate_int < int(pre_cap_bitrate_int * QUALITY_IMPACT_CAP_REDUCTION_RATIO)
+            and cap_notes
+        ):
+            pct = (1.0 - target_bitrate_int / pre_cap_bitrate_int) * 100.0
+            reasons.append(
+                f"File-size limits lowered bitrate by ~{pct:.0f}% "
+                f"({_format_bitrate_display(pre_cap_bitrate_int)} → "
+                f"{_format_bitrate_display(target_bitrate_int)})"
+            )
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for r in reasons:
+        if r not in seen:
+            seen.add(r)
+            unique.append(r)
+    return bool(unique), unique
+
+
+def maybe_confirm_noticeable_quality_impact(file_path: str, reasons: list[str]) -> bool:
+    """
+    Warn and ask whether to continue when compression may noticeably affect quality.
+    Returns True if conversion should proceed.
+    """
+    global _AUTO_CONFIRM_QUALITY_RISK
+
+    if not reasons:
+        return True
+    if _AUTO_CONFIRM_QUALITY_RISK:
+        return True
+    if _NO_PROMPT:
+        return True
+
+    detail = "\n".join(f"  • {r}" for r in reasons)
+    resp = safe_input(
+        "[y/N/a] (y=yes, N=no, a=all): ",
+        message=(
+            "⚠️  Compression may noticeably reduce visual quality:\n"
+            f"{detail}\n"
+            "Continue with this file?\n"
+            f"{_display_path(file_path, full_path=True, fallback_label='input file')}"
+        ),
+    ).strip().lower()
+    if resp in ("a", "all"):
+        _AUTO_CONFIRM_QUALITY_RISK = True
+        return True
+    return resp in ("y", "yes")
+
+
+# ============================================================================ #
 #                    FUNCTION: maybe_reencode_existing_av1                      #
 # ============================================================================ #
 def maybe_reencode_existing_av1(file_path: str, auto_reencode: bool = False) -> bool:
@@ -2770,9 +2921,11 @@ def convert_single_file(
     # --- CALCULATE TARGET BITRATE ---
     target_bitrate_int = 0
     bitrate_decision = "auto"
+    manual_bitrate = False
     if bitrate:
         try:
             target_bitrate_int = _parse_bitrate_to_bps(bitrate)
+            manual_bitrate = True
             bitrate_decision = f"manual {target_bitrate_int/1_000_000:.2f}M"
         except ValueError:
             cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
@@ -2824,6 +2977,23 @@ def convert_single_file(
     )
     if _cap_notes and target_bitrate_int < _pre_cap_bps:
         bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
+
+    noticeable_quality, quality_reasons = assess_noticeable_quality_impact(
+        stream_info=stream_info,
+        target_bitrate_int=target_bitrate_int,
+        pre_cap_bitrate_int=_pre_cap_bps,
+        effective_max_width=effective_max_width,
+        cap_notes=_cap_notes,
+        manual_bitrate=manual_bitrate,
+    )
+    if noticeable_quality:
+        if dry_run:
+            if not _SUPPRESS_OUTPUT:
+                cprint("⚠️  Dry run: compression would noticeably affect quality:", "warning")
+                for reason in quality_reasons:
+                    cprint(f"   • {reason}", "warning")
+        elif not maybe_confirm_noticeable_quality_impact(input_path, quality_reasons):
+            return delete_original, 0, "skip-quality", media_info
 
     if not _SUPPRESS_OUTPUT:
         cprint(
@@ -4256,8 +4426,9 @@ def main(
         _confirm_root_like_input_paths(input_paths, intent="convert", recursive=recursive)
         check_ffmpeg()
 
-        global _AUTO_REENCODE_AV1, _AUTO_OVERWRITE_EXISTING, _AUTO_RENAME_TO_ORIGINAL
+        global _AUTO_REENCODE_AV1, _AUTO_CONFIRM_QUALITY_RISK, _AUTO_OVERWRITE_EXISTING, _AUTO_RENAME_TO_ORIGINAL
         _AUTO_REENCODE_AV1 = False
+        _AUTO_CONFIRM_QUALITY_RISK = False
         _AUTO_OVERWRITE_EXISTING = False
         _AUTO_RENAME_TO_ORIGINAL = bool(rename_original)
 
