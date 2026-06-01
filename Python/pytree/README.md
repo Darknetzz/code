@@ -108,7 +108,7 @@ python pytree.py report . --no-open
 - `path` - Directory to scan (default: current directory)
 - `--depth, -d` - Maximum depth to scan (default: unlimited)
 - `--limit, -l` - Number of items to show (default: 20)
-- `--tree, -t` - Render the report in tree form
+- `--tree, -t` - Render text/Markdown reports in tree form (HTML always uses an expandable tree table)
 - `--output, -o` - Write the report to this file (default: a temp file). UTF-8.
 - `--format` - Report format: `text`, `json`, `markdown`, or `html`. Default: `html`. If `-o` is set without `--format`, the format is inferred from the filename extension.
 - `--no-open` - Do not launch the browser for HTML reports
@@ -214,7 +214,7 @@ HTML reports use a **dark theme** by default: an **interactive storage overview*
 
 1. Use `--depth` to limit recursion depth for large directories
 2. The TUI mode limits display to top 20 items per level for performance
-3. Hidden files are skipped by default (toggle with `h` in TUI)
+3. Dotfiles are included in scans; the TUI hides them by default (toggle with `h`)
 4. Permission errors are silently skipped
 
 ## License

@@ -3,7 +3,7 @@ use super::helpers::*;
 
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let config = AppConfig::load();
+        let (config, config_err) = AppConfig::load_with_status();
         let shell_path_edit = config
             .user_shell_path
             .clone()
@@ -38,6 +38,9 @@ impl PathmanApp {
             saved_feedback_until: None,
         };
         app.reload_from_store();
+        if let Some(msg) = config_err {
+            app.set_status_err(format!("Could not read pathman.toml (using defaults): {msg}"));
+        }
         app
     }
 

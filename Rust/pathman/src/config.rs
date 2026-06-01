@@ -23,8 +23,16 @@ impl AppConfig {
         Ok(dir.join("pathman").join(FILE_NAME))
     }
 
+    /// Load config from disk. Returns `(config, parse_error_message)`.
+    pub fn load_with_status() -> (Self, Option<String>) {
+        match Self::load_from_disk() {
+            Ok(c) => (c, None),
+            Err(e) => (Self::default(), Some(format!("{e:#}"))),
+        }
+    }
+
     pub fn load() -> Self {
-        Self::load_from_disk().unwrap_or_default()
+        Self::load_with_status().0
     }
 
     fn load_from_disk() -> Result<Self> {

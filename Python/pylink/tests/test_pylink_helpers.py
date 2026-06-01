@@ -5,7 +5,7 @@ from pathlib import Path as PathLib
 
 import pytest
 
-_PYLINK_PATH = Path(__file__).resolve().parents[1] / "pylink.py"
+_PYLINK_PATH = PathLib(__file__).resolve().parents[1] / "pylink.py"
 
 
 def _load_pylink():

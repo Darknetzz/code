@@ -83,277 +83,19 @@ def _main(
     """Root callback so --version works without a subcommand."""
     return
 
-# ─────────────────────────────────────────────────────────────────────── #
-#                              DATA STRUCTURES                            #
-# ─────────────────────────────────────────────────────────────────────── #
-
-@dataclass
-class DirInfo:
-    """Directory information with size and file counts."""
-    path: Path
-    size: int  # in bytes
-    file_count: int
-    dir_count: int
-    children: List['DirInfo']
-    error: Optional[str] = None
-
-    @property
-    def name(self) -> str:
-        return self.path.name or str(self.path)
-
-    def format_size(self) -> str:
-        """Format this entry's size in human-readable form.
-
-        Delegates to the module-level :func:`format_size` so the two can't
-        drift apart when units or formatting change.
-        """
-        return format_size(self.size)
-
-
-def entry_is_directory(info: DirInfo) -> bool:
-    """Whether this row is a directory. Uses the path so empty dirs are still dirs."""
-    try:
-        return info.path.is_dir()
-    except OSError:
-        return bool(info.children)
-
-
-def child_count_cells(
-    info: DirInfo, *, empty: str = "", fmt: str = "{:,}"
-) -> Tuple[str, str]:
-    """Display strings ``(files, dirs)`` for a child row.
-
-    Per-file counts (``file_count``/``dir_count``) are always ``1``/``0`` for a
-    file entry and therefore uninformative — every renderer should show empty
-    cells for files and only populate counts for directory rows. Centralizing
-    that rule here keeps the behavior consistent across CLI, TUI, text,
-    Markdown, HTML, and JSON outputs.
-    """
-    if not entry_is_directory(info):
-        return (empty, empty)
-    return (fmt.format(info.file_count), fmt.format(info.dir_count))
-
-
-class ChildRow(NamedTuple):
-    """Pre-computed fields for one row of a ``dir_info.children`` table.
-
-    Returned by :func:`iter_child_rows` so every "largest items" renderer
-    (plain text, Markdown, Rich table, HTML, ...) can share the same
-    enumeration, slicing, size formatting, and count-cell logic.
-
-    Attributes
-    ----------
-    index:
-        1-based row index (suitable for the ``#`` column).
-    child:
-        The underlying :class:`DirInfo` entry.
-    size_str:
-        Human-readable size, e.g. ``"12.3 MB"``.
-    files_str, dirs_str:
-        Count display strings; empty for file rows (see
-        :func:`child_count_cells`).
-    is_dir:
-        Whether ``child`` is a directory — lets callers pick their own
-        directory/file label (``"Dir"`` / ``"📁 Dir"`` / ...).
-    """
-    index: int
-    child: DirInfo
-    size_str: str
-    files_str: str
-    dirs_str: str
-    is_dir: bool
-
-
-def iter_child_rows(dir_info: DirInfo, limit: int) -> Iterator[ChildRow]:
-    """Yield :class:`ChildRow` tuples for the first ``limit`` children.
-
-    Single source of truth for the "enumerate / slice / format size / derive
-    count cells" pattern that used to be repeated verbatim in the plain-text,
-    Markdown, and Rich-table renderers.
-    """
-    for i, child in enumerate(dir_info.children[:limit], 1):
-        files_s, dirs_s = child_count_cells(child)
-        yield ChildRow(
-            index=i,
-            child=child,
-            size_str=format_size(child.size),
-            files_str=files_s,
-            dirs_str=dirs_s,
-            is_dir=entry_is_directory(child),
-        )
-
-
-# ─────────────────────────────────────────────────────────────────────── #
-#                              SCANNING LOGIC                             #
-# ─────────────────────────────────────────────────────────────────────── #
-
-@dataclass
-class ScanStats:
-    """Live counters updated during a scan. Shared across the full recursion."""
-    files: int = 0
-    dirs: int = 0
-    size: int = 0
-    current: str = ""
-
-
-ProgressCb = Callable[[ScanStats], None]
-
-
-def scan_directory(
-    path: Path,
-    max_depth: Optional[int] = None,
-    current_depth: int = 0,
-    *,
-    stats: Optional[ScanStats] = None,
-    progress_cb: Optional[ProgressCb] = None,
-) -> DirInfo:
-    """Recursively scan directory and calculate sizes.
-
-    If ``stats`` + ``progress_cb`` are supplied, ``progress_cb(stats)`` is
-    called after each file/dir is seen so callers (CLI/TUI) can render live
-    progress. Throttling is the caller's responsibility so the scanner stays
-    as fast as possible.
-    """
-    if stats is None:
-        stats = ScanStats()
-    total_size = 0
-    file_count = 0
-    dir_count = 0
-    children = []
-    error = None
-
-    if progress_cb is not None:
-        stats.current = str(path)
-        progress_cb(stats)
-
-    try:
-        items = list(path.iterdir())
-
-        for item in items:
-            try:
-                if item.is_file():
-                    sz = item.stat().st_size
-                    total_size += sz
-                    file_count += 1
-                    stats.files += 1
-                    stats.size += sz
-                    if progress_cb is not None:
-                        progress_cb(stats)
-                    # List files alongside dirs so table/tree show largest items in flat folders
-                    children.append(
-                        DirInfo(
-                            path=item,
-                            size=sz,
-                            file_count=1,
-                            dir_count=0,
-                            children=[],
-                        )
-                    )
-                elif item.is_dir():
-                    dir_count += 1
-                    stats.dirs += 1
-
-                    # Recursively scan subdirectories if within depth limit
-                    if max_depth is None or current_depth < max_depth:
-                        child_info = scan_directory(
-                            item,
-                            max_depth,
-                            current_depth + 1,
-                            stats=stats,
-                            progress_cb=progress_cb,
-                        )
-                        children.append(child_info)
-                        total_size += child_info.size
-                        file_count += child_info.file_count
-                        dir_count += child_info.dir_count
-                    else:
-                        # Beyond max_depth: still aggregate real size/counts so
-                        # every renderer can show accurate totals even when the
-                        # subtree is collapsed.
-                        summary = get_dir_size(item, stats=stats, progress_cb=progress_cb)
-                        child_info = DirInfo(
-                            path=item,
-                            size=summary.size,
-                            file_count=summary.files,
-                            dir_count=summary.dirs,
-                            children=[],
-                            error=summary.error,
-                        )
-                        children.append(child_info)
-                        total_size += summary.size
-                        file_count += summary.files
-                        dir_count += summary.dirs
-
-            except PermissionError:
-                continue
-            except Exception:
-                continue
-
-    except PermissionError:
-        error = "Permission denied"
-    except Exception as e:
-        error = str(e)
-
-    # Sort children by size (largest first)
-    children.sort(key=lambda x: x.size, reverse=True)
-
-    return DirInfo(
-        path=path,
-        size=total_size,
-        file_count=file_count,
-        dir_count=dir_count,
-        children=children,
-        error=error
-    )
-
-
-@dataclass
-class DirSummary:
-    """Aggregate stats for a directory, used when scanning past ``max_depth``.
-
-    Carries an ``error`` string so callers can surface ``rglob`` / permission
-    failures instead of silently reporting ``0 B``.
-    """
-    size: int = 0
-    files: int = 0
-    dirs: int = 0
-    error: Optional[str] = None
-
-
-def get_dir_size(
-    path: Path,
-    *,
-    stats: Optional[ScanStats] = None,
-    progress_cb: Optional[ProgressCb] = None,
-) -> DirSummary:
-    """Summarize a directory (size + counts) without building a child tree.
-
-    Used when ``scan_directory`` hits ``max_depth`` and still needs accurate
-    totals for the collapsed subtree.
-    """
-    summary = DirSummary()
-    try:
-        for item in path.rglob('*'):
-            try:
-                if item.is_file():
-                    sz = item.stat().st_size
-                    summary.size += sz
-                    summary.files += 1
-                    if stats is not None:
-                        stats.files += 1
-                        stats.size += sz
-                        if progress_cb is not None:
-                            progress_cb(stats)
-                elif item.is_dir():
-                    summary.dirs += 1
-                    if stats is not None:
-                        stats.dirs += 1
-            except OSError:
-                continue
-    except OSError as e:
-        summary.error = f"{type(e).__name__}: {e}"
-    return summary
-
+from pytree_lib import (
+    ChildRow,
+    DirInfo,
+    DirSummary,
+    ProgressCb,
+    ScanStats,
+    child_count_cells,
+    entry_is_directory,
+    format_size,
+    get_dir_size,
+    iter_child_rows,
+    scan_directory,
+)
 
 def make_throttled_progress_cb(
     progress: Progress,
@@ -385,16 +127,6 @@ def make_throttled_progress_cb(
         )
 
     return _cb
-
-
-def format_size(size: int) -> str:
-    """Format size in human-readable format."""
-    size_float = float(size)
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if size_float < 1024.0:
-            return f"{size_float:.1f} {unit}"
-        size_float /= 1024.0
-    return f"{size_float:.1f} PB"
 
 
 # Narrow no-break space — visually distinct from a decimal point, keeps
@@ -1255,8 +987,8 @@ def render_report_html(
     tree_view: bool,
     limit: int,
 ) -> str:
-    """HTML5 interactive report: storage chart, sortable table, expandable tree (dark theme)."""
-    _ = tree_view
+    """HTML5 interactive report: expandable tree table (``--tree`` is always on for HTML)."""
+    _ = tree_view  # HTML uses interactive tree rows; flag kept for API parity with text/md
     esc = html.escape
     path_s = str(target_path)
     title_esc = esc(f"Disk usage - {path_s}")

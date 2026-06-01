@@ -125,7 +125,15 @@ Options:
   --reencode-av1              Re-encode AV1 files without confirmation
   --no-prompt                 Suppress interactive confirmations
   --no-color                  Disable colored output
-  --parallel, -j INT          Files to process simultaneously [default: 1]
+  --probe, --probe-only       Inspect codecs/bitrate without converting
+  --max-output-size TEXT      Cap output file size (e.g. 10M)
+  --min-shrink FLOAT          Minimum shrink percent vs source
+  --size-preset TEXT          light | balanced | aggressive
+  --max-width INT             Max output video width
+  --force, -f                 Force in-place replace + rename flow
+  --rename-original, -R       Rename original after success
+  --clean, --cleanup          Remove stale *.temp.mkv under inputs
+  --hide-filenames            Redact names in progress output
   -V, --version               Show version and exit
   --help                      Show full help message and exit
 ```
@@ -152,7 +160,10 @@ Options:
    <tr><td>--reencode-av1</td><td>Re-encode files that are already AV1 without prompting. Mutually exclusive with <code>--prompt-av1</code>.</td></tr>
    <tr><td>--no-prompt</td><td>Suppress interactive prompts (useful for automation).</td></tr>
    <tr><td>--no-color</td><td>Disable colored output (useful for logging/piping).</td></tr>
-   <tr><td>--parallel, -j &lt;INT&gt;</td><td>Concurrent files to process [experimental, default: 1].</td></tr>
+   <tr><td>--probe / --probe-only</td><td>Inspect inputs without encoding.</td></tr>
+   <tr><td>--max-output-size</td><td>Cap output size (e.g. <code>10M</code>).</td></tr>
+   <tr><td>--min-shrink</td><td>Require minimum shrink percent vs source.</td></tr>
+   <tr><td>--size-preset</td><td><code>light</code>, <code>balanced</code>, or <code>aggressive</code>.</td></tr>
    <tr><td>-V, --version</td><td>Show version and exit.</td></tr>
    <tr><td>--help</td><td>Show full help message and exit.</td></tr>
 </table>
@@ -163,6 +174,7 @@ Options:
 2. **Detects best encoder**:
    - **Windows**: NVIDIA AV1 (`av1_nvenc`) → AMD AV1 (`av1_amf`) → NVIDIA HEVC (`hevc_nvenc`) → AMD HEVC (`hevc_amf`) → CPU AV1 (`libsvtav1`)
    - **Linux**: VAAPI AV1 → NVIDIA AV1 (`av1_nvenc`) → VAAPI HEVC → NVIDIA HEVC → CPU AV1
+   - **macOS**: VideoToolbox HEVC (`hevc_videotoolbox`) → CPU AV1
 3. **For each video file**:
    - Skips files that are already AV1 by default when AV1 is the active target.
    - Use `--prompt-av1` to ask per file, or `--reencode-av1` to always re-encode them without prompting.
@@ -195,7 +207,7 @@ $env:AV1_BITRATE_FALLBACK = "1800000"        # Fallback in bps if probe fails (d
 $env:AV1_LOG_TYPE = "json"                   # Default log format (default: txt)
 $env:AV1_LOG_DIR = "C:\Logs"                 # Default log directory (default: %TEMP%/av1-logs)
 $env:AV1_NO_COLOR = "1"                      # Disable colored output (default: enabled)
-$env:AV1_NO_PROMPT = "1"                     # Suppress interactive prompts (default: enabled)
+$env:AV1_NO_PROMPT = "1"                     # Suppress interactive prompts (unset = prompts enabled)
 $env:AV1_OUTPUT_PREPEND = "draft_"           # Default prepend for output basename
 $env:AV1_OUTPUT_APPEND = "_small"             # Default append for output stem (implies no rename)
 $env:AV1_NO_RENAME = "1"                      # Same as --no-rename (skip restore to original basename)
@@ -251,7 +263,7 @@ Example JSON log structure:
 ```json
 {
   "app": "av1",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "generated": "2025-12-16T14:23:45+00:00",
   "system_platform": "windows",
   "encoder": {
@@ -303,7 +315,26 @@ Example JSON log structure:
 - **Hardware encoder not detected** → Update GPU drivers; verify FFmpeg build includes NVENC/AMF. Use `--dry-run` to see which encoder was selected.
 - **Output larger than input** → Source may already be highly compressed or incompressible (entropy). Use `--min-shrink`, `--max-output-size`, or a size preset for stronger compression; raise `AV1_BITRATE_REDUCTION_FACTOR` for higher quality.
 - **Progress bar crashes with KeyError** → Ensure all `_LOG_EVENTS` fields match the Progress bar columns (should be resolved in latest version).
-- **Parallel option disabled** → Currently marked experimental; full support coming soon. Sequential processing is fast enough for most use cases.
+## Subcommands
+
+| Command | Purpose |
+|---------|---------|
+| *(default)* | Compress / probe (paths and flags on the command line) |
+| `list` / `ls` | Scan folder and show codec + size |
+| `clean` / `cleanup` | Remove stale `*.temp.mkv` files |
+| `help [TOPIC]` | Subcommand-aware help |
+| `version` | Version and ffmpeg/encoder info |
+
+## av1-verify
+
+Companion integrity checker (`av1-verify.py` / `av1-verify.exe`):
+
+```powershell
+av1-verify "video.mp4"
+av1-verify "C:\Videos" -r
+```
+
+Uses ffprobe metadata plus optional ffmpeg decode checks. Shares `common.py` helpers with `av1`.
 
 ## Performance Notes
 
