@@ -1,5 +1,5 @@
 use super::*;
-use super::helpers::{backup_dir_win, read_unix_system_file_raw};
+use super::helpers::*;
 
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
@@ -497,7 +497,7 @@ fn read_unix_system_file_raw() -> anyhow::Result<String> {
         Ok(String::new())
     }
 }
-use super::*;
+
 impl eframe::App for PathmanApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.pending_saved_feedback {

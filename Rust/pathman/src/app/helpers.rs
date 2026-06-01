@@ -7,7 +7,7 @@ use eframe::egui;
 use crate::path_model::{self, PathOrigin};
 use crate::row_icons::mix_srgb;
 
-use super::DuplicateViewFilter;
+use super::Scope;
 
 pub(crate) fn origin_badge_label(origin: PathOrigin) -> &'static str {
     match origin {
@@ -17,7 +17,7 @@ pub(crate) fn origin_badge_label(origin: PathOrigin) -> &'static str {
 }
 
 /// Row strip fill and accent color for path rows (Effective merged view; User tab = user tint; System tab = machine tint).
-fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) {
+pub(crate) fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) {
     match origin {
         PathOrigin::Machine => (
             egui::Color32::from_rgb(26, 34, 52),
@@ -31,14 +31,14 @@ fn effective_origin_style(origin: PathOrigin) -> (egui::Color32, egui::Color32) 
 }
 
 /// Fill, accent, and label colors for “add to user / machine” toolbar buttons (matches row strip hues).
-fn origin_add_button_theme(origin: PathOrigin) -> (egui::Color32, egui::Color32, egui::Color32) {
+pub(crate) fn origin_add_button_theme(origin: PathOrigin) -> (egui::Color32, egui::Color32, egui::Color32) {
     let (strip_fill, accent) = effective_origin_style(origin);
     let fill = mix_srgb(strip_fill, accent, 0.14);
     let text = egui::Color32::from_rgb(248, 248, 252);
     (fill, accent, text)
 }
 
-fn truncate_path_confirm(s: &str, max_chars: usize) -> String {
+pub(crate) fn truncate_path_confirm(s: &str, max_chars: usize) -> String {
     let n = s.chars().count();
     if n <= max_chars {
         s.to_string()
@@ -49,13 +49,13 @@ fn truncate_path_confirm(s: &str, max_chars: usize) -> String {
 
 /// Row mark column: `[!]` missing, `[+]` also in the other store, `[n]` repeated in this section.
 #[derive(Clone, Copy)]
-enum PathMarkContext {
+pub(crate) enum PathMarkContext {
     SingleUser,
     SingleSystem,
     Effective(PathOrigin),
 }
 
-fn path_row_mark(
+pub(crate) fn path_row_mark(
     warn: bool,
     cross_origin: bool,
     within_n: usize,
@@ -127,7 +127,7 @@ fn path_row_mark(
     ("   ".into(), egui::Color32::TRANSPARENT, None)
 }
 
-fn mark_tooltip_with_filter_hint(base: Option<String>, interactive: bool) -> Option<String> {
+pub(crate) fn mark_tooltip_with_filter_hint(base: Option<String>, interactive: bool) -> Option<String> {
     if !interactive {
         return base;
     }
@@ -139,7 +139,7 @@ fn mark_tooltip_with_filter_hint(base: Option<String>, interactive: bool) -> Opt
     })
 }
 
-fn effective_split_cross_and_counts(
+pub(crate) fn effective_split_cross_and_counts(
     segments: &[(PathOrigin, String)],
 ) -> (HashSet<String>, HashMap<String, usize>, HashMap<String, usize>) {
     let (m_segs, u_segs) = path_model::split_origins(segments);
@@ -150,7 +150,7 @@ fn effective_split_cross_and_counts(
     )
 }
 
-fn effective_row_is_duplicate(
+pub(crate) fn effective_row_is_duplicate(
     segments: &[(PathOrigin, String)],
     i: usize,
     cross_keys: &HashSet<String>,
@@ -170,7 +170,7 @@ fn effective_row_is_duplicate(
     cross || within_n > 1
 }
 
-fn tab_row_is_duplicate(
+pub(crate) fn tab_row_is_duplicate(
     entries: &[String],
     i: usize,
     cross_keys_tab: &HashSet<String>,
@@ -185,7 +185,7 @@ fn tab_row_is_duplicate(
     cross || within_n > 1
 }
 
-fn tab_cross_keys_and_dup_counts(
+pub(crate) fn tab_cross_keys_and_dup_counts(
     scope: Scope,
     entries: &[String],
     machine_for_cross: &[String],
@@ -200,7 +200,7 @@ fn tab_cross_keys_and_dup_counts(
 }
 
 /// Multiset difference between saved vs pending entry lists (order ignored).
-fn multiset_path_diff(baseline: &[String], pending: &[String]) -> (Vec<String>, Vec<String>) {
+pub(crate) fn multiset_path_diff(baseline: &[String], pending: &[String]) -> (Vec<String>, Vec<String>) {
     let mut delta: HashMap<String, i32> = HashMap::new();
     for s in baseline {
         *delta.entry(s.clone()).or_insert(0) += 1;
@@ -226,7 +226,7 @@ fn multiset_path_diff(baseline: &[String], pending: &[String]) -> (Vec<String>, 
     (removed, added)
 }
 
-fn format_path_store_diff(title: &str, baseline: &[String], pending: &[String]) -> String {
+pub(crate) fn format_path_store_diff(title: &str, baseline: &[String], pending: &[String]) -> String {
     if baseline == pending {
         return format!("{title}\n  (no changes)\n\n");
     }
