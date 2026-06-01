@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pytree\\pytree.py'],
+    ['pytree.py'],
     pathex=[],
     binaries=[],
     datas=[],

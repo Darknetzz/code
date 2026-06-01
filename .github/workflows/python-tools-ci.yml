@@ -1,0 +1,72 @@
+name: python-tools-ci
+
+on:
+  push:
+    paths:
+      - "Python/av1/**"
+      - "Python/pybin/**"
+      - "Python/pylink/**"
+      - "Python/pytree/**"
+      - "Python/pyproject.toml"
+      - ".github/workflows/python-tools-ci.yml"
+  pull_request:
+    paths:
+      - "Python/av1/**"
+      - "Python/pybin/**"
+      - "Python/pylink/**"
+      - "Python/pytree/**"
+      - "Python/pyproject.toml"
+      - ".github/workflows/python-tools-ci.yml"
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest ruff typer rich
+          pip install -r pybin/requirements.txt
+          pip install -r av1/requirements.txt
+          pip install -r pytree/requirements.txt
+          pip install -r pylink/requirements.txt
+
+      - name: ruff check
+        run: python -m ruff check av1 pybin pytree pylink
+
+      - name: pytest
+        run: python -m pytest av1/tests pybin/tests pytree/tests -q
+
+  test-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest ruff typer
+          pip install -r pylink/requirements.txt
+
+      - name: pytest pylink
+        shell: pwsh
+        run: python -m pytest pylink/tests -q

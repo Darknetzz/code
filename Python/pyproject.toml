@@ -1,6 +1,9 @@
 [tool.pytest.ini_options]
 testpaths = [
     "av1/tests",
+    "pybin/tests",
+    "pylink/tests",
+    "pytree/tests",
 ]
 python_files = [
     "test_*.py",
