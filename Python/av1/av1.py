@@ -27,11 +27,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Callable, Literal, Optional
 
-# Force UTF-8 encoding on Windows
-if platform.system() == 'Windows' and sys.stdout.isatty() and sys.stderr.isatty():
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+from common import SUPPORTED_EXTENSIONS, ensure_utf8_stdio
+
+ensure_utf8_stdio()
 
 import click
 import typer
@@ -101,7 +99,6 @@ DEFAULT_CPU_USAGE_PERCENT = 75
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
-SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv")
 TEMP_OUTPUT_SUFFIX = ".temp.mkv"
 ROOT_PREVIEW_MAX_WALK_STEPS = 750  # Cap os.walk steps for root-confirm preview (keep huge trees responsive)
 MIN_FILE_SIZE_BYTES = 1024  # Skip files smaller than 1KB
@@ -768,8 +765,6 @@ def _print_startup_summary(
     probe_only: bool,
     cpu_threads_requested: Optional[int],
     effective_cpu_threads: int,
-    requested_parallel: int,
-    effective_parallel: int,
     size_preset: Optional[str],
     max_video_width: int,
 ) -> None:
@@ -842,12 +837,6 @@ def _print_startup_summary(
         options.append(f"cpu-threads={effective_cpu_threads} (default {DEFAULT_CPU_USAGE_PERCENT}% logical CPUs)")
     else:
         options.append(f"cpu-threads={effective_cpu_threads}")
-    if requested_parallel != 1:
-        if effective_parallel != requested_parallel:
-            options.append(f"parallel={effective_parallel} (requested {requested_parallel})")
-        else:
-            options.append(f"parallel={effective_parallel}")
-
     cprint("Startup configuration:", "info")
     cprint(f"   Input:  {input_summary}", "info")
     if options:
@@ -1776,6 +1765,13 @@ def check_ffmpeg() -> None:
         if check_encoder_support("hevc_nvenc"):
             ACTIVE_ENCODER = {"encoder": "hevc_nvenc", "codec": "hevc", "hw_type": "nvidia"}
             cprint("Hardware Found: NVIDIA HEVC (`hevc_nvenc`).", "success")
+            return
+
+    # --- macOS: VideoToolbox HEVC (no AV1 VT encoder in typical FFmpeg builds) ---
+    elif SYSTEM_PLATFORM == "darwin":
+        if check_encoder_support("hevc_videotoolbox"):
+            ACTIVE_ENCODER = {"encoder": "hevc_videotoolbox", "codec": "hevc", "hw_type": "videotoolbox"}
+            cprint("Hardware Found: VideoToolbox HEVC (`hevc_videotoolbox`).", "success")
             return
 
     # --- PRIORITY 3: CPU FALLBACK (ALL PLATFORMS) ---
@@ -4115,7 +4111,6 @@ def main(
     no_color: bool = typer.Option(False, "--no-color", help="Disable ANSI/Rich colors. Default: colorized terminal output is enabled.", rich_help_panel="Display"),
     no_prompt: bool = typer.Option(False, "--no-prompt", help="Disable interactive confirmations. Default: prompts use their safe fallback behavior, which is usually 'No' unless another explicit flag such as --delete-original or --reencode-av1 was provided.", rich_help_panel="Display"),
     hide_filenames: bool = typer.Option(False, "--hide-filenames", help="Redact media filenames in progress output, prompts, and status messages. Default: show real filenames and relative paths.", rich_help_panel="Display"),
-    parallel: int = typer.Option(1, "--parallel", "-j", help="Requested file concurrency. Default: 1. Values above 1 are accepted for future compatibility but currently run sequentially.", rich_help_panel="Performance"),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -4225,8 +4220,6 @@ def main(
             incompatible.append("--prompt-av1")
         if reencode_av1:
             incompatible.append("--reencode-av1")
-        if parallel != 1:
-            incompatible.append("--parallel / -j")
         if cpu_threads is not None:
             incompatible.append("--cpu-threads / --cpu-cores")
         if incompatible:
@@ -4362,16 +4355,6 @@ def main(
     if ffprobe:
         FFPROBE_CMD = ffprobe
     
-    # Validate parallel value
-    requested_parallel = parallel
-    if parallel < 1:
-        cprint("⚠️  --parallel must be at least 1, setting to 1", "warning")
-        parallel = 1
-    elif parallel > 1:
-        cprint(f"⚠️  --parallel {parallel} requested, but this build currently runs sequentially.", "warning")
-        cprint("    Using --parallel 1 for now.", "info")
-        parallel = 1
-
     # Set global no-color flag and reinitialize console
     _NO_COLOR = no_color
     _NO_PROMPT = no_prompt
@@ -4412,8 +4395,6 @@ def main(
         probe_only=probe_only,
         cpu_threads_requested=cpu_threads,
         effective_cpu_threads=effective_cpu_threads,
-        requested_parallel=requested_parallel,
-        effective_parallel=parallel,
         size_preset=resolved_size_preset,
         max_video_width=effective_max_video_width,
     )

@@ -16,7 +16,7 @@ Scripts and projects in Python.
 | [pybin](pybin/) | Simple wrapper around PyInstaller to build a single-file executable from a Py... See [pybin/README.md](pybin/README.md) for details. |
 | [pyhello](pyhello/) | — |
 | [pyimgrmbg](pyimgrmbg/) | — |
-| [pylink](pylink/) | — |
+| [pylink](pylink/) | Windows CLI for symlinks, junctions, and hard links (mklink wrapper). See [pylink/README.md](pylink/README.md). |
 | [pyportscanner](pyportscanner/) | — |
 | [pyprotocol](pyprotocol/) | A secure, state-based network protocol implementation with replay protection... See [pyprotocol/README.md](pyprotocol/README.md) for details. |
 | [pyrat](pyrat/) | — |

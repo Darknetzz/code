@@ -11,16 +11,13 @@ import subprocess
 import shutil
 import sys
 import json
-import platform
 import glob
 import re
 from typing import Optional, Tuple
 
-# Force UTF-8 encoding on Windows
-if platform.system() == 'Windows':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+from common import SUPPORTED_EXTENSIONS, ensure_utf8_stdio, format_duration, format_size
+
+ensure_utf8_stdio()
 
 from rich.console import Console
 from rich.table import Table
@@ -42,7 +39,6 @@ app = typer.Typer(
 # ============================================================================ #
 #                         FILE HANDLING CONSTANTS                              #
 # ============================================================================ #
-SUPPORTED_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv")
 PROBE_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 
 # ============================================================================ #
@@ -355,31 +351,6 @@ def check_corruption(file_path: str, reported_duration: Optional[float]) -> Tupl
         return False, "Timeout during corruption check"
     except Exception as e:
         return False, f"Error during corruption check: {str(e)}"
-
-# ============================================================================ #
-#                      FUNCTION: format_duration                              #
-# ============================================================================ #
-def format_duration(seconds: float) -> str:
-    """Format duration in seconds to HH:MM:SS.mmm format."""
-    if seconds is None:
-        return "N/A"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = seconds % 60
-    return f"{hours:02d}:{int(minutes):02d}:{secs:06.3f}"
-
-# ============================================================================ #
-#                      FUNCTION: format_size                                  #
-# ============================================================================ #
-def format_size(bytes_amount: int) -> str:
-    """Format file size in bytes to human-readable format."""
-    if bytes_amount >= 1024 ** 3:
-        return f"{bytes_amount / (1024 ** 3):.2f} GB"
-    if bytes_amount >= 1024 ** 2:
-        return f"{bytes_amount / (1024 ** 2):.2f} MB"
-    if bytes_amount >= 1024:
-        return f"{bytes_amount / 1024:.2f} KB"
-    return f"{bytes_amount} B"
 
 # ============================================================================ #
 #                      FUNCTION: verify_video_file                            #
