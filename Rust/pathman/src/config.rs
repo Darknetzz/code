@@ -31,10 +31,6 @@ impl AppConfig {
         }
     }
 
-    pub fn load() -> Self {
-        Self::load_with_status().0
-    }
-
     fn load_from_disk() -> Result<Self> {
         let p = Self::config_path()?;
         if !p.exists() {

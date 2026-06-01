@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet};
-#[cfg(windows)]
-use std::path::PathBuf;
 
 use eframe::egui;
 

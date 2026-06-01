@@ -1,5 +1,6 @@
 use super::*;
 use super::helpers::*;
+use std::path::PathBuf;
 
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {

@@ -1,13 +1,14 @@
-use std::collections::{HashMap, HashSet};
-#[cfg(windows)]
-use std::path::PathBuf;
-
-use eframe::egui;
-use eframe::egui::scroll_area::ScrollBarVisibility;
-use eframe::egui::{ScrollArea, Sense, TextEdit};
-
+#[allow(unused_imports)]
 use crate::config::AppConfig;
+#[allow(unused_imports)]
 use crate::path_model::{self, PathOrigin};
+#[allow(unused_imports)]
+use eframe::egui;
+#[allow(unused_imports)]
+use eframe::egui::scroll_area::ScrollBarVisibility;
+#[allow(unused_imports)]
+use eframe::egui::{ScrollArea, Sense, TextEdit};
+#[allow(unused_imports)]
 use crate::row_icons::{
     mix_srgb, path_add_origin_menu, path_add_toolbar_button, path_row_icon_button,
     path_top_bar_button, path_top_bar_selectable, AddToolbarIcon, PathRowIcon, TopBarButtonEmphasis,
