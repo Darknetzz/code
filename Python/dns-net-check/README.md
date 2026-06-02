@@ -6,7 +6,7 @@ Python CLI tool to verify DNS and basic network connectivity for one or more tar
 
 - DNS checks: `A`, `AAAA`, `CNAME`, `PTR`, `DNSSEC` (enabled by default)
 - Network checks: TCP connect, HTTP probe, optional ping
-- Human-readable output and JSON output
+- Colored human-readable output ([Rich](https://github.com/Textualize/rich)) and JSON output
 - Deterministic exit codes for automation/CI
 
 ## Requirements

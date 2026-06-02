@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rich.console import Console
 
 from checks.dns_checks import check_cname, check_dns_record, check_dnssec, check_ptr
 from checks.models import CheckResult, CheckStatus
 from checks.network_checks import check_http, check_ping, check_tcp_connect
+
+console = Console()
+err_console = Console(stderr=True)
 
 FALLBACK_TARGETS: dict[str, list[dict[str, Any]]] = {
     "hosts": [{"name": "example.com", "dns_records": ["A"]}],
@@ -211,23 +214,47 @@ def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckRe
     return results
 
 
-def _result_line(result: CheckResult) -> str:
-    status = result.status.value.upper()
-    latency = f"{result.latency_ms:.1f}ms" if result.latency_ms is not None else "-"
-    message = result.error or "ok"
-    return f"[{status}] {result.name} target={result.target} latency={latency} msg={message}"
+def _status_style(status: CheckStatus) -> str:
+    if status is CheckStatus.PASS:
+        return "bold green"
+    if status is CheckStatus.FAIL:
+        return "bold red"
+    return "bold yellow"
+
+
+def _message_markup(result: CheckResult) -> str:
+    if result.status is CheckStatus.PASS:
+        return "[green]ok[/]"
+    if result.error:
+        return f"[red]{result.error}[/]"
+    return "[red]failed[/]"
 
 
 def print_human(results: list[CheckResult]) -> None:
     for result in results:
-        print(_result_line(result))
+        status_label = result.status.value.upper()
+        latency = f"{result.latency_ms:.1f}ms" if result.latency_ms is not None else "-"
+        console.print(
+            f"[{_status_style(result.status)}]{status_label}[/] "
+            f"[cyan]{result.name}[/] "
+            f"target=[white]{result.target}[/] "
+            f"latency=[dim]{latency}[/] "
+            f"msg={_message_markup(result)}"
+        )
         if result.hint and result.status is CheckStatus.FAIL:
-            print(f"  hint: {result.hint}")
+            console.print(f"  [dim]hint:[/] [italic]{result.hint}[/]")
 
     passed = sum(1 for result in results if result.status is CheckStatus.PASS)
     failed = sum(1 for result in results if result.status is CheckStatus.FAIL)
     warned = sum(1 for result in results if result.status is CheckStatus.WARN)
-    print(f"\nSummary: pass={passed} fail={failed} warn={warned} total={len(results)}")
+    console.print()
+    console.print(
+        "Summary: "
+        f"[green]pass={passed}[/] "
+        f"[red]fail={failed}[/] "
+        f"[yellow]warn={warned}[/] "
+        f"[bold]total={len(results)}[/]"
+    )
 
 
 def print_json(results: list[CheckResult]) -> None:
@@ -251,14 +278,14 @@ def main() -> int:
         config = _with_fallback_targets(loaded_config, args)
         results = run_checks(args, config)
     except Exception as exc:  # pragma: no cover - CLI fail-safe path
-        print(f"[FAIL] Unable to run checks: {exc}", file=sys.stderr)
+        err_console.print(f"[bold red]FAIL[/] Unable to run checks: {exc}")
         return 2
 
     if args.json:
         print_json(results)
     else:
         if using_fallback_targets:
-            print("No targets supplied; running built-in baseline checks.")
+            console.print("[dim]No targets supplied; running built-in baseline checks.[/]")
         print_human(results)
 
     return 1 if any(result.status is CheckStatus.FAIL for result in results) else 0
