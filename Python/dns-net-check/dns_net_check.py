@@ -36,7 +36,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dnssec",
         action="store_true",
-        help="Enable DNSSEC check for each host target.",
+        help="Force-enable DNSSEC check for each host target.",
+    )
+    parser.add_argument(
+        "--no-dnssec",
+        action="store_true",
+        help="Disable DNSSEC checks for host targets.",
     )
     parser.add_argument(
         "--nameserver",
@@ -123,6 +128,11 @@ def _with_fallback_targets(config: dict[str, Any], args: argparse.Namespace) -> 
 def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckResult]:
     timeout_s = float(config.get("timeout_s", args.timeout))
     do_ping = bool(config.get("ping", True)) and not args.no_ping
+    default_dnssec = bool(config.get("dnssec", True))
+    if args.no_dnssec:
+        default_dnssec = False
+    elif args.dnssec:
+        default_dnssec = True
     nameserver = args.nameserver or config.get("nameserver")
     results: list[CheckResult] = []
 
@@ -170,7 +180,7 @@ def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckRe
                 )
             )
 
-        do_dnssec = bool(host_cfg.get("dnssec", False)) or args.dnssec
+        do_dnssec = bool(host_cfg.get("dnssec", default_dnssec))
         if do_dnssec:
             require_ad = bool(host_cfg.get("dnssec_require_ad", False))
             results.append(
