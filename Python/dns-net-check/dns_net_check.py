@@ -17,9 +17,23 @@ console = Console()
 err_console = Console(stderr=True)
 
 FALLBACK_TARGETS: dict[str, list[dict[str, Any]]] = {
-    "hosts": [{"name": "example.com", "dns_records": ["A"]}],
-    "tcp": [{"host": "example.com", "port": 443}],
-    "urls": [{"url": "https://example.com", "expected_status": 200}],
+    "hosts": [
+        {"name": "example.com", "dns_records": ["A"]},
+        {"name": "one.one.one.one", "dns_records": ["A"], "ptr_ip": "1.1.1.1", "dnssec": False},
+        {"name": "dns.google", "dns_records": ["A"], "ptr_ip": "8.8.8.8"},
+    ],
+    "tcp": [
+        {"host": "example.com", "port": 443},
+        {"host": "1.1.1.1", "port": 53},
+        {"host": "8.8.8.8", "port": 53},
+        {"host": "1.1.1.1", "port": 443},
+        {"host": "8.8.8.8", "port": 443},
+    ],
+    "urls": [
+        {"url": "https://example.com", "expected_status": 200},
+        {"url": "https://www.cloudflare.com", "expected_status": 200},
+        {"url": "https://www.google.com/generate_204", "expected_status": 204},
+    ],
 }
 
 

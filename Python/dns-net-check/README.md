@@ -77,4 +77,9 @@ Use `config.example.yaml` as a template. Main keys:
 - `1`: one or more checks failed
 - `2`: runtime/config/argument error
 
-If you run with no targets and no config, the tool automatically uses baseline checks against `example.com` (`A` lookup, DNSSEC, ping, TCP 443, HTTPS probe).
+If you run with no targets and no config, the tool automatically uses an extended baseline profile:
+
+- DNS + DNSSEC + ping checks for `example.com`, `one.one.one.one`, and `dns.google`
+- PTR checks for `1.1.1.1` and `8.8.8.8`
+- TCP checks to `example.com:443`, `1.1.1.1:53`, `8.8.8.8:53`, `1.1.1.1:443`, and `8.8.8.8:443`
+- HTTP checks for `https://example.com`, `https://www.cloudflare.com`, and `https://www.google.com/generate_204`
