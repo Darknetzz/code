@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from checks.dns_checks import check_cname, check_dns_record, check_ptr
+from checks.models import CheckResult, CheckStatus
+from checks.network_checks import check_http, check_ping, check_tcp_connect
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="DNS/network verification tool")
+    parser.add_argument("--config", type=Path, help="Path to YAML config file.")
+    parser.add_argument("--host", action="append", default=[], help="Host to test.")
+    parser.add_argument(
+        "--port",
+        action="append",
+        default=[],
+        help="TCP target in host:port format (repeatable).",
+    )
+    parser.add_argument("--url", action="append", default=[], help="URL to probe.")
+    parser.add_argument("--timeout", type=float, default=5.0, help="Default timeout seconds.")
+    parser.add_argument("--json", action="store_true", help="Output JSON report.")
+    parser.add_argument("--no-ping", action="store_true", help="Skip ping checks.")
+    parser.add_argument(
+        "--nameserver",
+        default=None,
+        help="Optional DNS resolver IP to use instead of system default.",
+    )
+    return parser.parse_args()
+
+
+def _load_config(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(loaded, dict):
+        raise ValueError("Config root must be a mapping/object.")
+    return loaded
+
+
+def _parse_port_targets(items: list[str]) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = []
+    for item in items:
+        if ":" not in item:
+            raise ValueError(f"Invalid --port value '{item}', expected host:port")
+        host, raw_port = item.rsplit(":", 1)
+        targets.append({"host": host, "port": int(raw_port)})
+    return targets
+
+
+def _normalize_hosts(config: dict[str, Any], cli_hosts: list[str]) -> list[dict[str, Any]]:
+    configured = config.get("hosts", [])
+    results: list[dict[str, Any]] = []
+    if isinstance(configured, list):
+        for item in configured:
+            if isinstance(item, str):
+                results.append({"name": item})
+            elif isinstance(item, dict):
+                results.append(item)
+    for host in cli_hosts:
+        results.append({"name": host})
+    return results
+
+
+def _normalize_tcp(config: dict[str, Any], cli_ports: list[str]) -> list[dict[str, Any]]:
+    configured = config.get("tcp", [])
+    results: list[dict[str, Any]] = configured if isinstance(configured, list) else []
+    results.extend(_parse_port_targets(cli_ports))
+    return results
+
+
+def _normalize_urls(config: dict[str, Any], cli_urls: list[str]) -> list[dict[str, Any]]:
+    configured = config.get("urls", [])
+    results: list[dict[str, Any]] = []
+    if isinstance(configured, list):
+        for item in configured:
+            if isinstance(item, str):
+                results.append({"url": item})
+            elif isinstance(item, dict):
+                results.append(item)
+    for url in cli_urls:
+        results.append({"url": url})
+    return results
+
+
+def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckResult]:
+    timeout_s = float(config.get("timeout_s", args.timeout))
+    do_ping = bool(config.get("ping", True)) and not args.no_ping
+    nameserver = args.nameserver or config.get("nameserver")
+    results: list[CheckResult] = []
+
+    for host_cfg in _normalize_hosts(config, args.host):
+        host = host_cfg.get("name")
+        if not host:
+            continue
+        dns_records = host_cfg.get("dns_records", ["A"])
+        for record_type in dns_records:
+            expected = host_cfg.get("expected", {}).get(str(record_type).upper())
+            if expected and not isinstance(expected, list):
+                expected = [str(expected)]
+            results.append(
+                check_dns_record(
+                    host=host,
+                    record_type=str(record_type).upper(),
+                    expected=expected,
+                    timeout_s=timeout_s,
+                    nameserver=nameserver,
+                )
+            )
+
+        cname_expected = host_cfg.get("expected", {}).get("CNAME")
+        if cname_expected is not None:
+            results.append(
+                check_cname(
+                    host=host,
+                    expected=str(cname_expected),
+                    timeout_s=timeout_s,
+                    nameserver=nameserver,
+                )
+            )
+
+        if do_ping:
+            results.append(check_ping(host=host, timeout_s=min(timeout_s, 5.0)))
+
+        ptr_ip = host_cfg.get("ptr_ip")
+        if ptr_ip:
+            results.append(
+                check_ptr(
+                    ip=str(ptr_ip),
+                    expected=host_cfg.get("expected", {}).get("PTR"),
+                    timeout_s=timeout_s,
+                    nameserver=nameserver,
+                )
+            )
+
+    for tcp_cfg in _normalize_tcp(config, args.port):
+        host = str(tcp_cfg.get("host", "")).strip()
+        port = tcp_cfg.get("port")
+        if not host or port is None:
+            continue
+        results.append(check_tcp_connect(host=host, port=int(port), timeout_s=timeout_s))
+
+    for url_cfg in _normalize_urls(config, args.url):
+        url = str(url_cfg.get("url", "")).strip()
+        if not url:
+            continue
+        expected_status = url_cfg.get("expected_status")
+        results.append(
+            check_http(url=url, expected_status=expected_status, timeout_s=timeout_s)
+        )
+
+    return results
+
+
+def _result_line(result: CheckResult) -> str:
+    status = result.status.value.upper()
+    latency = f"{result.latency_ms:.1f}ms" if result.latency_ms is not None else "-"
+    message = result.error or "ok"
+    return f"[{status}] {result.name} target={result.target} latency={latency} msg={message}"
+
+
+def print_human(results: list[CheckResult]) -> None:
+    for result in results:
+        print(_result_line(result))
+        if result.hint and result.status is CheckStatus.FAIL:
+            print(f"  hint: {result.hint}")
+
+    passed = sum(1 for result in results if result.status is CheckStatus.PASS)
+    failed = sum(1 for result in results if result.status is CheckStatus.FAIL)
+    warned = sum(1 for result in results if result.status is CheckStatus.WARN)
+    print(f"\nSummary: pass={passed} fail={failed} warn={warned} total={len(results)}")
+
+
+def print_json(results: list[CheckResult]) -> None:
+    payload = {
+        "summary": {
+            "pass": sum(1 for result in results if result.status is CheckStatus.PASS),
+            "fail": sum(1 for result in results if result.status is CheckStatus.FAIL),
+            "warn": sum(1 for result in results if result.status is CheckStatus.WARN),
+            "total": len(results),
+        },
+        "results": [result.to_dict() for result in results],
+    }
+    print(json.dumps(payload, indent=2))
+
+
+def main() -> int:
+    try:
+        args = parse_args()
+        config = _load_config(args.config)
+        results = run_checks(args, config)
+    except Exception as exc:  # pragma: no cover - CLI fail-safe path
+        print(f"[FAIL] Unable to run checks: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print_json(results)
+    else:
+        print_human(results)
+
+    return 1 if any(result.status is CheckStatus.FAIL for result in results) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
