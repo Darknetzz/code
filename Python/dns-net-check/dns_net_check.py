@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 from rich.console import Console
+from rich.table import Table
 
 from checks.dns_checks import check_cname, check_dns_record, check_dnssec, check_ptr
 from checks.models import CheckResult, CheckStatus
@@ -231,18 +232,28 @@ def _message_markup(result: CheckResult) -> str:
 
 
 def print_human(results: list[CheckResult]) -> None:
+    table = Table(show_header=True, header_style="bold", expand=True)
+    table.add_column("Status", style="bold", no_wrap=True)
+    table.add_column("Check", style="cyan", no_wrap=True)
+    table.add_column("Target", style="white")
+    table.add_column("Latency", style="dim", no_wrap=True, justify="right")
+    table.add_column("Message")
+
     for result in results:
         status_label = result.status.value.upper()
         latency = f"{result.latency_ms:.1f}ms" if result.latency_ms is not None else "-"
-        console.print(
-            f"[{_status_style(result.status)}]{status_label}[/] "
-            f"[cyan]{result.name}[/] "
-            f"target=[white]{result.target}[/] "
-            f"latency=[dim]{latency}[/] "
-            f"msg={_message_markup(result)}"
-        )
+        message = _message_markup(result)
         if result.hint and result.status is CheckStatus.FAIL:
-            console.print(f"  [dim]hint:[/] [italic]{result.hint}[/]")
+            message = f"{message}\n[dim]hint:[/] [italic]{result.hint}[/]"
+        table.add_row(
+            f"[{_status_style(result.status)}]{status_label}[/]",
+            result.name,
+            result.target,
+            latency,
+            message,
+        )
+
+    console.print(table)
 
     passed = sum(1 for result in results if result.status is CheckStatus.PASS)
     failed = sum(1 for result in results if result.status is CheckStatus.FAIL)
