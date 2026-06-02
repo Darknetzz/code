@@ -4,7 +4,7 @@ Python CLI tool to verify DNS and basic network connectivity for one or more tar
 
 ## Features
 
-- DNS checks: `A`, `AAAA`, `CNAME`, `PTR`
+- DNS checks: `A`, `AAAA`, `CNAME`, `PTR`, optional `DNSSEC`
 - Network checks: TCP connect, HTTP probe, optional ping
 - Human-readable output and JSON output
 - Deterministic exit codes for automation/CI
@@ -25,6 +25,12 @@ Run with explicit targets:
 
 ```powershell
 python dns_net_check.py --host example.com --port example.com:443 --url https://example.com --no-ping
+```
+
+Run with no config/flags (built-in baseline checks):
+
+```powershell
+python dns_net_check.py
 ```
 
 Run with config:
@@ -48,6 +54,7 @@ python dns_net_check.py --config config.example.yaml --json
 - `--timeout <seconds>`: default timeout (default: `5.0`)
 - `--json`: emit JSON report
 - `--no-ping`: disable ping checks
+- `--dnssec`: enable DNSSEC checks for host targets
 - `--nameserver <ip>`: custom DNS resolver
 
 ## Config format
@@ -58,6 +65,7 @@ Use `config.example.yaml` as a template. Main keys:
 - `ping`: enable/disable ping checks globally
 - `nameserver`: optional DNS resolver IP
 - `hosts`: DNS-oriented checks per host
+  - Per-host options include `dnssec: true` and optional `dnssec_require_ad: true`
 - `tcp`: TCP connectivity targets
 - `urls`: HTTP probe targets
 
@@ -66,3 +74,5 @@ Use `config.example.yaml` as a template. Main keys:
 - `0`: all checks passed
 - `1`: one or more checks failed
 - `2`: runtime/config/argument error
+
+If you run with no targets and no config, the tool automatically uses baseline checks against `example.com` (`A` lookup, TCP 443, HTTPS probe).

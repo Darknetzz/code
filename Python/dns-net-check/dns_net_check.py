@@ -8,9 +8,15 @@ from typing import Any
 
 import yaml
 
-from checks.dns_checks import check_cname, check_dns_record, check_ptr
+from checks.dns_checks import check_cname, check_dns_record, check_dnssec, check_ptr
 from checks.models import CheckResult, CheckStatus
 from checks.network_checks import check_http, check_ping, check_tcp_connect
+
+FALLBACK_TARGETS: dict[str, list[dict[str, Any]]] = {
+    "hosts": [{"name": "example.com", "dns_records": ["A"]}],
+    "tcp": [{"host": "example.com", "port": 443}],
+    "urls": [{"url": "https://example.com", "expected_status": 200}],
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +33,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=5.0, help="Default timeout seconds.")
     parser.add_argument("--json", action="store_true", help="Output JSON report.")
     parser.add_argument("--no-ping", action="store_true", help="Skip ping checks.")
+    parser.add_argument(
+        "--dnssec",
+        action="store_true",
+        help="Enable DNSSEC check for each host target.",
+    )
     parser.add_argument(
         "--nameserver",
         default=None,
@@ -91,6 +102,24 @@ def _normalize_urls(config: dict[str, Any], cli_urls: list[str]) -> list[dict[st
     return results
 
 
+def _has_any_targets(config: dict[str, Any], args: argparse.Namespace) -> bool:
+    if args.host or args.port or args.url:
+        return True
+    for key in ("hosts", "tcp", "urls"):
+        values = config.get(key, [])
+        if isinstance(values, list) and values:
+            return True
+    return False
+
+
+def _with_fallback_targets(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    if _has_any_targets(config, args):
+        return config
+    merged = dict(config)
+    merged.update(FALLBACK_TARGETS)
+    return merged
+
+
 def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckResult]:
     timeout_s = float(config.get("timeout_s", args.timeout))
     do_ping = bool(config.get("ping", True)) and not args.no_ping
@@ -138,6 +167,18 @@ def run_checks(args: argparse.Namespace, config: dict[str, Any]) -> list[CheckRe
                     expected=host_cfg.get("expected", {}).get("PTR"),
                     timeout_s=timeout_s,
                     nameserver=nameserver,
+                )
+            )
+
+        do_dnssec = bool(host_cfg.get("dnssec", False)) or args.dnssec
+        if do_dnssec:
+            require_ad = bool(host_cfg.get("dnssec_require_ad", False))
+            results.append(
+                check_dnssec(
+                    host=host,
+                    timeout_s=timeout_s,
+                    nameserver=nameserver,
+                    require_ad=require_ad,
                 )
             )
 
@@ -195,7 +236,9 @@ def print_json(results: list[CheckResult]) -> None:
 def main() -> int:
     try:
         args = parse_args()
-        config = _load_config(args.config)
+        loaded_config = _load_config(args.config)
+        using_fallback_targets = not _has_any_targets(loaded_config, args)
+        config = _with_fallback_targets(loaded_config, args)
         results = run_checks(args, config)
     except Exception as exc:  # pragma: no cover - CLI fail-safe path
         print(f"[FAIL] Unable to run checks: {exc}", file=sys.stderr)
@@ -204,6 +247,8 @@ def main() -> int:
     if args.json:
         print_json(results)
     else:
+        if using_fallback_targets:
+            print("No targets supplied; running built-in baseline checks.")
         print_human(results)
 
     return 1 if any(result.status is CheckStatus.FAIL for result in results) else 0

@@ -5,6 +5,7 @@ ping: true
 hosts:
   - name: example.com
     dns_records: ["A", "AAAA"]
+    dnssec: true
     expected:
       A:
         - 93.184.216.34
