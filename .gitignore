@@ -2,6 +2,9 @@
 
 # Added by cargo
 
+# rustdl — standalone repo (https://github.com/Darknetzz/rustdl)
+Rust/rustdl/
+
 # Cargo (any crate, not only repo root)
 target/
 lib
