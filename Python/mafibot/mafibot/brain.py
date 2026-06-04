@@ -509,6 +509,7 @@ async def run_once(
             metrics.record_action(action.name)
         else:
             metrics.actions_failed += 1
+            metrics.record_action_failure(action.name)
     try:
         after_state = await parse_game_state(page)
     except ParseError:

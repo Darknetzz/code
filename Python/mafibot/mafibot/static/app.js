@@ -146,7 +146,42 @@ function appendActionCountsRow(addRow, counts) {
   ul.className = "action-counts-list action-counts-list--compact";
   renderActionCountsList(Object.fromEntries(entries), ul);
   wrap.appendChild(ul);
-  addRow("Activity", wrap);
+  addRow("Activity (ok)", wrap);
+}
+
+function appendActionOutcomeRow(addRow, okCounts, failCounts) {
+  const names = new Set([
+    ...Object.keys(okCounts || {}),
+    ...Object.keys(failCounts || {}),
+  ]);
+  if (!names.size) return;
+  const wrap = document.createElement("div");
+  wrap.className = "session-action-counts-wrap";
+  const ul = document.createElement("ul");
+  ul.className = "action-counts-list action-counts-list--compact";
+  [...names]
+    .sort((a, b) => {
+      const totalA =
+        (okCounts?.[a] || 0) + (failCounts?.[a] || 0);
+      const totalB =
+        (okCounts?.[b] || 0) + (failCounts?.[b] || 0);
+      return totalB - totalA;
+    })
+    .forEach((id) => {
+      const ok = okCounts?.[id] || 0;
+      const fail = failCounts?.[id] || 0;
+      const li = document.createElement("li");
+      const label = document.createElement("span");
+      label.className = "action-count-label";
+      label.textContent = displayActionLabel(id);
+      const num = document.createElement("span");
+      num.className = "action-count-n";
+      num.textContent = `${ok} ok · ${fail} failed`;
+      li.append(label, num);
+      ul.appendChild(li);
+    });
+  wrap.appendChild(ul);
+  addRow("Actions by type", wrap);
 }
 
 const SOURCE_LABELS = {
@@ -296,7 +331,47 @@ function updateLiveSessionMetrics(metrics, state) {
     $("st-session-gains-sources"),
     3
   );
-  renderActionCountsList(metrics.action_counts, list);
+  if (list) {
+    list.replaceChildren();
+    const names = new Set([
+      ...Object.keys(metrics.action_counts || {}),
+      ...Object.keys(metrics.action_failed_counts || {}),
+    ]);
+    if (!names.size && !metrics.actions_failed) {
+      list.classList.add("hidden");
+    } else {
+      list.classList.remove("hidden");
+      if (metrics.actions_run || metrics.actions_failed) {
+        const summary = document.createElement("li");
+        summary.className = "action-count-summary muted";
+        summary.textContent = `${metrics.actions_run ?? 0} ok · ${metrics.actions_failed ?? 0} failed (total)`;
+        list.appendChild(summary);
+      }
+      [...names]
+        .sort((a, b) => {
+          const ta =
+            (metrics.action_counts?.[a] || 0) +
+            (metrics.action_failed_counts?.[a] || 0);
+          const tb =
+            (metrics.action_counts?.[b] || 0) +
+            (metrics.action_failed_counts?.[b] || 0);
+          return tb - ta;
+        })
+        .forEach((id) => {
+          const li = document.createElement("li");
+          const label = document.createElement("span");
+          label.className = "action-count-label";
+          label.textContent = displayActionLabel(id);
+          const num = document.createElement("span");
+          num.className = "action-count-n";
+          const ok = metrics.action_counts?.[id] || 0;
+          const fail = metrics.action_failed_counts?.[id] || 0;
+          num.textContent = `${ok} ok · ${fail} failed`;
+          li.append(label, num);
+          list.appendChild(li);
+        });
+    }
+  }
 }
 
 /** Actions with extra config panels (shown only when enabled in the list). */
@@ -1253,7 +1328,7 @@ function renderSessionDetail(m) {
     addRow("Rankpoeng", rankpoengSummaryNode(m.rank_start, m.rank_end, gained));
   }
 
-  appendActionCountsRow(addRow, m.action_counts);
+  appendActionOutcomeRow(addRow, m.action_counts, m.action_failed_counts);
   appendGainsRows(addRow, m.gains);
 
   if (m.hotel_time_percent != null) {
@@ -1384,16 +1459,7 @@ function renderLiveSessionCard(metrics) {
     addRow("Rankpoeng", rankpoengSummaryNode(metrics.rank_start, metrics.rank_end, gained));
   }
   appendGainsRows(addRow, metrics.gains);
-  const counts = Object.entries(metrics.action_counts || {});
-  if (counts.length) {
-    const wrap = document.createElement("div");
-    wrap.className = "session-action-counts-wrap";
-    const ul = document.createElement("ul");
-    ul.className = "action-counts-list action-counts-list--compact";
-    renderActionCountsList(Object.fromEntries(counts), ul);
-    wrap.appendChild(ul);
-    addRow("Activity", wrap);
-  }
+  appendActionOutcomeRow(addRow, metrics.action_counts, metrics.action_failed_counts);
 }
 
 function updateSessionsLiveFromStatus(st) {

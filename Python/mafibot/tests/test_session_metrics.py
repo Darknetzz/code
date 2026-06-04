@@ -36,6 +36,15 @@ def test_record_hotel_skip():
     assert m.hotel_skip_hotel_full == 1
 
 
+def test_record_action_failure_counts():
+    m = SessionMetrics()
+    m.record_action("crime")
+    m.record_action_failure("crime")
+    m.record_action_failure("drugs")
+    assert m.action_counts == {"crime": 1}
+    assert m.action_failed_counts == {"crime": 1, "drugs": 1}
+
+
 def test_record_action_and_rank_gained():
     m = SessionMetrics()
     m.record_action("crime")

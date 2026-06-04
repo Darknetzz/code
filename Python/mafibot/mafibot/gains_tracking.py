@@ -95,6 +95,8 @@ def log_session_gains_summary(metrics: SessionMetrics) -> None:
     g = metrics.gains
     log_session_event(
         "SUMMARY",
+        actions_ok=metrics.actions_run,
+        actions_failed=metrics.actions_failed,
         money_net=g.money_net,
         rank_net=g.rank_points_net,
         cannabis=g.cannabis_grams_sold,

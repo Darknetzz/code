@@ -33,12 +33,17 @@ class SessionMetrics:
     rank_end: int | None = None
     stop_reason: str | None = None
     action_counts: dict[str, int] = field(default_factory=dict)
+    action_failed_counts: dict[str, int] = field(default_factory=dict)
     log_file: str | None = None
     gains: GainsLedger = field(default_factory=GainsLedger)
 
     def record_action(self, name: str) -> None:
         """Increment counter for a successfully completed action."""
         self.action_counts[name] = self.action_counts.get(name, 0) + 1
+
+    def record_action_failure(self, name: str) -> None:
+        """Increment counter for a failed action attempt."""
+        self.action_failed_counts[name] = self.action_failed_counts.get(name, 0) + 1
 
     def record_hotel_sample(self, in_hotel: bool) -> None:
         if in_hotel:

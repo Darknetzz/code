@@ -159,6 +159,7 @@ class SessionMetricsResponse(BaseModel):
     money_gained: int | None = None
     money_lost: int | None = None
     action_counts: dict[str, int] = Field(default_factory=dict)
+    action_failed_counts: dict[str, int] = Field(default_factory=dict)
     log_file: str | None = None
     gains: GainsLedgerResponse = Field(default_factory=GainsLedgerResponse)
 
