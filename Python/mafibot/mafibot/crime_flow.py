@@ -29,13 +29,15 @@ async def run_crime_flow(
     *,
     policy: HumanPolicy,
     dry_run: bool = False,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, str]:
     section = pick_crime_section(profile)
     if section == "stjel":
-        return await _run_stjel_flow(page, profile, policy=policy, dry_run=dry_run)
-    return await _run_perform_section_flow(
+        ok, detail = await _run_stjel_flow(page, profile, policy=policy, dry_run=dry_run)
+        return ok, detail, section
+    ok, detail = await _run_perform_section_flow(
         page, profile, section, policy=policy, dry_run=dry_run
     )
+    return ok, detail, section
 
 
 async def _run_perform_section_flow(

@@ -6,6 +6,7 @@ from mafibot.minions_page import (
     MinionsRoster,
     parse_minions_from_html,
     resolve_minion_training,
+    roster_skill_totals,
 )
 
 _FIXTURE = (
@@ -29,6 +30,12 @@ def test_parse_minions_from_fixture():
     hoz = next(m for m in roster.minions if m.name == "Hozoxube")
     assert hoz.id == "38633"
     assert hoz.training == "angrep"
+    assert hoz.angrep == 5.5
+    assert hoz.beskyttelse == 8.5
+    assert hoz.intelligens == 3.3
+    totals = roster_skill_totals(roster)
+    assert totals["angrep"] > 0
+    assert totals["beskyttelse"] > 0
     dead = next(m for m in roster.minions if m.name == "Pigapuwy")
     assert not dead.alive
     assert dead.id == "14136"

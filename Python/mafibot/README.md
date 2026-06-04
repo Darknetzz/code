@@ -207,8 +207,9 @@ Set `scheduler` to `soonest_ready` to prefer runnable actions by cooldown timing
 - Set `MAFIBOT_UI_TOKEN` in the environment before `mafibot.py ui`; the User tab can store the same token for API/WebSocket calls (`X-Mafibot-Token`).
 - Non-loopback bind requires `mafibot.py ui --insecure-bind`.
 - Optional `stop_webhook_url` in profile JSON posts to a Discord-compatible webhook when the session stops (captcha, ban, logout).
-- Last session stats are written to `last_session.json` under your config dir and shown in the Run tab.
-- The Run tab log is appended to `logs/mafibot.log` (rotating, ~2 MB × 5 files) and reloaded when you open the UI.
+- Last session stats are written to `last_session.json` and `sessions_history.ndjson` under your config dir; the **Sessions** tab shows per-session gains and lifetime totals.
+- Each autopilot run gets its own log under `logs/sessions/<timestamp>_<profile>.log` (every action/decision line). The Run tab tails the active session log; `logs/mafibot.log` remains for UI-only messages (rotating, ~2 MB × 5).
+- Gains tracking (money/rankpoeng by source, minion skill deltas, cannabis/opium grams) is stored in session JSON and merged into `lifetime_stats.json`.
 
 ## How it works
 

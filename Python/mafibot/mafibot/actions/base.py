@@ -18,6 +18,7 @@ class ActionResult:
     success: bool
     message: str = ""
     cooldown_until: datetime | None = None
+    source: str | None = None
 
 
 class Action(Protocol):

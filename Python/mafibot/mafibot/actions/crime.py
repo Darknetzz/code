@@ -8,6 +8,7 @@ from mafibot.actions.base import ActionResult
 from mafibot.config import BotProfile
 from mafibot.crime_catalog import crime_actions_enabled
 from mafibot.crime_flow import crime_flow_dry_run_summary, run_crime_flow
+from mafibot.gains_ledger import source_for_crime_section
 from mafibot.human_policy import HumanPolicy, page_reading_pause
 from mafibot.navigation import goto_page
 from mafibot.profile_options import (
@@ -54,7 +55,10 @@ class CrimeAction:
         await goto_page(page, "crime", policy=policy)
         await page_reading_pause(page)
 
-        ok, detail = await run_crime_flow(page, profile, policy=policy, dry_run=dry_run)
+        ok, detail, section = await run_crime_flow(
+            page, profile, policy=policy, dry_run=dry_run
+        )
+        source = source_for_crime_section(section)
         if ok:
-            return ActionResult(True, detail)
-        return ActionResult(False, detail)
+            return ActionResult(True, detail, source=source)
+        return ActionResult(False, detail, source=source)

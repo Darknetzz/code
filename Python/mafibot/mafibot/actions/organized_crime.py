@@ -79,5 +79,6 @@ class OrganizedCrimeAction(_EconomyPageAction):
             return ActionResult(
                 True,
                 f"organized crime ({profile.organized_crime_difficulty}) submitted",
+                source="organisert_krim",
             )
-        return ActionResult(False, "no organized crime button found")
+        return ActionResult(False, "no organized crime button found", source="organisert_krim")

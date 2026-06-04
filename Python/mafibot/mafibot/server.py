@@ -46,17 +46,25 @@ from mafibot.models import (
     ProfileRenameRequest,
     RunRequest,
     RunStatusResponse,
+    GainsLedgerResponse,
+    SessionLogListItem,
     SessionMetricsResponse,
     SessionStatusResponse,
 )
 from mafibot.runner import MafibotRunner, get_runner, run_state_blocks_start
+from mafibot.gains_ledger import load_lifetime_gains
 from mafibot.session_log import (
     append_ui_log_line,
     clear_session_log,
     configure_session_file_logging,
+    get_active_session_log_id,
     get_log_path,
+    list_session_logs,
     open_log_in_default_app,
+    read_log_lines,
     read_recent_log_lines,
+    resolve_log_path_for_read,
+    session_log_id_from_path,
 )
 from mafibot.session_metrics import (
     SessionMetrics,
@@ -188,11 +196,45 @@ def _ensure_runner_hooks() -> None:
 
 
 @app.get("/api/logs", response_model=LogLinesResponse)
-def api_get_logs(limit: int = 400) -> LogLinesResponse:
+def api_get_logs(limit: int = 400, session_id: str | None = None) -> LogLinesResponse:
     capped = max(1, min(limit, 2000))
+    path = resolve_log_path_for_read(session_id)
+    sid = session_id or get_active_session_log_id()
+    if sid is None and path != get_log_path():
+        sid = session_log_id_from_path(path)
     return LogLinesResponse(
-        path=str(get_log_path()),
-        lines=read_recent_log_lines(limit=capped),
+        path=str(path),
+        lines=read_log_lines(path, limit=capped),
+        session_id=sid,
+    )
+
+
+@app.get("/api/logs/sessions", response_model=list[SessionLogListItem])
+def api_list_session_logs(limit: int = 50) -> list[SessionLogListItem]:
+    capped = max(1, min(limit, 200))
+    return [
+        SessionLogListItem(
+            id=item.id,
+            path=item.path,
+            profile=item.profile,
+            started_at=item.started_at,
+            size_bytes=item.size_bytes,
+            modified_at=item.modified_at,
+        )
+        for item in list_session_logs(limit=capped)
+    ]
+
+
+@app.get("/api/logs/sessions/{session_id}", response_model=LogLinesResponse)
+def api_get_session_log(session_id: str, limit: int = 400) -> LogLinesResponse:
+    capped = max(1, min(limit, 2000))
+    path = resolve_log_path_for_read(session_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Session log not found")
+    return LogLinesResponse(
+        path=str(path),
+        lines=read_log_lines(path, limit=capped),
+        session_id=session_id,
     )
 
 
@@ -209,9 +251,14 @@ def api_clear_logs() -> dict:
 
 
 @app.post("/api/logs/open")
-def api_open_log_file() -> dict:
-    path = open_log_in_default_app()
+def api_open_log_file(session_id: str | None = None) -> dict:
+    path = open_log_in_default_app(session_id)
     return {"ok": True, "path": str(path)}
+
+
+@app.get("/api/stats/lifetime", response_model=GainsLedgerResponse)
+def api_lifetime_stats() -> GainsLedgerResponse:
+    return GainsLedgerResponse.model_validate(load_lifetime_gains().to_dict())
 
 
 @app.get("/api/health", response_model=HealthResponse)

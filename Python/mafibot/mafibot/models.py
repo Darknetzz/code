@@ -124,6 +124,16 @@ class DiscoverRequest(BaseModel):
     compare_last: bool = False
 
 
+class GainsLedgerResponse(BaseModel):
+    money_net: int = 0
+    money_by_source: dict[str, int] = Field(default_factory=dict)
+    rank_points_net: int = 0
+    rank_points_by_source: dict[str, int] = Field(default_factory=dict)
+    minion_skills_net: dict[str, float] = Field(default_factory=dict)
+    cannabis_grams_sold: int = 0
+    opium_grams_sold: int = 0
+
+
 class SessionMetricsResponse(BaseModel):
     profile: str = ""
     started_at: str = ""
@@ -146,7 +156,11 @@ class SessionMetricsResponse(BaseModel):
     stop_reason: str | None = None
     hotel_time_percent: float | None = None
     rank_points_gained: int | None = None
+    money_gained: int | None = None
+    money_lost: int | None = None
     action_counts: dict[str, int] = Field(default_factory=dict)
+    log_file: str | None = None
+    gains: GainsLedgerResponse = Field(default_factory=GainsLedgerResponse)
 
 
 class PreflightCheckResponse(BaseModel):
@@ -201,3 +215,13 @@ class LogAppendRequest(BaseModel):
 class LogLinesResponse(BaseModel):
     path: str
     lines: list[str] = Field(default_factory=list)
+    session_id: str | None = None
+
+
+class SessionLogListItem(BaseModel):
+    id: str
+    path: str
+    profile: str
+    started_at: str
+    size_bytes: int
+    modified_at: str

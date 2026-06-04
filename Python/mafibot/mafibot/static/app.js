@@ -149,6 +149,112 @@ function appendActionCountsRow(addRow, counts) {
   addRow("Activity", wrap);
 }
 
+const SOURCE_LABELS = {
+  enkel_krim: "Enkel krim",
+  tung_krim: "Tung krim",
+  stjel: "Stjel",
+  organisert_krim: "Organisert krim",
+  narkotika_solgt: "Narkotika solgt",
+  narkotika_kjop: "Narkotika kjøp",
+  bedrift: "Bedrift",
+  rederi: "Rederi",
+  marked: "Marked",
+  oppdrag: "Oppdrag",
+  bank: "Bank",
+  reise: "Reise",
+  drap: "Drap",
+  hotel: "Hotell",
+  annet: "Annet",
+};
+
+function displaySourceLabel(key) {
+  return SOURCE_LABELS[key] || key;
+}
+
+function renderSourceBreakdownList(bySource, listEl, limit = 12) {
+  if (!listEl) return;
+  const entries = Object.entries(bySource || {})
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, limit);
+  listEl.replaceChildren();
+  if (!entries.length) {
+    listEl.classList.add("hidden");
+    return;
+  }
+  listEl.classList.remove("hidden");
+  for (const [src, amount] of entries) {
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.className = "action-count-label";
+    label.textContent = displaySourceLabel(src);
+    const num = document.createElement("span");
+    num.className = `action-count-n ${amount > 0 ? "positive" : amount < 0 ? "negative" : ""}`;
+    const prefix = amount > 0 ? "+" : "";
+    num.textContent =
+      typeof amount === "number" && Math.abs(amount) >= 1000
+        ? `${prefix}${formatKr(amount)}`
+        : `${prefix}${amount}`;
+    li.append(label, num);
+    listEl.appendChild(li);
+  }
+}
+
+function appendGainsRows(addRow, gains) {
+  if (!gains) return;
+  const g = gains;
+  if (g.money_net || Object.keys(g.money_by_source || {}).length) {
+    const money = document.createElement("span");
+    money.className = "last-session-money";
+    money.textContent = formatKr(g.money_net || 0);
+    if (g.money_net) {
+      const deltaEl = document.createElement("span");
+      deltaEl.className = `last-session-delta ${g.money_net > 0 ? "positive" : "negative"}`;
+      deltaEl.textContent = ` (net)`;
+      money.appendChild(deltaEl);
+    }
+    addRow("Money (tracked)", money);
+    const wrap = document.createElement("div");
+    wrap.className = "session-action-counts-wrap";
+    const ul = document.createElement("ul");
+    ul.className = "action-counts-list action-counts-list--compact";
+    renderSourceBreakdownList(g.money_by_source, ul);
+    wrap.appendChild(ul);
+    if (ul.childNodes.length) addRow("Money by source", wrap);
+  }
+  if (g.rank_points_net || Object.keys(g.rank_points_by_source || {}).length) {
+    addRow("Rankpoeng (tracked)", `${g.rank_points_net > 0 ? "+" : ""}${formatRankpoeng(g.rank_points_net)}`);
+    const wrap = document.createElement("div");
+    wrap.className = "session-action-counts-wrap";
+    const ul = document.createElement("ul");
+    ul.className = "action-counts-list action-counts-list--compact";
+    renderSourceBreakdownList(g.rank_points_by_source, ul, 8);
+    wrap.appendChild(ul);
+    if (ul.childNodes.length) addRow("Rank by source", wrap);
+  }
+  const skills = g.minion_skills_net || {};
+  const skillParts = Object.entries(skills)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k} ${v > 0 ? "+" : ""}${v}`);
+  if (skillParts.length) {
+    addRow("Undersåtter skills", skillParts.join(" · "));
+  }
+  const drugs = [];
+  if (g.cannabis_grams_sold) drugs.push(`${g.cannabis_grams_sold} g cannabis`);
+  if (g.opium_grams_sold) drugs.push(`${g.opium_grams_sold} g opium`);
+  if (drugs.length) addRow("Narkotika solgt", drugs.join(" · "));
+}
+
+function sessionLogIdFromMetrics(m) {
+  if (!m?.log_file) return null;
+  const parts = String(m.log_file).replace(/\\/g, "/").split("/");
+  const file = parts[parts.length - 1] || "";
+  return file.replace(/\.log$/i, "") || null;
+}
+
+let sessionDetailCurrent = null;
+let sessionLogViewId = null;
+
 function updateLiveSessionMetrics(metrics, state) {
   const show = metrics && state === "running";
   $("st-session-activity-title")?.classList.toggle("hidden", !show);
@@ -167,6 +273,29 @@ function updateLiveSessionMetrics(metrics, state) {
   if (rankCell) {
     rankCell.replaceChildren(rankpoengSummaryNode(metrics.rank_start, metrics.rank_end, gained));
   }
+  const moneyCell = $("st-session-money");
+  if (moneyCell) {
+    const g = metrics.gains || {};
+    const walletDelta =
+      metrics.money_start != null && metrics.money_end != null
+        ? metrics.money_end - metrics.money_start
+        : null;
+    const net = g.money_net ?? walletDelta;
+    moneyCell.replaceChildren();
+    if (net != null && net !== 0) {
+      const span = document.createElement("span");
+      span.textContent = `${net > 0 ? "+" : ""}${formatKr(net)}`;
+      span.className = `last-session-delta ${net > 0 ? "positive" : "negative"}`;
+      moneyCell.appendChild(span);
+    } else {
+      moneyCell.textContent = "—";
+    }
+  }
+  renderSourceBreakdownList(
+    metrics.gains?.money_by_source,
+    $("st-session-gains-sources"),
+    3
+  );
   renderActionCountsList(metrics.action_counts, list);
 }
 
@@ -697,9 +826,10 @@ function renderLogLines(lines) {
   }
 }
 
-async function loadPersistedLogs() {
+async function loadPersistedLogs(sessionId = null) {
   try {
-    const data = await api("/api/logs?limit=400");
+    const q = sessionId ? `?limit=400&session_id=${encodeURIComponent(sessionId)}` : "?limit=400";
+    const data = await api(`/api/logs${q}`);
     const openBtn = $("btn-open-log");
     if (openBtn && data.path) {
       openBtn.title = data.path;
@@ -1035,12 +1165,19 @@ function renderSessionDetail(m) {
     body.replaceChildren();
   };
 
+  const viewLogBtn = $("btn-session-view-log");
+  sessionDetailCurrent = m;
+
   if (!m) {
     if (title) title.textContent = "Session details";
     showLatestBtn?.classList.add("hidden");
+    viewLogBtn?.classList.add("hidden");
     showEmpty("No session recorded yet. Start a run from the Run tab.");
     return;
   }
+
+  const logId = sessionLogIdFromMetrics(m);
+  viewLogBtn?.classList.toggle("hidden", !logId);
 
   if (title) {
     const when = formatSessionWhen(m.ended_at || m.started_at);
@@ -1117,6 +1254,7 @@ function renderSessionDetail(m) {
   }
 
   appendActionCountsRow(addRow, m.action_counts);
+  appendGainsRows(addRow, m.gains);
 
   if (m.hotel_time_percent != null) {
     addRow("Time in hotel", `${m.hotel_time_percent.toFixed(0)}%`);
@@ -1221,6 +1359,22 @@ function renderLiveSessionCard(metrics) {
   addRow("Profile", metrics.profile || "—");
   addRow("Started", formatSessionWhen(metrics.started_at));
   addRow("Actions ok", String(metrics.actions_run ?? 0));
+  if (metrics.money_start != null || metrics.money_end != null) {
+    const money = document.createElement("span");
+    money.className = "last-session-money";
+    const delta =
+      metrics.money_start != null && metrics.money_end != null
+        ? metrics.money_end - metrics.money_start
+        : metrics.gains?.money_net ?? null;
+    money.textContent = `${formatKr(metrics.money_start)} → ${formatKr(metrics.money_end)}`;
+    if (delta != null && delta !== 0) {
+      const deltaEl = document.createElement("span");
+      deltaEl.className = `last-session-delta ${delta > 0 ? "positive" : "negative"}`;
+      deltaEl.textContent = ` (${delta > 0 ? "+" : ""}${formatKr(delta)})`;
+      money.appendChild(deltaEl);
+    }
+    addRow("Money", money);
+  }
   if (metrics.rank_start != null || metrics.rank_end != null) {
     const gained =
       metrics.rank_points_gained ??
@@ -1229,6 +1383,7 @@ function renderLiveSessionCard(metrics) {
         : null);
     addRow("Rankpoeng", rankpoengSummaryNode(metrics.rank_start, metrics.rank_end, gained));
   }
+  appendGainsRows(addRow, metrics.gains);
   const counts = Object.entries(metrics.action_counts || {});
   if (counts.length) {
     const wrap = document.createElement("div");
@@ -1257,6 +1412,64 @@ function selectLatestSavedSession() {
     .forEach((el) => el.classList.remove("selected"));
 }
 
+async function loadLifetimeStats() {
+  const card = $("lifetime-stats-card");
+  const body = $("lifetime-stats-body");
+  if (!card || !body) return;
+  try {
+    const g = await api("/api/stats/lifetime");
+    body.replaceChildren();
+    const addRow = (label, value) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = label;
+      const td = document.createElement("td");
+      if (value instanceof Node) td.appendChild(value);
+      else td.textContent = value;
+      tr.append(th, td);
+      body.appendChild(tr);
+    };
+    const hasData =
+      g.money_net ||
+      g.rank_points_net ||
+      g.cannabis_grams_sold ||
+      g.opium_grams_sold ||
+      Object.keys(g.money_by_source || {}).length;
+    if (!hasData) {
+      card.classList.add("hidden");
+      return;
+    }
+    card.classList.remove("hidden");
+    appendGainsRows(addRow, g);
+  } catch {
+    card.classList.add("hidden");
+  }
+}
+
+async function loadSessionLogSelect() {
+  const sel = $("session-log-select");
+  if (!sel) return;
+  try {
+    const rows = await api("/api/logs/sessions?limit=40");
+    sel.replaceChildren();
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "Current / latest";
+    sel.appendChild(opt0);
+    for (const row of rows) {
+      const opt = document.createElement("option");
+      opt.value = row.id;
+      opt.textContent = `${row.profile} · ${row.started_at || row.modified_at}`;
+      sel.appendChild(opt);
+    }
+    sel.classList.toggle("hidden", rows.length === 0);
+    if (sessionLogViewId) sel.value = sessionLogViewId;
+  } catch {
+    sel.classList.add("hidden");
+  }
+}
+
 async function loadSessionsPage() {
   const empty = $("session-detail-empty");
   if (!empty) return;
@@ -1270,8 +1483,14 @@ async function loadSessionsPage() {
     hint.append(historyFile, document.createElement("br"));
     const lastFile = document.createElement("code");
     lastFile.textContent = `${mafibotConfigDir}/last_session.json`;
-    hint.append(lastFile);
+    hint.append(lastFile, document.createElement("br"));
+    const logsDir = document.createElement("code");
+    logsDir.textContent = `${mafibotConfigDir}/logs/sessions/`;
+    hint.append(logsDir);
   }
+
+  loadLifetimeStats().catch((e) => console.warn("lifetime stats", e));
+  loadSessionLogSelect().catch((e) => console.warn("session logs", e));
 
   const metricsPromise = api("/api/session/metrics").catch((e) => ({ error: e }));
   const historyPromise = api("/api/session/metrics/history?limit=50").catch((e) => ({
@@ -1820,6 +2039,19 @@ function setupTabs() {
     });
   });
   $("btn-session-show-latest")?.addEventListener("click", () => selectLatestSavedSession());
+  $("btn-session-view-log")?.addEventListener("click", async () => {
+    const id = sessionLogIdFromMetrics(sessionDetailCurrent);
+    if (!id) return;
+    try {
+      await api(`/api/logs/open?session_id=${encodeURIComponent(id)}`, { method: "POST" });
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  $("session-log-select")?.addEventListener("change", (ev) => {
+    sessionLogViewId = ev.target.value || null;
+    loadPersistedLogs(sessionLogViewId);
+  });
 }
 
 function setupActions() {
@@ -1851,7 +2083,10 @@ function setupActions() {
 
   $("btn-open-log")?.addEventListener("click", async () => {
     try {
-      await api("/api/logs/open", { method: "POST" });
+      const q = sessionLogViewId
+        ? `?session_id=${encodeURIComponent(sessionLogViewId)}`
+        : "";
+      await api(`/api/logs/open${q}`, { method: "POST" });
     } catch (e) {
       alert(e.message);
     }

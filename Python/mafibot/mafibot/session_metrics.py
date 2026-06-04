@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from mafibot.config import get_config_dir
+from mafibot.gains_ledger import GainsLedger, merge_session_into_lifetime
 
 
 @dataclass
@@ -32,6 +33,8 @@ class SessionMetrics:
     rank_end: int | None = None
     stop_reason: str | None = None
     action_counts: dict[str, int] = field(default_factory=dict)
+    log_file: str | None = None
+    gains: GainsLedger = field(default_factory=GainsLedger)
 
     def record_action(self, name: str) -> None:
         """Increment counter for a successfully completed action."""
@@ -64,16 +67,32 @@ class SessionMetrics:
             return None
         return self.rank_end - self.rank_start
 
+    @property
+    def money_gained(self) -> int:
+        return sum(v for v in self.gains.money_by_source.values() if v > 0)
+
+    @property
+    def money_lost(self) -> int:
+        return sum(-v for v in self.gains.money_by_source.values() if v < 0)
+
     def to_dict(self) -> dict:
         data = asdict(self)
+        data.pop("gains", None)
+        data["gains"] = self.gains.to_dict()
         data["hotel_time_percent"] = self.hotel_time_percent
         data["rank_points_gained"] = self.rank_points_gained
+        data["money_gained"] = self.money_gained
+        data["money_lost"] = self.money_lost
         return data
 
     @classmethod
     def from_dict(cls, data: dict) -> SessionMetrics:
         fields = cls.__dataclass_fields__
-        return cls(**{k: v for k, v in data.items() if k in fields})
+        gains_raw = data.get("gains")
+        kwargs = {k: v for k, v in data.items() if k in fields and k != "gains"}
+        if gains_raw is not None:
+            kwargs["gains"] = GainsLedger.from_dict(gains_raw)
+        return cls(**kwargs)
 
 
 _metrics: SessionMetrics | None = None
@@ -141,6 +160,8 @@ def finish_session_metrics(
         _metrics.money_end = money_end
     if rank_end is not None:
         _metrics.rank_end = rank_end
+    if not _metrics.dry_run:
+        merge_session_into_lifetime(_metrics.gains)
     save_last_session_summary(_metrics)
     append_session_history(_metrics)
     finished = _metrics

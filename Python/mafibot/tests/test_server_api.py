@@ -90,6 +90,20 @@ def test_session_metrics_with_saved_summary(tmp_path, monkeypatch):
     assert data["action_counts"]["crime"] == 12
 
 
+def test_lifetime_stats_endpoint():
+    r = client.get("/api/stats/lifetime")
+    assert r.status_code == 200
+    data = r.json()
+    assert "money_net" in data
+    assert "money_by_source" in data
+
+
+def test_session_logs_list():
+    r = client.get("/api/logs/sessions?limit=5")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
 def test_websocket_rejects_bad_token(monkeypatch):
     monkeypatch.setenv("MAFIBOT_UI_TOKEN", "secret-token")
     try:

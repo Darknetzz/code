@@ -1130,6 +1130,19 @@ button:disabled {
   color: var(--accent);
 }
 
+.action-count-n.positive {
+  color: var(--success, #3d9a5c);
+}
+
+.action-count-n.negative {
+  color: var(--danger);
+}
+
+.session-log-select {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
 .action-counts-list--compact {
   margin: 0;
   gap: 0.2rem;

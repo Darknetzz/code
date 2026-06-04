@@ -44,6 +44,9 @@ from mafibot.scheduler import (
 )
 from mafibot.selectors import action_display_label
 from mafibot.session import capture_failure
+from mafibot.gains_tracking import log_session_gains_summary, record_action_gains
+from mafibot.minions_page import MinionsRoster, parse_minions_page
+from mafibot.session_log import end_session_log, log_session_event, start_session_log
 from mafibot.session_metrics import (
     current_session_metrics,
     finish_session_metrics,
@@ -461,6 +464,7 @@ async def run_once(
 
     action, reason = await pick_next_action(state, profile, dry_run=dry_run)
     log.info("decision: %s", reason)
+    log_session_event("DECISION", reason=reason, action=action.name if action else None)
     _notify_status(state, action.name if action else None, reason, reason)
 
     if dry_run:
@@ -478,15 +482,25 @@ async def run_once(
             await _book_hotel_with_retry(page, profile, policy)
         if metrics:
             metrics.actions_skipped += 1
+        log_session_event("IDLE", reason=reason[:200] if reason else None)
         return None
+
+    minions_before: MinionsRoster | None = None
+    if action.name == "minions" and not dry_run:
+        try:
+            minions_before = await parse_minions_page(page)
+        except Exception:
+            minions_before = None
 
     if dry_run:
         log.info("dry-run: %s (hotel wrap simulated)", action.name)
+        log_session_event("DRY_RUN", action=action.name, reason=reason[:120])
         if metrics:
             metrics.actions_run += 1
             metrics.record_action(action.name)
         return ActionResult(True, f"dry-run: {action.name}")
 
+    log_session_event("ACTION_START", action=action.name)
     result = await execute_with_hotel_stay(page, action, profile, policy, dry_run=False)
     log.info("action %s: success=%s msg=%s", action.name, result.success, result.message)
     if metrics:
@@ -499,8 +513,29 @@ async def run_once(
         after_state = await parse_game_state(page)
     except ParseError:
         after_state = state
-    if metrics and after_state.rank_points is not None:
-        metrics.rank_end = after_state.rank_points
+    if metrics:
+        if after_state.money is not None:
+            metrics.money_end = after_state.money
+        if after_state.rank_points is not None:
+            metrics.rank_end = after_state.rank_points
+        minions_after: MinionsRoster | None = None
+        if action.name == "minions" and result.success:
+            try:
+                minions_after = await parse_minions_page(page)
+            except Exception:
+                minions_after = None
+        await record_action_gains(
+            metrics,
+            page=page,
+            action_name=action.name,
+            result_source=result.source,
+            success=result.success,
+            message=result.message,
+            before_state=state,
+            after_state=after_state,
+            minions_before=minions_before,
+            minions_after=minions_after,
+        )
     _notify_status(
         after_state,
         action.name,
@@ -550,6 +585,8 @@ async def run_session(
     _session = SessionContext()
     reset_rotation_state()
     metrics = start_session_metrics(profile.name, dry_run=dry_run)
+    log_path = start_session_log(profile.name, metrics.started_at)
+    metrics.log_file = str(log_path)
     policy = _policy_from_profile(profile)
     pacing = _new_session_pacing(policy)
     limit = max_minutes if max_minutes is not None else profile.max_session_minutes
@@ -670,12 +707,18 @@ async def run_session(
     except ParseError:
         pass
 
-    finished = finish_session_metrics(
-        stop_reason=stop_reason,
-        money_end=money_end,
-        rank_end=rank_end,
-    )
-    _log_session_summary(profile, finished)
+    try:
+        finished = finish_session_metrics(
+            stop_reason=stop_reason,
+            money_end=money_end,
+            rank_end=rank_end,
+        )
+        if finished:
+            log_session_gains_summary(finished)
+        _log_session_summary(profile, finished)
+    finally:
+        log_session_event("SESSION_END", stop_reason=stop_reason or "complete")
+        end_session_log()
 
     elapsed = datetime.now() - session_start
     log.info("session ended after %s", elapsed)

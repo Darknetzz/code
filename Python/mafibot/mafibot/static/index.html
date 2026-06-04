@@ -106,8 +106,10 @@
             </dl>
             <h3 class="subsection-title hidden" id="st-session-activity-title">This session</h3>
             <dl class="status-grid hidden" id="st-session-activity-fields">
+              <div><dt>Penger (session)</dt><dd id="st-session-money">—</dd></div>
               <div><dt>Rankpoeng</dt><dd id="st-rankpoeng">—</dd></div>
             </dl>
+            <ul id="st-session-gains-sources" class="action-counts-list hidden" aria-live="polite"></ul>
             <ul id="st-action-counts" class="action-counts-list hidden" aria-live="polite"></ul>
             <p id="st-parse-error" class="hidden tos-note"></p>
             <p id="st-parse-playbook" class="hidden muted small"></p>
@@ -152,11 +154,22 @@
           </table>
         </div>
 
+        <div class="card card-lifetime-stats hidden" id="lifetime-stats-card">
+          <h2>Lifetime totals</h2>
+          <p class="tos-note">Cumulative gains across all completed sessions.</p>
+          <table class="config-overview-table last-session-table">
+            <tbody id="lifetime-stats-body"></tbody>
+          </table>
+        </div>
+
         <div class="sessions-layout">
           <div class="card card-session-detail">
             <div class="session-detail-header">
               <h2 id="session-detail-title">Session details</h2>
-              <button type="button" class="small hidden" id="btn-session-show-latest">Show latest saved</button>
+              <div class="session-detail-actions button-group" role="group">
+                <button type="button" class="small hidden" id="btn-session-view-log">View log</button>
+                <button type="button" class="small hidden" id="btn-session-show-latest">Show latest saved</button>
+              </div>
             </div>
             <p id="session-detail-empty" class="last-session-empty muted">Loading…</p>
             <table class="config-overview-table last-session-table hidden" id="session-detail-table">
@@ -168,6 +181,10 @@
             <h2>Session history</h2>
             <div class="session-history-inner">
               <p id="sessions-storage-hint" class="sessions-storage-hint muted">Loading storage path…</p>
+              <label for="session-log-select" class="muted small">Session log</label>
+              <select id="session-log-select" class="session-log-select hidden" aria-label="Browse session logs">
+                <option value="">Current / latest</option>
+              </select>
               <p id="session-history-empty" class="session-history-empty muted">Loading…</p>
               <ul id="session-history-list" class="session-history-list hidden" aria-label="Past sessions"></ul>
             </div>

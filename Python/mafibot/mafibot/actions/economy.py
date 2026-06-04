@@ -21,6 +21,7 @@ from mafibot.drugs_locations import (
     location_allows_drugs,
 )
 from mafibot.selectors import BUSINESS_ACTION_LABELS, SHIP_ACTION_LABELS
+from mafibot.gains_ledger import source_for_action
 from mafibot.state import GameState
 
 
@@ -66,10 +67,11 @@ class _EconomyPageAction:
             await goto_page(page, self.logical, policy=policy)
 
         await page_reading_pause(page)
+        source = source_for_action(self.logical)
         clicked = await click_button_matching(page, self.labels, policy=policy, dry_run=dry_run)
         if clicked or dry_run:
-            return ActionResult(True, f"{self.logical} action submitted")
-        return ActionResult(False, f"no button for {self.logical}")
+            return ActionResult(True, f"{self.logical} action submitted", source=source)
+        return ActionResult(False, f"no button for {self.logical}", source=source)
 
 
 class BusinessAction(_EconomyPageAction):
@@ -192,10 +194,20 @@ class DrugsAction(_EconomyPageAction):
         except Exception:
             location = state.location
         labels = drugs_click_labels_for_location(profile, location)
+        prefer = (profile.drugs_prefer or "sell").lower()
+        source = "narkotika_kjop" if prefer == "buy" else "narkotika_solgt"
         clicked = await click_button_matching(page, labels, policy=policy, dry_run=dry_run)
         if clicked or dry_run:
-            return ActionResult(True, f"drugs action submitted ({profile.drugs_prefer})")
-        return ActionResult(False, f"no button for drugs ({profile.drugs_prefer})")
+            return ActionResult(
+                True,
+                f"drugs action submitted ({profile.drugs_prefer})",
+                source=source,
+            )
+        return ActionResult(
+            False,
+            f"no button for drugs ({profile.drugs_prefer})",
+            source=source,
+        )
 
 
 class BankAction:

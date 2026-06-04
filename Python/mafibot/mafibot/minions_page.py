@@ -30,6 +30,9 @@ class MinionInfo:
     name: str
     alive: bool
     training: str | None = None
+    angrep: float | None = None
+    beskyttelse: float | None = None
+    intelligens: float | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,39 @@ class MinionsRoster:
 
 def training_label(training_id: str) -> str:
     return _TRAINING_LABELS.get(training_id.lower(), training_id)
+
+
+def _parse_skill_cells(row: str) -> tuple[float | None, float | None, float | None]:
+    labels = ("Angrep", "Beskyttelse", "Intelligens")
+    values: list[float | None] = []
+    for label in labels:
+        m = re.search(
+            rf'app-table-extra">{label}:\s*</span>\s*<a[^>]*>([\d.]+)</a>',
+            row,
+            re.I,
+        )
+        if m:
+            try:
+                values.append(float(m.group(1)))
+            except ValueError:
+                values.append(None)
+        else:
+            values.append(None)
+    return values[0], values[1], values[2]
+
+
+def roster_skill_totals(roster: MinionsRoster) -> dict[str, float]:
+    totals = {"angrep": 0.0, "beskyttelse": 0.0, "intelligens": 0.0}
+    for m in roster.minions:
+        if not m.alive:
+            continue
+        if m.angrep is not None:
+            totals["angrep"] += m.angrep
+        if m.beskyttelse is not None:
+            totals["beskyttelse"] += m.beskyttelse
+        if m.intelligens is not None:
+            totals["intelligens"] += m.intelligens
+    return {k: round(v, 1) for k, v in totals.items()}
 
 
 def resolve_minion_training(profile: BotProfile, minion: MinionInfo) -> str | None:
@@ -108,8 +144,17 @@ def parse_minions_from_html(html: str) -> MinionsRoster:
             hide_m = re.search(r"folk_skjul\(\{id:\s*(\d+)", row, re.I)
             if hide_m:
                 mid = hide_m.group(1)
+        angrep, beskyttelse, intelligens = _parse_skill_cells(row)
         minions.append(
-            MinionInfo(id=mid, name=name, alive=alive, training=training)
+            MinionInfo(
+                id=mid,
+                name=name,
+                alive=alive,
+                training=training,
+                angrep=angrep,
+                beskyttelse=beskyttelse,
+                intelligens=intelligens,
+            )
         )
     return MinionsRoster(tuple(minions))
 
