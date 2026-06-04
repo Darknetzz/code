@@ -15,9 +15,8 @@ hackcon2026/
 PowerShell/OptimizePerformance_Changes.json
 downloads/
 .env
-Python/mafibot/.env
-Python/mafibot/**/profile/
-Python/mafibot/**/discovery/
+# Moved to ssh://git@gitlab.roste.org/kriss/mafiaspillet-bot.git
+Python/mafibot/
 Python/pyspotify/exports
 *.exe
 *.bak
