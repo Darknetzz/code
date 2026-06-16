@@ -34,6 +34,8 @@ if (-not $PSBoundParameters.ContainsKey('Ffprobe')) {
     if (-not $Ffprobe) { $Ffprobe = 'ffprobe' }
 }
 
+$ScriptBoundParameters = $PSBoundParameters
+
 $VideoExtensions = @('.mp4', '.mkv', '.m4v', '.mov', '.webm', '.avi', '.wmv', '.flv', '.ts', '.m2ts')
 
 function Get-SuggestedScanPath {
@@ -51,16 +53,16 @@ function Get-DefaultOutputPaths {
 }
 
 function Resolve-ScanConfiguration {
-    if (-not $PSBoundParameters.ContainsKey('Path') -or [string]::IsNullOrWhiteSpace($Path)) {
+    if (-not $ScriptBoundParameters.ContainsKey('Path') -or [string]::IsNullOrWhiteSpace($Path)) {
         $label = if ($ReportOnly) { 'Scanned folder' } else { 'Folder to scan' }
         $script:Path = Read-HostPath -Prompt $label -Default (Get-SuggestedScanPath) -MustExist
     }
 
     $defaults = Get-DefaultOutputPaths $Path
-    if (-not $PSBoundParameters.ContainsKey('OutputCsv') -or [string]::IsNullOrWhiteSpace($OutputCsv)) {
+    if (-not $ScriptBoundParameters.ContainsKey('OutputCsv') -or [string]::IsNullOrWhiteSpace($OutputCsv)) {
         $script:OutputCsv = $defaults.Csv
     }
-    if (-not $PSBoundParameters.ContainsKey('OutputHtml') -or [string]::IsNullOrWhiteSpace($OutputHtml)) {
+    if (-not $ScriptBoundParameters.ContainsKey('OutputHtml') -or [string]::IsNullOrWhiteSpace($OutputHtml)) {
         $script:OutputHtml = $defaults.Html
     }
 }
@@ -165,7 +167,7 @@ function Initialize-InteractiveOptions {
     }
 }
 
-if ($PSBoundParameters.Count -eq 0) {
+if ($ScriptBoundParameters.Count -eq 0) {
     Initialize-InteractiveOptions
 } else {
     Resolve-ScanConfiguration
