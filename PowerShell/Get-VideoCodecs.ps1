@@ -389,24 +389,30 @@ function New-CodecHtmlReport {
     h1 { margin: 0 0 8px; font-size: 2.1rem; letter-spacing: -0.04em; }
     h2 { margin: 28px 0 12px; font-size: 1.2rem; }
     .muted { color: var(--muted); }
-    .meta, .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+    main > section,
+    main > .grid-2 { margin-bottom: 28px; }
+    .meta, .cards {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    }
     .card, .panel, .split-card {
       background: rgba(21, 27, 35, 0.9);
       border: 1px solid var(--border);
       border-radius: 16px;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
     }
-    .card { padding: 16px; }
+    .card { padding: 18px 20px; }
     .card span { display: block; color: var(--muted); font-size: 0.86rem; }
     .card strong { display: block; margin-top: 8px; font-size: 1.45rem; color: var(--accent); }
     .card.av1 strong { color: var(--av1); }
     .card.nonav1 strong { color: var(--h264); }
-    .split-card { padding: 20px; margin-bottom: 8px; }
+    .split-card { padding: 22px 24px; }
     .split-header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; font-size: 0.95rem; }
     .split-bar { display: flex; height: 18px; border-radius: 999px; overflow: hidden; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border); }
     .split-bar .av1 { background: linear-gradient(90deg, #059669, var(--av1)); }
     .split-bar .nonav1 { background: linear-gradient(90deg, #2563eb, var(--h264)); }
-    .panel { overflow: hidden; margin-bottom: 8px; }
+    .panel { overflow: hidden; }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
     .controls input, .controls select, .controls button {
       min-width: 220px;
@@ -511,7 +517,7 @@ function New-CodecHtmlReport {
     .bar-fill.error { background: linear-gradient(90deg, #e11d48, var(--error)); }
     .bar-fill.other { background: linear-gradient(90deg, #475569, var(--other)); }
     .bar-label { display: block; margin-top: 6px; color: var(--muted); font-size: 0.8rem; }
-    .grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+    .grid-2 { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
     #file-table-wrap { max-height: 70vh; overflow: auto; }
     tr.hidden { display: none; }
     footer { margin-top: 28px; color: var(--muted); font-size: 0.86rem; }
