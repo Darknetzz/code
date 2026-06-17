@@ -420,6 +420,26 @@ function New-CodecHtmlReport {
       box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
     }
     .table-status { align-self: center; color: var(--muted); font-size: 0.9rem; }
+    .pagination {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .pagination button {
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    .pagination button:hover:not(:disabled) { border-color: var(--accent); }
+    .pagination button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .pagination .page-info { min-width: 8rem; text-align: center; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
@@ -514,13 +534,26 @@ function New-CodecHtmlReport {
           <option value="">All codecs</option>
           $codecOptions
         </select>
-        <span id="table-status" class="table-status">Showing $total of $total</span>
+        <select id="page-size" aria-label="Rows per page">
+          <option value="50">50 per page</option>
+          <option value="100" selected>100 per page</option>
+          <option value="250">250 per page</option>
+          <option value="500">500 per page</option>
+        </select>
+        <span id="table-status" class="table-status">Showing 1–100 of $total</span>
       </div>
       <div id="file-table-wrap" class="panel table-wrap">
         <table id="file-table">
           <thead><tr><th>Codec</th><th>Size</th><th>Ext</th><th>Filename</th><th>Directory</th></tr></thead>
           <tbody>$fileRows</tbody>
         </table>
+      </div>
+      <div class="pagination">
+        <button type="button" id="page-first" aria-label="First page">First</button>
+        <button type="button" id="page-prev" aria-label="Previous page">Prev</button>
+        <span id="page-info" class="page-info">Page 1 of 1</span>
+        <button type="button" id="page-next" aria-label="Next page">Next</button>
+        <button type="button" id="page-last" aria-label="Last page">Last</button>
       </div>
     </section>
 
@@ -529,25 +562,71 @@ function New-CodecHtmlReport {
   <script>
     const search = document.getElementById('search');
     const codecFilter = document.getElementById('codec-filter');
+    const pageSizeSelect = document.getElementById('page-size');
     const rows = Array.from(document.querySelectorAll('#file-table tbody tr'));
     const status = document.getElementById('table-status');
+    const pageInfo = document.getElementById('page-info');
+    const pageFirst = document.getElementById('page-first');
+    const pagePrev = document.getElementById('page-prev');
+    const pageNext = document.getElementById('page-next');
+    const pageLast = document.getElementById('page-last');
+    let currentPage = 1;
 
-    function applyFilters() {
+    function getMatchingRows() {
       const q = (search.value || '').trim().toLowerCase();
       const codec = codecFilter.value;
-      let visible = 0;
-      for (const row of rows) {
+      return rows.filter((row) => {
         const matchSearch = !q || row.dataset.search.includes(q);
         const matchCodec = !codec || row.dataset.codec === codec;
-        const show = matchSearch && matchCodec;
-        row.classList.toggle('hidden', !show);
-        if (show) visible++;
-      }
-      status.textContent = 'Showing ' + visible.toLocaleString() + ' of ' + rows.length.toLocaleString();
+        return matchSearch && matchCodec;
+      });
     }
 
-    search.addEventListener('input', applyFilters);
-    codecFilter.addEventListener('change', applyFilters);
+    function applyFilters(resetPage) {
+      if (resetPage) currentPage = 1;
+      const matching = getMatchingRows();
+      const pageSize = parseInt(pageSizeSelect.value, 10) || 100;
+      const totalPages = Math.max(1, Math.ceil(matching.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const start = (currentPage - 1) * pageSize;
+      const end = Math.min(start + pageSize, matching.length);
+      const visibleSet = new Set(matching.slice(start, end));
+
+      for (const row of rows) {
+        row.classList.toggle('hidden', !visibleSet.has(row));
+      }
+
+      if (matching.length === 0) {
+        status.textContent = 'Showing 0 of ' + rows.length.toLocaleString();
+      } else if (matching.length === rows.length) {
+        status.textContent = 'Showing ' + (start + 1).toLocaleString() + '\u2013' + end.toLocaleString() + ' of ' + rows.length.toLocaleString();
+      } else {
+        status.textContent = 'Showing ' + (start + 1).toLocaleString() + '\u2013' + end.toLocaleString() + ' of ' + matching.length.toLocaleString() + ' (filtered from ' + rows.length.toLocaleString() + ')';
+      }
+
+      pageInfo.textContent = 'Page ' + currentPage.toLocaleString() + ' of ' + totalPages.toLocaleString();
+      pageFirst.disabled = currentPage <= 1;
+      pagePrev.disabled = currentPage <= 1;
+      pageNext.disabled = currentPage >= totalPages;
+      pageLast.disabled = currentPage >= totalPages;
+    }
+
+    search.addEventListener('input', () => applyFilters(true));
+    codecFilter.addEventListener('change', () => applyFilters(true));
+    pageSizeSelect.addEventListener('change', () => applyFilters(true));
+    pageFirst.addEventListener('click', () => { currentPage = 1; applyFilters(false); });
+    pagePrev.addEventListener('click', () => { currentPage--; applyFilters(false); });
+    pageNext.addEventListener('click', () => { currentPage++; applyFilters(false); });
+    pageLast.addEventListener('click', () => {
+      const matching = getMatchingRows();
+      const pageSize = parseInt(pageSizeSelect.value, 10) || 100;
+      currentPage = Math.max(1, Math.ceil(matching.length / pageSize));
+      applyFilters(false);
+    });
+
+    applyFilters(false);
   </script>
 </body>
 </html>
