@@ -329,9 +329,11 @@ function New-CodecHtmlReport {
 "@
     }) -join "`n"
 
-    $codecOptions = ($codecGroups | ForEach-Object {
+    $codecFilterChips = ($codecGroups | ForEach-Object {
         $label = Get-CodecDisplayName $_.Name
-        "<option value=""$((ConvertTo-HtmlSafe $_.Name))"">$((ConvertTo-HtmlSafe $label)) ($($_.Count))</option>"
+        @"
+<label class="codec-chip"><input type="checkbox" value="$((ConvertTo-HtmlSafe $_.Name))" checked> $((ConvertTo-HtmlSafe $label)) ($($_.Count))</label>
+"@
     }) -join "`n"
 
     $fileRows = ($normalized | Sort-Object Codec, Path | ForEach-Object {
@@ -340,7 +342,7 @@ function New-CodecHtmlReport {
         $fileName = [System.IO.Path]::GetFileName($_.Path)
         $dirName = [System.IO.Path]::GetDirectoryName($_.Path)
         @"
-<tr data-codec="$((ConvertTo-HtmlSafe $_.Codec))" data-search="$((ConvertTo-HtmlSafe ($_.Path.ToLowerInvariant())))">
+<tr data-codec="$((ConvertTo-HtmlSafe $_.Codec))" data-path="$((ConvertTo-HtmlSafe $_.Path))" data-size-gb="$($_.SizeGB)" data-extension="$((ConvertTo-HtmlSafe $_.Extension))" data-search="$((ConvertTo-HtmlSafe ($_.Path.ToLowerInvariant())))">
   <td><span class="pill $css">$((ConvertTo-HtmlSafe $label))</span></td>
   <td class="num">$((Format-DisplaySize $_.SizeGB))</td>
   <td>$((ConvertTo-HtmlSafe $_.Extension))</td>
@@ -406,7 +408,7 @@ function New-CodecHtmlReport {
     .split-bar .nonav1 { background: linear-gradient(90deg, #2563eb, var(--h264)); }
     .panel { overflow: hidden; margin-bottom: 8px; }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
-    .controls input, .controls select {
+    .controls input, .controls select, .controls button {
       min-width: 220px;
       background: rgba(15, 23, 42, 0.9);
       color: var(--text);
@@ -415,10 +417,48 @@ function New-CodecHtmlReport {
       padding: 9px 11px;
       outline: none;
     }
-    .controls input:focus, .controls select:focus {
+    .controls button {
+      min-width: auto;
+      cursor: pointer;
+      font: inherit;
+    }
+    .controls button:hover { border-color: var(--accent); }
+    .controls input:focus, .controls select:focus, .controls button:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
     }
+    .codec-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .codec-filters-label { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
+    .codec-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      font-size: 0.86rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .codec-chip:has(input:checked) { border-color: var(--accent); }
+    .codec-chip input { margin: 0; accent-color: var(--accent); }
+    .filter-action {
+      background: transparent;
+      color: var(--accent);
+      border: none;
+      padding: 6px 8px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.86rem;
+    }
+    .filter-action:hover { text-decoration: underline; }
     .table-status { align-self: center; color: var(--muted); font-size: 0.9rem; }
     .pagination {
       display: flex;
@@ -530,17 +570,20 @@ function New-CodecHtmlReport {
       <h2>All files</h2>
       <div class="controls">
         <input id="search" type="search" placeholder="Search path or filename..." aria-label="Search files">
-        <select id="codec-filter" aria-label="Filter by codec">
-          <option value="">All codecs</option>
-          $codecOptions
-        </select>
         <select id="page-size" aria-label="Rows per page">
           <option value="50">50 per page</option>
           <option value="100" selected>100 per page</option>
           <option value="250">250 per page</option>
           <option value="500">500 per page</option>
         </select>
+        <button type="button" id="export-csv" title="Download CSV of all rows matching current filters">Export filtered CSV</button>
         <span id="table-status" class="table-status">Showing 1–100 of $total</span>
+      </div>
+      <div class="codec-filters" id="codec-filters" aria-label="Filter by codec">
+        <span class="codec-filters-label">Codecs:</span>
+        $codecFilterChips
+        <button type="button" class="filter-action" id="codec-all">All</button>
+        <button type="button" class="filter-action" id="codec-none">None</button>
       </div>
       <div id="file-table-wrap" class="panel table-wrap">
         <table id="file-table">
@@ -561,8 +604,10 @@ function New-CodecHtmlReport {
   </main>
   <script>
     const search = document.getElementById('search');
-    const codecFilter = document.getElementById('codec-filter');
+    const codecFilters = document.getElementById('codec-filters');
+    const codecCheckboxes = () => Array.from(codecFilters.querySelectorAll('input[type=checkbox]'));
     const pageSizeSelect = document.getElementById('page-size');
+    const exportCsvBtn = document.getElementById('export-csv');
     const rows = Array.from(document.querySelectorAll('#file-table tbody tr'));
     const status = document.getElementById('table-status');
     const pageInfo = document.getElementById('page-info');
@@ -572,14 +617,67 @@ function New-CodecHtmlReport {
     const pageLast = document.getElementById('page-last');
     let currentPage = 1;
 
+    function getSelectedCodecs() {
+      return codecCheckboxes().filter((cb) => cb.checked).map((cb) => cb.value);
+    }
+
     function getMatchingRows() {
       const q = (search.value || '').trim().toLowerCase();
-      const codec = codecFilter.value;
+      const selected = getSelectedCodecs();
+      const allCodecs = codecCheckboxes().map((cb) => cb.value);
+      const filterCodec = selected.length > 0 && selected.length < allCodecs.length;
       return rows.filter((row) => {
         const matchSearch = !q || row.dataset.search.includes(q);
-        const matchCodec = !codec || row.dataset.codec === codec;
-        return matchSearch && matchCodec;
+        if (!matchSearch) return false;
+        if (selected.length === 0) return false;
+        if (!filterCodec) return true;
+        return selected.includes(row.dataset.codec);
       });
+    }
+
+    function csvEscape(value) {
+      const s = String(value ?? '');
+      if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function buildExportFilename() {
+      const selected = getSelectedCodecs();
+      const allCodecs = codecCheckboxes().map((cb) => cb.value);
+      const parts = ['codec-export'];
+      if (selected.length > 0 && selected.length < allCodecs.length) {
+        parts.push(selected.slice().sort().join('-'));
+      }
+      const q = (search.value || '').trim();
+      if (q) parts.push('search');
+      parts.push(new Date().toISOString().slice(0, 10));
+      return parts.join('-') + '.csv';
+    }
+
+    function downloadFilteredCsv() {
+      const matching = getMatchingRows();
+      if (!matching.length) {
+        window.alert('No rows match the current filters.');
+        return;
+      }
+      const lines = ['Path,Codec,SizeGB,Extension'];
+      for (const row of matching) {
+        lines.push([
+          csvEscape(row.dataset.path),
+          csvEscape(row.dataset.codec),
+          csvEscape(row.dataset.sizeGb),
+          csvEscape(row.dataset.extension)
+        ].join(','));
+      }
+      const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = buildExportFilename();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     }
 
     function applyFilters(resetPage) {
@@ -614,7 +712,18 @@ function New-CodecHtmlReport {
     }
 
     search.addEventListener('input', () => applyFilters(true));
-    codecFilter.addEventListener('change', () => applyFilters(true));
+    for (const cb of codecCheckboxes()) {
+      cb.addEventListener('change', () => applyFilters(true));
+    }
+    document.getElementById('codec-all').addEventListener('click', () => {
+      for (const cb of codecCheckboxes()) cb.checked = true;
+      applyFilters(true);
+    });
+    document.getElementById('codec-none').addEventListener('click', () => {
+      for (const cb of codecCheckboxes()) cb.checked = false;
+      applyFilters(true);
+    });
+    exportCsvBtn.addEventListener('click', downloadFilteredCsv);
     pageSizeSelect.addEventListener('change', () => applyFilters(true));
     pageFirst.addEventListener('click', () => { currentPage = 1; applyFilters(false); });
     pagePrev.addEventListener('click', () => { currentPage--; applyFilters(false); });
