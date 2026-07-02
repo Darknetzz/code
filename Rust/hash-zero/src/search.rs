@@ -1,8 +1,9 @@
 use crate::cli::{FindArgs, HashAlgorithm, ZeroSide, ZeroUnit};
 use crate::hash::{build_input, count_zeroes, digest_hex, hash_digest, meets_target};
+use crate::output::FindProgress;
 use anyhow::Result;
 use rayon::prelude::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -27,9 +28,12 @@ pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
     let shared = &args.shared;
     let prefix = Arc::new(args.prefix.clone());
     let found = Arc::new(AtomicBool::new(false));
+    let best_zeroes = Arc::new(AtomicU32::new(0));
+    let latest_nonce = Arc::new(AtomicU64::new(args.nonce_start));
+    let show_progress = args.show_progress();
     let start = Instant::now();
     let mut nonce_cursor = args.nonce_start;
-    let mut total_attempts = 0u64;
+    let mut progress = FindProgress::new(show_progress, args.progress_interval_ms, shared.zeros);
 
     loop {
         if found.load(Ordering::Relaxed) {
@@ -48,6 +52,13 @@ pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
 
                 let input = build_input(&prefix, nonce, args.nonce_format);
                 let digest = hash_digest(shared.algorithm, input.as_bytes());
+
+                if show_progress {
+                    let zeroes = count_zeroes(&digest, shared.side(), shared.unit);
+                    best_zeroes.fetch_max(zeroes, Ordering::Relaxed);
+                    latest_nonce.store(nonce, Ordering::Relaxed);
+                }
+
                 if meets_target(
                     &digest,
                     shared.zeros,
@@ -67,10 +78,20 @@ pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
                 }
             });
 
-        total_attempts = total_attempts.saturating_add(CHUNK_SIZE);
+        let attempts_so_far = chunk_end.saturating_sub(args.nonce_start);
+        if match_result.is_none() {
+            progress.maybe_report(
+                attempts_so_far,
+                start.elapsed(),
+                best_zeroes.load(Ordering::Relaxed),
+                latest_nonce.load(Ordering::Relaxed),
+            );
+        }
         nonce_cursor = chunk_end;
 
         if let Some(found_match) = match_result {
+            progress.finish();
+
             let elapsed = start.elapsed();
             let elapsed_ms = elapsed.as_millis();
             let hash_rate = if elapsed.as_secs_f64() > 0.0 {
@@ -112,7 +133,7 @@ struct FindMatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{SharedArgs, ZeroUnit};
+    use crate::cli::{NonceFormat, SharedArgs, ZeroUnit};
 
     fn test_find_args(prefix: &str, zeros: u32) -> FindArgs {
         FindArgs {
@@ -128,6 +149,9 @@ mod tests {
             nonce_start: 0,
             nonce_format: NonceFormat::Decimal,
             threads: None,
+            progress: false,
+            no_progress: true,
+            progress_interval_ms: 1000,
         }
     }
 

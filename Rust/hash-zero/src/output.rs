@@ -1,4 +1,6 @@
 use serde::Serialize;
+use std::io::Write;
+use std::time::{Duration, Instant};
 
 use crate::cli::{HashAlgorithm, ZeroSide, ZeroUnit};
 use crate::hash::VerifyOutcome;
@@ -6,6 +8,60 @@ use crate::search::FindResult;
 
 pub fn print_error(message: &str) {
     eprintln!("FAIL {message}");
+}
+
+pub struct FindProgress {
+    enabled: bool,
+    interval: Duration,
+    target_zeroes: u32,
+    last_report: Instant,
+}
+
+impl FindProgress {
+    pub fn new(enabled: bool, interval_ms: u64, target_zeroes: u32) -> Self {
+        Self {
+            enabled,
+            interval: Duration::from_millis(interval_ms),
+            target_zeroes,
+            last_report: Instant::now(),
+        }
+    }
+
+    pub fn maybe_report(
+        &mut self,
+        attempts: u64,
+        elapsed: Duration,
+        best_zeroes: u32,
+        latest_nonce: u64,
+    ) {
+        if !self.enabled {
+            return;
+        }
+        if self.last_report.elapsed() < self.interval {
+            return;
+        }
+        self.last_report = Instant::now();
+
+        let rate = if elapsed.as_secs_f64() > 0.0 {
+            attempts as f64 / elapsed.as_secs_f64()
+        } else {
+            attempts as f64
+        };
+
+        let _ = write!(
+            std::io::stderr(),
+            "\rprogress: attempts={attempts} elapsed={:.1}s rate={rate:.0}/s best={best_zeroes}/{} nonce={latest_nonce}   ",
+            elapsed.as_secs_f64(),
+            self.target_zeroes,
+        );
+        let _ = std::io::stderr().flush();
+    }
+
+    pub fn finish(&self) {
+        if self.enabled {
+            let _ = writeln!(std::io::stderr());
+        }
+    }
 }
 
 pub fn print_find_human(result: &FindResult) {

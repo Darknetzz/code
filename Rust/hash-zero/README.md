@@ -48,6 +48,9 @@ cargo run --release -- verify "hello45231" --zeros 4 --unit hex --json
 | `--nonce-start <N>` | `0` | Starting nonce value. |
 | `--nonce-format decimal\|hex` | `decimal` | How the nonce is appended to the prefix. |
 | `--threads <N>` | all CPUs | Rayon worker thread count. |
+| `--progress` | on (unless `--json`) | Show live search progress on stderr. |
+| `--no-progress` | | Disable progress output. |
+| `--progress-interval <MS>` | `1000` | How often to refresh progress (milliseconds). |
 
 ### Difficulty
 
@@ -67,11 +70,20 @@ Each additional hex zero multiplies expected search time by roughly 16×. Each a
 
 # JSON output
 .\target\release\hash-zero.exe find "test" --zeros 3 --unit hex --json
+
+# Live progress on stderr (default for human output)
+.\target\release\hash-zero.exe find "hello" --zeros 5 --unit hex --progress-interval 500
 ```
 
 ### Default `find` output
 
+Progress updates are written to stderr while searching (disabled with `--json` or `--no-progress`):
+
 ```
+progress: attempts=65536 elapsed=2.0s rate=32768/s best=2/4 nonce=65535
+```
+
+Final result on stdout:
 nonce: 45231
 input: hello45231
 hash: 0000a3f2c1...

@@ -97,6 +97,30 @@ pub struct FindArgs {
     /// Number of Rayon worker threads (default: all CPUs).
     #[arg(long)]
     pub threads: Option<NonZeroUsize>,
+
+    /// Show live search progress on stderr.
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub progress: bool,
+
+    /// Suppress live search progress on stderr.
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub no_progress: bool,
+
+    /// Progress update interval in milliseconds.
+    #[arg(long = "progress-interval", default_value_t = 1000, value_name = "MS")]
+    pub progress_interval_ms: u64,
+}
+
+impl FindArgs {
+    pub fn show_progress(&self) -> bool {
+        if self.no_progress {
+            return false;
+        }
+        if self.progress {
+            return true;
+        }
+        !self.shared.json
+    }
 }
 
 #[derive(Debug, Args)]
