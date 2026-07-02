@@ -1,6 +1,6 @@
 //! Interactive line editor wrapper.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use rustyline::completion::{Completer, Pair};
@@ -9,6 +9,7 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Editor, Helper};
+use crate::completion;
 use crate::interp::eval_line_streams;
 use crate::shell::ShellState;
 use crate::signals;
@@ -39,89 +40,7 @@ impl Completer for DshHelper {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        let prefix = &line[..pos];
-        let start = prefix
-            .rfind(|c: char| c.is_whitespace())
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        let word = &line[start..pos];
-        if word.is_empty() {
-            return Ok((start, Vec::new()));
-        }
-
-        let mut candidates: Vec<Pair> = Vec::new();
-
-        for name in builtin_names() {
-            if name.starts_with(word) {
-                candidates.push(Pair {
-                    display: name.to_string(),
-                    replacement: name.to_string(),
-                });
-            }
-        }
-
-        let mut fnames: Vec<_> = self.state.functions.keys().map(String::as_str).collect();
-        fnames.sort();
-        for name in fnames {
-            if name.starts_with(word) {
-                candidates.push(Pair {
-                    display: name.to_string(),
-                    replacement: name.to_string(),
-                });
-            }
-        }
-
-        if word.starts_with('$') {
-            let var_prefix = &word[1..];
-            let mut keys: Vec<_> = self.state.env.keys().map(String::as_str).collect();
-            keys.sort();
-            for key in keys {
-                if key.starts_with(var_prefix) {
-                    candidates.push(Pair {
-                        display: format!("${key}"),
-                        replacement: format!("${key}"),
-                    });
-                }
-            }
-        } else if start == 0 {
-            let dir = if word.contains('\\') || word.contains('/') {
-                let parent = Path::new(word)
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .unwrap_or_else(|| Path::new("."));
-                let base = Path::new(word)
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(word);
-                (parent.to_path_buf(), base)
-            } else {
-                (self.state.cwd.clone(), word)
-            };
-            if let Ok(entries) = std::fs::read_dir(&dir.0) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    if name.starts_with(&dir.1) {
-                        let mut replacement = if start == 0 && dir.0 == self.state.cwd {
-                            name.clone()
-                        } else {
-                            let parent = Path::new(word).parent().unwrap_or(Path::new("."));
-                            parent.join(&name).to_string_lossy().into_owned()
-                        };
-                        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                            replacement.push(std::path::MAIN_SEPARATOR);
-                        }
-                        candidates.push(Pair {
-                            display: name,
-                            replacement,
-                        });
-                    }
-                }
-            }
-        }
-
-        candidates.sort_by(|a, b| a.display.cmp(&b.display));
-        candidates.dedup_by(|a, b| a.replacement == b.replacement);
-        Ok((start, candidates))
+        Ok(completion::completions_at(&self.state, line, pos))
     }
 }
 
@@ -131,13 +50,6 @@ impl Hinter for DshHelper {
 }
 impl Highlighter for DshHelper {}
 impl Validator for DshHelper {}
-
-fn builtin_names() -> &'static [&'static str] {
-    &[
-        "cd", "export", "unset", "pwd", "echo", "exit", "return", "help", "source", ".", "type",
-        ":", "true", "false",
-    ]
-}
 
 pub fn dshrc_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".dshrc"))

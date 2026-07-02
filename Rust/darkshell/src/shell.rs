@@ -5,10 +5,21 @@ use std::path::PathBuf;
 
 use crate::ast::Stmt;
 
+/// User home directory (`HOME`, `USERPROFILE`, or `dirs::home_dir()`).
+pub fn home_dir() -> PathBuf {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .ok()
+        .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+        .unwrap_or_else(|| dirs::home_dir().expect("unable to locate home directory"))
+}
+
 #[derive(Clone)]
 pub struct ShellState {
     pub env: HashMap<String, String>,
     pub cwd: PathBuf,
+    /// Previous working directory for `cd -`.
+    pub prev_cwd: Option<PathBuf>,
     pub last_status: i32,
     pub functions: HashMap<String, Vec<Stmt>>,
     pub positional: Vec<String>,
@@ -39,6 +50,7 @@ impl ShellState {
         Self {
             env: HashMap::new(),
             cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            prev_cwd: None,
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),
@@ -58,6 +70,7 @@ impl ShellState {
         Self {
             env,
             cwd,
+            prev_cwd: None,
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),

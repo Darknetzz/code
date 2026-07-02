@@ -13,12 +13,13 @@ pub enum BuiltinOutcome {
     Source(PathBuf),
 }
 
+pub const BUILTIN_NAMES: &[&str] = &[
+    "cd", "export", "unset", "pwd", "echo", "exit", "return", "help", "source", ".", "type", ":",
+    "true", "false",
+];
+
 pub fn is_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "cd" | "export" | "unset" | "pwd" | "echo" | "exit" | "return" | "help" | "source" | "."
-            | "type" | ":" | "true" | "false"
-    )
+    BUILTIN_NAMES.contains(&name)
 }
 
 pub fn run_builtin(
@@ -86,7 +87,11 @@ pub fn run_builtin(
 
 fn cd(st: &mut ShellState, argv: &[String]) -> Result<BuiltinOutcome> {
     let target = match argv.len() {
-        0 => home_dir_fallback(),
+        0 => crate::shell::home_dir(),
+        1 if argv[0] == "-" => st
+            .prev_cwd
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("cd: OLDPWD not set"))?,
         1 => PathBuf::from(&argv[0]),
         _ => bail!("cd: too many arguments"),
     };
@@ -99,22 +104,19 @@ fn cd(st: &mut ShellState, argv: &[String]) -> Result<BuiltinOutcome> {
     let dest = std::fs::canonicalize(&abs)
         .map_err(|e| anyhow::anyhow!("cd: `{}`: {e}", abs.display()))?;
 
+    let old = st.cwd.clone();
     std::env::set_current_dir(&dest)?;
     let fresh = std::env::current_dir().unwrap_or_else(|_| dest.clone());
+    st.prev_cwd = Some(old.clone());
     st.cwd = fresh;
     let ps = st.cwd.to_string_lossy().into_owned();
     st.env.insert("PWD".into(), ps);
     st.export_name("PWD");
+    st.env
+        .insert("OLDPWD".into(), old.to_string_lossy().into_owned());
+    st.export_name("OLDPWD");
 
     Ok(BuiltinOutcome::Status(0))
-}
-
-fn home_dir_fallback() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .ok()
-        .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
-        .unwrap_or_else(|| dirs::home_dir().expect("unable to locate home directory"))
 }
 
 fn export<W: Write>(st: &mut ShellState, argv: &[String], out: &mut W) -> Result<BuiltinOutcome> {
@@ -157,7 +159,7 @@ Darkshell (dsh) — experimental bash-like shell. This is `help` for dsh, not Wi
 
 Builtins:
   help [TOPIC]     Show this overview or one-line help for TOPIC.
-  cd [DIR]         Change directory; default is your home/profile directory.
+  cd [DIR]         Change directory; default is your home/profile directory; `cd -` goes to OLDPWD.
   pwd              Print the current directory.
   echo WORDS...    Print words separated by spaces, then a newline.
   export [N=V...]  Set variables and mark them exported; with no args, list exports.
@@ -182,7 +184,7 @@ For Windows CMD help (SET, PATH, …), run e.g.  cmd /c help  or  where help
 fn help_topic(name: &str) -> Option<&'static str> {
     Some(match name {
         "help" => "help [TOPIC] — show dsh help; TOPIC is a builtin name.\n",
-        "cd" => "cd [DIR] — change directory; DIR defaults to home.\n",
+        "cd" => "cd [DIR] — change directory; DIR defaults to home; `cd -` returns to OLDPWD.\n",
         "pwd" => "pwd — print working directory; no arguments.\n",
         "echo" => "echo [WORD ...] — print arguments, newline at end.\n",
         "export" => "export [NAME[=VALUE] ...] — set/export vars; no args lists exports.\n",

@@ -185,3 +185,31 @@ fn command_substitution_rejected() {
         .failure()
         .stderr(contains("command substitution"));
 }
+
+#[test]
+fn cd_minus_returns_to_previous_directory() {
+    let base = std::env::temp_dir().join(format!("dsh-cd-minus-{}", std::process::id()));
+    let other = base.join("other");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&other).expect("create other dir");
+
+    let marker = format!("dsh-cd-minus-{}", std::process::id());
+    let base_s = base.to_string_lossy().replace('\\', "/");
+    let other_s = other.to_string_lossy().replace('\\', "/");
+    let script = format!("cd {base_s}; cd {other_s}; pwd; cd -; pwd");
+
+    let assert = dsh().arg("-c").arg(&script).assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let _ = std::fs::remove_dir_all(&base);
+
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 2, "unexpected stdout: {stdout}");
+    assert!(
+        lines[0].contains("other"),
+        "expected other dir in first pwd: {stdout}"
+    );
+    assert!(
+        lines[1].contains(marker.as_str()) && !lines[1].contains("other"),
+        "expected base dir after cd -: {stdout}"
+    );
+}

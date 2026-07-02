@@ -1,5 +1,6 @@
 mod ast;
 mod builtins;
+mod completion;
 mod expand;
 mod interp;
 mod lexer;
