@@ -51,9 +51,11 @@ impl FindProgress {
         };
 
         let char_label = char_filter_label(self.match_char);
+        let attempts_label = format_compact(attempts);
+        let rate_label = format_compact(rate as u64);
         let _ = write!(
             std::io::stderr(),
-            "\rprogress: attempts={attempts} elapsed={:.1}s rate={rate:.0}/s best={best_run}/{target_run} {char_label} nonce={latest_nonce}   ",
+            "\rprogress: attempts={attempts_label} elapsed={:.1}s rate={rate_label}/s best={best_run}/{target_run} {char_label} nonce={latest_nonce}   ",
             elapsed.as_secs_f64(),
             target_run = self.target_run,
         );
@@ -79,9 +81,9 @@ pub fn print_find_human(result: &FindResult) {
         side_label(result.side),
         unit_label(result.unit)
     );
-    println!("attempts: {}", result.attempts);
+    println!("attempts: {}", format_compact(result.attempts));
     println!("elapsed_ms: {}", result.elapsed_ms);
-    println!("hash_rate: {}/s", result.hash_rate);
+    println!("hash_rate: {}/s", format_compact(result.hash_rate));
 }
 
 pub fn print_verify_human(outcome: &VerifyOutcome) {
@@ -149,6 +151,46 @@ fn char_filter_json(match_char: MatchChar) -> String {
     match match_char {
         MatchChar::Any => "any".to_string(),
         MatchChar::Specific(ch) => ch.to_string(),
+    }
+}
+
+fn format_compact(n: u64) -> String {
+    if n >= 1_000_000 {
+        format_scaled(n as f64 / 1_000_000.0, "M")
+    } else if n >= 1_000 {
+        format_scaled(n as f64 / 1_000.0, "K")
+    } else {
+        n.to_string()
+    }
+}
+
+fn format_scaled(value: f64, suffix: &str) -> String {
+    if value >= 100.0 {
+        format!("{:.0}{suffix}", value)
+    } else if value >= 10.0 {
+        format!("{:.1}{suffix}", value)
+    } else {
+        format!("{:.2}{suffix}", value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_compact;
+
+    #[test]
+    fn compact_formats_thousands() {
+        assert_eq!(format_compact(999), "999");
+        assert_eq!(format_compact(1_500), "1.50K");
+        assert_eq!(format_compact(45_232), "45.2K");
+        assert_eq!(format_compact(156_057), "156K");
+    }
+
+    #[test]
+    fn compact_formats_millions() {
+        assert_eq!(format_compact(1_500_000), "1.50M");
+        assert_eq!(format_compact(12_300_000), "12.3M");
+        assert_eq!(format_compact(150_000_000), "150M");
     }
 }
 

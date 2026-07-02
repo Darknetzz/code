@@ -87,7 +87,7 @@ Each additional matching hex character multiplies expected search time by roughl
 Progress updates are written to stderr while searching (disabled with `--json` or `--no-progress`):
 
 ```
-progress: attempts=65536 elapsed=2.0s rate=32768/s best=2/4 any nonce=65535
+progress: attempts=65.5K elapsed=2.0s rate=32.8K/s best=2/4 any nonce=65535
 ```
 
 Final result on stdout:
@@ -97,9 +97,9 @@ nonce: 45231
 input: hello45231
 hash: aaa0a3f2c1...
 run: 3 x 'a' (any, leading, hex)
-attempts: 45232
+attempts: 45.2K
 elapsed_ms: 87
-hash_rate: 519885/s
+hash_rate: 520K/s
 ```
 
 ### Exit codes
