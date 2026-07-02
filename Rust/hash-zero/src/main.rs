@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
 
-use crate::cli::{validate_match_target, Command, FindArgs, VerifyArgs};
+use crate::cli::{print_full_help, validate_match_target, wants_root_help, Command, FindArgs, VerifyArgs};
 use crate::hash::verify_input;
 use crate::output::{
     print_error, print_find_human, print_find_json, print_verify_human, print_verify_json,
@@ -25,6 +25,11 @@ fn main() {
 }
 
 fn run() -> Result<i32> {
+    if wants_root_help() {
+        print_full_help();
+        return Ok(0);
+    }
+
     let cli = cli::Cli::parse();
 
     match cli.command {

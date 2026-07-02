@@ -1,12 +1,15 @@
 use anyhow::{bail, Result};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use std::io::Write;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[command(
     name = "hash-zero",
-    about = "Find and verify hashes with leading or trailing repeating hex characters"
+    about = "Find and verify hashes with leading or trailing repeating hex characters",
+    disable_help_subcommand = true,
+    next_line_help = false
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -159,6 +162,100 @@ pub struct VerifyArgs {
 
     #[command(flatten)]
     pub shared: SharedArgs,
+}
+
+pub fn wants_root_help() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        return false;
+    }
+    let has_help = args.iter().skip(1).any(|arg| arg == "-h" || arg == "--help");
+    if !has_help {
+        return false;
+    }
+    !args
+        .iter()
+        .skip(1)
+        .any(|arg| matches!(arg.as_str(), "find" | "verify"))
+}
+
+pub fn print_full_help() {
+    let mut cmd = Cli::command();
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+
+    let _ = write!(
+        handle,
+        "{}",
+        compact_help_text(&cmd.render_help().to_string())
+    );
+
+    for sub in cmd.get_subcommands_mut() {
+        let name = sub.get_name().to_string();
+        let mut section = compact_help_text(&sub.render_help().to_string());
+        section = trim_subcommand_about(&section);
+        section = trim_subcommand_help_footer(&section);
+        section = qualify_subcommand_usage(&name, &section);
+        let _ = write!(handle, "\n\n{name}\n{section}");
+    }
+}
+
+fn trim_subcommand_about(text: &str) -> String {
+    let mut lines: Vec<&str> = text.lines().collect();
+
+    if lines.first().is_some_and(|line| !line.starts_with("Usage:")) {
+        lines.remove(0);
+        while lines.first().is_some_and(|line| line.trim().is_empty()) {
+            lines.remove(0);
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn qualify_subcommand_usage(name: &str, text: &str) -> String {
+    text.replacen(
+        &format!("Usage: {name} "),
+        &format!("Usage: hash-zero {name} "),
+        1,
+    )
+}
+
+fn compact_help_text(text: &str) -> String {
+    let mut lines = Vec::new();
+    let mut prev_blank = false;
+
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            if !prev_blank {
+                lines.push(String::new());
+            }
+            prev_blank = true;
+        } else {
+            lines.push(line.to_string());
+            prev_blank = false;
+        }
+    }
+
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+
+    lines.join("\n")
+}
+
+fn trim_subcommand_help_footer(text: &str) -> String {
+    let mut lines: Vec<&str> = text.lines().collect();
+
+    while let Some(last) = lines.last() {
+        if last.trim().is_empty() || last.contains("--help") {
+            lines.pop();
+        } else {
+            break;
+        }
+    }
+
+    lines.join("\n")
 }
 
 pub fn validate_match_target(shared: &SharedArgs) -> Result<()> {
