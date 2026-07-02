@@ -5,6 +5,8 @@ Scripts and projects in Rust.
 | Subdirectory | Description |
 |-------------|-------------|
 | [dns-net-check](dns-net-check/) | DNS and network verification CLI (Rust port of `Python/dns-net-check`). |
+| [superping](superping/) | Feature-rich ICMP/TCP ping CLI with multi-host probes, stats, and JSON output. |
+| [hash-zero](hash-zero/) | Find and verify hashes with leading or trailing zeroes (proof-of-work search). |
 | [prereq-doctor](prereq-doctor/) | Check local development and admin prerequisites. |
 | [darkshell](darkshell/) | Custom shell. See [darkshell/README.md](darkshell/README.md). |
 | [pathman](pathman/) | Cross-platform GUI for editing user and system PATH. |

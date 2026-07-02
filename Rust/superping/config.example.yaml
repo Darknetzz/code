@@ -1,0 +1,11 @@
+hosts:
+  - name: example.com
+  - name: 1.1.1.1
+count: 4
+interval_s: 1.0
+timeout_s: 5.0
+mode: icmp # icmp | tcp
+port: 443 # used when mode=tcp
+ipv6: false
+ptr: false
+payload_size: 56

@@ -17,6 +17,8 @@ Release builds are recommended; the hot loop is integer arithmetic.
 
 ```powershell
 cargo run --release -- 27
+cargo run --release -- "2^54"
+cargo run --release -- "12340*248"
 cargo run --release -- 999999999999999999999999999999999
 cargo run --release -- --steps-only 27
 cargo run --release -- --show-sequence 27
@@ -27,7 +29,11 @@ cargo run --release -- --json 27
 
 | Argument | Description |
 |----------|-------------|
-| `NUMBER` | Required. Positive decimal integer (any size). |
+| `NUMBER` | Required. Positive decimal integer or arithmetic expression. |
+
+Expressions support `+`, `-`, `*`, `/`, `^`, and parentheses. **Quote expressions in PowerShell** (e.g. `"935577^7777777"`) so operators are passed to the program correctly.
+
+Powers are limited to exponent ≤ 1,000,000 and values with at most 500,000 decimal digits.
 
 ### Flags
 
@@ -37,6 +43,21 @@ cargo run --release -- --json 27
 | `--show-sequence` | Print every value in the sequence, then the summary. |
 | `--peak` | Include peak value when combined with `--steps-only`. |
 | `--json` | Emit a JSON report (`start`, `steps`, `peak`, optional `sequence`). |
+| `--progress` | Show live step/current/peak updates on stderr. |
+| `--no-progress` | Disable progress output (including the default on interactive stderr). |
+
+### Progress
+
+Progress and status messages are written to **stderr** when stderr is a terminal (disabled with `--json`, `--no-progress`, or non-interactive stderr). Step progress uses bit counts for huge integers to avoid slowing the calculation.
+
+```
+evaluating expression: 2^54
+evaluating power (~17 digits)...
+calculating collatz sequence...
+step       54  current 1  peak 18014398509481984
+```
+
+Use `--progress` to force step updates when stderr is piped, or `--no-progress` to disable.
 
 ### Default output
 
@@ -51,6 +72,11 @@ peak: 9232
 # Step count and peak (default)
 .\target\release\collatz.exe 27
 
+# Arithmetic expressions
+.\target\release\collatz.exe "2^54"
+.\target\release\collatz.exe "12340*248"
+.\target\release\collatz.exe "(2+3)^4"
+
 # Step count only
 .\target\release\collatz.exe --steps-only 27
 
@@ -62,4 +88,4 @@ peak: 9232
 .\target\release\collatz.exe --json --show-sequence 27
 ```
 
-Invalid input (empty, zero, negative, non-numeric) exits with code `1`.
+Invalid input (empty, zero, negative result, non-numeric, division by zero) exits with code `1`.
