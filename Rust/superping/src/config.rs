@@ -119,40 +119,61 @@ fn normalize_hosts(file: &FileConfig, cli: &Cli) -> Result<Vec<HostTarget>> {
         .hosts
         .iter()
         .map(|item| match item {
-            HostItem::Name(name) => HostTarget {
-                name: name.clone(),
-                port: None,
-            },
-            HostItem::Entry(entry) => HostTarget {
+            HostItem::Name(name) => parse_target(name),
+            HostItem::Entry(entry) => Ok(HostTarget {
                 name: entry.name.clone(),
                 port: entry.port,
-            },
+            }),
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
 
     for host in cli.host.iter().chain(cli.hosts_positional.iter()) {
-        if host.contains(':') && !host.starts_with('[') {
-            let (name, port) = parse_host_port(host)?;
-            results.push(HostTarget { name, port: Some(port) });
-        } else {
-            results.push(HostTarget {
-                name: host.clone(),
-                port: None,
-            });
-        }
+        results.push(parse_target(host)?);
     }
 
     Ok(results)
 }
 
-fn parse_host_port(item: &str) -> Result<(String, u16)> {
-    let Some((host, raw_port)) = item.rsplit_once(':') else {
-        bail!("Invalid host:port value '{item}'");
-    };
-    let port = raw_port
-        .parse::<u16>()
-        .with_context(|| format!("Invalid port in '{item}'"))?;
-    Ok((host.to_string(), port))
+fn parse_target(item: &str) -> Result<HostTarget> {
+    let trimmed = item.trim();
+    if trimmed.is_empty() {
+        bail!("Host target cannot be empty");
+    }
+
+    if let Some(target) = parse_bracketed_ipv6_target(trimmed) {
+        return Ok(target);
+    }
+
+    if let Some((host, port)) = parse_host_port_suffix(trimmed) {
+        return Ok(HostTarget {
+            name: host,
+            port: Some(port),
+        });
+    }
+
+    Ok(HostTarget {
+        name: trimmed.to_string(),
+        port: None,
+    })
+}
+
+fn parse_bracketed_ipv6_target(item: &str) -> Option<HostTarget> {
+    let inner = item.strip_prefix('[')?;
+    let (host, port_str) = inner.rsplit_once("]:")?;
+    let port = port_str.parse::<u16>().ok()?;
+    Some(HostTarget {
+        name: host.to_string(),
+        port: Some(port),
+    })
+}
+
+fn parse_host_port_suffix(item: &str) -> Option<(String, u16)> {
+    let (host, port_str) = item.rsplit_once(':')?;
+    if host.is_empty() || host.contains(':') {
+        return None;
+    }
+    let port = port_str.parse::<u16>().ok()?;
+    Some((host.to_string(), port))
 }
 
 fn resolve_mode(
@@ -213,5 +234,33 @@ mod tests {
     fn defaults_to_icmp_without_port_hints() {
         let mode = resolve_mode(None, None, None, None, &[]).unwrap();
         assert_eq!(mode, ProbeMode::Icmp);
+    }
+
+    #[test]
+    fn parses_ipv4_host_port_target() {
+        let target = parse_target("1.1.1.1:80").unwrap();
+        assert_eq!(target.name, "1.1.1.1");
+        assert_eq!(target.port, Some(80));
+    }
+
+    #[test]
+    fn parses_hostname_port_target() {
+        let target = parse_target("example.com:443").unwrap();
+        assert_eq!(target.name, "example.com");
+        assert_eq!(target.port, Some(443));
+    }
+
+    #[test]
+    fn parses_bracketed_ipv6_host_port_target() {
+        let target = parse_target("[2001:db8::1]:80").unwrap();
+        assert_eq!(target.name, "2001:db8::1");
+        assert_eq!(target.port, Some(80));
+    }
+
+    #[test]
+    fn bare_ipv6_is_not_treated_as_host_port() {
+        let target = parse_target("2001:db8::1").unwrap();
+        assert_eq!(target.name, "2001:db8::1");
+        assert_eq!(target.port, None);
     }
 }

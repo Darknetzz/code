@@ -49,7 +49,7 @@ cargo run --release -- --forever 127.0.0.1
 - `--json`: emit JSON report
 - `-q, --quiet`: summary only (no per-reply lines)
 
-Positional hosts are also accepted: `superping 8.8.8.8 example.com`.
+Positional hosts are also accepted: `superping 8.8.8.8 example.com` or `superping 1.1.1.1:80` (TCP to port 80).
 
 ## Windows note
 
