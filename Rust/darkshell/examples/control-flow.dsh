@@ -1,0 +1,24 @@
+# if / elif / else, && / ||, for, and while.
+# Run: dsh examples/control-flow.dsh
+
+if false; then
+  echo "skipped: if false";
+elif true; then
+  echo "elif branch runs";
+else
+  echo "skipped: else";
+fi
+
+false || echo "|| runs after failure";
+true && echo "&& runs after success";
+
+echo "--- for loop ---";
+for item in alpha beta gamma; do
+  echo "item: $item";
+done
+
+echo "--- while loop (zero iterations) ---";
+while false; do
+  echo "never printed";
+done
+echo "while finished";

@@ -1,0 +1,13 @@
+# Redirect builtin stdout/stderr to files (paths relative to cwd).
+# Run from crate root: dsh examples/redirects.dsh
+# Creates examples/redirects-out.txt and examples/redirects-err.txt
+
+OUT=examples/redirects-out.txt;
+ERR=examples/redirects-err.txt;
+
+echo "line one" > $OUT;
+echo "line two" >> $OUT;
+
+cd __no_such_directory__ 2> $ERR;
+
+echo "wrote stdout to $OUT (see redirects-err.txt for cd failure)";

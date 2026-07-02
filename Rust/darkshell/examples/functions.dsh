@@ -1,0 +1,14 @@
+# User-defined functions, positional params, and return.
+# Run: dsh examples/functions.dsh Alice
+#
+# Use semicolons between top-level commands after a function body (see README).
+
+greet() { echo "Hello, $1"; };
+
+greet world;
+greet "$1";
+
+status_demo() { return 7; echo "not reached"; };
+
+status_demo;
+echo "return status: $?";

@@ -259,7 +259,9 @@ Run **`help`** or **`help cd`** inside `dsh` for the full builtin text.
 | `src/shell.rs` | Process-wide state: env, cwd, functions, `exit` |
 | `src/signals.rs` | Interrupt / child tracking (platform-specific pieces) |
 | `src/style.rs` | TTY-aware banner, prompt, and error styling |
-| `tests/integration.rs` | Smoke tests via `assert_cmd` |
+| `tests/integration.rs` | Integration tests via `assert_cmd` |
+| `examples/` | Example `.dsh` scripts (see [`examples/README.md`](examples/README.md)) |
+| `script.dsh` | Full language tour (legacy entry point at crate root) |
 | `SPEC.md` | Language semantics (v0) |
 | `WINDOWS.md` | Windows-specific behavior notes |
 

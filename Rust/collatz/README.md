@@ -48,7 +48,7 @@ Powers are limited to exponent ≤ 1,000,000 and values with at most 500,000 dec
 
 ### Progress
 
-Progress and status messages are written to **stderr** when stderr is a terminal (disabled with `--json`, `--no-progress`, or non-interactive stderr). Step progress uses bit counts for huge integers to avoid slowing the calculation.
+Progress and status messages update a single stderr line while calculating, then **clear automatically** when finished so only the final result remains on screen.
 
 ```
 evaluating expression: 2^54

@@ -1,0 +1,6 @@
+# Sourced by run.dsh — defines a function in the caller's shell.
+# Not meant to be run directly.
+
+export SOURCED=1;
+
+sourced_greet() { echo "sourced_greet says hi from helper.dsh"; }

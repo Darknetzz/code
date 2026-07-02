@@ -1,0 +1,16 @@
+# Builtin introspection: type, help, true/false.
+# Run: dsh examples/builtins.dsh
+
+type echo;
+type cd;
+type not_a_real_command_xyz;
+
+help;
+echo "---";
+help export;
+
+true;
+echo "after true, \$? = $?";
+
+false;
+echo "after false, \$? = $?";

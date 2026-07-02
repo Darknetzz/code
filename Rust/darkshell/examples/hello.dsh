@@ -1,0 +1,11 @@
+# Minimal tour: echo, pwd, export, and quoting.
+# Run: dsh examples/hello.dsh
+
+export GREETING=Hello;
+
+echo "$GREETING from Darkshell";
+echo "Working directory:";
+pwd;
+
+echo "Literal dollar:" \$HOME;
+echo "Expanded GREETING:" "$GREETING";

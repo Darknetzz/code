@@ -1,0 +1,15 @@
+# export, unset, and prefix assignments (VAR=value cmd).
+# Run: dsh examples/environment.dsh
+
+export PUBLIC=visible;
+PUBLIC=shadow echo "prefix assign wins: $PUBLIC";
+
+echo "PUBLIC in shell: $PUBLIC";
+
+unset PUBLIC;
+echo "after unset, PUBLIC is" "'$PUBLIC'";
+
+DEMO=42 echo "DEMO=$DEMO";
+
+export KEEP=yes;
+LOCAL_ONLY=no;

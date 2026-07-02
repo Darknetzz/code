@@ -1,0 +1,9 @@
+# Script invocation and positional parameters.
+# Run: dsh examples/script-args.dsh foo bar baz
+
+echo "script path (\$0): $0";
+echo "argument count (\$#): ${#}";
+echo "first arg (\$1): $1";
+echo "second arg (\$2): $2";
+echo "third arg (\$3): $3";
+echo "(try: dsh examples/script-args.dsh foo bar baz)";

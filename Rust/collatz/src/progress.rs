@@ -48,7 +48,10 @@ impl ProgressReporter {
     }
 
     pub fn status(&self, message: &str) {
-        status_line(message);
+        if !self.enabled {
+            return;
+        }
+        write_status(message, self.interactive);
     }
 
     pub fn on_step_u128(&mut self, steps: u64, current: u128, peak: u128) {
@@ -57,7 +60,7 @@ impl ProgressReporter {
         }
 
         self.last_reported = steps;
-        self.write_line(&format!(
+        self.write_progress(&format!(
             "step {steps:>8}  current {current:<DISPLAY_MAX_LEN$}  peak {peak}"
         ));
     }
@@ -68,14 +71,14 @@ impl ProgressReporter {
         }
 
         self.last_reported = steps;
-        self.write_line(&format!(
+        self.write_progress(&format!(
             "step {steps:>8}  current ~{current_bits} bits  peak ~{peak_bits} bits"
         ));
     }
 
-    fn write_line(&mut self, line: &str) {
+    fn write_progress(&mut self, line: &str) {
         if self.interactive {
-            eprint!("\r{line}");
+            let _ = write!(io::stderr(), "\r{line}");
         } else {
             eprintln!("{line}");
         }
@@ -96,7 +99,7 @@ impl ProgressReporter {
             self.finished = true;
             self.flush_stderr();
             if self.interactive {
-                eprintln!();
+                clear_progress_line();
             }
         }
     }
@@ -109,7 +112,20 @@ impl Drop for ProgressReporter {
 }
 
 pub fn status_line(message: &str) {
-    eprintln!("{message}");
+    write_status(message, io::stderr().is_terminal());
+}
+
+fn write_status(message: &str, interactive: bool) {
+    if interactive {
+        let _ = write!(io::stderr(), "\r{message}");
+    } else {
+        eprintln!("{message}");
+    }
+    let _ = io::stderr().flush();
+}
+
+fn clear_progress_line() {
+    let _ = write!(io::stderr(), "\x1b[2K\r");
     let _ = io::stderr().flush();
 }
 

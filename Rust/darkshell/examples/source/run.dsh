@@ -1,0 +1,8 @@
+# Demonstrates source / . — loads helper.dsh into the current shell.
+# Run from crate root: dsh examples/source/run.dsh
+
+source examples/source/helper.dsh;
+
+echo "SOURCED=$SOURCED";
+sourced_greet;
+type sourced_greet;
