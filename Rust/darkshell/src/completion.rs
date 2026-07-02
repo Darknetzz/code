@@ -238,6 +238,31 @@ fn complete_env_vars(
         .collect()
 }
 
+fn prefix_matches(name: &str, prefix: &str) -> bool {
+    if prefix.is_empty() {
+        return true;
+    }
+    if cfg!(windows) {
+        name.len() >= prefix.len() && name[..prefix.len()].eq_ignore_ascii_case(prefix)
+    } else {
+        name.starts_with(prefix)
+    }
+}
+
+/// Directory entries, including Windows junctions/reparse points (e.g. `Documents`).
+fn is_directory_entry(path: &Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    if meta.is_dir() {
+        return true;
+    }
+    if meta.is_symlink() {
+        return std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false);
+    }
+    false
+}
+
 fn complete_paths(st: &ShellState, word: &str, dirs_only: bool) -> Vec<Pair> {
     let (dir, base_prefix) = path_completion_parts(&st.cwd, word);
     let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -250,11 +275,12 @@ fn complete_paths(st: &ShellState, word: &str, dirs_only: bool) -> Vec<Pair> {
         if name.starts_with('.') && !base_prefix.starts_with('.') {
             continue;
         }
-        if !name.starts_with(&base_prefix) {
+        if !prefix_matches(&name, &base_prefix) {
             continue;
         }
 
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let path = entry.path();
+        let is_dir = is_directory_entry(&path);
         if dirs_only && !is_dir {
             continue;
         }
@@ -301,7 +327,7 @@ fn complete_path_executables(st: &ShellState, word: &str) -> Vec<Pair> {
             let Some(cmd_name) = executable_command_name(&path) else {
                 continue;
             };
-            if !cmd_name.starts_with(word) || !seen.insert(cmd_name.clone()) {
+            if !prefix_matches(&cmd_name, word) || !seen.insert(cmd_name.clone()) {
                 continue;
             }
             candidates.push(pair(cmd_name.clone(), cmd_name));
@@ -606,5 +632,18 @@ mod tests {
         let (dir, prefix) = split_dir_and_prefix(Path::new("/base"), "sub/prefix");
         assert_eq!(prefix, "prefix");
         assert!(dir.ends_with("sub"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn completes_documents_junction_in_user_home() {
+        let home = dirs::home_dir().expect("home dir");
+        let st = test_state(home);
+        let reps = replacements(&st, "cd Doc", 6);
+        assert!(
+            reps.iter()
+                .any(|r| r.to_ascii_lowercase().starts_with("documents")),
+            "expected Documents junction, got {reps:?}"
+        );
     }
 }
