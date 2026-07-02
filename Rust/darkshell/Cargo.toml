@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Darkshell (dsh): Bash-inspired cross-platform experimental shell"
 license = "MIT OR Apache-2.0"
-default-run = "dsh"
+default-run = "darkshell"
 
 [[bin]]
-name = "dsh"
+name = "darkshell"
 path = "src/main.rs"
 
 [dependencies]

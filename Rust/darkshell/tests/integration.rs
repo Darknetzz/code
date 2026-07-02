@@ -4,7 +4,7 @@ use predicates::str::contains;
 use std::process::{Command as StdCommand, Stdio};
 
 fn dsh() -> Command {
-    Command::cargo_bin("dsh").expect("cargo_bin dsh")
+    Command::cargo_bin("darkshell").expect("cargo_bin darkshell")
 }
 
 #[test]
@@ -60,10 +60,10 @@ fn missing_script_file_errors() {
 
 #[test]
 fn repl_refuses_non_tty_stdin() {
-    let out = StdCommand::new(cargo_bin("dsh"))
+    let out = StdCommand::new(cargo_bin("darkshell"))
         .stdin(Stdio::null())
         .output()
-        .expect("spawn dsh");
+        .expect("spawn darkshell");
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
