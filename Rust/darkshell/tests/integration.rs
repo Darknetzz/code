@@ -71,3 +71,117 @@ fn repl_refuses_non_tty_stdin() {
         "unexpected stderr: {stderr}"
     );
 }
+
+#[test]
+fn prefix_assign_affects_builtin_expansion() {
+    dsh()
+        .arg("-c")
+        .arg("FOO=bar echo $FOO")
+        .assert()
+        .success()
+        .stdout(contains("bar"));
+}
+
+#[test]
+fn builtin_redirect_stdout() {
+    let out_file = "dsh_integration_out.txt";
+    let script = format!("echo hello > {out_file}");
+    dsh().arg("-c").arg(script).assert().success();
+    let contents = std::fs::read_to_string(out_file).expect("read out file");
+    let _ = std::fs::remove_file(out_file);
+    assert!(contents.contains("hello"), "contents: {contents}");
+}
+
+#[test]
+fn non_exported_var_not_in_child_env() {
+    #[cfg(windows)]
+    let cmd = "DSH_SECRET=hidden export DSH_PUBLIC=visible; cmd /c set DSH_SECRET";
+    #[cfg(not(windows))]
+    let cmd = "DSH_SECRET=hidden export DSH_PUBLIC=visible; sh -c 'echo $DSH_SECRET'";
+
+    let assert = dsh().arg("-c").arg(cmd).assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        !stdout.contains("hidden"),
+        "non-exported var leaked to child: {stdout}"
+    );
+}
+
+#[test]
+fn exported_var_visible_to_child() {
+    #[cfg(windows)]
+    let cmd = "export DSH_PUBLIC=visible; cmd /c set DSH_PUBLIC";
+    #[cfg(not(windows))]
+    let cmd = "export DSH_PUBLIC=visible; sh -c 'echo $DSH_PUBLIC'";
+
+    dsh()
+        .arg("-c")
+        .arg(cmd)
+        .assert()
+        .success()
+        .stdout(contains("visible"));
+}
+
+#[test]
+fn function_with_positional() {
+    dsh()
+        .arg("-c")
+        .arg("greet() { echo $1; }; greet world")
+        .assert()
+        .success()
+        .stdout(contains("world"));
+}
+
+#[test]
+fn return_from_function() {
+    dsh()
+        .arg("-c")
+        .arg("f() { return 3; echo nope; }; f; echo $?")
+        .assert()
+        .success()
+        .stdout(contains("3\n"));
+}
+
+#[test]
+fn exit_uses_last_status() {
+    dsh()
+        .arg("-c")
+        .arg("false; exit")
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn type_builtin() {
+    dsh()
+        .arg("-c")
+        .arg("type echo")
+        .assert()
+        .success()
+        .stdout(contains("builtin"));
+}
+
+#[test]
+fn pipeline_external() {
+    #[cfg(windows)]
+    let cmd = "cmd /c echo hello | findstr hello";
+    #[cfg(not(windows))]
+    let cmd = "/bin/echo hello | cat";
+
+    dsh()
+        .arg("-c")
+        .arg(cmd)
+        .assert()
+        .success()
+        .stdout(contains("hello"));
+}
+
+#[test]
+fn command_substitution_rejected() {
+    dsh()
+        .arg("-c")
+        .arg("echo $(date)")
+        .assert()
+        .failure()
+        .stderr(contains("command substitution"));
+}

@@ -150,14 +150,12 @@ impl<'a> Parser<'a> {
         let mut v = Vec::new();
         loop {
             self.skip_sep();
-            if self.at_eof() || self.starts_compound() || self.looks_like_fn_at(self.keyword_cursor())
-            {
+            if self.semilist_boundary() {
                 break;
             }
             v.push(self.parse_and_or()?);
             self.skip_sep();
-            if self.at_eof() || self.starts_compound() || self.looks_like_fn_at(self.keyword_cursor())
-            {
+            if self.semilist_boundary() {
                 break;
             }
         }
@@ -165,6 +163,14 @@ impl<'a> Parser<'a> {
             bail!("empty statement");
         }
         Ok(SemicolonList(v))
+    }
+
+    /// True when the next token begins a new statement or closes a compound block.
+    fn semilist_boundary(&self) -> bool {
+        if self.at_eof() || self.starts_compound() || self.looks_like_fn_at(self.keyword_cursor()) {
+            return true;
+        }
+        matches!(self.peek(), Some(Tok::RBrace))
     }
 
     /// Collect `AndOrList` segments until hitting one of `kws`, consuming that delimiter.

@@ -15,6 +15,10 @@ pub struct ShellState {
     pub argv0: String,
     /// When a builtin requests `exit`, REPL / main checks this.
     pub pending_exit: Option<i32>,
+    /// When a builtin requests `return` inside a function body.
+    pub pending_return: Option<i32>,
+    /// Nesting depth for user-defined function calls (`return` is invalid at 0).
+    pub function_depth: u32,
     exported: HashSet<String>,
 }
 
@@ -40,6 +44,8 @@ impl ShellState {
             positional: Vec::new(),
             argv0: Self::program_name_from_args(),
             pending_exit: None,
+            pending_return: None,
+            function_depth: 0,
             exported: HashSet::new(),
         }
     }
@@ -57,6 +63,8 @@ impl ShellState {
             positional: Vec::new(),
             argv0: Self::program_name_from_args(),
             pending_exit: None,
+            pending_return: None,
+            function_depth: 0,
             exported,
         }
     }
@@ -97,10 +105,44 @@ impl ShellState {
     }
 
     pub fn child_env(&self, overlay: &[(String, String)]) -> HashMap<String, String> {
-        let mut m = self.env.clone();
+        let mut m = HashMap::new();
+        for k in &self.exported {
+            if let Some(v) = self.env.get(k) {
+                m.insert(k.clone(), v.clone());
+            }
+        }
         for (k, v) in overlay {
             m.insert(k.clone(), v.clone());
         }
         m
+    }
+}
+
+/// Temporary overlay for prefix assignments (`VAR=value cmd`).
+pub struct EnvOverlay {
+    saved: Vec<(String, Option<String>)>,
+}
+
+impl EnvOverlay {
+    pub fn apply(st: &mut ShellState, overlay: &[(String, String)]) -> Self {
+        let mut saved = Vec::with_capacity(overlay.len());
+        for (k, v) in overlay {
+            saved.push((k.clone(), st.env.get(k).cloned()));
+            st.env.insert(k.clone(), v.clone());
+        }
+        Self { saved }
+    }
+
+    pub fn restore(self, st: &mut ShellState) {
+        for (k, old) in self.saved {
+            match old {
+                Some(v) => {
+                    st.env.insert(k, v);
+                }
+                None => {
+                    st.env.remove(&k);
+                }
+            }
+        }
     }
 }

@@ -5,16 +5,19 @@ use anyhow::{bail, Result};
 use std::io::Write;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum BuiltinOutcome {
     Status(i32),
     Exit(i32),
+    Return(i32),
+    Source(PathBuf),
 }
 
 pub fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "cd" | "export" | "unset" | "pwd" | "echo" | "exit" | "help" | ":" | "true" | "false"
+        "cd" | "export" | "unset" | "pwd" | "echo" | "exit" | "return" | "help" | "source" | "."
+            | "type" | ":" | "true" | "false"
     )
 }
 
@@ -41,6 +44,27 @@ pub fn run_builtin(
                 .unwrap_or(st.last_status);
             Ok(BuiltinOutcome::Exit(code))
         }
+        "return" => {
+            if st.function_depth == 0 {
+                bail!("return: can only be used in a function");
+            }
+            let code = argv
+                .first()
+                .map(|s| s.parse::<i32>())
+                .transpose()?
+                .unwrap_or(st.last_status);
+            Ok(BuiltinOutcome::Return(code))
+        }
+        "source" | "." => {
+            let path = argv
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("{name}: missing file operand"))?;
+            if argv.len() > 1 {
+                bail!("{name}: too many arguments");
+            }
+            Ok(BuiltinOutcome::Source(PathBuf::from(path)))
+        }
+        "type" => type_cmd(st, &argv, &mut out),
         "pwd" => {
             if !argv.is_empty() {
                 bail!("pwd: too many arguments");
@@ -139,6 +163,10 @@ Builtins:
   export [N=V...]  Set variables and mark them exported; with no args, list exports.
   unset NAME...    Remove shell variables.
   exit [N]         Leave the shell with status N (default: last command status).
+  return [N]       Return from the current function with status N.
+  source FILE      Run commands from FILE in the current shell.
+  . FILE           Same as source.
+  type NAME        Show whether NAME is a builtin, function, or external command.
   true / false     Exit with status 0 or 1.
   :                No-op, status 0.
 
@@ -160,6 +188,9 @@ fn help_topic(name: &str) -> Option<&'static str> {
         "export" => "export [NAME[=VALUE] ...] — set/export vars; no args lists exports.\n",
         "unset" => "unset NAME ... — remove variables from the shell.\n",
         "exit" => "exit [N] — exit dsh with status N (0–255 typical).\n",
+        "return" => "return [N] — return from a function with status N.\n",
+        "source" | "." => "source FILE / . FILE — run FILE in the current shell.\n",
+        "type" => "type NAME — show how NAME would be resolved.\n",
         "true" | "false" => "true / false — exit 0 or 1.\n",
         ":" => ": — no-op, always succeeds.\n",
         _ => return None,
@@ -172,6 +203,21 @@ fn unset(st: &mut ShellState, argv: &[String]) -> Result<BuiltinOutcome> {
     }
     for k in argv {
         st.unset(k.as_str());
+    }
+    Ok(BuiltinOutcome::Status(0))
+}
+
+fn type_cmd(st: &ShellState, argv: &[String], out: &mut impl Write) -> Result<BuiltinOutcome> {
+    if argv.len() != 1 {
+        bail!("type: expected one NAME");
+    }
+    let name = &argv[0];
+    if is_builtin(name) {
+        writeln!(out, "{name} is a shell builtin")?;
+    } else if st.functions.contains_key(name) {
+        writeln!(out, "{name} is a function")?;
+    } else {
+        writeln!(out, "{name} is an external command")?;
     }
     Ok(BuiltinOutcome::Status(0))
 }

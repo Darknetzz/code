@@ -27,6 +27,8 @@ pub enum LexError {
     UnterminatedQuote,
     #[error("invalid duplication redirect")]
     InvalidDupRedirect,
+    #[error("command substitution $(...) is not supported yet")]
+    CommandSubstitutionUnsupported,
 }
 
 pub struct Lexer {
@@ -275,18 +277,7 @@ impl Lexer {
                         '$' => {
                             lx.bump();
                             if lx.peek() == Some('(') {
-                                lx.bump();
-                                lit.push_str("$(");
-                                while let Some(ch) = lx.peek() {
-                                    if ch == ')' {
-                                        lx.bump();
-                                        lit.push(')');
-                                        break;
-                                    }
-                                    lx.bump();
-                                    lit.push(ch);
-                                }
-                                continue;
+                                return Err(LexError::CommandSubstitutionUnsupported);
                             }
                             if let Some(name) = lx.param_name(lit)? {
                                 if name.is_empty() {
@@ -339,18 +330,7 @@ impl Lexer {
                 '$' => {
                     self.bump();
                     if self.peek() == Some('(') {
-                        self.bump();
-                        lit.push_str("$(");
-                        while let Some(ch) = self.peek() {
-                            if ch == ')' {
-                                self.bump();
-                                lit.push(')');
-                                break;
-                            }
-                            self.bump();
-                            lit.push(ch);
-                        }
-                        continue;
+                        return Err(LexError::CommandSubstitutionUnsupported);
                     }
                     if let Some(name) = self.param_name(&mut lit)? {
                         if name.is_empty() {
