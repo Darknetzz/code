@@ -12,6 +12,7 @@ The binary name `dsh` matches the common short form for **Darkshell**. Be aware 
 - **Comments**: `#` begins a comment; the rest of the line is discarded.
 - **Quoting**: `'` ... `'` is literal except that a single quote cannot appear inside (use concatenation `'it'"'"'s'` or double quotes later). `"` ... `"` allows `$`-expansion (`$VAR`, `${VAR}`, `$?`, `$$`, `$1`).
 - **Escapes**: Outside quotes, `\` escapes the next character (`\$` emits a literal `$`).
+- **Command substitution**: `$(...)` is rejected at lex time (not implemented in v0).
 
 ## Redirections (elementary)
 
@@ -24,7 +25,7 @@ The binary name `dsh` matches the common short form for **Darkshell**. Be aware 
 | `n>> word` | Append fd `n` |
 | `n>&m` | Duplicate fd `n` to `m` (`2>&1`) |
 
-Redirections may appear before or after the command words; they apply to that simple command in a pipeline.
+Redirections may appear before or after the command words; they apply to that simple command (builtins and externals). `2>&1` without an explicit stdout file merges stderr onto stdout.
 
 ## Pipelines and lists
 
@@ -37,10 +38,11 @@ Redirections may appear before or after the command words; they apply to that si
 
 ## Assignments
 
-- **Prefix assignments** attach only to the **following** external command or builtin invocation:  
-  `VAR=value cmd ...` overlays the environment for that command (like Bash).
+- **Prefix assignments** attach only to the **following** command (builtin, function, or external):  
+  `VAR=value cmd ...` overlays the environment for that command, including during word expansion (`FOO=bar echo $FOO` → `bar`).
 - `export VAR=value` persists `VAR` in the shell session (exported to children).
-- Ordinary variables can be referenced with `$VAR` after export or when set for expansion purposes (see builtins).
+- Only **exported** variables (plus prefix-overlay keys for that command) are passed to child processes.
+- Non-exported shell variables are visible for expansion but are not inherited by externals.
 
 ## Control flow
 
@@ -62,7 +64,7 @@ Redirections may appear before or after the command words; they apply to that si
   ```
   name() { list; }
   ```
-  Positional parameters `$1`… are set for the function body; `$#` is supported.
+  Positional parameters `$1`… are set for the function body; `$#` is supported. `return [n]` exits the function with status `n` (default last status). `exit` exits the entire shell.
 
 ## Builtins
 
@@ -75,14 +77,19 @@ Redirections may appear before or after the command words; they apply to that si
 | `echo [args...]` | Print arguments separated by spaces, then newline. |
 | `help [topic]` | Print dsh usage (not Windows `help`); optional `topic` is a builtin name. |
 | `exit [n]` | Exit the shell with status `n` (default last status or `0`). |
+| `return [n]` | Return from the current function with status `n` (invalid at top level). |
+| `source file` / `. file` | Execute `file` in the current shell environment. |
+| `type name` | Report whether `name` is a builtin, function, or external command. |
+| `true` / `false` / `:` | Exit status 0, 1, or no-op success. |
 
 ## Exit status
 
-- Last external command’s wait status is stored (truncated to 8 bits where applicable).
+- Last command’s status is stored (builtins and functions included; truncated to 8 bits where applicable).
 - Missing commands or expansion to empty command name is an error with non-zero status.
 
 ## Intentional non-goals (v0)
 
 - Bash parameter expansion beyond `$VAR`, `${VAR}`, `$?`, `$$`, `$n`, `$#`.
+- Command substitution (`$(...)`, backticks).
 - Arrays, `select`, `case`, arithmetic `(( ))`, process substitution, here-documents.
 - Job control (`fg`, `bg`, `%1`) or `set -e` — see [WINDOWS.md](WINDOWS.md) for platform notes.

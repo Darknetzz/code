@@ -54,14 +54,14 @@ On many **Linux** systems, a **different** program also called `dsh` exists (**D
 | Area | What works |
 |------|------------|
 | **Invocation** | REPL (no args), `dsh -c '…'`, script file + args (first arg must be an existing file) |
-| **Line editing** | [rustyline](https://github.com/kkawakam/rustyline)-based interactive prompt (TTY-aware styling on supported terminals) |
+| **Line editing** | [rustyline](https://github.com/kkawakam/rustyline)-based interactive prompt (TTY-aware styling), **persistent history** (`~/.dsh_history`), **tab completion** (builtins, functions, paths, `$VAR`) |
 | **Commands** | External programs via `std::process::Command`, builtins, user-defined functions |
 | **Composition** | `;`, `&&`, `||`, `|` pipelines (with restrictions, see below) |
-| **Redirects** | `<`, `>`, `>>`, `n>`, `n>>`, `2>&1`-style dup where implemented |
+| **Redirects** | `<`, `>`, `>>`, `n>`, `n>>`, `2>&1`-style dup — on **builtins and externals** |
 | **Variables** | `export`, `unset`, prefix `VAR=value cmd`, `$VAR`, `${VAR}`, `$?`, `$$`, `$1`…, `$#` |
 | **Control flow** | `if` / `then` / `elif` / `else` / `fi`, `while` / `do` / `done`, `for` / `in` / `do` / `done` |
-| **Functions** | `name() { … }` with positional parameters in the body |
-| **Misc** | `#` comments, `&` background (best-effort), `help` builtin (dsh help—not Windows CMD `help`) |
+| **Functions** | `name() { … }` with positional parameters; **`return [n]`** exits the function only |
+| **Misc** | `#` comments, `&` background (best-effort), `source` / `.`, `type`, `help` builtin (dsh help—not Windows CMD `help`) |
 
 Authoritative semantics for the language **v0** are in [`SPEC.md`](SPEC.md).
 
@@ -72,10 +72,11 @@ Authoritative semantics for the language **v0** are in [`SPEC.md`](SPEC.md).
 These are **intentionally** out of scope or incomplete in v0 (see [`SPEC.md`](SPEC.md)):
 
 - Full Bash **parameter expansion** (only a small `$…` subset).
+- **Command substitution** (`$(cmd)` or backticks) — rejected at parse time in v0.
 - **Arrays**, `select`, `case`, arithmetic `(( ))`, process substitution, here-documents.
 - **Job control** (`fg`, `bg`, `%1`) and **`set -e`**.
 - **Pipelines:** multi-command pipelines **cannot** mix builtins (builtins are not supported inside `|` chains). Redirects and prefix assignments on pipeline segments are **not** supported yet for multi-command pipes.
-- **Background `&`:** runs in a detached way; do not expect POSIX job-control semantics (especially on Windows—see [`WINDOWS.md`](WINDOWS.md)).
+- **Background `&`:** runs in a detached way; `$?` is **0** immediately after starting a background job. Do not expect POSIX job-control semantics (especially on Windows—see [`WINDOWS.md`](WINDOWS.md)).
 
 ---
 
@@ -119,6 +120,9 @@ CLI flags (from `dsh --help`):
 - On a color-capable **TTY**, the banner and prompt use ANSI styling; **plain** output is used when stdout/stderr are redirected so scripts stay clean.
 - The prompt shows the current working directory (see `PWD` / `cd`).
 - **Leave the shell:** run the **`exit`** builtin, or press **Ctrl+D** (end-of-input) at the prompt.
+- **Startup file:** if `~/.dshrc` exists (or `%USERPROFILE%\.dshrc` on Windows), it is sourced before the first prompt.
+- **History:** command history is saved to `~/.dsh_history` (or `%USERPROFILE%\.dsh_history` on Windows) across sessions.
+- **Tab completion:** builtins, shell functions, file paths, and `$VAR` names.
 - Parse/runtime errors print to **stderr** and the REPL **continues** (you are not dropped back to the OS on the first typo).
 
 ---
@@ -132,6 +136,7 @@ CLI flags (from `dsh --help`):
 - **Single quotes** `'…'` — literal; a single `'` cannot appear inside (use concatenation or double quotes).
 - **Double quotes** `"…"` — allow **$** expansion (`$VAR`, `${VAR}`, `$?`, etc.).
 - **Escapes:** outside quotes, `\` escapes the next character (e.g. `\$` → literal `$`).
+- **Command substitution:** `$(…)` is **not** supported; the lexer reports an error.
 - **Line endings:** scripts may use `\n` or `\r\n`; `\r` is treated as whitespace.
 
 ### Lists, conditionals, pipelines
@@ -158,14 +163,15 @@ CLI flags (from `dsh --help`):
 | `n>> word` | append fd `n` |
 | `n>&m` | duplicate fd `n` to `m` (e.g. `2>&1`) |
 
-Redirects may appear **before or after** the command words on a **simple** command; they apply to that command in the pipeline.
+Redirects may appear **before or after** the command words on a **simple** command. They apply to **builtins and externals** (e.g. `echo hi > out.txt`). For `2>&1` without `>file`, stderr is merged onto stdout.
 
 ### Environment and assignments
 
 - **`export NAME=value`** — sets and exports variables for the shell and child processes.
 - **`export NAME`** — marks `NAME` as exported (value comes from the shell if already set).
 - **`export`** with no arguments — lists exported variables in a shell-friendly form.
-- **`VAR=value command …`** — sets `VAR` in the environment **only for that command** (overlay), like Bash.
+- **`VAR=value command …`** — sets `VAR` for that command only (overlay), including during **word expansion** (`FOO=bar echo $FOO` prints `bar`).
+- Only **exported** variables (plus any prefix overlay) are passed to **child processes**; shell-local variables (e.g. `for` loop iterators) do not leak to externals.
 
 ### Control flow
 
@@ -197,7 +203,7 @@ greet() { echo "hello $1"; }
 greet world
 ```
 
-`$1`, `$2`, … and `$#` are available in the function body.
+`$1`, `$2`, … and `$#` are available in the function body. Use **`return [n]`** to leave a function without exiting the shell (`exit` still leaves the whole shell). End the previous statement with **`;`** before a line that starts with `name()` on the same line (see `script.dsh`).
 
 ### Expansion
 
@@ -216,6 +222,9 @@ Supported forms include **`$VAR`**, **`${VAR}`**, **`$?`** (last status), **`$$`
 | **`export`** | Set/export variables, or list exports when given no args. |
 | **`unset`** `names…` | Remove shell variables. |
 | **`exit`** `[n]` | Exit the shell with status `n` (default: last command status). |
+| **`return`** `[n]` | Return from the current function with status `n` (default: last status). |
+| **`source`** `file` / **`.`** `file` | Run a script file in the current shell (same as Bash `source`). |
+| **`type`** `name` | Show whether `name` is a builtin, function, or external command. |
 | **`:`**, **`true`**, **`false`** | No-op success, success (`0`), failure (`1`). |
 
 Run **`help`** or **`help cd`** inside `dsh` for the full builtin text.
@@ -224,7 +233,7 @@ Run **`help`** or **`help cd`** inside `dsh` for the full builtin text.
 
 ## Exit status
 
-- The last **external** command’s wait status is remembered (as **`$?`**), truncated to 8 bits where the OS applies that.
+- The last command’s status is remembered (as **`$?`**), including builtins and functions; truncated to 8 bits where the OS applies that.
 - **Missing** commands or expansion to an **empty** command name yield a **non-zero** status / error.
 
 ---
@@ -262,7 +271,7 @@ Run **`help`** or **`help cd`** inside `dsh` for the full builtin text.
 cargo test
 ```
 
-Integration tests spawn the `dsh` binary and assert on stdout/stderr and exit codes.
+Integration tests spawn the `dsh` binary and assert on stdout/stderr and exit codes (redirects, pipelines, exports, functions, `return`, etc.).
 
 ---
 

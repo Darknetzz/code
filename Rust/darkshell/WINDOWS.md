@@ -17,3 +17,8 @@
 ## Line endings
 
 - Scripts may use `\n` or `\r\n`; the lexer treats `\r` as whitespace.
+
+## Interactive REPL files
+
+- **Startup**: `~/.dshrc` (or `%USERPROFILE%\.dshrc`) is sourced when the REPL starts, if the file exists.
+- **History**: `~/.dsh_history` (or `%USERPROFILE%\.dsh_history`) persists command history between sessions.
