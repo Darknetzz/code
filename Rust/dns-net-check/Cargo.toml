@@ -1,0 +1,24 @@
+[package]
+name = "dns-net-check"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+description = "DNS and network verification CLI"
+license = "MIT"
+
+[[bin]]
+name = "dns-net-check"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+comfy-table = "7"
+hickory-client = "0.24"
+hickory-proto = "0.24"
+hickory-resolver = "0.24"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["macros", "net", "process", "rt-multi-thread", "time"] }

@@ -19,12 +19,19 @@ This repository is a multi-language monorepo. Keep new work inside the language/
 
 ## DNS/Network checker location
 
-The DNS/network verification tool lives in:
+The DNS/network verification tool is available in Python and Rust:
+
+**Python** (`Python/dns-net-check/`):
 
 - `Python/dns-net-check/dns_net_check.py`
 - `Python/dns-net-check/checks/`
 - `Python/dns-net-check/config.example.yaml`
 - `Python/dns-net-check/requirements.txt`
+
+**Rust** (`Rust/dns-net-check/`):
+
+- `Rust/dns-net-check/src/`
+- `Rust/dns-net-check/config.example.yaml`
 
 ## Running the DNS tool
 
@@ -32,4 +39,22 @@ From `Python/dns-net-check/`:
 
 ```powershell
 python dns_net_check.py --config config.example.yaml --no-ping
+```
+
+From `Rust/dns-net-check/`:
+
+```powershell
+cargo run --release -- --config config.example.yaml --no-ping
+```
+
+## Prereq doctor location
+
+Development prerequisite checker:
+
+- `Rust/prereq-doctor/src/`
+- `Rust/prereq-doctor/config.example.yaml`
+
+```powershell
+cd Rust/prereq-doctor
+cargo run --release
 ```

@@ -1,0 +1,8 @@
+# Optional extra checks. Built-in checks always run unless filtered with --only.
+
+checks:
+  - id: docker
+    required: false
+    commands: [docker]
+    args: ["version", "--format", "{{.Server.Version}}"]
+    hint: "Install Docker Desktop or the Docker Engine CLI."

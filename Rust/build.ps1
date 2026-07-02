@@ -1,6 +1,6 @@
 Set-Location -Path $PSScriptRoot
 
-$BuildDirs = @("rustdl", "pathman")
+$BuildDirs = @("pathman", "dns-net-check", "prereq-doctor")
 
 foreach ($BuildDir in $BuildDirs) {
     Set-Location -Path $BuildDir

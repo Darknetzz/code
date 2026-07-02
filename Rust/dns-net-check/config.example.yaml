@@ -1,0 +1,30 @@
+timeout_s: 5
+ping: true
+# nameserver: 1.1.1.1
+
+hosts:
+  - name: example.com
+    dns_records: ["A", "AAAA"]
+    dnssec: true
+    expected:
+      A:
+        - 93.184.216.34
+  - name: www.example.com
+    dns_records: ["CNAME"]
+    expected:
+      CNAME: example.com
+  - name: one.one.one.one
+    dns_records: ["A"]
+    ptr_ip: 1.1.1.1
+    expected:
+      PTR: one.one.one.one
+
+tcp:
+  - host: example.com
+    port: 443
+  - host: 1.1.1.1
+    port: 53
+
+urls:
+  - url: https://example.com
+    expected_status: 200
