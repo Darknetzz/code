@@ -27,10 +27,11 @@ pub enum HashAlgorithm {
     Sha512,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ZeroSide {
     Leading,
     Trailing,
+    Any,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -85,7 +86,7 @@ pub struct SharedArgs {
     #[arg(long)]
     pub zeros: u32,
 
-    /// Which end of the digest to match from.
+    /// Which end of the digest to match from, or `any` for either end.
     #[arg(long, value_enum, default_value_t = ZeroSide::Leading)]
     pub side: ZeroSide,
 

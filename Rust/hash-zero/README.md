@@ -34,7 +34,7 @@ cargo run --release -- verify "hello45231" --zeros 4 --unit hex --json
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--zeros <N>` | required | Target length of consecutive matching characters. |
-| `--side leading\|trailing` | `leading` | Which end of the digest to match from. |
+| `--side leading\|trailing\|any` | `leading` | Which end to match from; `any` uses whichever end has the longer run. |
 | `--char <DIGIT>` | `0` | Hex digit to match, or `any` for any repeated digit. |
 | `--unit hex\|bits` | `hex` | Hex = consecutive matching nibbles; bits = consecutive zero bits. |
 | `--algorithm sha256\|sha512` | `sha256` | Hash algorithm. |
@@ -68,6 +68,9 @@ Each additional matching hex character multiplies expected search time by roughl
 
 # Find 3 leading repeats of any hex digit (e.g. aaa, fff, 000)
 .\target\release\hash-zero.exe find "test" --zeros 3 --char any --side leading
+
+# Find 3 repeats at either end (leading or trailing, whichever is longer)
+.\target\release\hash-zero.exe find "test" --zeros 3 --char any --side any
 
 # Find 16 trailing zero bits
 .\target\release\hash-zero.exe find "block" --zeros 16 --unit bits --side trailing

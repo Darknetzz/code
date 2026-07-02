@@ -78,7 +78,7 @@ pub fn print_find_human(result: &FindResult) {
         result.actual_run,
         result.matched_char,
         char_filter_label(result.match_char),
-        side_label(result.side),
+        side_display(result.side, result.matched_side),
         unit_label(result.unit)
     );
     println!("attempts: {}", format_compact(result.attempts));
@@ -94,7 +94,7 @@ pub fn print_verify_human(outcome: &VerifyOutcome) {
         outcome.actual_run,
         outcome.matched_char,
         char_filter_label(outcome.match_char),
-        side_label(outcome.side),
+        side_display(outcome.side, outcome.matched_side),
         unit_label(outcome.unit)
     );
     println!(
@@ -123,6 +123,15 @@ fn side_label(side: ZeroSide) -> &'static str {
     match side {
         ZeroSide::Leading => "leading",
         ZeroSide::Trailing => "trailing",
+        ZeroSide::Any => "any",
+    }
+}
+
+fn side_display(side: ZeroSide, matched_side: ZeroSide) -> String {
+    if side == ZeroSide::Any {
+        format!("any→{}", side_label(matched_side))
+    } else {
+        side_label(side).to_string()
     }
 }
 
@@ -199,6 +208,7 @@ struct JsonFindReport {
     mode: &'static str,
     algorithm: &'static str,
     side: &'static str,
+    matched_side: &'static str,
     unit: &'static str,
     char: String,
     matched_char: char,
@@ -222,6 +232,7 @@ struct JsonVerifyReport {
     mode: &'static str,
     algorithm: &'static str,
     side: &'static str,
+    matched_side: &'static str,
     unit: &'static str,
     char: String,
     matched_char: char,
@@ -242,6 +253,7 @@ impl From<&FindResult> for JsonFindReport {
             mode: "find",
             algorithm: algorithm_label(result.algorithm),
             side: side_label(result.side),
+            matched_side: side_label(result.matched_side),
             unit: unit_label(result.unit),
             char: char_filter_json(result.match_char),
             matched_char: result.matched_char,
@@ -266,6 +278,7 @@ impl From<&VerifyOutcome> for JsonVerifyReport {
             mode: "verify",
             algorithm: algorithm_label(outcome.algorithm),
             side: side_label(outcome.side),
+            matched_side: side_label(outcome.matched_side),
             unit: unit_label(outcome.unit),
             char: char_filter_json(outcome.match_char),
             matched_char: outcome.matched_char,

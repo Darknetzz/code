@@ -25,6 +25,7 @@ impl From<&SharedArgs> for MatchCriteria {
 pub struct RunInfo {
     pub length: u32,
     pub matched_char: char,
+    pub matched_side: ZeroSide,
 }
 
 pub fn hash_digest(algorithm: HashAlgorithm, input: &[u8]) -> Vec<u8> {
@@ -51,24 +52,17 @@ pub fn max_run_length(algorithm: HashAlgorithm, unit: ZeroUnit) -> u32 {
 }
 
 pub fn count_run_info(digest: &[u8], criteria: MatchCriteria) -> RunInfo {
-    match criteria.unit {
-        ZeroUnit::Hex => match criteria.match_char {
-            MatchChar::Specific(ch) => {
-                let length = count_hex_run_specific(digest, criteria.side, ch);
-                RunInfo {
-                    length,
-                    matched_char: ch,
-                }
-            }
-            MatchChar::Any => count_hex_run_any(digest, criteria.side),
-        },
-        ZeroUnit::Bits => {
-            let length = count_bit_zeroes(digest, criteria.side);
-            RunInfo {
-                length,
-                matched_char: '0',
+    match criteria.side {
+        ZeroSide::Any => {
+            let leading = count_run_info_for_side(digest, criteria, ZeroSide::Leading);
+            let trailing = count_run_info_for_side(digest, criteria, ZeroSide::Trailing);
+            if trailing.length > leading.length {
+                trailing
+            } else {
+                leading
             }
         }
+        side => count_run_info_for_side(digest, criteria, side),
     }
 }
 
@@ -105,6 +99,7 @@ pub fn verify_input(input: &str, shared: &SharedArgs) -> Result<VerifyOutcome> {
         matched_char: run.matched_char,
         algorithm: shared.algorithm,
         side: criteria.side,
+        matched_side: run.matched_side,
         unit: criteria.unit,
     })
 }
@@ -120,7 +115,38 @@ pub struct VerifyOutcome {
     pub matched_char: char,
     pub algorithm: HashAlgorithm,
     pub side: ZeroSide,
+    pub matched_side: ZeroSide,
     pub unit: ZeroUnit,
+}
+
+fn count_run_info_for_side(
+    digest: &[u8],
+    criteria: MatchCriteria,
+    side: ZeroSide,
+) -> RunInfo {
+    debug_assert!(matches!(side, ZeroSide::Leading | ZeroSide::Trailing));
+
+    match criteria.unit {
+        ZeroUnit::Hex => match criteria.match_char {
+            MatchChar::Specific(ch) => RunInfo {
+                length: count_hex_run_specific(digest, side, ch),
+                matched_char: ch,
+                matched_side: side,
+            },
+            MatchChar::Any => {
+                let run = count_hex_run_any(digest, side);
+                RunInfo {
+                    matched_side: side,
+                    ..run
+                }
+            }
+        },
+        ZeroUnit::Bits => RunInfo {
+            length: count_bit_zeroes(digest, side),
+            matched_char: '0',
+            matched_side: side,
+        },
+    }
 }
 
 fn count_hex_run_specific(digest: &[u8], side: ZeroSide, ch: char) -> u32 {
@@ -135,21 +161,23 @@ fn count_hex_run_specific(digest: &[u8], side: ZeroSide, ch: char) -> u32 {
             .rev()
             .take_while(|c| matches(*c))
             .count() as u32,
+        ZeroSide::Any => unreachable!("specific hex run requires leading or trailing side"),
     }
 }
 
 fn count_hex_run_any(digest: &[u8], side: ZeroSide) -> RunInfo {
     let hex = digest_hex(digest);
-    let mut chars = hex.chars();
     let first = match side {
-        ZeroSide::Leading => chars.next(),
+        ZeroSide::Leading => hex.chars().next(),
         ZeroSide::Trailing => hex.chars().last(),
+        ZeroSide::Any => unreachable!("any-char hex run requires leading or trailing side"),
     };
 
     let Some(first) = first else {
         return RunInfo {
             length: 0,
             matched_char: '0',
+            matched_side: side,
         };
     };
 
@@ -164,11 +192,13 @@ fn count_hex_run_any(digest: &[u8], side: ZeroSide) -> RunInfo {
             .rev()
             .take_while(|c| c.to_ascii_lowercase() == matched)
             .count() as u32,
+        ZeroSide::Any => unreachable!("any-char hex run requires leading or trailing side"),
     };
 
     RunInfo {
         length,
         matched_char: matched,
+        matched_side: side,
     }
 }
 
@@ -176,6 +206,7 @@ fn count_bit_zeroes(digest: &[u8], side: ZeroSide) -> u32 {
     match side {
         ZeroSide::Leading => count_leading_zero_bits(digest),
         ZeroSide::Trailing => count_trailing_zero_bits(digest),
+        ZeroSide::Any => unreachable!("bit run requires leading or trailing side"),
     }
 }
 
@@ -229,6 +260,28 @@ mod tests {
             ),
             3
         );
+    }
+
+    #[test]
+    fn side_any_picks_longer_run() {
+        let digest = vec![0x00, 0x0a, 0x00];
+        let run = count_run_info(
+            &digest,
+            criteria(ZeroSide::Any, ZeroUnit::Hex, 1, MatchChar::Specific('0')),
+        );
+        assert_eq!(run.length, 3);
+        assert_eq!(run.matched_side, ZeroSide::Leading);
+    }
+
+    #[test]
+    fn side_any_tie_prefers_leading() {
+        let digest = vec![0x00, 0x11, 0x00];
+        let run = count_run_info(
+            &digest,
+            criteria(ZeroSide::Any, ZeroUnit::Hex, 1, MatchChar::Specific('0')),
+        );
+        assert_eq!(run.length, 2);
+        assert_eq!(run.matched_side, ZeroSide::Leading);
     }
 
     #[test]
@@ -299,6 +352,17 @@ mod tests {
             ),
             7
         );
+    }
+
+    #[test]
+    fn side_any_bits_picks_longer_run() {
+        let digest = vec![0x01, 0x00, 0x80];
+        let run = count_run_info(
+            &digest,
+            criteria(ZeroSide::Any, ZeroUnit::Bits, 1, MatchChar::Specific('0')),
+        );
+        assert_eq!(run.length, 7);
+        assert_eq!(run.matched_side, ZeroSide::Leading);
     }
 
     #[test]
