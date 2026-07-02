@@ -95,6 +95,7 @@ pub struct ResolvedHost {
 pub struct HostProbeResult {
     pub name: String,
     pub resolved_ip: String,
+    pub port: Option<u16>,
     pub ptr_name: Option<String>,
     pub method: ProbeMethod,
     pub stats: ProbeStats,
@@ -112,6 +113,9 @@ impl HostProbeResult {
         let mut map = Map::new();
         map.insert("name".into(), Value::String(self.name.clone()));
         map.insert("resolved_ip".into(), Value::String(self.resolved_ip.clone()));
+        if let Some(port) = self.port {
+            map.insert("port".into(), Value::from(port));
+        }
         if let Some(ptr) = &self.ptr_name {
             map.insert("ptr".into(), Value::String(ptr.clone()));
         }

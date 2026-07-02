@@ -19,11 +19,13 @@ pub enum ProbeEvent<'a> {
         host: &'a ResolvedHost,
         ip: &'a str,
         method: ProbeMethod,
+        port: Option<u16>,
     },
     Reply {
         host: &'a ResolvedHost,
         ip: &'a str,
         method: ProbeMethod,
+        port: Option<u16>,
         reply: PingReply,
         payload_size: usize,
     },
@@ -45,21 +47,25 @@ pub async fn run_probes(config: &RunConfig, sink: &mut ReplySink<'_>) -> Result<
             config,
             cancel_rx,
             |event| match event {
-                ProbeEvent::Header { host, ip, method } => {
-                    sink.print_header(host, ip, method);
-                }
+                ProbeEvent::Header {
+                    host,
+                    ip,
+                    method,
+                    port,
+                } => sink.print_header(host, ip, method, port),
                 ProbeEvent::Reply {
                     host,
                     ip,
                     method,
+                    port,
                     reply,
                     payload_size,
-                } => sink.print_reply(host, ip, method, &reply, payload_size),
+                } => sink.print_reply(host, ip, method, port, &reply, payload_size),
             },
         )
         .await?;
         if !config.json && !config.quiet {
-            sink.print_host_statistics(&host, &result.resolved_ip, &result.stats);
+            sink.print_host_statistics(&host, &result.resolved_ip, result.port, &result.stats);
         }
         return Ok(vec![result]);
     }
@@ -92,6 +98,11 @@ where
 {
     let ip_string = host.ip.to_string();
     let port = host.port.unwrap_or(config.port);
+    let tcp_port = if config.mode == ProbeMode::Tcp {
+        Some(port)
+    } else {
+        None
+    };
     let mut replies = Vec::new();
     let mut interrupted = false;
     let mut method = match config.mode {
@@ -108,7 +119,7 @@ where
                 None
             }
             Err(error) => {
-                return Ok(failed_result(host, &ip_string, method, error));
+                return Ok(failed_result(host, &ip_string, tcp_port, method, error));
             }
         }
     } else {
@@ -119,6 +130,7 @@ where
         host,
         ip: &ip_string,
         method,
+        port: tcp_port,
     });
 
     let mut seq = 0u32;
@@ -135,7 +147,7 @@ where
                 match subprocess_ping(&host.name, config.timeout_s).await {
                     Ok(mut batch) => batch.pop().unwrap_or(timeout_reply(seq)),
                     Err(error) if replies.is_empty() && !is_permission_error(&error) => {
-                        return Ok(failed_result(host, &ip_string, method, error));
+                        return Ok(failed_result(host, &ip_string, tcp_port, method, error));
                     }
                     Err(_) => timeout_reply(seq),
                 }
@@ -152,6 +164,7 @@ where
                                 return Ok(failed_result(
                                     host,
                                     &ip_string,
+                                    tcp_port,
                                     ProbeMethod::SystemPing,
                                     sub_error,
                                 ));
@@ -159,7 +172,7 @@ where
                         }
                     }
                     Err(error) => {
-                        return Ok(failed_result(host, &ip_string, method, error));
+                        return Ok(failed_result(host, &ip_string, tcp_port, method, error));
                     }
                 }
             }
@@ -169,6 +182,7 @@ where
             host,
             ip: &ip_string,
             method,
+            port: tcp_port,
             reply: reply.clone(),
             payload_size: config.payload_size,
         });
@@ -192,6 +206,7 @@ where
     Ok(HostProbeResult {
         name: host.name.clone(),
         resolved_ip: ip_string,
+        port: tcp_port,
         ptr_name: host.ptr_name.clone(),
         method,
         stats,
@@ -213,12 +228,14 @@ fn timeout_reply(seq: u32) -> PingReply {
 fn failed_result(
     host: &ResolvedHost,
     ip: &str,
+    port: Option<u16>,
     method: ProbeMethod,
     error: String,
 ) -> HostProbeResult {
     HostProbeResult {
         name: host.name.clone(),
         resolved_ip: ip.to_string(),
+        port,
         ptr_name: host.ptr_name.clone(),
         method,
         stats: compute_stats(0, &[]),

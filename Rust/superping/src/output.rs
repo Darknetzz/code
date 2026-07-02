@@ -12,6 +12,13 @@ pub struct ReplySink<'a> {
     writer: &'a mut dyn Write,
 }
 
+fn format_target(ip: &str, port: Option<u16>) -> String {
+    match port {
+        Some(port) => format!("{ip}:{port}"),
+        None => ip.to_string(),
+    }
+}
+
 impl<'a> ReplySink<'a> {
     pub fn new(writer: &'a mut dyn Write, quiet: bool, json: bool, multi_host: bool) -> Self {
         Self {
@@ -30,11 +37,18 @@ impl<'a> ReplySink<'a> {
         let _ = self.writer.flush();
     }
 
-    pub fn print_header(&mut self, host: &ResolvedHost, ip: &str, method: ProbeMethod) {
+    pub fn print_header(
+        &mut self,
+        host: &ResolvedHost,
+        ip: &str,
+        method: ProbeMethod,
+        port: Option<u16>,
+    ) {
         if self.json || self.quiet {
             return;
         }
-        let mut header = format!("PING {} ({ip}) via {}", host.name, method.as_str());
+        let target = format_target(ip, port);
+        let mut header = format!("PING {} ({target}) via {}", host.name, method.as_str());
         if let Some(ptr) = &host.ptr_name {
             header.push_str(&format!(" ptr={ptr}"));
         }
@@ -49,6 +63,7 @@ impl<'a> ReplySink<'a> {
         host: &ResolvedHost,
         ip: &str,
         method: ProbeMethod,
+        port: Option<u16>,
         reply: &PingReply,
         payload_size: usize,
     ) {
@@ -61,15 +76,21 @@ impl<'a> ReplySink<'a> {
         } else {
             String::new()
         };
+        let target = format_target(ip, port);
 
         if reply.timed_out {
-            self.writeln(&format!("{prefix}Request timeout for icmp_seq {}", reply.seq));
+            let line = if port.is_some() {
+                format!("{prefix}Request timeout for seq {} ({target})", reply.seq)
+            } else {
+                format!("{prefix}Request timeout for icmp_seq {}", reply.seq)
+            };
+            self.writeln(&line);
             return;
         }
 
         let line = match method {
             ProbeMethod::Tcp => format!(
-                "{prefix}Connected to {ip}: seq={} time={:.1} ms",
+                "{prefix}Connected to {target}: seq={} time={:.1} ms",
                 reply.seq, reply.rtt_ms
             ),
             _ => {
@@ -86,14 +107,25 @@ impl<'a> ReplySink<'a> {
         self.writeln(&line);
     }
 
-    pub fn print_host_statistics(&mut self, host: &ResolvedHost, _ip: &str, stats: &ProbeStats) {
+    pub fn print_host_statistics(
+        &mut self,
+        host: &ResolvedHost,
+        ip: &str,
+        port: Option<u16>,
+        stats: &ProbeStats,
+    ) {
         if self.json || self.quiet {
             return;
         }
         if self.multi_host {
             return;
         }
-        print_statistics_block(&mut self.writer, &host.name, stats);
+        let label = if host.name == ip || host.name == format_target(ip, port) {
+            format_target(ip, port)
+        } else {
+            format!("{} ({})", host.name, format_target(ip, port))
+        };
+        print_statistics_block(&mut self.writer, &label, stats);
     }
 }
 
@@ -126,7 +158,7 @@ pub fn print_summary_table(results: &[HostProbeResult]) {
     table.set_header(vec![
         "Status",
         "Host",
-        "IP",
+        "Target",
         "Method",
         "Sent",
         "Recv",
@@ -140,6 +172,7 @@ pub fn print_summary_table(results: &[HostProbeResult]) {
         } else {
             Cell::new("FAIL").fg(Color::Red)
         };
+        let target = format_target(&result.resolved_ip, result.port);
         let avg = result
             .stats
             .avg_ms
@@ -148,7 +181,7 @@ pub fn print_summary_table(results: &[HostProbeResult]) {
         table.add_row(vec![
             status,
             Cell::new(&result.name),
-            Cell::new(&result.resolved_ip),
+            Cell::new(target),
             Cell::new(result.method.as_str()),
             Cell::new(result.stats.packets_sent.to_string()),
             Cell::new(result.stats.packets_received.to_string()),
@@ -189,12 +222,17 @@ pub fn print_human_results(results: &[HostProbeResult], multi_host: bool, quiet:
                     println!(
                         "PING {} ({}) FAILED: {}",
                         result.name,
-                        result.resolved_ip,
+                        format_target(&result.resolved_ip, result.port),
                         result.error.as_deref().unwrap_or("error")
                     );
                     continue;
                 }
-                print_statistics_block(&mut io::stdout(), &result.name, &result.stats);
+                let label = format!(
+                    "{} ({})",
+                    result.name,
+                    format_target(&result.resolved_ip, result.port)
+                );
+                print_statistics_block(&mut io::stdout(), &label, &result.stats);
             }
         }
         print_summary_table(results);
@@ -206,7 +244,8 @@ pub fn print_human_results(results: &[HostProbeResult], multi_host: bool, quiet:
             if let Some(error) = &result.error {
                 println!(
                     "PING {} ({}) FAILED: {error}",
-                    result.name, result.resolved_ip
+                    result.name,
+                    format_target(&result.resolved_ip, result.port)
                 );
             }
         }
