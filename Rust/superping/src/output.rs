@@ -47,8 +47,10 @@ impl<'a> ReplySink<'a> {
         if self.json || self.quiet {
             return;
         }
-        let target = format_target(ip, port);
-        let mut header = format!("PING {} ({target}) via {}", host.name, method.as_str());
+        let mut header = format!("PING {} ({ip}) via {}", host.name, method.as_str());
+        if let Some(port) = port {
+            header.push_str(&format!(" on port {port}"));
+        }
         if let Some(ptr) = &host.ptr_name {
             header.push_str(&format!(" ptr={ptr}"));
         }
