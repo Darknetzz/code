@@ -47,22 +47,23 @@ fn main() -> Result<()> {
     if cli.command.is_none() && cli.script_and_args.is_empty() {
         let argc = std::env::args().count();
         if argc <= 1 {
-            eprintln!("dsh: note: this process started with no script path on the command line.");
-            eprintln!("dsh:       if you ran `dsh .\\script.dsh` but see this, your `dsh` is probably a shell function or alias that does not forward arguments.");
-            eprintln!("dsh:       try:  & '.\\target\\release\\dsh.exe' '.\\script.dsh'   (or `cargo run -- .\\script.dsh`)");
+            let prog = &st.argv0;
+            eprintln!("{prog}: note: this process started with no script path on the command line.");
+            eprintln!("{prog}:       if you ran `{prog} .\\script.dsh` but see this, your `{prog}` is probably a shell function or alias that does not forward arguments.");
+            eprintln!("{prog}:       try:  & '{prog}' '.\\script.dsh'   (or `cargo run -- .\\script.dsh`)");
             let _ = io::stderr().flush();
         }
     }
 
     if let Some(code) = cli.command {
-        st.argv0 = "dsh".into();
         st.positional.clear();
         interp::eval_source(&mut st, &code)?;
     } else if let Some(path_str) = cli.script_and_args.first() {
         let path = PathBuf::from(path_str);
         if !path.is_file() {
             anyhow::bail!(
-                "dsh: script file does not exist or is not a regular file: {}",
+                "{}: script file does not exist or is not a regular file: {}",
+                st.argv0,
                 path.display()
             );
         }
@@ -80,11 +81,12 @@ fn main() -> Result<()> {
         // Embedded / IDE terminals often leave stdin as a pipe. Rustyline then blocks forever on
         // the first read with no useful prompt — looks like a freeze. Require a real TTY stdin.
         if !std::io::stdin().is_terminal() {
-            eprintln!("dsh: cannot start the interactive shell: standard input is not a terminal.");
-            eprintln!("dsh: run a script by passing a file path to this executable, for example:");
-            eprintln!("dsh:   .\\target\\release\\dsh.exe .\\script.dsh");
-            eprintln!("dsh: or:  cargo run -- .\\script.dsh");
-            eprintln!("dsh: if you already used a path but see this message, the path was not passed to this process (often a PowerShell function named `dsh` without `@args`).");
+            let prog = &st.argv0;
+            eprintln!("{prog}: cannot start the interactive shell: standard input is not a terminal.");
+            eprintln!("{prog}: run a script by passing a file path to this executable, for example:");
+            eprintln!("{prog}:   {prog} .\\script.dsh");
+            eprintln!("{prog}: or:  cargo run -- .\\script.dsh");
+            eprintln!("{prog}: if you already used a path but see this message, the path was not passed to this process (often a PowerShell function named `{prog}` without `@args`).");
             let _ = io::stderr().flush();
             std::process::exit(1);
         }

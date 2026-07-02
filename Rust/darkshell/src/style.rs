@@ -42,13 +42,13 @@ pub fn print_repl_banner() -> io::Result<()> {
 
 /// `(raw, styled)` for [`rustyline`](https://docs.rs/rustyline/latest/rustyline/prompt/trait.Prompt.html):
 /// width is derived from `raw` (no ANSI); the terminal shows `styled` when colors are on.
-pub fn repl_prompt_pair(cwd: &Path) -> (String, String) {
+pub fn repl_prompt_pair(argv0: &str, cwd: &Path) -> (String, String) {
     let path = cwd.to_string_lossy();
-    let raw = format!("dsh:{path}$ ");
+    let raw = format!("{argv0}:{path}$ ");
     let styled = if stdout_color() {
         format!(
             "{}{}{} ",
-            "dsh:".bold().bright_magenta(),
+            format!("{argv0}:").bold().bright_magenta(),
             path.as_ref().bright_cyan(),
             "$".bold().bright_green(),
         )

@@ -19,6 +19,18 @@ pub struct ShellState {
 }
 
 impl ShellState {
+    /// Basename of argv[0] (e.g. `darkshell.exe` or `dsh` via symlink).
+    pub fn program_name_from_args() -> String {
+        std::env::args()
+            .next()
+            .and_then(|p| {
+                std::path::Path::new(&p)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| String::from("darkshell"))
+    }
+
     pub fn minimal() -> Self {
         Self {
             env: HashMap::new(),
@@ -26,7 +38,7 @@ impl ShellState {
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),
-            argv0: String::from("dsh"),
+            argv0: Self::program_name_from_args(),
             pending_exit: None,
             exported: HashSet::new(),
         }
@@ -43,7 +55,7 @@ impl ShellState {
             last_status: 0,
             functions: HashMap::new(),
             positional: Vec::new(),
-            argv0: String::from("dsh"),
+            argv0: Self::program_name_from_args(),
             pending_exit: None,
             exported,
         }

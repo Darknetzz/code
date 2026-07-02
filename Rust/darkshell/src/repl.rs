@@ -15,7 +15,7 @@ pub fn repl_loop(st: &mut ShellState) -> Result<()> {
     style::print_repl_banner()?;
 
     loop {
-        let prompt = style::repl_prompt_pair(st.cwd.as_path());
+        let prompt = style::repl_prompt_pair(&st.argv0, st.cwd.as_path());
         match rl.readline(&prompt) {
             Ok(line) => {
                 rl.add_history_entry(line.as_str())?;

@@ -176,11 +176,11 @@ fn run_pipeline(
     if pipe.cmds.len() > 1 {
         for c in &pipe.cmds {
             if !(c.redirects.is_empty() && c.assigns.is_empty()) {
-                bail!("dsh: assignments/redirects in multi-command pipelines are not supported yet");
+                bail!("{}: assignments/redirects in multi-command pipelines are not supported yet", st.argv0);
             }
             let head = expanded_head(st, c)?;
             if !head.is_empty() && is_builtin(&head) {
-                bail!("dsh: builtins are not supported in pipelines (`{head}`)");
+                bail!("{}: builtins are not supported in pipelines (`{head}`)", st.argv0);
             }
         }
     }
@@ -217,7 +217,7 @@ fn run_pipeline_fg(
         let head = expanded_head(st, simple)?;
         let argv = expanded_argv(st, simple)?;
         if head.is_empty() {
-            bail!("dsh: empty command in pipeline");
+            bail!("{}: empty command in pipeline", st.argv0);
         }
         let mut cmd = Command::new(&head);
         cmd.args(argv.iter().skip(1));
@@ -384,7 +384,7 @@ fn apply_redirects_touch_only(st: &ShellState, s: &SimpleCommand) -> Result<()> 
                 drop(open_write_target(st, target, *truncate)?);
             }
             RedirectSpec::DupFd { .. } => {
-                bail!("dsh: `2>&1` redirection without a command still needs a stdout target file");
+                bail!("{}: `2>&1` redirection without a command still needs a stdout target file", st.argv0);
             }
         }
     }
@@ -408,7 +408,7 @@ fn run_external(st: &mut ShellState, argv: &[String], simple: &SimpleCommand) ->
         match r {
             RedirectSpec::OpenRead { fd, target } => {
                 if *fd != 0 {
-                    bail!("dsh: stdin redirect on fd {fd} is not implemented");
+                    bail!("{}: stdin redirect on fd {fd} is not implemented", st.argv0);
                 }
                 stdin = Stdio::from(open_read_target(st, target)?);
             }
@@ -421,7 +421,7 @@ fn run_external(st: &mut ShellState, argv: &[String], simple: &SimpleCommand) ->
                 match *fd {
                     1 => out_file = Some(f),
                     2 => err_file = Some(f),
-                    _ => bail!("dsh: unsupported output fd {fd}"),
+                    _ => bail!("{}: unsupported output fd {fd}", st.argv0),
                 }
             }
             RedirectSpec::DupFd {
@@ -430,7 +430,7 @@ fn run_external(st: &mut ShellState, argv: &[String], simple: &SimpleCommand) ->
             } if *fd == 2 && *target_fd == 1 => {
                 dup_err_to_stdout = true;
             }
-            _ => bail!("dsh: unsupported redirect"),
+            _ => bail!("{}: unsupported redirect", st.argv0),
         }
     }
 
