@@ -39,13 +39,13 @@ pub struct Cli {
     #[arg(long, default_value_t = 5.0)]
     pub timeout: f64,
 
-    /// Probe mode.
-    #[arg(long, value_enum, default_value_t = ProbeModeArg::Icmp)]
-    pub mode: ProbeModeArg,
+    /// Probe mode (defaults to tcp when --port is set, otherwise icmp).
+    #[arg(long, value_enum)]
+    pub mode: Option<ProbeModeArg>,
 
-    /// TCP port when mode is tcp.
-    #[arg(long, default_value_t = 443)]
-    pub port: u16,
+    /// TCP port (implies --mode tcp when set).
+    #[arg(long)]
+    pub port: Option<u16>,
 
     /// Use IPv4 addresses only.
     #[arg(long, conflicts_with = "ipv6")]

@@ -1,9 +1,13 @@
 use anyhow::{bail, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::num::NonZeroUsize;
+use std::str::FromStr;
 
 #[derive(Debug, Parser)]
-#[command(name = "hash-zero", about = "Find and verify hashes with leading or trailing zeroes")]
+#[command(
+    name = "hash-zero",
+    about = "Find and verify hashes with leading or trailing repeating hex characters"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -11,9 +15,9 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Brute-force a nonce until hash(prefix + nonce) meets the zero target.
+    /// Brute-force a nonce until hash(prefix + nonce) meets the match target.
     Find(FindArgs),
-    /// Hash a fixed input and check whether it meets the zero target.
+    /// Hash a fixed input and check whether it meets the match target.
     Verify(VerifyArgs),
 }
 
@@ -29,7 +33,7 @@ pub enum ZeroSide {
     Trailing,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ZeroUnit {
     Hex,
     Bits,
@@ -41,21 +45,55 @@ pub enum NonceFormat {
     Hex,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchChar {
+    Specific(char),
+    Any,
+}
+
+impl MatchChar {
+    pub fn is_any(self) -> bool {
+        matches!(self, Self::Any)
+    }
+}
+
+impl FromStr for MatchChar {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        if value.eq_ignore_ascii_case("any") {
+            return Ok(Self::Any);
+        }
+
+        let mut chars = value.chars();
+        let ch = chars
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("--char must be a hex digit or 'any'"))?;
+        if chars.next().is_some() {
+            bail!("--char must be a single hex digit or 'any'");
+        }
+        if !ch.is_ascii_hexdigit() {
+            bail!("--char must be a hex digit (0-9, a-f) or 'any'");
+        }
+        Ok(Self::Specific(ch.to_ascii_lowercase()))
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct SharedArgs {
-    /// Target count of leading or trailing zeroes.
+    /// Target length of consecutive matching characters.
     #[arg(long)]
     pub zeros: u32,
 
-    /// Count zeroes from the start of the digest.
-    #[arg(long, group = "side")]
-    pub leading: bool,
+    /// Which end of the digest to match from.
+    #[arg(long, value_enum, default_value_t = ZeroSide::Leading)]
+    pub side: ZeroSide,
 
-    /// Count zeroes from the end of the digest.
-    #[arg(long, group = "side")]
-    pub trailing: bool,
+    /// Hex digit to match, or `any` for any repeated digit (--unit hex only).
+    #[arg(long = "char", default_value = "0")]
+    pub match_char: MatchChar,
 
-    /// Measure zeroes as hex nibbles or raw bits.
+    /// Measure runs as hex nibbles or raw zero bits.
     #[arg(long, value_enum, default_value_t = ZeroUnit::Hex)]
     pub unit: ZeroUnit,
 
@@ -66,16 +104,6 @@ pub struct SharedArgs {
     /// Emit JSON report.
     #[arg(long)]
     pub json: bool,
-}
-
-impl SharedArgs {
-    pub fn side(&self) -> ZeroSide {
-        if self.trailing {
-            ZeroSide::Trailing
-        } else {
-            ZeroSide::Leading
-        }
-    }
 }
 
 #[derive(Debug, Args)]
@@ -132,17 +160,28 @@ pub struct VerifyArgs {
     pub shared: SharedArgs,
 }
 
-pub fn validate_zero_target(
-    algorithm: HashAlgorithm,
-    unit: ZeroUnit,
-    zeros: u32,
-) -> Result<()> {
-    let max = crate::hash::max_zeroes(algorithm, unit);
-    if zeros == 0 {
+pub fn validate_match_target(shared: &SharedArgs) -> Result<()> {
+    let max = crate::hash::max_run_length(shared.algorithm, shared.unit);
+    if shared.zeros == 0 {
         bail!("--zeros must be at least 1");
     }
-    if zeros > max {
-        bail!("--zeros {zeros} exceeds maximum of {max} for {:?} {:?}", unit, algorithm);
+    if shared.zeros > max {
+        bail!(
+            "--zeros {} exceeds maximum of {max} for {:?} {:?}",
+            shared.zeros,
+            shared.unit,
+            shared.algorithm
+        );
+    }
+    if shared.unit == ZeroUnit::Bits {
+        if shared.match_char.is_any() {
+            bail!("--char any requires --unit hex; bits mode matches zero bits only");
+        }
+        if let MatchChar::Specific(ch) = shared.match_char {
+            if ch != '0' {
+                bail!("--char is only supported with --unit hex; bits mode matches zero bits only");
+            }
+        }
     }
     Ok(())
 }

@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
 
-use crate::cli::{validate_zero_target, Command, FindArgs, VerifyArgs};
+use crate::cli::{validate_match_target, Command, FindArgs, VerifyArgs};
 use crate::hash::verify_input;
 use crate::output::{
     print_error, print_find_human, print_find_json, print_verify_human, print_verify_json,
@@ -51,13 +51,7 @@ fn run_find(args: FindArgs) -> Result<i32> {
 fn run_verify(args: VerifyArgs) -> Result<i32> {
     validate_shared(&args.shared)?;
 
-    let outcome = verify_input(
-        &args.input,
-        args.shared.algorithm,
-        args.shared.zeros,
-        args.shared.side(),
-        args.shared.unit,
-    )?;
+    let outcome = verify_input(&args.input, &args.shared)?;
 
     if args.shared.json {
         print_verify_json(&outcome);
@@ -69,7 +63,7 @@ fn run_verify(args: VerifyArgs) -> Result<i32> {
 }
 
 fn validate_shared(shared: &cli::SharedArgs) -> Result<()> {
-    validate_zero_target(shared.algorithm, shared.unit, shared.zeros)
+    validate_match_target(shared)
 }
 
 fn configure_threads(threads: Option<std::num::NonZeroUsize>) -> Result<()> {

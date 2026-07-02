@@ -8,7 +8,7 @@ Feature-rich ICMP/TCP ping CLI — multi-host parallel probes, rich RTT statisti
 - **Multi-host parallel** probing with comparison summary table
 - **Rich statistics**: min/avg/max/stddev/jitter and packet loss
 - **Continuous mode**: `--forever` with Ctrl+C summary
-- **TCP probe mode** when ICMP is blocked (`--mode tcp --port 443`)
+- **TCP probe mode** when ICMP is blocked, or when `--port` is set (`--mode tcp --port 443`)
 - **DNS context**: A/AAAA resolution, optional PTR (`--ptr`), IPv4/IPv6 filter
 - Human-readable output and JSON for automation
 
@@ -25,6 +25,7 @@ cargo build --release
 cargo run --release -- 127.0.0.1 -c 3
 cargo run --release -- --host 8.8.8.8 --host 1.1.1.1
 cargo run --release -- --host 8.8.8.8 --host 1.1.1.1 --json
+cargo run --release -- --port 80 --host example.com
 cargo run --release -- --mode tcp --port 443 --host example.com
 cargo run --release -- --config config.example.yaml
 cargo run --release -- --forever 127.0.0.1
@@ -38,8 +39,8 @@ cargo run --release -- --forever 127.0.0.1
 - `--forever`: ping until interrupted
 - `-i, --interval <secs>`: seconds between probes (default: 1.0)
 - `--timeout <secs>`: per-probe timeout (default: 5.0)
-- `--mode <icmp|tcp>`: probe mode (default: icmp)
-- `--port <port>`: TCP port when mode is tcp (default: 443)
+- `--mode <icmp|tcp>`: probe mode (default: icmp; auto tcp when `--port` or `host:port` is used)
+- `--port <port>`: TCP port (implies tcp mode; default 443 when in tcp mode)
 - `--ipv4` / `--ipv6`: address family filter
 - `--ptr`: show reverse DNS for resolved IPs
 - `--payload-size <n>`: ICMP payload bytes in native mode (default: 56)

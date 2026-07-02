@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::io::Write;
 use std::time::{Duration, Instant};
 
-use crate::cli::{HashAlgorithm, ZeroSide, ZeroUnit};
+use crate::cli::{HashAlgorithm, MatchChar, ZeroSide, ZeroUnit};
 use crate::hash::VerifyOutcome;
 use crate::search::FindResult;
 
@@ -13,16 +13,18 @@ pub fn print_error(message: &str) {
 pub struct FindProgress {
     enabled: bool,
     interval: Duration,
-    target_zeroes: u32,
+    target_run: u32,
+    match_char: MatchChar,
     last_report: Instant,
 }
 
 impl FindProgress {
-    pub fn new(enabled: bool, interval_ms: u64, target_zeroes: u32) -> Self {
+    pub fn new(enabled: bool, interval_ms: u64, target_run: u32, match_char: MatchChar) -> Self {
         Self {
             enabled,
             interval: Duration::from_millis(interval_ms),
-            target_zeroes,
+            target_run,
+            match_char,
             last_report: Instant::now(),
         }
     }
@@ -31,7 +33,7 @@ impl FindProgress {
         &mut self,
         attempts: u64,
         elapsed: Duration,
-        best_zeroes: u32,
+        best_run: u32,
         latest_nonce: u64,
     ) {
         if !self.enabled {
@@ -48,11 +50,12 @@ impl FindProgress {
             attempts as f64
         };
 
+        let char_label = char_filter_label(self.match_char);
         let _ = write!(
             std::io::stderr(),
-            "\rprogress: attempts={attempts} elapsed={:.1}s rate={rate:.0}/s best={best_zeroes}/{} nonce={latest_nonce}   ",
+            "\rprogress: attempts={attempts} elapsed={:.1}s rate={rate:.0}/s best={best_run}/{target_run} {char_label} nonce={latest_nonce}   ",
             elapsed.as_secs_f64(),
-            self.target_zeroes,
+            target_run = self.target_run,
         );
         let _ = std::io::stderr().flush();
     }
@@ -69,8 +72,10 @@ pub fn print_find_human(result: &FindResult) {
     println!("input: {}", result.input);
     println!("hash: {}", result.hash_hex);
     println!(
-        "zeroes: {} ({}, {})",
-        result.actual_zeroes,
+        "run: {} x '{}' ({}, {}, {})",
+        result.actual_run,
+        result.matched_char,
+        char_filter_label(result.match_char),
         side_label(result.side),
         unit_label(result.unit)
     );
@@ -83,8 +88,10 @@ pub fn print_verify_human(outcome: &VerifyOutcome) {
     println!("input: {}", outcome.input);
     println!("hash: {}", outcome.hash_hex);
     println!(
-        "zeroes: {} ({}, {})",
-        outcome.actual_zeroes,
+        "run: {} x '{}' ({}, {}, {})",
+        outcome.actual_run,
+        outcome.matched_char,
+        char_filter_label(outcome.match_char),
         side_label(outcome.side),
         unit_label(outcome.unit)
     );
@@ -131,13 +138,33 @@ fn algorithm_label(algorithm: HashAlgorithm) -> &'static str {
     }
 }
 
+fn char_filter_label(match_char: MatchChar) -> &'static str {
+    match match_char {
+        MatchChar::Any => "any",
+        MatchChar::Specific(_) => "specific",
+    }
+}
+
+fn char_filter_json(match_char: MatchChar) -> String {
+    match match_char {
+        MatchChar::Any => "any".to_string(),
+        MatchChar::Specific(ch) => ch.to_string(),
+    }
+}
+
 #[derive(Serialize)]
 struct JsonFindReport {
     mode: &'static str,
     algorithm: &'static str,
     side: &'static str,
     unit: &'static str,
+    char: String,
+    matched_char: char,
+    target_run: u32,
+    actual_run: u32,
+    #[serde(rename = "target_zeroes")]
     target_zeroes: u32,
+    #[serde(rename = "actual_zeroes")]
     actual_zeroes: u32,
     meets_target: bool,
     nonce: u64,
@@ -154,7 +181,13 @@ struct JsonVerifyReport {
     algorithm: &'static str,
     side: &'static str,
     unit: &'static str,
+    char: String,
+    matched_char: char,
+    target_run: u32,
+    actual_run: u32,
+    #[serde(rename = "target_zeroes")]
     target_zeroes: u32,
+    #[serde(rename = "actual_zeroes")]
     actual_zeroes: u32,
     meets_target: bool,
     input: String,
@@ -168,9 +201,13 @@ impl From<&FindResult> for JsonFindReport {
             algorithm: algorithm_label(result.algorithm),
             side: side_label(result.side),
             unit: unit_label(result.unit),
-            target_zeroes: result.target_zeroes,
-            actual_zeroes: result.actual_zeroes,
-            meets_target: result.actual_zeroes >= result.target_zeroes,
+            char: char_filter_json(result.match_char),
+            matched_char: result.matched_char,
+            target_run: result.target_run,
+            actual_run: result.actual_run,
+            target_zeroes: result.target_run,
+            actual_zeroes: result.actual_run,
+            meets_target: result.actual_run >= result.target_run,
             nonce: result.nonce,
             input: result.input.clone(),
             hash: result.hash_hex.clone(),
@@ -188,8 +225,12 @@ impl From<&VerifyOutcome> for JsonVerifyReport {
             algorithm: algorithm_label(outcome.algorithm),
             side: side_label(outcome.side),
             unit: unit_label(outcome.unit),
-            target_zeroes: outcome.target_zeroes,
-            actual_zeroes: outcome.actual_zeroes,
+            char: char_filter_json(outcome.match_char),
+            matched_char: outcome.matched_char,
+            target_run: outcome.target_run,
+            actual_run: outcome.actual_run,
+            target_zeroes: outcome.target_run,
+            actual_zeroes: outcome.actual_run,
             meets_target: outcome.meets_target,
             input: outcome.input.clone(),
             hash: outcome.hash_hex.clone(),

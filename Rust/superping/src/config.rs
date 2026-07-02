@@ -83,7 +83,8 @@ pub fn build_run_config(cli: &Cli, file: FileConfig) -> Result<RunConfig> {
         bail!("No hosts specified. Use --host, positional HOST args, or a config file with hosts.");
     }
 
-    let mode = parse_mode(file.mode.as_deref(), cli.mode)?;
+    let mode = resolve_mode(cli.mode, cli.port, file.mode.as_deref(), file.port, &hosts)?;
+    let port = cli.port.or(file.port).unwrap_or(443);
     let address_family = if cli.ipv6 || file.ipv6.unwrap_or(false) {
         AddressFamily::V6
     } else if cli.ipv4 {
@@ -102,7 +103,7 @@ pub fn build_run_config(cli: &Cli, file: FileConfig) -> Result<RunConfig> {
         interval_s: file.interval_s.unwrap_or(cli.interval),
         timeout_s: file.timeout_s.unwrap_or(cli.timeout),
         mode,
-        port: file.port.unwrap_or(cli.port),
+        port,
         address_family,
         ptr: cli.ptr || file.ptr.unwrap_or(false),
         payload_size: file.payload_size.unwrap_or(cli.payload_size),
@@ -154,14 +155,63 @@ fn parse_host_port(item: &str) -> Result<(String, u16)> {
     Ok((host.to_string(), port))
 }
 
-fn parse_mode(file_mode: Option<&str>, cli_mode: ProbeModeArg) -> Result<ProbeMode> {
-    let mode = match file_mode {
-        Some(raw) => match raw.to_ascii_lowercase().as_str() {
-            "icmp" => ProbeMode::Icmp,
-            "tcp" => ProbeMode::Tcp,
-            other => bail!("Invalid mode '{other}', expected icmp or tcp"),
-        },
-        None => ProbeMode::from(cli_mode),
-    };
-    Ok(mode)
+fn resolve_mode(
+    cli_mode: Option<ProbeModeArg>,
+    cli_port: Option<u16>,
+    file_mode: Option<&str>,
+    file_port: Option<u16>,
+    hosts: &[HostTarget],
+) -> Result<ProbeMode> {
+    if let Some(mode) = cli_mode {
+        return Ok(ProbeMode::from(mode));
+    }
+    if let Some(raw) = file_mode {
+        return parse_mode_str(raw);
+    }
+    if cli_port.is_some() || file_port.is_some() || hosts.iter().any(|host| host.port.is_some()) {
+        return Ok(ProbeMode::Tcp);
+    }
+    Ok(ProbeMode::Icmp)
+}
+
+fn parse_mode_str(raw: &str) -> Result<ProbeMode> {
+    match raw.to_ascii_lowercase().as_str() {
+        "icmp" => Ok(ProbeMode::Icmp),
+        "tcp" => Ok(ProbeMode::Tcp),
+        other => bail!("Invalid mode '{other}', expected icmp or tcp"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::ProbeModeArg;
+
+    #[test]
+    fn port_flag_implies_tcp_mode() {
+        let mode = resolve_mode(None, Some(80), None, None, &[]).unwrap();
+        assert_eq!(mode, ProbeMode::Tcp);
+    }
+
+    #[test]
+    fn explicit_mode_overrides_port_implication() {
+        let mode = resolve_mode(Some(ProbeModeArg::Icmp), Some(80), None, None, &[]).unwrap();
+        assert_eq!(mode, ProbeMode::Icmp);
+    }
+
+    #[test]
+    fn host_port_implies_tcp_mode() {
+        let hosts = vec![HostTarget {
+            name: "example.com".into(),
+            port: Some(443),
+        }];
+        let mode = resolve_mode(None, None, None, None, &hosts).unwrap();
+        assert_eq!(mode, ProbeMode::Tcp);
+    }
+
+    #[test]
+    fn defaults_to_icmp_without_port_hints() {
+        let mode = resolve_mode(None, None, None, None, &[]).unwrap();
+        assert_eq!(mode, ProbeMode::Icmp);
+    }
 }

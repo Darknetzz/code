@@ -1,8 +1,8 @@
 # hash-zero
 
-CLI for finding and verifying cryptographic hashes with leading or trailing zeroes.
+CLI for finding and verifying cryptographic hashes with leading or trailing runs of a hex character.
 
-Brute-forces a nonce appended to a prefix (`find`) or checks a fixed input (`verify`). Supports SHA-256 and SHA-512, with zeroes counted as hex nibbles or raw bits.
+Brute-forces a nonce appended to a prefix (`find`) or checks a fixed input (`verify`). Supports SHA-256 and SHA-512. Match any hex digit with `--char`, or use `--unit bits` for zero-bit runs.
 
 ## Build
 
@@ -17,7 +17,8 @@ Release builds are recommended; the hot path is parallel hashing.
 
 ```powershell
 cargo run --release -- find "hello" --zeros 4 --unit hex
-cargo run --release -- find "block" --zeros 16 --unit bits --trailing
+cargo run --release -- find "block" --zeros 3 --char f --side trailing
+cargo run --release -- find "block" --zeros 16 --unit bits --side trailing
 cargo run --release -- verify "hello45231" --zeros 4 --unit hex --json
 ```
 
@@ -25,21 +26,21 @@ cargo run --release -- verify "hello45231" --zeros 4 --unit hex --json
 
 | Subcommand | Description |
 |------------|-------------|
-| `find <PREFIX>` | Brute-force `hash(prefix + nonce)` until the zero target is met. |
+| `find <PREFIX>` | Brute-force `hash(prefix + nonce)` until the match target is met. |
 | `verify <INPUT>` | Hash a fixed input and report whether it meets the target. |
 
 ### Shared flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--zeros <N>` | required | Target count of leading or trailing zeroes. |
-| `--leading` | on | Count zeroes from the start of the digest. |
-| `--trailing` | off | Count zeroes from the end of the digest. |
-| `--unit hex\|bits` | `hex` | Hex = consecutive `0` nibbles; bits = consecutive zero bits. |
+| `--zeros <N>` | required | Target length of consecutive matching characters. |
+| `--side leading\|trailing` | `leading` | Which end of the digest to match from. |
+| `--char <DIGIT>` | `0` | Hex digit to match, or `any` for any repeated digit. |
+| `--unit hex\|bits` | `hex` | Hex = consecutive matching nibbles; bits = consecutive zero bits. |
 | `--algorithm sha256\|sha512` | `sha256` | Hash algorithm. |
 | `--json` | off | Emit a JSON report. |
 
-`--leading` and `--trailing` are mutually exclusive. When neither is given, leading is used.
+With `--unit bits`, only zero bits are supported (`--char` must be `0`; `any` is not allowed).
 
 ### `find` flags
 
@@ -54,16 +55,22 @@ cargo run --release -- verify "hello45231" --zeros 4 --unit hex --json
 
 ### Difficulty
 
-Each additional hex zero multiplies expected search time by roughly 16×. Each additional bit multiplies it by roughly 2×.
+Each additional matching hex character multiplies expected search time by roughly 16×. Each additional zero bit multiplies it by roughly 2×.
 
 ### Examples
 
 ```powershell
-# Find a SHA-256 hash with 4 leading hex zeroes
+# Find 4 leading hex zeroes (default --char 0)
 .\target\release\hash-zero.exe find "hello" --zeros 4 --unit hex
 
-# Find 16 trailing zero bits with SHA-256
-.\target\release\hash-zero.exe find "block" --zeros 16 --unit bits --trailing
+# Find 3 trailing 'f' nibbles
+.\target\release\hash-zero.exe find "test" --zeros 3 --char f --side trailing
+
+# Find 3 leading repeats of any hex digit (e.g. aaa, fff, 000)
+.\target\release\hash-zero.exe find "test" --zeros 3 --char any --side leading
+
+# Find 16 trailing zero bits
+.\target\release\hash-zero.exe find "block" --zeros 16 --unit bits --side trailing
 
 # Verify an input (exit 0 if target met, 1 if not)
 .\target\release\hash-zero.exe verify "hello12345" --zeros 2 --unit hex
@@ -80,14 +87,16 @@ Each additional hex zero multiplies expected search time by roughly 16×. Each a
 Progress updates are written to stderr while searching (disabled with `--json` or `--no-progress`):
 
 ```
-progress: attempts=65536 elapsed=2.0s rate=32768/s best=2/4 nonce=65535
+progress: attempts=65536 elapsed=2.0s rate=32768/s best=2/4 any nonce=65535
 ```
 
 Final result on stdout:
+
+```
 nonce: 45231
 input: hello45231
-hash: 0000a3f2c1...
-zeroes: 4 (leading, hex)
+hash: aaa0a3f2c1...
+run: 3 x 'a' (any, leading, hex)
 attempts: 45232
 elapsed_ms: 87
 hash_rate: 519885/s
