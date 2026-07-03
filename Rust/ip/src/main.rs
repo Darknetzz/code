@@ -1,9 +1,23 @@
 use anyhow::{Context, Result};
+use clap::Parser;
 use comfy_table::{presets::UTF8_FULL, Table};
 use if_addrs::IfAddr;
 
+#[derive(Parser)]
+#[command(name = "ip", about = "List IP addresses for network interfaces", version)]
+struct Cli {
+    /// Include loopback interfaces
+    #[arg(short, long)]
+    all: bool,
+}
+
 fn main() -> Result<()> {
+    let cli = Cli::parse();
+
     let mut ifaces = if_addrs::get_if_addrs().context("failed to enumerate network interfaces")?;
+    if !cli.all {
+        ifaces.retain(|iface| !iface.addr.ip().is_loopback());
+    }
     ifaces.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.addr.ip().cmp(&b.addr.ip())));
 
     let mut table = Table::new();
