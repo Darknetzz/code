@@ -1,0 +1,16 @@
+[package]
+name = "ip"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+description = "List IP addresses for all network interfaces"
+license = "MIT"
+
+[[bin]]
+name = "ip"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+comfy-table = "7"
+if-addrs = "0.13"
