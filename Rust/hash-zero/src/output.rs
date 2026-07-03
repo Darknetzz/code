@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::io::Write;
 use std::time::{Duration, Instant};
 
-use crate::cli::{HashAlgorithm, MatchChar, ZeroSide, ZeroUnit};
+use crate::cli::{HashAlgorithm, InputJoin, MatchChar, ZeroSide, ZeroUnit};
 use crate::hash::VerifyOutcome;
 use crate::search::FindResult;
 
@@ -70,6 +70,11 @@ impl FindProgress {
 }
 
 pub fn print_find_human(result: &FindResult) {
+    println!("prefix: {}", result.prefix);
+    if result.prefix_random {
+        println!("prefix_random: yes");
+    }
+    println!("join: {}", join_label(result.join));
     println!("nonce: {}", result.nonce);
     println!("input: {}", result.input);
     println!("hash: {}", result.hash_hex);
@@ -139,6 +144,15 @@ fn unit_label(unit: ZeroUnit) -> &'static str {
     match unit {
         ZeroUnit::Hex => "hex",
         ZeroUnit::Bits => "bits",
+    }
+}
+
+fn join_label(join: InputJoin) -> &'static str {
+    match join {
+        InputJoin::Concat => "concat",
+        InputJoin::Dash => "dash",
+        InputJoin::Colon => "colon",
+        InputJoin::Pipe => "pipe",
     }
 }
 
@@ -212,6 +226,9 @@ struct JsonFindReport {
     unit: &'static str,
     char: String,
     matched_char: char,
+    prefix: String,
+    prefix_random: bool,
+    join: &'static str,
     target_run: u32,
     actual_run: u32,
     #[serde(rename = "target_zeroes")]
@@ -257,6 +274,9 @@ impl From<&FindResult> for JsonFindReport {
             unit: unit_label(result.unit),
             char: char_filter_json(result.match_char),
             matched_char: result.matched_char,
+            prefix: result.prefix.clone(),
+            prefix_random: result.prefix_random,
+            join: join_label(result.join),
             target_run: result.target_run,
             actual_run: result.actual_run,
             target_zeroes: result.target_run,

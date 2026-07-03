@@ -1,4 +1,4 @@
-use crate::cli::{HashAlgorithm, MatchChar, NonceFormat, SharedArgs, ZeroSide, ZeroUnit};
+use crate::cli::{HashAlgorithm, InputJoin, MatchChar, NonceFormat, SharedArgs, ZeroSide, ZeroUnit};
 use anyhow::Result;
 use sha2::{Digest, Sha256, Sha512};
 
@@ -74,6 +74,21 @@ pub fn meets_target(digest: &[u8], criteria: MatchCriteria) -> bool {
     count_run(digest, criteria) >= criteria.target
 }
 
+pub fn random_prefix(len: usize) -> Result<String> {
+    let byte_len = len.div_ceil(2);
+    let mut bytes = vec![0u8; byte_len];
+    getrandom::fill(&mut bytes).map_err(|error| anyhow::anyhow!("failed to generate random prefix: {error}"))?;
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(hex[..len].to_string())
+}
+
+pub fn resolve_find_prefix(prefix: Option<&str>, prefix_len: usize) -> Result<(String, bool)> {
+    match prefix {
+        Some(value) => Ok((value.to_string(), false)),
+        None => Ok((random_prefix(prefix_len)?, true)),
+    }
+}
+
 pub fn format_nonce(nonce: u64, format: NonceFormat) -> String {
     match format {
         NonceFormat::Decimal => nonce.to_string(),
@@ -81,8 +96,19 @@ pub fn format_nonce(nonce: u64, format: NonceFormat) -> String {
     }
 }
 
-pub fn build_input(prefix: &str, nonce: u64, format: NonceFormat) -> String {
-    format!("{}{}", prefix, format_nonce(nonce, format))
+pub fn build_input(
+    prefix: &str,
+    nonce: u64,
+    nonce_format: NonceFormat,
+    join: InputJoin,
+) -> String {
+    let nonce_str = format_nonce(nonce, nonce_format);
+    match join {
+        InputJoin::Concat => format!("{prefix}{nonce_str}"),
+        InputJoin::Dash => format!("{prefix}-{nonce_str}"),
+        InputJoin::Colon => format!("{prefix}:{nonce_str}"),
+        InputJoin::Pipe => format!("{prefix}|{nonce_str}"),
+    }
 }
 
 pub fn verify_input(input: &str, shared: &SharedArgs) -> Result<VerifyOutcome> {
@@ -240,6 +266,29 @@ fn count_trailing_zero_bits(digest: &[u8]) -> u32 {
 mod tests {
     use super::*;
     use crate::cli::MatchChar;
+
+    #[test]
+    fn build_input_join_formats() {
+        assert_eq!(
+            build_input("abc", 42, NonceFormat::Decimal, InputJoin::Concat),
+            "abc42"
+        );
+        assert_eq!(
+            build_input("abc", 42, NonceFormat::Decimal, InputJoin::Colon),
+            "abc:42"
+        );
+        assert_eq!(
+            build_input("abc", 255, NonceFormat::Hex, InputJoin::Dash),
+            "abc-ff"
+        );
+    }
+
+    #[test]
+    fn random_prefix_has_expected_length() {
+        let prefix = random_prefix(12).expect("random prefix");
+        assert_eq!(prefix.len(), 12);
+        assert!(prefix.chars().all(|ch| ch.is_ascii_hexdigit()));
+    }
 
     fn criteria(side: ZeroSide, unit: ZeroUnit, target: u32, ch: MatchChar) -> MatchCriteria {
         MatchCriteria {

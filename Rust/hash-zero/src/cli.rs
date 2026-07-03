@@ -18,7 +18,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Brute-force a nonce until hash(prefix + nonce) meets the match target.
+    /// Brute-force a nonce until hash(input) meets the match target.
     Find(FindArgs),
     /// Hash a fixed input and check whether it meets the match target.
     Verify(VerifyArgs),
@@ -110,10 +110,31 @@ pub struct SharedArgs {
     pub json: bool,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum InputJoin {
+    /// Concatenate prefix and nonce with no separator (`prefix42`).
+    Concat,
+    /// Join with a dash (`prefix-42`).
+    Dash,
+    /// Join with a colon (`prefix:42`).
+    Colon,
+    /// Join with a pipe (`prefix|42`).
+    Pipe,
+}
+
 #[derive(Debug, Args)]
 pub struct FindArgs {
-    /// Prefix prepended to each nonce candidate.
-    pub prefix: String,
+    /// Prefix string; if omitted, a random hex prefix is generated.
+    #[arg(value_name = "PREFIX")]
+    pub prefix: Option<String>,
+
+    /// Length of the random hex prefix when PREFIX is omitted.
+    #[arg(long, default_value_t = 12)]
+    pub prefix_len: usize,
+
+    /// How prefix and nonce are combined into the hash input.
+    #[arg(long, value_enum, default_value_t = InputJoin::Colon)]
+    pub join: InputJoin,
 
     #[command(flatten)]
     pub shared: SharedArgs,
@@ -256,6 +277,24 @@ fn trim_subcommand_help_footer(text: &str) -> String {
     }
 
     lines.join("\n")
+}
+
+pub fn validate_find_args(args: &FindArgs) -> Result<()> {
+    validate_match_target(&args.shared)?;
+
+    if args.prefix_len == 0 {
+        bail!("--prefix-len must be at least 1");
+    }
+    if args.prefix_len > 64 {
+        bail!("--prefix-len must be at most 64");
+    }
+    if let Some(prefix) = &args.prefix {
+        if prefix.is_empty() {
+            bail!("PREFIX must not be empty");
+        }
+    }
+
+    Ok(())
 }
 
 pub fn validate_match_target(shared: &SharedArgs) -> Result<()> {

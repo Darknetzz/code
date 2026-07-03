@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
 
-use crate::cli::{print_full_help, validate_match_target, wants_root_help, Command, FindArgs, VerifyArgs};
+use crate::cli::{validate_find_args, validate_match_target, print_full_help, wants_root_help, Command, FindArgs, VerifyArgs};
 use crate::hash::verify_input;
 use crate::output::{
     print_error, print_find_human, print_find_json, print_verify_human, print_verify_json,
@@ -40,7 +40,7 @@ fn run() -> Result<i32> {
 
 fn run_find(args: FindArgs) -> Result<i32> {
     configure_threads(args.threads)?;
-    validate_shared(&args.shared)?;
+    validate_find_args(&args)?;
 
     let result = find_hash(&args)?;
 

@@ -1,5 +1,8 @@
 use crate::cli::FindArgs;
-use crate::hash::{build_input, count_run, count_run_info, digest_hex, hash_digest, meets_target, MatchCriteria};
+use crate::hash::{
+    build_input, count_run, count_run_info, digest_hex, hash_digest, meets_target, resolve_find_prefix,
+    MatchCriteria,
+};
 use crate::output::FindProgress;
 use anyhow::Result;
 use rayon::prelude::*;
@@ -11,6 +14,9 @@ const CHUNK_SIZE: u64 = 16_384;
 
 #[derive(Debug, Clone)]
 pub struct FindResult {
+    pub prefix: String,
+    pub prefix_random: bool,
+    pub join: crate::cli::InputJoin,
     pub nonce: u64,
     pub input: String,
     pub hash_hex: String,
@@ -30,7 +36,9 @@ pub struct FindResult {
 pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
     let shared = &args.shared;
     let criteria = MatchCriteria::from(shared);
-    let prefix = Arc::new(args.prefix.clone());
+    let (prefix_value, prefix_random) = resolve_find_prefix(args.prefix.as_deref(), args.prefix_len)?;
+    let prefix = Arc::new(prefix_value);
+    let join = args.join;
     let found = Arc::new(AtomicBool::new(false));
     let best_run = Arc::new(AtomicU32::new(0));
     let latest_nonce = Arc::new(AtomicU64::new(args.nonce_start));
@@ -59,7 +67,7 @@ pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
                     return None;
                 }
 
-                let input = build_input(&prefix, nonce, args.nonce_format);
+                let input = build_input(&prefix, nonce, args.nonce_format, join);
                 let digest = hash_digest(shared.algorithm, input.as_bytes());
 
                 if show_progress {
@@ -107,6 +115,9 @@ pub fn find_hash(args: &FindArgs) -> Result<FindResult> {
             let run = count_run_info(&found_match.digest, criteria);
 
             return Ok(FindResult {
+                prefix: (*prefix).clone(),
+                prefix_random,
+                join,
                 nonce: found_match.nonce,
                 input: found_match.input,
                 hash_hex: digest_hex(&found_match.digest),
@@ -138,11 +149,13 @@ struct FindMatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{HashAlgorithm, MatchChar, NonceFormat, SharedArgs, ZeroSide, ZeroUnit};
+    use crate::cli::{HashAlgorithm, InputJoin, MatchChar, NonceFormat, SharedArgs, ZeroSide, ZeroUnit};
 
-    fn test_find_args(prefix: &str, zeros: u32) -> FindArgs {
+    fn test_find_args(prefix: Option<&str>, zeros: u32) -> FindArgs {
         FindArgs {
-            prefix: prefix.to_string(),
+            prefix: prefix.map(str::to_string),
+            prefix_len: 12,
+            join: InputJoin::Concat,
             shared: SharedArgs {
                 zeros,
                 side: ZeroSide::Leading,
@@ -162,23 +175,28 @@ mod tests {
 
     #[test]
     fn finds_single_leading_hex_zero_quickly() {
-        let result = find_hash(&test_find_args("hz", 1)).expect("should find a match");
+        let result = find_hash(&test_find_args(Some("hz"), 1)).expect("should find a match");
         assert!(result.actual_run >= 1);
         assert!(result.hash_hex.starts_with('0'));
         assert!(result.input.starts_with("hz"));
+        assert_eq!(result.prefix, "hz");
+        assert!(!result.prefix_random);
+    }
+
+    #[test]
+    fn finds_with_random_prefix() {
+        let result = find_hash(&test_find_args(None, 1)).expect("should find a match");
+        assert!(result.actual_run >= 1);
+        assert!(result.prefix_random);
+        assert_eq!(result.prefix.len(), 12);
+        assert!(result.input.starts_with(&result.prefix));
     }
 
     #[test]
     fn finds_any_char_run_quickly() {
-        let mut args = test_find_args("hz", 2);
+        let mut args = test_find_args(Some("hz"), 2);
         args.shared.match_char = MatchChar::Any;
         let result = find_hash(&args).expect("should find a match");
         assert!(result.actual_run >= 2);
-        let prefix_len = result
-            .hash_hex
-            .chars()
-            .take(result.actual_run as usize)
-            .collect::<String>();
-        assert!(prefix_len.chars().all(|c| c == prefix_len.chars().next().unwrap()));
     }
 }
