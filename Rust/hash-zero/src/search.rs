@@ -157,7 +157,7 @@ mod tests {
             prefix_len: 12,
             join: InputJoin::Concat,
             shared: SharedArgs {
-                zeros,
+                zeros: Some(zeros),
                 side: ZeroSide::Leading,
                 match_char: MatchChar::Specific('0'),
                 unit: ZeroUnit::Hex,

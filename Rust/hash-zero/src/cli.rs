@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
-use std::io::Write;
+use std::io::{self, IsTerminal, Write};
 use std::num::NonZeroUsize;
 use std::str::FromStr;
 
@@ -85,9 +85,9 @@ impl FromStr for MatchChar {
 
 #[derive(Debug, Args)]
 pub struct SharedArgs {
-    /// Target length of consecutive matching characters.
+    /// Target length of consecutive matching characters (prompted if omitted).
     #[arg(long)]
-    pub zeros: u32,
+    pub zeros: Option<u32>,
 
     /// Which end of the digest to match from, or `any` for either end.
     #[arg(long, value_enum, default_value_t = ZeroSide::Leading)]
@@ -108,6 +108,56 @@ pub struct SharedArgs {
     /// Emit JSON report.
     #[arg(long)]
     pub json: bool,
+}
+
+impl SharedArgs {
+    pub fn ensure_zeros(&mut self) -> Result<()> {
+        if self.zeros.is_none() {
+            self.zeros = Some(prompt_zeros()?);
+        }
+        Ok(())
+    }
+
+    pub fn zeros(&self) -> u32 {
+        self.zeros
+            .expect("zeros must be resolved with ensure_zeros before use")
+    }
+}
+
+fn prompt_zeros() -> Result<u32> {
+    if !io::stdin().is_terminal() {
+        bail!("--zeros is required when stdin is not a terminal");
+    }
+
+    eprint!("Target run length (--zeros): ");
+    io::stderr().flush()?;
+
+    let mut line = String::new();
+    io::stdin().read_line(&mut line)?;
+    let value = line.trim();
+    if value.is_empty() {
+        bail!("--zeros is required");
+    }
+
+    let zeros: u32 = value
+        .parse()
+        .map_err(|_| anyhow::anyhow!("--zeros must be a positive integer"))?;
+    if zeros == 0 {
+        bail!("--zeros must be at least 1");
+    }
+
+    Ok(zeros)
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    use super::prompt_zeros;
+
+    #[test]
+    fn prompt_zeros_requires_terminal() {
+        // Non-interactive stdin in tests should fail fast instead of blocking.
+        assert!(prompt_zeros().is_err());
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -298,14 +348,14 @@ pub fn validate_find_args(args: &FindArgs) -> Result<()> {
 }
 
 pub fn validate_match_target(shared: &SharedArgs) -> Result<()> {
+    let zeros = shared.zeros.ok_or_else(|| anyhow::anyhow!("--zeros is required"))?;
     let max = crate::hash::max_run_length(shared.algorithm, shared.unit);
-    if shared.zeros == 0 {
+    if zeros == 0 {
         bail!("--zeros must be at least 1");
     }
-    if shared.zeros > max {
+    if zeros > max {
         bail!(
-            "--zeros {} exceeds maximum of {max} for {:?} {:?}",
-            shared.zeros,
+            "--zeros {zeros} exceeds maximum of {max} for {:?} {:?}",
             shared.unit,
             shared.algorithm
         );

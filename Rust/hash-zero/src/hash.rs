@@ -15,7 +15,7 @@ impl From<&SharedArgs> for MatchCriteria {
         Self {
             side: shared.side,
             unit: shared.unit,
-            target: shared.zeros,
+            target: shared.zeros(),
             match_char: shared.match_char,
         }
     }
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn verify_reports_custom_char_run() {
         let shared = SharedArgs {
-            zeros: 1,
+            zeros: Some(1),
             side: ZeroSide::Leading,
             match_char: MatchChar::Specific('f'),
             unit: ZeroUnit::Hex,

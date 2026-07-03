@@ -39,7 +39,7 @@ cargo run --release -- verify "hello:45231" --zeros 4 --unit hex --json
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--zeros <N>` | required | Target length of consecutive matching characters. |
+| `--zeros <N>` | prompted | Target run length; prompted interactively if omitted. |
 | `--side leading\|trailing\|any` | `leading` | Which end to match from; `any` uses whichever end has the longer run. |
 | `--char <DIGIT>` | `0` | Hex digit to match, or `any` for any repeated digit. |
 | `--unit hex\|bits` | `hex` | Hex = consecutive matching nibbles; bits = consecutive zero bits. |

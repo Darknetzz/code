@@ -38,8 +38,9 @@ fn run() -> Result<i32> {
     }
 }
 
-fn run_find(args: FindArgs) -> Result<i32> {
+fn run_find(mut args: FindArgs) -> Result<i32> {
     configure_threads(args.threads)?;
+    args.shared.ensure_zeros()?;
     validate_find_args(&args)?;
 
     let result = find_hash(&args)?;
@@ -53,7 +54,8 @@ fn run_find(args: FindArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn run_verify(args: VerifyArgs) -> Result<i32> {
+fn run_verify(mut args: VerifyArgs) -> Result<i32> {
+    args.shared.ensure_zeros()?;
     validate_shared(&args.shared)?;
 
     let outcome = verify_input(&args.input, &args.shared)?;
