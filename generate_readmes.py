@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-Generate root README.md and update/create README.md in each top-level subdirectory
-in Go-style format (title, description, table of subdirectories). Works on Windows and Linux.
-Run from the repository root: python generate_readmes.py
+Generate root README.md and update README.md indexes in language/domain folders.
+
+Run from the repository root:
+
+    python generate_readmes.py
+
+See AGENTS.md for when to run this and which READMEs are managed manually.
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 import re
 import sys
 
-# Directories to skip when listing subdirs (build/output/hidden)
+# Directories to skip when listing subdirs (build/output/hidden/internal)
 SKIP_DIRS = {
     ".git",
     ".vscode",
@@ -24,7 +30,33 @@ SKIP_DIRS = {
     "Scripts",
     "python-win",
     "python-linux",
+    "apps",
+    "config",
+    "hotkeys",
+    "includes",
 }
+
+# Omit from the repo root index (not language/domain workspaces)
+SKIP_ROOT_DIRS = {
+    "!scripts",
+    ".cursor",
+    ".github",
+    ".vscode",
+}
+
+# READMEs with custom layout or curated script lists — do not overwrite
+PRESERVE_README_DIRS = {
+    "AutoHotkey",
+    "PowerShell",
+    "Shell",
+}
+
+# Subdirs that exist on disk but should not appear in parent indexes
+SKIP_INDEX_SUBDIRS = {
+    "rustdl",  # moved to external repo; keep manual table row instead
+}
+
+SUBDIR_ROW_RE = re.compile(r"^\|\s*\[([^\]]+)\]\(([^)]+)/?\)\s*\|")
 
 
 def get_repo_root() -> Path:
@@ -47,16 +79,14 @@ def get_direct_subdirs(path: Path) -> list[Path]:
     if not path.is_dir():
         return []
     return sorted(
-        p for p in path.iterdir()
-        if p.is_dir() and not is_skipped(p.name)
+        p
+        for p in path.iterdir()
+        if p.is_dir() and not is_skipped(p.name) and p.name not in SKIP_INDEX_SUBDIRS
     )
 
 
-def extract_description(readme_path: Path, dir_name: str) -> str:
-    """
-    From README.md, get the first paragraph after the main # Title line.
-    Used as the "Description" in parent's table.
-    """
+def extract_description(readme_path: Path) -> str:
+    """First paragraph after the main # Title line, for parent index tables."""
     if not readme_path.is_file():
         return "—"
     try:
@@ -65,7 +95,7 @@ def extract_description(readme_path: Path, dir_name: str) -> str:
         return "—"
     lines = text.splitlines()
     found_title = False
-    description_lines = []
+    description_lines: list[str] = []
     for line in lines:
         stripped = line.strip()
         if re.match(r"^#\s+", line):
@@ -86,10 +116,7 @@ def extract_description(readme_path: Path, dir_name: str) -> str:
 
 
 def get_existing_intro(readme_path: Path) -> str | None:
-    """
-    If README exists, return the first paragraph after # Title as intro.
-    Otherwise return None (caller will use default).
-    """
+    """First paragraph after # Title; None if README missing or empty intro."""
     if not readme_path.is_file():
         return None
     try:
@@ -98,7 +125,7 @@ def get_existing_intro(readme_path: Path) -> str | None:
         return None
     lines = text.splitlines()
     found_title = False
-    intro_lines = []
+    intro_lines: list[str] = []
     for line in lines:
         stripped = line.strip()
         if re.match(r"^#\s+", line):
@@ -120,20 +147,94 @@ def get_existing_intro(readme_path: Path) -> str | None:
     return " ".join(intro_lines).strip()
 
 
+def parse_readme_tail(readme_path: Path) -> tuple[list[str], str]:
+    """
+    Return (manual_table_rows, body_after_table) from an existing README.
+
+    Manual rows are table lines whose first column is not a [name](name/) subdir link
+    (e.g. external-project notes like rustdl).
+    """
+    if not readme_path.is_file():
+        return [], ""
+    try:
+        text = readme_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [], ""
+
+    lines = text.splitlines()
+    table_start: int | None = None
+    table_end: int | None = None
+    manual_rows: list[str] = []
+
+    for i, line in enumerate(lines):
+        if line.strip().startswith("|") and table_start is None:
+            if i + 1 < len(lines) and re.match(r"^\|\s*[-:|]+\s*\|", lines[i + 1]):
+                table_start = i
+                continue
+        if table_start is not None and table_end is None:
+            if line.strip().startswith("|"):
+                if not SUBDIR_ROW_RE.match(line.strip()):
+                    manual_rows.append(line.rstrip())
+            else:
+                table_end = i
+                break
+
+    if table_start is not None and table_end is None:
+        table_end = len(lines)
+
+    body = ""
+    if table_end is not None:
+        body = "\n".join(lines[table_end:]).strip()
+        if body:
+            body = "\n" + body + "\n"
+
+    return manual_rows, body
+
+
 def humanize_dir_name(name: str) -> str:
-    """e.g. python -> Python, PowerShell -> PowerShell (preserve rest of casing)."""
     if not name:
         return name
     return name[0].upper() + name[1:]
 
 
+def format_subdir_description(sub: Path, desc: str) -> str:
+    sub_readme = sub / "README.md"
+    sub_link = f"[{sub.name}/README.md]({sub.name}/README.md)"
+    if desc != "—" and len(desc) > 80:
+        desc = desc[:77].rstrip() + "..."
+        if sub_readme.is_file():
+            desc += f" See {sub_link} for details."
+    elif sub_readme.is_file() and desc != "—":
+        desc += f" See {sub_link} for details."
+    return desc
+
+
+def build_subdir_table_rows(subdirs: list[Path]) -> list[str]:
+    rows = [
+        "| Subdirectory | Description |",
+        "|-------------|-------------|",
+    ]
+    for sub in subdirs:
+        desc = format_subdir_description(sub, extract_description(sub / "README.md"))
+        rows.append(f"| [{sub.name}]({sub.name}/) | {desc} |")
+    return rows
+
+
 def build_root_readme(root: Path) -> str:
-    subdirs = get_direct_subdirs(root)
+    subdirs = [
+        d for d in get_direct_subdirs(root) if d.name not in SKIP_ROOT_DIRS
+    ]
     title = root.name if root.name else "code"
+    readme_path = root / "README.md"
+    intro = get_existing_intro(readme_path) or (
+        "Scripts and CLI tools in various languages "
+        "(AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell)."
+    )
+
     lines = [
         f"# {title}",
         "",
-        "Different scripts in different languages for different purposes.",
+        intro,
         "",
         "## Index",
         "",
@@ -146,18 +247,13 @@ def build_root_readme(root: Path) -> str:
     return "\n".join(lines)
 
 
-def build_subdir_readme(
-    dir_path: Path,
-    subdirs: list[Path],
-) -> str:
-    """Build Go-style README: title, description, table of subdirectories."""
+def build_subdir_readme(dir_path: Path, subdirs: list[Path]) -> str:
     name = dir_path.name
     display_name = humanize_dir_name(name)
     readme_path = dir_path / "README.md"
 
-    intro = get_existing_intro(readme_path)
-    if not intro:
-        intro = f"Scripts and projects in {display_name}."
+    intro = get_existing_intro(readme_path) or f"Scripts and projects in {display_name}."
+    manual_rows, body = parse_readme_tail(readme_path)
 
     lines = [
         f"# {display_name}",
@@ -167,25 +263,20 @@ def build_subdir_readme(
     ]
 
     if subdirs:
-        lines.append("| Subdirectory | Description |")
-        lines.append("|-------------|-------------|")
-        for sub in subdirs:
-            sub_readme = sub / "README.md"
-            desc = extract_description(sub_readme, sub.name)
-            # If subdir has README with more details, link it when description is long
-            sub_link = f"[{sub.name}/README.md]({sub.name}/README.md)"
-            if desc != "—" and len(desc) > 80:
-                desc = desc[:77].rstrip() + "..."
-                if sub_readme.is_file():
-                    desc += f" See {sub_link} for details."
-            elif sub_readme.is_file() and desc != "—":
-                desc += f" See {sub_link} for details."
-            lines.append(f"| [{sub.name}]({sub.name}/) | {desc} |")
+        lines.extend(build_subdir_table_rows(subdirs))
+        for row in manual_rows:
+            lines.append(row)
         lines.append("")
 
-    # Optional footer for Go
     if name.lower() == "go" and subdirs:
-        lines.append("Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.")
+        lines.append(
+            "Each project has its own `go.mod`. Build from the project directory, "
+            "e.g. `go build -o b64 .` in `b64/`."
+        )
+        lines.append("")
+
+    if body:
+        lines.append(body.rstrip())
         lines.append("")
 
     return "\n".join(lines)
@@ -195,18 +286,20 @@ def main() -> int:
     root = get_repo_root()
     print(f"Repository root: {root}")
 
-    # 1. Root README
     root_readme = root / "README.md"
-    content = build_root_readme(root)
-    root_readme.write_text(content, encoding="utf-8")
+    root_readme.write_text(build_root_readme(root), encoding="utf-8")
     print(f"Updated: {root_readme.relative_to(root)}")
 
-    # 2. Each top-level subdirectory
     for subdir in get_direct_subdirs(root):
+        if subdir.name in SKIP_ROOT_DIRS:
+            continue
+        if subdir.name in PRESERVE_README_DIRS:
+            print(f"Skipped (custom README): {subdir.name}/README.md")
+            continue
+
         children = get_direct_subdirs(subdir)
-        content = build_subdir_readme(subdir, children)
         readme_path = subdir / "README.md"
-        readme_path.write_text(content, encoding="utf-8")
+        readme_path.write_text(build_subdir_readme(subdir, children), encoding="utf-8")
         print(f"Updated: {readme_path.relative_to(root)}")
 
     return 0
