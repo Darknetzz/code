@@ -1,5 +1,7 @@
+mod browser;
 mod cli;
 mod models;
+mod progress;
 mod report;
 mod scan;
 

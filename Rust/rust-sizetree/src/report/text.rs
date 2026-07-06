@@ -1,7 +1,4 @@
-use std::fs;
 use std::path::Path;
-
-use anyhow::Result;
 
 use crate::models::{
     dir_info_to_json_dict, format_size, iter_child_rows, DirInfo, ReportFormat,
@@ -14,29 +11,26 @@ pub fn write_scan_report(
     fmt: ReportFormat,
     tree_view: bool,
     limit: usize,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let text = match fmt {
         ReportFormat::Json => render_json(dir_info, target_path),
         ReportFormat::Markdown => render_markdown(dir_info, target_path, tree_view, limit),
-        ReportFormat::Html => render_html(dir_info, target_path, tree_view, limit),
+        ReportFormat::Html => super::html::render_report_html(dir_info, target_path, limit),
         ReportFormat::Text => render_text(dir_info, target_path, tree_view, limit),
     };
     if let Some(parent) = out_path.parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent)?;
         }
     }
-    fs::write(out_path, text)?;
+    std::fs::write(out_path, text)?;
     Ok(())
 }
 
 fn now_iso() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("{secs}")
+    chrono::Local::now()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
 }
 
 fn render_json(dir_info: &DirInfo, target_path: &Path) -> String {
@@ -92,9 +86,9 @@ fn render_markdown(
     if tree_view {
         lines.push("## Tree".to_string());
         lines.push(String::new());
-        for line in build_plain_tree_lines(dir_info, limit, 3) {
-            lines.push(format!("```\n{line}"));
-        }
+        lines.push("```".to_string());
+        lines.extend(build_plain_tree_lines(dir_info, limit, 3));
+        lines.push("```".to_string());
     } else {
         lines.push("## Largest items".to_string());
         lines.push(String::new());
@@ -102,67 +96,30 @@ fn render_markdown(
         lines.push("|---:|------|-----:|------:|-----:|------|".to_string());
         for row in iter_child_rows(dir_info, limit) {
             let item_type = if row.is_dir { "Dir" } else { "File" };
+            let safe_name = row.child.name().replace('|', "\\|");
             lines.push(format!(
                 "| {} | {} | {} | {} | {} | {} |",
-                row.index,
-                row.child.name(),
-                row.size_str,
-                row.files_str,
-                row.dirs_str,
-                item_type
+                row.index, safe_name, row.size_str, row.files_str, row.dirs_str, item_type
             ));
         }
     }
     lines.join("\n") + "\n"
 }
 
-fn render_html(
+pub(crate) fn build_plain_tree_lines(
     dir_info: &DirInfo,
-    target_path: &Path,
-    tree_view: bool,
     limit: usize,
-) -> String {
-    let body = if tree_view {
-        let tree = build_plain_tree_lines(dir_info, limit, 3)
-            .into_iter()
-            .map(|l| html_escape(&l))
-            .collect::<Vec<_>>()
-            .join("<br>\n");
-        format!("<h2>Tree</h2><pre>{tree}</pre>")
-    } else {
-        let mut rows = String::new();
-        for row in iter_child_rows(dir_info, limit) {
-            let item_type = if row.is_dir { "Dir" } else { "File" };
-            rows.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
-                row.index,
-                html_escape(&row.child.name()),
-                html_escape(&row.size_str),
-                html_escape(&row.files_str),
-                html_escape(&row.dirs_str),
-                item_type
-            ));
-        }
-        format!(
-            "<h2>Largest items</h2><table><thead><tr><th>#</th><th>Name</th><th>Size</th><th>Files</th><th>Dirs</th><th>Type</th></tr></thead><tbody>{rows}</tbody></table>"
-        )
-    };
-    format!(
-        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Disk usage: {}</title>\
-         <style>body{{font-family:system-ui,sans-serif;margin:2rem}}table{{border-collapse:collapse}}td,th{{border:1px solid #ccc;padding:.4rem .6rem}}</style></head>\
-         <body><h1>Disk usage: {}</h1><p>Total: {} · Files: {} · Dirs: {}</p>{body}\
-         <footer><small>SizeTree / rust-sizetree</small></footer></body></html>\n",
-        html_escape(&target_path.display().to_string()),
-        html_escape(&target_path.display().to_string()),
-        format_size(dir_info.size),
-        dir_info.file_count,
-        dir_info.dir_count,
-    )
-}
-
-fn build_plain_tree_lines(dir_info: &DirInfo, limit: usize, max_level: u32) -> Vec<String> {
+    max_level: u32,
+) -> Vec<String> {
     let mut lines = Vec::new();
-    fn walk(d: &DirInfo, prefix: &str, level: u32, limit: usize, max_level: u32, lines: &mut Vec<String>) {
+    fn walk(
+        d: &DirInfo,
+        prefix: &str,
+        level: u32,
+        limit: usize,
+        max_level: u32,
+        lines: &mut Vec<String>,
+    ) {
         if level >= max_level {
             return;
         }
@@ -223,11 +180,4 @@ fn build_plain_table_lines(dir_info: &DirInfo, target_path: &Path, limit: usize)
         ));
     }
     lines
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }

@@ -1,12 +1,15 @@
+use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Cell, Table};
 
+use crate::browser::open_in_browser;
 use crate::models::{format_size, infer_report_format, iter_child_rows, ReportFormat};
+use crate::progress::ScanProgress;
 use crate::report::write_scan_report;
-use crate::scan::scan_directory;
+use crate::scan::{scan_directory_with, ScanOptions};
 
 #[derive(Parser)]
 #[command(
@@ -43,10 +46,16 @@ pub struct ScanArgs {
 
     #[arg(short = 't', long = "tree")]
     pub tree: bool,
+
+    /// Include hidden files and directories
+    #[arg(long = "hidden")]
+    pub hidden: bool,
 }
 
 #[derive(Parser)]
 pub struct ReportArgs {
+    /// Directory to scan
+    #[arg(default_value = ".")]
     pub path: PathBuf,
 
     #[arg(short = 'o', long = "output")]
@@ -63,6 +72,14 @@ pub struct ReportArgs {
 
     #[arg(short = 't', long = "tree")]
     pub tree: bool,
+
+    /// Include hidden files and directories
+    #[arg(long = "hidden")]
+    pub hidden: bool,
+
+    /// Do not launch the browser for HTML reports
+    #[arg(long = "no-open")]
+    pub no_open: bool,
 }
 
 pub fn run_scan(args: ScanArgs) -> Result<u8> {
@@ -70,8 +87,8 @@ pub fn run_scan(args: ScanArgs) -> Result<u8> {
     if !target.is_dir() {
         bail!("not a directory: {}", target.display());
     }
-    eprintln!("Scanning {} ...", target.display());
-    let info = scan_directory(&target, args.depth, 0)?;
+    eprintln!("Scanning: {}", target.display());
+    let info = scan_with_progress(&target, args.depth, args.hidden)?;
     if args.tree {
         print_tree(&info, args.limit, 3);
     } else {
@@ -93,14 +110,45 @@ pub fn run_report(args: ReportArgs) -> Result<u8> {
         bail!("not a directory: {}", target.display());
     }
     let fmt = resolve_format(&args.output, args.format.as_deref())?;
+    let is_temp = args.output.is_none();
     let out = args
         .output
-        .unwrap_or_else(|| default_report_path(&target, fmt));
-    eprintln!("Scanning {} ...", target.display());
-    let info = scan_directory(&target, args.depth, 0)?;
+        .unwrap_or_else(|| make_temp_report_path(&target, fmt));
+    eprintln!("Scanning: {}", target.display());
+    let info = scan_with_progress(&target, args.depth, args.hidden)?;
     write_scan_report(&info, &target, &out, fmt, args.tree, args.limit)?;
-    println!("Report written to {}", out.display());
+    let label = if is_temp { "Generated" } else { "Wrote" };
+    println!("{label} {} report: {}", fmt.label(), out.display());
+
+    if fmt == ReportFormat::Html && !args.no_open {
+        if open_in_browser(&out) {
+            eprintln!("Opened in your default browser.");
+        } else {
+            eprintln!("Could not launch a browser automatically; open the file above manually.");
+        }
+    }
     Ok(0)
+}
+
+fn scan_with_progress(
+    target: &Path,
+    depth: Option<u32>,
+    hidden: bool,
+) -> Result<crate::models::DirInfo> {
+    let opts = ScanOptions {
+        max_depth: depth,
+        include_hidden: hidden,
+    };
+    let mut progress = ScanProgress::new();
+    let info = scan_directory_with(target, &opts, 0, Some(&mut progress))?;
+    progress.finish(&crate::models::ScanStats {
+        files: info.file_count,
+        dirs: info.dir_count,
+        size: info.size,
+        current: None,
+    });
+    eprintln!("Scan complete");
+    Ok(info)
 }
 
 fn resolve_format(output: &Option<PathBuf>, format_flag: Option<&str>) -> Result<ReportFormat> {
@@ -121,12 +169,36 @@ fn resolve_format(output: &Option<PathBuf>, format_flag: Option<&str>) -> Result
     Ok(ReportFormat::Html)
 }
 
-fn default_report_path(target: &Path, fmt: ReportFormat) -> PathBuf {
-    let name = target
+fn slugify_for_filename(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches(|c| c == '.' || c == '_');
+    if trimmed.is_empty() {
+        "root".to_string()
+    } else {
+        trimmed.chars().take(40).collect()
+    }
+}
+
+fn make_temp_report_path(target_path: &Path, fmt: ReportFormat) -> PathBuf {
+    let name = target_path
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("scan");
-    PathBuf::from(format!("rust-sizetree-{name}{}", fmt.extension()))
+        .unwrap_or("root");
+    let slug = slugify_for_filename(name);
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    env::temp_dir().join(format!(
+        "rust-sizetree-{slug}-{stamp}{}",
+        fmt.extension()
+    ))
 }
 
 fn print_table(info: &crate::models::DirInfo, target: &Path, limit: usize) {

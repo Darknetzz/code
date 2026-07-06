@@ -1,0 +1,527 @@
+:root {
+  --bg: #0d1117;
+  --bg-elevated: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-dim: #388bfd66;
+  --dir: #d2a8ff;
+  --file: #79c0ff;
+  --radius: 10px;
+  --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--text);
+  background: radial-gradient(1200px 800px at 10% -10%, #1f2937 0%, var(--bg) 45%);
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+@media (min-width: 1920px) {
+  .wrap { max-width: 2200px; }
+}
+@media (min-width: 2560px) {
+  .wrap { max-width: 2600px; }
+}
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+@media (min-width: 1180px) {
+  .layout {
+    grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
+    gap: 1.75rem 2rem;
+  }
+  .layout .panel-viz {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+  }
+  .layout .panel-viz .storage-viz-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .layout .panel-viz .donut-wrap { max-width: 260px; }
+  .layout .panel-viz .viz-charts-col { max-width: 100%; }
+}
+header.hero {
+  margin-bottom: 1.75rem;
+  padding: 1.5rem 1.25rem;
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, #1c2128 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+}
+header.hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.meta {
+  display: grid;
+  gap: 0.35rem 1.5rem;
+  grid-template-columns: auto 1fr;
+  font-size: 0.9rem;
+}
+.meta dt {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+.meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.meta code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 0.15rem 0.4rem;
+  background: var(--bg);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  word-break: break-all;
+}
+.stat-big {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.25rem 1.5rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,.25);
+}
+.panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+thead th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+thead th:nth-child(4),
+thead th:nth-child(5),
+thead th:nth-child(6) { text-align: right; }
+/* Fixed layout + <colgroup> widths keep columns aligned at every depth. */
+#pytree-items { table-layout: fixed; width: 100%; }
+#pytree-items .col-w-idx   { width: 3rem; }
+#pytree-items .col-w-share { width: 12rem; }
+#pytree-items .col-w-size  { width: 7rem; }
+#pytree-items .col-w-files { width: 7rem; }
+#pytree-items .col-w-dirs  { width: 6rem; }
+/* col-w-name is intentionally unset so it takes the remaining width. */
+.heat-pill {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  min-width: 2.5rem;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: #f6f8fa;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+/* Structural zero: keep the same pill silhouette but mute it so rows align
+   visually and we never leave a bare number in an otherwise pill column. */
+.heat-pill-zero {
+  background: #1b2029;
+  color: var(--muted);
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.tree-root-label {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+thead th.sortable:hover { color: var(--accent); background: #1c2128; }
+thead th.sort-asc::after { content: " \\25B2"; font-size: 0.65em; opacity: 0.85; }
+thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85; }
+/* Column header = [icon] label; inline-flex keeps both baselines aligned and
+   lets the sort glyph ("::after") hug the label on the right. */
+thead th .th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+thead th .th-icon { color: var(--muted); display: inline-flex; }
+thead th.sortable:hover .th-icon { color: var(--accent); }
+.panel-viz h2, .panel-tree h2 { margin-top: 0; }
+.table-hint, .tree-hint {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+#pytree-viz-data { display: none; }
+.storage-viz {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.viz-toolbar-wrap { width: 100%; }
+.storage-viz-top {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 1.25rem 1.75rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .storage-viz-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .viz-charts-col { width: 100%; max-width: 100%; }
+}
+.donut-wrap { justify-self: center; width: 100%; max-width: 280px; }
+.donut-svg { width: 100%; max-width: 280px; height: auto; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+.viz-charts-col {
+  width: 100%;
+  min-width: 0;
+}
+.viz-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.stacked-hbar {
+  display: flex;
+  height: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #21262d;
+  margin-bottom: 0;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.35);
+}
+.stacked-hbar > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: opacity 0.15s ease;
+}
+.stacked-hbar > span:hover { opacity: 0.92; }
+.viz-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.viz-toolbar .viz-tb-btn { font-size: 0.8rem; padding: 0.3rem 0.65rem; }
+.viz-status { font-size: 0.8rem; color: var(--muted); }
+.viz-tooltip {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  max-width: 300px;
+  padding: 0.65rem 0.85rem;
+  background: #21262d;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.55);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+.viz-tooltip strong { color: var(--accent); font-size: 0.95em; }
+.viz-tooltip em { color: var(--muted); font-size: 0.9em; }
+.viz-donut-seg, .viz-hbar-seg {
+  cursor: pointer;
+  transition: opacity 0.12s ease, filter 0.12s ease;
+}
+.viz-donut-seg:hover, .viz-hbar-seg:hover { filter: brightness(1.12); }
+.viz-donut-seg:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.viz-donut-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+.legend-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.legend-col-full {
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+.legend-row, .viz-legend-row {
+  display: grid;
+  grid-template-columns: auto 14px minmax(120px, 1fr) auto auto;
+  gap: 0.5rem 0.85rem;
+  align-items: start;
+  font-size: 0.85rem;
+}
+.viz-legend-row {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.15rem 0.25rem;
+  margin: 0 -0.25rem;
+  transition: background 0.12s ease;
+}
+.viz-legend-row:hover { background: #21262d; }
+.viz-legend-row:has(.viz-filter-cb:not(:checked)) { opacity: 0.65; }
+.viz-filter-cb { cursor: pointer; accent-color: var(--accent); }
+.legend-row .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,.12);
+}
+.legend-name {
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+  min-width: 0;
+}
+.legend-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend-sz { font-variant-numeric: tabular-nums; color: var(--text); }
+.viz-empty { margin: 0; color: var(--muted); }
+td.share-cell { vertical-align: middle; }
+.share-bar {
+  height: 8px;
+  background: #21262d;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+  max-width: 140px;
+}
+.share-bar span { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+.share-pct { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tree-toolbar {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+/* Search input with a leading magnifier icon. The wrapper owns the flex
+   sizing; the input itself just fills 100% of it. */
+.tree-filter-wrap {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+}
+.tree-filter-icon {
+  position: absolute;
+  left: 0.6rem;
+  display: inline-flex;
+  color: var(--muted);
+  pointer-events: none;
+}
+.tree-filter {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem 0.4rem 2rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.tree-filter::placeholder { color: var(--muted); }
+.tree-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.tree-filter-wrap:focus-within .tree-filter-icon { color: var(--accent); }
+.tree-filter-status { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
+.toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #21262d;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.toolbar-toggle:hover { color: var(--text); border-color: var(--accent); }
+.toolbar-toggle input { accent-color: var(--accent); cursor: pointer; }
+.toolbar-toggle:has(input:checked) { color: var(--text); border-color: var(--accent); }
+.item-row.viz-highlight > td {
+  background: rgba(88, 166, 255, 0.14);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.item-row.row-hidden { display: none; }
+.btn {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #21262d;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn:hover { background: #30363d; border-color: var(--accent); }
+/* Shared icon conventions for toolbar/button/header chrome. All `.chrome-icon`
+   SVGs inherit color via `fill="currentColor"` so hover/focus states just
+   update the parent's color. */
+.chrome-icon { display: block; flex-shrink: 0; }
+.btn-icon { display: inline-flex; align-items: center; color: var(--muted); }
+.btn:hover .btn-icon,
+.toolbar-toggle:hover .btn-icon,
+.toolbar-toggle:has(input:checked) .btn-icon { color: var(--accent); }
+.merged-tree-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  max-height: min(85vh, 1200px);
+  overflow: auto;
+}
+.merged-tree-table table { border-collapse: collapse; }
+/* Expand caret + placeholder share the same box so the icon and name
+   always land at exactly the same x-offset whether or not the row is a
+   folder that can be opened. */
+.row-expand,
+.row-expand-placeholder {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+.row-expand {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #21262d;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.55rem;
+  line-height: 1.1;
+}
+.row-expand::before {
+  content: "\\25B6";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.row-expand[aria-expanded="true"]::before { transform: rotate(90deg); }
+.row-expand:hover { background: #30363d; border-color: var(--accent); }
+.entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  line-height: 0;
+}
+.entry-icon[data-kind="dir"]  { color: var(--dir); }
+.entry-icon[data-kind="file"] { color: var(--file); }
+/* Per-file-type accents. The attribute selector always wins against the
+   generic kind color above (same specificity, later rule), so adding a
+   new file family is a one-line CSS change. Hues roughly match common
+   IDE file-icon conventions (green=code, purple=media, red=video/pdf). */
+.entry-icon[data-icon="file_code"]        { color: #7ee787; }
+.entry-icon[data-icon="file_image"]       { color: #d2a8ff; }
+.entry-icon[data-icon="file_video"]       { color: #ff7b72; }
+.entry-icon[data-icon="file_audio"]       { color: #ffa657; }
+.entry-icon[data-icon="file_archive"]     { color: #d4a72c; }
+.entry-icon[data-icon="file_pdf"]         { color: #f85149; }
+.entry-icon[data-icon="file_doc"]         { color: #58a6ff; }
+.entry-icon[data-icon="file_text"]        { color: #8b949e; }
+.entry-icon[data-icon="file_html"]        { color: #ff7b72; }
+.entry-icon[data-icon="file_config"]      { color: #a371f7; }
+.entry-icon[data-icon="file_exec"]        { color: #3fb950; }
+.entry-icon[data-icon="file_spreadsheet"] { color: #3fb950; }
+.entry-icon .icon-svg { display: block; }
+.tree-meta { color: var(--muted); font-weight: normal; }
+.item-row {
+  border-bottom: 1px solid #21262d;
+  transition: background 0.12s ease;
+}
+.item-row:hover { background: #1f242c; }
+tbody td {
+  padding: 0.45rem 0.75rem;
+  vertical-align: middle;
+}
+tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody td.name {
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tbody td.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 1.5rem;
+}
+pre.tree {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: auto;
+  color: #c9d1d9;
+}
+footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}

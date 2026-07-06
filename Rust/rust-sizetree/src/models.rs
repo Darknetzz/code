@@ -81,11 +81,41 @@ fn child_count_cells(info: &DirInfo) -> (String, String) {
     )
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ScanStats {
     pub files: u64,
     pub dirs: u64,
     pub size: u64,
+    pub current: Option<String>,
+}
+
+/// Narrow no-break space thousands separator (matches pytree HTML counts).
+pub fn format_count(n: u64) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
+            out.push('\u{202f}');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+pub fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 pub struct DirSummary {
@@ -133,6 +163,15 @@ impl ReportFormat {
             Self::Json => ".json",
             Self::Markdown => ".md",
             Self::Html => ".html",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Json => "json",
+            Self::Markdown => "markdown",
+            Self::Html => "html",
         }
     }
 }
