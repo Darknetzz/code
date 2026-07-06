@@ -12,10 +12,31 @@ app = typer.Typer(
     no_args_is_help=True,
     help=(
         "A modern wrapper for Windows mklink.\n\n"
+        "Create a link: pylink TARGET [LINK] [OPTIONS]\n\n"
         "If TARGET is a directory and no type flag is given, pylink defaults to Junction "
         "(/J). In interactive mode it prompts you to choose Junction or Directory Symlink."
     ),
 )
+
+_CLI_KNOWN_SUBCOMMANDS = frozenset({"version", "info", "remove", "create-link"})
+_CLI_GROUP_ONLY_FLAGS = frozenset({
+    "-h",
+    "--help",
+    "--install-completion",
+    "--show-completion",
+})
+
+
+def _normalize_cli_argv(argv: Optional[list[str]] = None) -> list[str]:
+    """Assume create-link when the first token is not a known subcommand."""
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        return argv
+    first = argv[0]
+    if first in _CLI_KNOWN_SUBCOMMANDS or first in _CLI_GROUP_ONLY_FLAGS:
+        return argv
+    return ["create-link", *argv]
 
 
 def path_lexists(path: Path) -> bool:
@@ -346,10 +367,9 @@ def _run_create_link(
         raise typer.Exit(code=1)
 
 
-@app.callback(invoke_without_command=True)
-def main(
-    ctx: typer.Context,
-    target_path_raw: Annotated[Optional[str], typer.Argument(help="TARGET path")] = None,
+@app.command("create-link")
+def create_link(
+    target_path_raw: Annotated[str, typer.Argument(help="TARGET path")],
     link_path_raw: Annotated[Optional[str], typer.Argument(help="LINK path (optional)")] = None,
     directory: bool = typer.Option(False, "--dir", "-d", help="Force a directory symbolic link (/D)"),
     junction: bool = typer.Option(False, "--junction", "-j", help="Force a directory junction (/J)"),
@@ -361,35 +381,6 @@ def main(
     ),
 ) -> None:
     """Create a filesystem link (default when TARGET is provided)."""
-    if ctx.invoked_subcommand is not None:
-        return
-    if target_path_raw is None:
-        typer.echo(ctx.get_help())
-        raise typer.Exit(code=0)
-    _run_create_link(
-        target_path_raw,
-        link_path_raw,
-        directory=directory,
-        junction=junction,
-        hard=hard,
-        yes=yes,
-        replace=replace,
-        no_validate_target=no_validate_target,
-    )
-
-
-@app.command("create-link", hidden=True)
-def create_link(
-    target_path_raw: Annotated[str, typer.Argument(help="TARGET path")],
-    link_path_raw: Annotated[Optional[str], typer.Argument(help="LINK path (optional)")] = None,
-    directory: bool = typer.Option(False, "--dir", "-d"),
-    junction: bool = typer.Option(False, "--junction", "-j"),
-    hard: bool = typer.Option(False, "--hard", "-H"),
-    yes: bool = typer.Option(False, "--yes", "-y"),
-    replace: bool = typer.Option(False, "--replace", "-r"),
-    no_validate_target: bool = typer.Option(False, "--no-validate-target"),
-) -> None:
-    """Alias for the default create-link behavior."""
     _run_create_link(
         target_path_raw,
         link_path_raw,
@@ -403,4 +394,4 @@ def create_link(
 
 
 if __name__ == "__main__":
-    app()
+    app(_normalize_cli_argv())

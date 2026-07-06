@@ -54,3 +54,20 @@ def test_format_link_type(pylink):
     assert pylink.format_link_type("/H") == "/H (hard link, same volume, files only)"
     assert pylink.format_link_type("") == "file symbolic link"
     assert pylink.format_link_type("/X") == "/X"
+
+
+def test_normalize_cli_argv(pylink):
+    assert pylink._normalize_cli_argv(["version"]) == ["version"]
+    assert pylink._normalize_cli_argv(["info", "D:\\link"]) == ["info", "D:\\link"]
+    assert pylink._normalize_cli_argv(["--help"]) == ["--help"]
+    assert pylink._normalize_cli_argv(["C:\\target", "D:\\link"]) == [
+        "create-link",
+        "C:\\target",
+        "D:\\link",
+    ]
+    assert pylink._normalize_cli_argv(["-y", "C:\\target", "D:\\link"]) == [
+        "create-link",
+        "-y",
+        "C:\\target",
+        "D:\\link",
+    ]

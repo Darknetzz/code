@@ -1,5 +1,7 @@
 # SizeTree - Disk Space Analyzer
 
+> **Scan/report canonical implementation:** [`Rust/pytree`](../../Rust/pytree/) provides the Rust CLI for `scan` and `report`. **Interactive TUI** (`pytree tui`) and advanced HTML visualizations remain in this Python version only.
+
 A TreeSize-like disk space analyzer built with **Textual** for interactive TUI and **Typer** for powerful CLI support.
 
 ## Features

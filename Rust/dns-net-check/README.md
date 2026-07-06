@@ -1,6 +1,6 @@
 # DNS Network Check (Rust)
 
-Rust port of the Python DNS/network verification tool in `Python/dns-net-check/`.
+**Canonical implementation.** Rust port of the legacy Python tool in `Python/dns-net-check/`. Prefer this build for release binaries (see `Rust/build.ps1`) and automation.
 
 ## Features
 

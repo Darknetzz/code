@@ -1,5 +1,7 @@
 # hash-zero
 
+**Canonical implementation** for CPU hash brute-force with leading/trailing zero runs. Replaces the core CPU path of the legacy Python tool in `Python/leadingzeroes/`. Use Python `leadingzeroes` only for OpenCL GPU or recurring-pattern modes not implemented here.
+
 CLI for finding and verifying cryptographic hashes with leading or trailing runs of a hex character.
 
 Brute-forces a nonce over a structured input (`find`) or checks a fixed input (`verify`). Supports SHA-256 and SHA-512. Match any hex digit with `--char`, or use `--unit bits` for zero-bit runs.
