@@ -1,0 +1,23 @@
+[package]
+name = "rust-lhp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+description = "Lab Hop Protocol TCP CLI (Rust port of Python/pyprotocol)"
+license = "MIT"
+
+[[bin]]
+name = "rust-lhp"
+path = "src/main.rs"
+
+[lib]
+name = "rust_lhp"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

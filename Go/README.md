@@ -15,6 +15,14 @@ Small CLI utilities and network tools, each in its own module.
 | [refreshenv](refreshenv/) | Windows CLI that reloads User and Machine environment variables from the regi... See [refreshenv/README.md](refreshenv/README.md) for details. |
 |-------------|-------------|
 |-------------|-------------|
+|-------------|-------------|
+|-------------|-------------|
+
+Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.
+
+
+Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.
+
 
 Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.
 

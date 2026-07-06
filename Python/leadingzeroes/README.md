@@ -1,6 +1,6 @@
 # leadingzeroes
 
-> **Legacy / reference implementation.** For CPU brute-force hash search with leading or trailing zero runs, use the canonical Rust tool [`Rust/hash-zero`](../../Rust/hash-zero/). Keep this Python version only if you need **OpenCL GPU** acceleration, **recurring-pattern** search modes, or the Rich progress UI.
+> **Legacy / reference implementation.** For CPU brute-force hash search with leading or trailing zero runs, use [`Rust/rust-hash-zero`](../../Rust/rust-hash-zero/) (`rust-hash-zero` CLI). Keep this Python version only if you need **OpenCL GPU** acceleration, **recurring-pattern** search modes, or the Rich progress UI.
 
 CLI for finding SHA-256 hashes with leading zero runs, optional OpenCL GPU acceleration, and recurring-pattern modes.
 
@@ -23,4 +23,4 @@ python leadingzeroes.py --help
 python leadingzeroes-simple.py
 ```
 
-See [`Rust/hash-zero/README.md`](../../Rust/hash-zero/README.md) for the recommended `find` / `verify` workflow.
+See [`Rust/rust-hash-zero/README.md`](../../Rust/rust-hash-zero/README.md) for the recommended `find` / `verify` workflow.

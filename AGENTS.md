@@ -61,10 +61,10 @@ The DNS/network verification tool is available in Python and Rust:
 - `Python/dns-net-check/config.example.yaml`
 - `Python/dns-net-check/requirements.txt`
 
-**Rust** (`Rust/dns-net-check/`):
+**Rust** (`Rust/rust-dns-net-check/`):
 
-- `Rust/dns-net-check/src/`
-- `Rust/dns-net-check/config.example.yaml`
+- `Rust/rust-dns-net-check/src/`
+- `Rust/rust-dns-net-check/config.example.yaml`
 
 ## Running the DNS tool
 
@@ -74,7 +74,7 @@ From `Python/dns-net-check/`:
 python dns_net_check.py --config config.example.yaml --no-ping
 ```
 
-From `Rust/dns-net-check/`:
+From `Rust/rust-dns-net-check/`:
 
 ```powershell
 cargo run --release -- --config config.example.yaml --no-ping

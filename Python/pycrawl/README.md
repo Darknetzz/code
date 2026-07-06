@@ -1,6 +1,6 @@
 # pycrawl
 
-> **Legacy / reference implementation.** The canonical crawler is the Rust port in [`Rust/pycrawl`](../../Rust/pycrawl/). This Python version remains for PyInstaller builds and programmatic import.
+> **Legacy / reference implementation.** The canonical crawler is [`Rust/rust-crawl`](../../Rust/rust-crawl/) (`rust-crawl` CLI). This Python version remains for PyInstaller builds and programmatic import.
 
 Universal, reusable web crawler for downloading files (e.g. PDFs) from index pages. Built with **Typer** and **Rich**. Crawl a start URL, optionally follow links matching a regex, collect asset links by file extension, and download them—with progress display and subdirectory grouping.
 

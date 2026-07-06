@@ -18,20 +18,22 @@ Scripts and projects in Python.
 | [py7z](py7z/) | — |
 | [pybin](pybin/) | Simple wrapper around PyInstaller to build a single-file executable from a Py... See [pybin/README.md](pybin/README.md) for details. |
 | [pyconvert](pyconvert/) | > **Future Rust candidate (tier 2):** No Rust port yet. A rewrite would targe... See [pyconvert/README.md](pyconvert/README.md) for details. |
-| [pycrawl](pycrawl/) | > **Legacy / reference implementation.** The canonical crawler is the Rust po... See [pycrawl/README.md](pycrawl/README.md) for details. |
+| [pycrawl](pycrawl/) | > **Legacy / reference implementation.** The canonical crawler is [`Rust/rust... See [pycrawl/README.md](pycrawl/README.md) for details. |
 | [pygallery](pygallery/) | — |
 | [pyhello](pyhello/) | — |
 | [pyimgen](pyimgen/) | > **Future Rust candidate (tier 2):** No Rust port yet. The procedural pixel... See [pyimgen/README.md](pyimgen/README.md) for details. |
 | [pyimgrmbg](pyimgrmbg/) | — |
 | [pylink](pylink/) | Windows CLI for creating file symlinks, directory symlinks, junctions, and ha... See [pylink/README.md](pylink/README.md) for details. |
-| [pyportscanner](pyportscanner/) | > **Canonical implementation:** Use the Rust port [`Rust/portscan`](../../Rus... See [pyportscanner/README.md](pyportscanner/README.md) for details. |
-| [pyprotocol](pyprotocol/) | > **Canonical implementation:** [`Rust/lhp`](../../Rust/lhp/) is the preferre... See [pyprotocol/README.md](pyprotocol/README.md) for details. |
+| [pyportscanner](pyportscanner/) | > **Canonical implementation:** Use [`Rust/rust-portscan`](../../Rust/rust-po... See [pyportscanner/README.md](pyportscanner/README.md) for details. |
+| [pyprotocol](pyprotocol/) | > **Canonical implementation:** [`Rust/rust-lhp`](../../Rust/rust-lhp/) (`rus... See [pyprotocol/README.md](pyprotocol/README.md) for details. |
 | [pyrat](pyrat/) | — |
 | [pysound](pysound/) | A Python library and CLI tool for generating and playing audio tones using Nu... See [pysound/README.md](pysound/README.md) for details. |
 | [pyspotify](pyspotify/) | Export your Spotify playlists (including tracks) to `txt`, `json`, and `csv`. See [pyspotify/README.md](pyspotify/README.md) for details. |
-| [pytree](pytree/) | > **Scan/report canonical implementation:** [`Rust/pytree`](../../Rust/pytree... See [pytree/README.md](pytree/README.md) for details. |
+| [pytree](pytree/) | > **Scan/report canonical implementation:** [`Rust/rust-sizetree`](../../Rust... See [pytree/README.md](pytree/README.md) for details. |
 | [snapbot](snapbot/) | **Version 2.0.0** - Selenium-based browser automation for Snapchat Web See [snapbot/README.md](snapbot/README.md) for details. |
 | [utils](utils/) | — |
 | [webbot](webbot/) | Human-like browser automation with Playwright. Click and type on web pages wi... See [webbot/README.md](webbot/README.md) for details. |
+|-------------|-------------|
+|-------------|-------------|
 |-------------|-------------|
 |-------------|-------------|

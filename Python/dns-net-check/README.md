@@ -1,6 +1,6 @@
 # DNS Network Check
 
-> **Legacy / reference implementation.** The canonical tool is the Rust port in [`Rust/dns-net-check`](../../Rust/dns-net-check/). Use that build for release binaries, CI, and day-to-day checks. This Python version is kept for reference and parity testing.
+> **Legacy / reference implementation.** The canonical tool is the Rust port [`Rust/rust-dns-net-check`](../../Rust/rust-dns-net-check/) (`rust-dns-net-check` CLI). Use that build for release binaries, CI, and day-to-day checks. This Python version is kept for reference and parity testing.
 
 Python CLI tool to verify DNS and basic network connectivity for one or more targets.
 

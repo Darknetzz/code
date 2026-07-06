@@ -1,0 +1,18 @@
+[package]
+name = "rust-sizetree"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+description = "Disk space analyzer CLI (Rust port of Python/pytree core)"
+license = "MIT"
+
+[[bin]]
+name = "rust-sizetree"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+comfy-table = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
