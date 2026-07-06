@@ -40,3 +40,17 @@ def test_validate_link_flags_exclusive(pylink):
 
 def test_resolve_default_directory_flag_yes(pylink):
     assert pylink.resolve_default_directory_flag(yes=True) == "/J"
+
+
+def test_format_link_display(pylink):
+    link = PathLib("D:\\link")
+    target = PathLib("C:\\target")
+    assert pylink.format_link_display(link, target) == "D:\\link -> C:\\target"
+
+
+def test_format_link_type(pylink):
+    assert pylink.format_link_type("/J") == "/J (directory junction)"
+    assert pylink.format_link_type("/D") == "/D (directory symbolic link)"
+    assert pylink.format_link_type("/H") == "/H (hard link, same volume, files only)"
+    assert pylink.format_link_type("") == "file symbolic link"
+    assert pylink.format_link_type("/X") == "/X"

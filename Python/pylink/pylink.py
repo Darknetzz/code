@@ -35,12 +35,34 @@ def is_reparse_point(path: Path) -> bool:
     return bool(getattr(st, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def show_link_context(link_path: Path, target_path: Path, flag: str = "") -> None:
-    """Print normalized absolute link creation context."""
-    typer.echo(f"Link:   {link_path}")
-    typer.echo(f"Target: {target_path}")
+def format_link_display(link_path: Path, target_path: Path | str) -> str:
+    """Format link path and destination as ``link -> dest``."""
+    return f"{link_path} -> {target_path}"
+
+
+_LINK_FLAG_DESCRIPTIONS: dict[str, str] = {
+    "/J": "directory junction",
+    "/D": "directory symbolic link",
+    "/H": "hard link, same volume, files only",
+    "": "file symbolic link",
+}
+
+
+def format_link_type(flag: str) -> str:
+    """Return mklink-style flag with a short human-readable explanation."""
+    desc = _LINK_FLAG_DESCRIPTIONS.get(flag)
+    if desc is None:
+        return flag
     if flag:
-        typer.echo(f"Type:   {flag}")
+        return f"{flag} ({desc})"
+    return desc
+
+
+def show_link_context(link_path: Path, target_path: Path, flag: Optional[str] = None) -> None:
+    """Print normalized absolute link creation context."""
+    typer.echo(format_link_display(link_path, target_path))
+    if flag is not None:
+        typer.echo(f"Type:   {format_link_type(flag)}")
 
 
 def normalize_absolute_path(path: Path) -> Path:
@@ -142,11 +164,11 @@ def info_cmd(
         typer.secho(f"Path does not exist: {link_path}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
     is_link = is_reparse_point(link_path)
-    typer.echo(f"Path:   {link_path}")
-    typer.echo(f"Link:   {'yes' if is_link else 'no'}")
     if is_link:
         target = _read_link_target(link_path)
-        typer.echo(f"Target: {target or '(unavailable)'}")
+        typer.echo(format_link_display(link_path, target or "(unavailable)"))
+    else:
+        typer.echo(f"Path: {link_path} (not a link)")
 
 
 @app.command("remove")
