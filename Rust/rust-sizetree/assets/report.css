@@ -176,8 +176,8 @@ thead th.sortable {
   transition: color 0.12s ease, background 0.12s ease;
 }
 thead th.sortable:hover { color: var(--accent); background: #1c2128; }
-thead th.sort-asc::after { content: " \\25B2"; font-size: 0.65em; opacity: 0.85; }
-thead th.sort-desc::after { content: " \\25BC"; font-size: 0.65em; opacity: 0.85; }
+thead th.sort-asc::after { content: " ▲"; font-size: 0.65em; opacity: 0.85; }
+thead th.sort-desc::after { content: " ▼"; font-size: 0.65em; opacity: 0.85; }
 /* Column header = [icon] label; inline-flex keeps both baselines aligned and
    lets the sort glyph ("::after") hug the label on the right. */
 thead th .th-inner {
@@ -451,7 +451,7 @@ td.share-cell { vertical-align: middle; }
   line-height: 1.1;
 }
 .row-expand::before {
-  content: "\\25B6";
+  content: "▶";
   display: inline-block;
   transition: transform 0.15s ease;
 }
