@@ -218,7 +218,8 @@ fn html_tree_rows(
                 ),
             )
         } else {
-            (String::new(), String::new())
+            // Files: muted dash keeps pill column rhythm (dirs use heat-pill-zero for 0).
+            (pill("—", ""), pill("—", ""))
         };
 
         let indent_rem = 0.75 + depth as f64 * 1.25;
