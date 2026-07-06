@@ -33,7 +33,3 @@ Scripts and projects in Python.
 | [snapbot](snapbot/) | **Version 2.0.0** - Selenium-based browser automation for Snapchat Web See [snapbot/README.md](snapbot/README.md) for details. |
 | [utils](utils/) | — |
 | [webbot](webbot/) | Human-like browser automation with Playwright. Click and type on web pages wi... See [webbot/README.md](webbot/README.md) for details. |
-|-------------|-------------|
-|-------------|-------------|
-|-------------|-------------|
-|-------------|-------------|

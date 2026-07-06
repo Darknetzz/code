@@ -18,8 +18,4 @@ Scripts and projects in Rust.
 | [rust-portscan](rust-portscan/) | Rust port of the Python TCP port scanner in `Python/pyportscanner/`. See [rust-portscan/README.md](rust-portscan/README.md) for details. |
 | [rust-sizetree](rust-sizetree/) | Disk space analyzer (scan + report). Rust port of the legacy Python tool in `... See [rust-sizetree/README.md](rust-sizetree/README.md) for details. |
 | [superping](superping/) | Feature-rich ICMP/TCP ping CLI — multi-host parallel probes, rich RTT statist... See [superping/README.md](superping/README.md) for details. |
-|-------------|-------------|
-|-------------|-------------|
-|-------------|-------------|
-|-------------|-------------|
 | **rustdl** | Moved to [github.com/Darknetzz/rustdl](https://github.com/Darknetzz/rustdl) (mirror: [gitlab.roste.org/kriss/rustdl](https://gitlab.roste.org/kriss/rustdl)). |

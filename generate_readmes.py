@@ -57,6 +57,12 @@ SKIP_INDEX_SUBDIRS = {
 }
 
 SUBDIR_ROW_RE = re.compile(r"^\|\s*\[([^\]]+)\]\(([^)]+)/?\)\s*\|")
+SEPARATOR_ROW_RE = re.compile(r"^\|\s*[-:|]+\s*\|")
+
+GO_BUILD_NOTE = (
+    "Each project has its own `go.mod`. Build from the project directory, "
+    "e.g. `go build -o b64 .` in `b64/`."
+)
 
 
 def get_repo_root() -> Path:
@@ -173,7 +179,10 @@ def parse_readme_tail(readme_path: Path) -> tuple[list[str], str]:
                 continue
         if table_start is not None and table_end is None:
             if line.strip().startswith("|"):
-                if not SUBDIR_ROW_RE.match(line.strip()):
+                stripped = line.strip()
+                if SEPARATOR_ROW_RE.match(stripped):
+                    continue
+                if not SUBDIR_ROW_RE.match(stripped):
                     manual_rows.append(line.rstrip())
             else:
                 table_end = i
@@ -189,6 +198,19 @@ def parse_readme_tail(readme_path: Path) -> tuple[list[str], str]:
             body = "\n" + body + "\n"
 
     return manual_rows, body
+
+
+def strip_go_build_note(body: str) -> str:
+    """Remove Go build boilerplate so regeneration does not duplicate it."""
+    if not body:
+        return body
+    lines = body.splitlines()
+    kept: list[str] = []
+    for line in lines:
+        if line.strip() == GO_BUILD_NOTE:
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def humanize_dir_name(name: str) -> str:
@@ -269,15 +291,15 @@ def build_subdir_readme(dir_path: Path, subdirs: list[Path]) -> str:
         lines.append("")
 
     if name.lower() == "go" and subdirs:
-        lines.append(
-            "Each project has its own `go.mod`. Build from the project directory, "
-            "e.g. `go build -o b64 .` in `b64/`."
-        )
+        lines.append(GO_BUILD_NOTE)
         lines.append("")
 
     if body:
-        lines.append(body.rstrip())
-        lines.append("")
+        if name.lower() == "go":
+            body = strip_go_build_note(body)
+        if body:
+            lines.append(body.rstrip())
+            lines.append("")
 
     return "\n".join(lines)
 
