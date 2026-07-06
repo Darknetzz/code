@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use csv::Writer;
 use reqwest::Client;
 use serde_json::Value;
-use tokio::fs;
 
 use crate::crawl::{
     build_client, collect_pages_and_assets, download_file, filename_from_url, subdir_from_page_url,

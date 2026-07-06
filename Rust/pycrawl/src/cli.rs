@@ -108,6 +108,7 @@ pub async fn run_crawl(args: RunArgs) -> Result<u8> {
     let started = Instant::now();
     let time_started = chrono_now();
 
+    let use_wayback = args.wayback_from.is_some();
     let (followed, downloaded, failed) = if let Some(from_date) = args.wayback_from {
         let wayback_out = args
             .wayback_out
@@ -137,7 +138,7 @@ pub async fn run_crawl(args: RunArgs) -> Result<u8> {
         &failed,
         &time_started,
         started.elapsed(),
-        args.wayback_from.is_some(),
+        use_wayback,
     );
     Ok(0)
 }

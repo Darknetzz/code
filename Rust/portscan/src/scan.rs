@@ -44,7 +44,7 @@ pub async fn scan_host(
                 if pct > prev || done % 100 == 0 || done == total {
                     last_pct.store(pct, Ordering::Relaxed);
                     let percentage = (done as f64 / total as f64) * 100.0;
-                    println!("[*] Progress: {done}/{total} ({percentage:.1f}%)");
+                    println!("[*] Progress: {done}/{total} ({percentage:.1}%)");
                 }
                 (port, is_open)
             }

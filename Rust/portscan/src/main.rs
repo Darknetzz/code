@@ -136,7 +136,7 @@ fn run() -> Result<u8> {
         }
     }
 
-    println!("\n[*] Scan completed in {duration:.2} seconds");
+    println!("\n[*] Scan completed in {duration:.1} seconds");
     Ok(0)
 }
 

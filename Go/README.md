@@ -14,6 +14,10 @@ Small CLI utilities and network tools, each in its own module.
 | [hashsum](hashsum/) | File checksum (hash) utility — compute or verify MD5, SHA1, SHA256, or SHA512... See [hashsum/README.md](hashsum/README.md) for details. |
 | [refreshenv](refreshenv/) | Windows CLI that reloads User and Machine environment variables from the regi... See [refreshenv/README.md](refreshenv/README.md) for details. |
 |-------------|-------------|
+|-------------|-------------|
+
+Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.
+
 
 Each project has its own `go.mod`. Build from the project directory, e.g. `go build -o b64 .` in `b64/`.
 

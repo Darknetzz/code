@@ -34,6 +34,8 @@ def _normalize_cli_argv(argv: Optional[list[str]] = None) -> list[str]:
     if not argv:
         return argv
     first = argv[0]
+    if first in ("--version", "-V"):
+        return ["version"]
     if first in _CLI_KNOWN_SUBCOMMANDS or first in _CLI_GROUP_ONLY_FLAGS:
         return argv
     return ["create-link", *argv]
