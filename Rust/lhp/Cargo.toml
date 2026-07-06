@@ -10,6 +10,10 @@ license = "MIT"
 name = "lhp"
 path = "src/main.rs"
 
+[lib]
+name = "lhp"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

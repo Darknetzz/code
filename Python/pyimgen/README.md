@@ -1,5 +1,7 @@
 # pyimgen (Imagegen)
 
+> **Future Rust candidate (tier 2):** No Rust port yet. The procedural pixel core would benefit from native speed; the FastAPI UI would likely stay Python or become a thin wrapper.
+
 Procedural space image generator (nebula, stars, galaxy). Python core; API-backed generation can be added later. Lives in the `code` repo under `Python/pyimgen`.
 
 ## Setup

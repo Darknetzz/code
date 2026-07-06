@@ -4,8 +4,8 @@ use anyhow::Result;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
 
+use crate::client::validate_packet;
 use crate::protocol::{parse_packet, HEADER_SIZE, STX};
-use crate::validate_packet;
 
 pub async fn run_server(
     host: &str,
@@ -30,20 +30,20 @@ pub async fn run_server(
         tokio::spawn(async move {
             if let Some(acceptor) = tls_acceptor {
                 match acceptor.accept(stream).await {
-                    Ok(tls_stream) => handle_connection(Box::pin(tls_stream), seen).await,
+                    Ok(tls_stream) => process_stream(tls_stream, seen).await,
                     Err(e) => eprintln!("TLS handshake failed: {e}"),
                 }
             } else {
-                handle_connection(Box::pin(stream), seen).await;
+                process_stream(stream, seen).await;
             }
         });
     }
 }
 
-async fn handle_connection(
-    mut stream: std::pin::Pin<Box<dyn tokio::io::AsyncRead + tokio::io::AsyncWrite + Send>>,
-    seen: Arc<Mutex<std::collections::HashSet<u32>>>,
-) {
+async fn process_stream<S>(mut stream: S, seen: Arc<Mutex<std::collections::HashSet<u32>>>)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     let mut buffer = Vec::new();
     let mut read_buf = [0u8; 4096];
     loop {
@@ -55,22 +55,26 @@ async fn handle_connection(
                 break;
             }
         }
-        while buffer.len() >= HEADER_SIZE {
-            if buffer[0] != STX {
-                buffer.remove(0);
-                continue;
-            }
-            let payload_len = u16::from_be_bytes([buffer[1], buffer[2]]) as usize;
-            let total = HEADER_SIZE + payload_len + 1;
-            if buffer.len() < total {
-                break;
-            }
-            let packet_bytes: Vec<u8> = buffer.drain(..total).collect();
-            if let Some(packet) = parse_packet(&packet_bytes) {
-                if validate_packet(&packet, &seen) {
-                    let text = String::from_utf8_lossy(&packet.payload);
-                    println!("Received Command {}: {text}", packet.cmd_id);
-                }
+        drain_packets(&mut buffer, &seen);
+    }
+}
+
+fn drain_packets(buffer: &mut Vec<u8>, seen: &Mutex<std::collections::HashSet<u32>>) {
+    while buffer.len() >= HEADER_SIZE {
+        if buffer[0] != STX {
+            buffer.remove(0);
+            continue;
+        }
+        let payload_len = u16::from_be_bytes([buffer[1], buffer[2]]) as usize;
+        let total = HEADER_SIZE + payload_len + 1;
+        if buffer.len() < total {
+            break;
+        }
+        let packet_bytes: Vec<u8> = buffer.drain(..total).collect();
+        if let Some(packet) = parse_packet(&packet_bytes) {
+            if validate_packet(&packet, seen) {
+                let text = String::from_utf8_lossy(&packet.payload);
+                println!("Received Command {}: {text}", packet.cmd_id);
             }
         }
     }

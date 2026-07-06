@@ -5,9 +5,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Cell, Table};
 
-use crate::models::{
-    dir_info_to_json_dict, format_size, infer_report_format, iter_child_rows, ReportFormat,
-};
+use crate::models::{format_size, infer_report_format, iter_child_rows, ReportFormat};
 use crate::report::write_scan_report;
 use crate::scan::scan_directory;
 

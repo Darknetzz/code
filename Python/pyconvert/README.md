@@ -1,5 +1,7 @@
 # pyconvert
 
+> **Future Rust candidate (tier 2):** No Rust port yet. A rewrite would target PDF/image rasterization throughput; keep Python if you rely on PyMuPDF/Pillow parity.
+
 Universal CLI tool for converting files (media primarily). Supports **PDF→PNG/JPG** and **image format conversion** with resize, quality control, and batch processing. Built with **Typer** and **Rich**.
 
 ## Features

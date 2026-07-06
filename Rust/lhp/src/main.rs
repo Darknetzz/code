@@ -1,13 +1,9 @@
-mod protocol;
-mod server;
-
 use std::process::ExitCode;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 
-use lhp::{build_tls_client, build_tls_server, interactive_client, send_packet};
-use server::run_server;
+use lhp::{build_tls_client, build_tls_server, interactive_client, run_server, send_packet};
 
 #[derive(Parser)]
 #[command(
@@ -22,9 +18,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the LHP server
     Server(ServerArgs),
-    /// Connect and send commands
     Client(ClientArgs),
 }
 
@@ -99,15 +93,7 @@ async fn run() -> Result<()> {
                 interactive_client(&args.host, args.port, tls).await
             } else if let Some(cmd) = args.cmd {
                 let data = args.data.unwrap_or_default();
-                send_packet(
-                    &args.host,
-                    args.port,
-                    cmd,
-                    data.as_bytes(),
-                    tls,
-                    args.certfile.as_deref(),
-                )
-                .await
+                send_packet(&args.host, args.port, cmd, data.as_bytes(), tls).await
             } else {
                 bail!("specify --interactive or --cmd");
             }

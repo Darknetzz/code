@@ -1,5 +1,7 @@
 # Lab Hop Protocol (LHP)
 
+> **Canonical implementation:** [`Rust/lhp`](../../Rust/lhp/) is the preferred CLI for server and client. This Python version remains for educational reference.
+
 A secure, state-based network protocol implementation with replay protection and optional TLS encryption.
 
 ## Features
