@@ -84,10 +84,12 @@ pub struct PathmanApp {
     env_pending_saved_feedback: bool,
     env_saved_feedback_until: Option<f64>,
     env_show_confirm_discard: bool,
-    /// Names locked after first successful validation (cannot rename in-place).
-    env_locked_names: std::collections::HashSet<usize>,
+    /// Variable names locked after load or first successful validation.
+    env_locked_names: std::collections::HashSet<String>,
     show_confirm_mode_switch: bool,
     pending_mode_switch: Option<AppMode>,
+    path_sort: Option<(column_sort::PathSortColumn, column_sort::SortDir)>,
+    env_sort: Option<(column_sort::EnvSortColumn, column_sort::SortDir)>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -98,6 +100,7 @@ pub(crate) enum DuplicateViewFilter {
     OnlyDuplicates,
 }
 
+mod column_sort;
 mod env_panel;
 mod helpers;
 mod impls;

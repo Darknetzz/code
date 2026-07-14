@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use eframe::egui::{self, ScrollArea, TextEdit};
@@ -12,6 +12,9 @@ use crate::row_icons::{
     AddToolbarIcon, PathRowIcon, TopBarButtonEmphasis, TopBarIcon,
 };
 
+use super::column_sort::{
+    column_header, cmp_i32, cmp_origin, cmp_str_insensitive, EnvSortColumn, SortDir,
+};
 use super::helpers::{
     effective_origin_style, format_env_store_diff, origin_add_button_theme, origin_badge_label,
     truncate_path_confirm,
@@ -53,6 +56,7 @@ impl PathmanApp {
         self.env_list_search.clear();
         self.env_show_change_summary = false;
         self.env_locked_names.clear();
+        self.env_sort = None;
         let r = match self.scope {
             Scope::User => self.load_env_user(),
             Scope::System => self.load_env_system(),
@@ -67,7 +71,7 @@ impl PathmanApp {
         let map = persist::read_user_env(&self.config)?;
         self.env_user_baseline = map.clone();
         self.env_entries = map_to_sorted_entries(&map);
-        self.env_locked_names = (0..self.env_entries.len()).collect();
+        self.env_locked_names = env_names_from_entries(&self.env_entries);
         self.env_dirty = false;
         Ok(())
     }
@@ -76,7 +80,7 @@ impl PathmanApp {
         let map = persist::read_system_env()?;
         self.env_system_baseline = map.clone();
         self.env_entries = map_to_sorted_entries(&map);
-        self.env_locked_names = (0..self.env_entries.len()).collect();
+        self.env_locked_names = env_names_from_entries(&self.env_entries);
         self.env_dirty = false;
         Ok(())
     }
@@ -87,7 +91,7 @@ impl PathmanApp {
         self.env_user_baseline = u.clone();
         self.env_system_baseline = m.clone();
         self.env_segments = env_model::merge_machine_user_env(&m, &u);
-        self.env_locked_names = (0..self.env_segments.len()).collect();
+        self.env_locked_names = env_names_from_segments(&self.env_segments);
         self.env_dirty = false;
         Ok(())
     }
@@ -266,19 +270,128 @@ impl PathmanApp {
     }
 
     fn lock_env_name_at(&mut self, i: usize) {
-        if self.scope == Scope::Effective {
-            if i < self.env_segments.len() {
-                let name = self.env_segments[i].1.name.trim();
-                if !name.is_empty() && env_model::validate_var_name(name).is_ok() {
-                    self.env_locked_names.insert(i);
-                }
-            }
-        } else if i < self.env_entries.len() {
-            let name = self.env_entries[i].name.trim();
-            if !name.is_empty() && env_model::validate_var_name(name).is_ok() {
-                self.env_locked_names.insert(i);
+        let name = match self.scope {
+            Scope::Effective => self
+                .env_segments
+                .get(i)
+                .map(|(_, e)| e.name.trim().to_string()),
+            Scope::User | Scope::System => self
+                .env_entries
+                .get(i)
+                .map(|e| e.name.trim().to_string()),
+        };
+        if let Some(name) = name {
+            if !name.is_empty() && env_model::validate_var_name(&name).is_ok() {
+                self.env_locked_names.insert(name);
             }
         }
+    }
+
+    fn env_name_locked(&self, name: &str) -> bool {
+        let t = name.trim();
+        !t.is_empty() && self.env_locked_names.contains(t)
+    }
+
+    fn toggle_env_sort(&mut self, column: EnvSortColumn) {
+        let dir = match self.env_sort {
+            Some((col, d)) if col == column => d.toggle(),
+            _ => SortDir::Asc,
+        };
+        self.env_sort = Some((column, dir));
+        self.apply_env_sort(column, dir);
+        self.env_dirty = true;
+    }
+
+    fn apply_env_sort(&mut self, column: EnvSortColumn, dir: SortDir) {
+        match self.scope {
+            Scope::Effective => {
+                let cross = env_model::cross_origin_env_names(
+                    &self.env_system_baseline,
+                    &self.env_user_baseline,
+                );
+                self.env_segments.sort_by(|(oa, ea), (ob, eb)| {
+                    let ord = match column {
+                        EnvSortColumn::Name => cmp_str_insensitive(&ea.name, &eb.name, dir),
+                        EnvSortColumn::Value => cmp_str_insensitive(&ea.value, &eb.value, dir),
+                        EnvSortColumn::Origin => cmp_origin(*oa, *ob, dir),
+                        EnvSortColumn::Duplicate => {
+                            let da = i32::from(cross.contains(&ea.name));
+                            let db = i32::from(cross.contains(&eb.name));
+                            cmp_i32(da, db, dir)
+                        }
+                    };
+                    ord.then_with(|| cmp_str_insensitive(&ea.name, &eb.name, SortDir::Asc))
+                });
+            }
+            Scope::User | Scope::System => {
+                let disk_user = self.read_disk_env_user().unwrap_or_default();
+                let disk_system = self.read_disk_env_system().unwrap_or_default();
+                let cross = env_model::cross_origin_env_names(&disk_system, &disk_user);
+                self.env_entries.sort_by(|a, b| {
+                    let ord = match column {
+                        EnvSortColumn::Name => cmp_str_insensitive(&a.name, &b.name, dir),
+                        EnvSortColumn::Value => cmp_str_insensitive(&a.value, &b.value, dir),
+                        EnvSortColumn::Origin => {
+                            let row_origin = match self.scope {
+                                Scope::User => PathOrigin::User,
+                                Scope::System => PathOrigin::Machine,
+                                Scope::Effective => unreachable!(),
+                            };
+                            cmp_origin(row_origin, row_origin, dir)
+                        }
+                        EnvSortColumn::Duplicate => {
+                            let da = i32::from(!a.name.is_empty() && cross.contains(&a.name));
+                            let db = i32::from(!b.name.is_empty() && cross.contains(&b.name));
+                            cmp_i32(da, db, dir)
+                        }
+                    };
+                    ord.then_with(|| cmp_str_insensitive(&a.name, &b.name, SortDir::Asc))
+                });
+            }
+        }
+    }
+
+    fn show_env_column_headers(
+        &mut self,
+        ui: &mut egui::Ui,
+        _scroll_w: f32,
+        name_w: f32,
+        value_w: f32,
+        origin_w: f32,
+        dup_w: f32,
+    ) {
+        ui.horizontal(|ui| {
+            let origin_dir = self
+                .env_sort
+                .filter(|(c, _)| *c == EnvSortColumn::Origin)
+                .map(|(_, d)| d);
+            if column_header(ui, "Origin", origin_w, origin_dir).clicked() {
+                self.toggle_env_sort(EnvSortColumn::Origin);
+            }
+            let name_dir = self
+                .env_sort
+                .filter(|(c, _)| *c == EnvSortColumn::Name)
+                .map(|(_, d)| d);
+            if column_header(ui, "Name", name_w, name_dir).clicked() {
+                self.toggle_env_sort(EnvSortColumn::Name);
+            }
+            let value_dir = self
+                .env_sort
+                .filter(|(c, _)| *c == EnvSortColumn::Value)
+                .map(|(_, d)| d);
+            if column_header(ui, "Value", value_w, value_dir).clicked() {
+                self.toggle_env_sort(EnvSortColumn::Value);
+            }
+            let dup_dir = self
+                .env_sort
+                .filter(|(c, _)| *c == EnvSortColumn::Duplicate)
+                .map(|(_, d)| d);
+            if column_header(ui, "Dup", dup_w, dup_dir).clicked() {
+                self.toggle_env_sort(EnvSortColumn::Duplicate);
+            }
+            ui.add_space(26.0);
+        });
+        ui.add_space(2.0);
     }
 
     pub(crate) fn show_env_top_bar_extras(&mut self, ui: &mut egui::Ui) {
@@ -615,7 +728,16 @@ impl PathmanApp {
         );
         ui.add_space(4.0);
 
+        const ORIGIN_W: f32 = 56.0;
+        const BTN_W: f32 = 26.0;
+        const DUP_W: f32 = 34.0;
         let scroll_w = ui.available_width();
+        let gap = ui.spacing().item_spacing.x;
+        let name_w = 180.0_f32;
+        let row_reserve = ORIGIN_W + BTN_W + DUP_W + 3.0 * gap + name_w + 80.0;
+        let value_w = (scroll_w - row_reserve).max(120.0);
+        self.show_env_column_headers(ui, scroll_w, name_w, value_w, ORIGIN_W, DUP_W);
+
         ScrollArea::vertical()
             .id_salt("env_entries")
             .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
@@ -624,13 +746,6 @@ impl PathmanApp {
             .show(ui, |ui| {
                 ui.set_min_width(scroll_w);
                 ui.set_max_width(scroll_w);
-
-                const ORIGIN_W: f32 = 56.0;
-                const BTN_W: f32 = 26.0;
-                let gap = ui.spacing().item_spacing.x;
-                let name_w = 180.0_f32;
-                let row_reserve = ORIGIN_W + BTN_W + 3.0 * gap + name_w + 80.0;
-                let value_w = (scroll_w - row_reserve).max(120.0);
 
                 let mut lock_name_at: Option<usize> = None;
                 let mut remove_at: Option<usize> = None;
@@ -650,7 +765,7 @@ impl PathmanApp {
                         }
                         let (strip_fill, origin_color) = effective_origin_style(origin);
                         let show_cross = cross.contains(&search_name);
-                        let name_locked = self.env_locked_names.contains(&i);
+                        let name_locked = self.env_name_locked(&search_name);
                         let row_frame = egui::Frame::none()
                             .fill(strip_fill)
                             .inner_margin(egui::Margin::symmetric(6.0, 3.0))
@@ -737,7 +852,7 @@ impl PathmanApp {
                         if !self.env_entry_matches_search(&search_name, &search_value) {
                             continue;
                         }
-                        let name_locked = self.env_locked_names.contains(&i);
+                        let name_locked = self.env_name_locked(&search_name);
                         let row_frame = egui::Frame::none()
                             .fill(strip_fill)
                             .inner_margin(egui::Margin::symmetric(6.0, 3.0))
@@ -818,6 +933,22 @@ impl PathmanApp {
                 }
             });
     }
+}
+
+fn env_names_from_entries(entries: &[EnvEntry]) -> HashSet<String> {
+    entries
+        .iter()
+        .map(|e| e.name.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+fn env_names_from_segments(segments: &[(PathOrigin, EnvEntry)]) -> HashSet<String> {
+    segments
+        .iter()
+        .map(|(_, e)| e.name.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect()
 }
 
 fn map_to_sorted_entries(map: &HashMap<String, String>) -> Vec<EnvEntry> {

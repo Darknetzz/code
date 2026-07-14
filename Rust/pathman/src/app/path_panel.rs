@@ -1,5 +1,9 @@
-﻿use super::*;
+﻿use super::column_sort::{
+    column_header, cmp_i32, cmp_origin, cmp_str_insensitive, path_mark_score, PathSortColumn,
+    SortDir,
+};
 use super::helpers::*;
+use super::*;
 use eframe::egui::{self, ScrollArea, Sense, TextEdit};
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use crate::path_model::{self, PathOrigin};
@@ -16,7 +20,7 @@ impl PathmanApp {
                 ui.horizontal(|ui| {
                     path_add_origin_menu(
                         ui,
-                        "Add userâ€¦",
+                        "Add user…",
                         fill_u,
                         acc_u,
                         txt_u,
@@ -42,7 +46,7 @@ impl PathmanApp {
                     );
                     path_add_origin_menu(
                         ui,
-                        "Add machineâ€¦",
+                        "Add machine…",
                         fill_m,
                         acc_m,
                         txt_m,
@@ -89,7 +93,7 @@ impl PathmanApp {
                 ui.horizontal(|ui| {
                     if path_add_toolbar_button(
                         ui,
-                        "Add folderâ€¦",
+                        "Add folder…",
                         AddToolbarIcon::Folder,
                         fill,
                         acc,
@@ -125,10 +129,10 @@ impl PathmanApp {
                 ui.add(
                     TextEdit::singleline(&mut self.list_search)
                         .desired_width(280.0)
-                        .hint_text("Filter entriesâ€¦"),
+                        .hint_text("Filter entries…"),
                 )
                 .on_hover_text(
-                    "Case-insensitive substring; matches the row text or expanded path (%VAR%, ~, â€¦).",
+                    "Case-insensitive substring; matches the row text or expanded path (%VAR%, ~, …).",
                 );
                 if !self.list_search.is_empty() && ui.small_button("Clear").clicked() {
                     self.list_search.clear();
@@ -141,7 +145,7 @@ impl PathmanApp {
                     match &self.duplicate_view_filter {
                         Some(DuplicateViewFilter::PathDuplicate { banner, .. }) => {
                             ui.label(
-                                egui::RichText::new(format!("Filtered â€” {banner}"))
+                                egui::RichText::new(format!("Filtered — {banner}"))
                                     .small()
                                     .strong(),
                             );
@@ -151,7 +155,7 @@ impl PathmanApp {
                         }
                         Some(DuplicateViewFilter::MissingPaths) => {
                             ui.label(
-                                egui::RichText::new("Filtered â€” rows whose path is missing on disk")
+                                egui::RichText::new("Filtered — rows whose path is missing on disk")
                                     .small()
                                     .strong(),
                             );
@@ -159,7 +163,7 @@ impl PathmanApp {
                         Some(DuplicateViewFilter::OnlyDuplicates) => {
                             ui.label(
                                 egui::RichText::new(
-                                    "Filtered â€” duplicate entries (same path in both stores and/or repeated in one store)",
+                                    "Filtered — duplicate entries (same path in both stores and/or repeated in one store)",
                                 )
                                 .small()
                                 .strong(),
@@ -176,6 +180,7 @@ impl PathmanApp {
             }
 
             let list_viewport_w = ui.available_width();
+            self.show_path_column_headers(ui, list_viewport_w);
             ScrollArea::vertical()
                 .id_salt(if self.scope == Scope::Effective {
                     "path_entries_effective"
@@ -203,7 +208,7 @@ impl PathmanApp {
                 let gap = ui.spacing().item_spacing.x;
 
                 if self.scope == Scope::Effective {
-                    // [â‰¡][^][v][mark][origin][text][open][X] â†’ 8 widgets, 7 gaps.
+                    // [≡][^][v][mark][origin][text][open][X] → 8 widgets, 7 gaps.
                     let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
 
@@ -423,7 +428,7 @@ impl PathmanApp {
                                                 3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
                                             );
                                             ui.label(
-                                                egui::RichText::new(format!("â†’ {expanded}"))
+                                                egui::RichText::new(format!("-> {expanded}"))
                                                     .small()
                                                     .color(origin_color.gamma_multiply(0.75))
                                                     .monospace(),
@@ -440,7 +445,7 @@ impl PathmanApp {
                         }
                     }
                 } else {
-                    // [â‰¡][^][v][mark][Machine|User][text][open][X] â€” align with Effective scope layout.
+                    // [≡][^][v][mark][Machine|User][text][open][X] — align with Effective scope layout.
                     const ORIGIN_W: f32 = 56.0;
                     let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
                     let text_column_w = (scroll_w - row_reserve).max(48.0);
@@ -643,7 +648,7 @@ impl PathmanApp {
                                                 3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
                                             );
                                             ui.label(
-                                                egui::RichText::new(format!("â†’ {expanded}"))
+                                                egui::RichText::new(format!("-> {expanded}"))
                                                     .small()
                                                     .color(origin_color.gamma_multiply(0.75))
                                                     .monospace(),
@@ -787,4 +792,161 @@ impl PathmanApp {
                 }
             });
     }
+
+    fn toggle_path_sort(&mut self, column: PathSortColumn) {
+        let dir = match self.path_sort {
+            Some((col, d)) if col == column => d.toggle(),
+            _ => SortDir::Asc,
+        };
+        self.path_sort = Some((column, dir));
+        self.apply_path_sort(column, dir);
+        self.dirty = true;
+    }
+
+    fn apply_path_sort(&mut self, column: PathSortColumn, dir: SortDir) {
+        match self.scope {
+            Scope::Effective => {
+                let (cross_keys, cnt_m, cnt_u) =
+                    effective_split_cross_and_counts(&self.effective_segments);
+                let warn_missing = self.warn_missing;
+                self.effective_segments.sort_by(|(oa, pa), (ob, pb)| {
+                    let ord = match column {
+                        PathSortColumn::Path => cmp_str_insensitive(pa, pb, dir),
+                        PathSortColumn::Origin => cmp_origin(*oa, *ob, dir),
+                        PathSortColumn::Mark => {
+                            let sa = path_mark_score_for_segment(
+                                pa,
+                                *oa,
+                                &cross_keys,
+                                &cnt_m,
+                                &cnt_u,
+                                warn_missing,
+                            );
+                            let sb = path_mark_score_for_segment(
+                                pb,
+                                *ob,
+                                &cross_keys,
+                                &cnt_m,
+                                &cnt_u,
+                                warn_missing,
+                            );
+                            cmp_i32(sa, sb, dir)
+                        }
+                    };
+                    ord.then_with(|| cmp_str_insensitive(pa, pb, SortDir::Asc))
+                });
+            }
+            Scope::User | Scope::System => {
+                let machine_for_cross = self.read_machine_slice_for_marks();
+                let user_for_cross = self.read_user_slice_for_marks();
+                let (cross_keys, within_counts) = tab_cross_keys_and_dup_counts(
+                    self.scope,
+                    &self.entries,
+                    &machine_for_cross,
+                    &user_for_cross,
+                );
+                let warn_missing = self.warn_missing;
+                self.entries.sort_by(|a, b| {
+                    let ord = match column {
+                        PathSortColumn::Path => cmp_str_insensitive(a, b, dir),
+                        PathSortColumn::Origin => {
+                            let row_origin = match self.scope {
+                                Scope::User => PathOrigin::User,
+                                Scope::System => PathOrigin::Machine,
+                                Scope::Effective => unreachable!(),
+                            };
+                            cmp_origin(row_origin, row_origin, dir)
+                        }
+                        PathSortColumn::Mark => {
+                            let sa = path_mark_score_for_entry(
+                                a,
+                                &cross_keys,
+                                &within_counts,
+                                warn_missing,
+                            );
+                            let sb = path_mark_score_for_entry(
+                                b,
+                                &cross_keys,
+                                &within_counts,
+                                warn_missing,
+                            );
+                            cmp_i32(sa, sb, dir)
+                        }
+                    };
+                    ord.then_with(|| cmp_str_insensitive(a, b, SortDir::Asc))
+                });
+            }
+        }
+    }
+
+    fn show_path_column_headers(&mut self, ui: &mut egui::Ui, scroll_w: f32) {
+        const ICON_BTN: f32 = 26.0;
+        const MARK_W: f32 = 34.0;
+        const ORIGIN_W: f32 = 56.0;
+        let gap = ui.spacing().item_spacing.x;
+        let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
+        let path_w = (scroll_w - row_reserve).max(48.0);
+
+        ui.horizontal(|ui| {
+            ui.add_space(3.0 * ICON_BTN + 3.0 * gap);
+            let mark_dir = self
+                .path_sort
+                .filter(|(c, _)| *c == PathSortColumn::Mark)
+                .map(|(_, d)| d);
+            if column_header(ui, "Mark", MARK_W, mark_dir)
+                .clicked()
+            {
+                self.toggle_path_sort(PathSortColumn::Mark);
+            }
+            let origin_dir = self
+                .path_sort
+                .filter(|(c, _)| *c == PathSortColumn::Origin)
+                .map(|(_, d)| d);
+            if column_header(ui, "Origin", ORIGIN_W, origin_dir)
+                .clicked()
+            {
+                self.toggle_path_sort(PathSortColumn::Origin);
+            }
+            let path_dir = self
+                .path_sort
+                .filter(|(c, _)| *c == PathSortColumn::Path)
+                .map(|(_, d)| d);
+            if column_header(ui, "Path", path_w, path_dir).clicked() {
+                self.toggle_path_sort(PathSortColumn::Path);
+            }
+            ui.add_space(2.0 * ICON_BTN + gap);
+        });
+        ui.add_space(2.0);
+    }
+}
+
+fn path_mark_score_for_segment(
+    path: &str,
+    origin: PathOrigin,
+    cross_keys: &std::collections::HashSet<String>,
+    cnt_m: &std::collections::HashMap<String, usize>,
+    cnt_u: &std::collections::HashMap<String, usize>,
+    warn_missing: bool,
+) -> i32 {
+    let key = path_model::path_duplicate_key(path);
+    let cross = !key.is_empty() && cross_keys.contains(&key);
+    let within_n = match origin {
+        PathOrigin::Machine => *cnt_m.get(&key).unwrap_or(&1),
+        PathOrigin::User => *cnt_u.get(&key).unwrap_or(&1),
+    };
+    let warn = warn_missing && !path_model::entry_exists(path);
+    path_mark_score(warn, cross, within_n)
+}
+
+fn path_mark_score_for_entry(
+    path: &str,
+    cross_keys: &std::collections::HashSet<String>,
+    within_counts: &std::collections::HashMap<String, usize>,
+    warn_missing: bool,
+) -> i32 {
+    let key = path_model::path_duplicate_key(path);
+    let cross = !key.is_empty() && cross_keys.contains(&key);
+    let within_n = *within_counts.get(&key).unwrap_or(&1);
+    let warn = warn_missing && !path_model::entry_exists(path);
+    path_mark_score(warn, cross, within_n)
 }

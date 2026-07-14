@@ -56,6 +56,8 @@ impl PathmanApp {
             env_locked_names: std::collections::HashSet::new(),
             show_confirm_mode_switch: false,
             pending_mode_switch: None,
+            path_sort: None,
+            env_sort: None,
         };
         app.reload_from_store();
         if let Some(msg) = config_err {
@@ -80,6 +82,7 @@ impl PathmanApp {
         self.duplicate_view_filter = None;
         self.list_search.clear();
         self.show_change_summary = false;
+        self.path_sort = None;
         self.status_clear();
         let r = match self.scope {
             Scope::User => self.load_user(),
