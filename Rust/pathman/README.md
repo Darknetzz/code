@@ -63,6 +63,21 @@ export MY_VAR="hello"
 cargo build --release
 ```
 
+### App icon (Windows `.exe` icon + window)
+
+Assets live in `assets/`:
+
+- `icon_foreground.png` — transparent artwork
+- `icon.png` — composed 256×256 PNG (window/taskbar via eframe)
+- `pathman.ico` — multi-size icon embedded in the Windows executable
+
+Regenerate PNG + ICO after editing the foreground art:
+
+```bash
+python scripts/compose_icon.py
+cargo build --release
+```
+
 ## Tests
 
 ```bash

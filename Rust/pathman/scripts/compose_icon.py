@@ -59,6 +59,12 @@ def main() -> None:
         type=Path,
         default=Path(__file__).resolve().parent.parent / "assets" / "icon.png",
     )
+    p.add_argument(
+        "--ico-out",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / "assets" / "pathman.ico",
+        help="Optional multi-size Windows .ico (from --out PNG or --fg composite)",
+    )
     p.add_argument("--size", type=int, default=256)
     args = p.parse_args()
 
@@ -83,6 +89,21 @@ def main() -> None:
     out = Image.alpha_composite(bg, fg)
     out.save(args.out, format="PNG", optimize=True)
     print(f"Wrote {args.out} ({args.size}x{args.size})")
+    write_ico(out, args.ico_out)
+
+
+def write_ico(source: Image.Image, ico_path: Path) -> None:
+    """Write a Windows .ico with common shell/taskbar sizes."""
+    sizes = (16, 32, 48, 64, 128, 256)
+    base = source.convert("RGBA")
+    images = [base.resize((s, s), Image.Resampling.LANCZOS) for s in sizes]
+    images[0].save(
+        ico_path,
+        format="ICO",
+        sizes=[(s, s) for s in sizes],
+        append_images=images[1:],
+    )
+    print(f"Wrote {ico_path} ({', '.join(str(s) for s in sizes)} px)")
 
 
 if __name__ == "__main__":
