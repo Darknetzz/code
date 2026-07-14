@@ -2,6 +2,8 @@ use super::*;
 use super::helpers::*;
 use std::path::PathBuf;
 
+use super::AppMode;
+
 impl PathmanApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (config, config_err) = AppConfig::load_with_status();
@@ -15,6 +17,7 @@ impl PathmanApp {
                     .to_string()
             });
         let mut app = Self {
+            mode: AppMode::default(),
             scope: Scope::default(),
             entries: Vec::new(),
             effective_segments: Vec::new(),
@@ -37,6 +40,22 @@ impl PathmanApp {
             change_summary_text: String::new(),
             pending_saved_feedback: false,
             saved_feedback_until: None,
+            env_segments: Vec::new(),
+            env_entries: Vec::new(),
+            env_user_baseline: std::collections::HashMap::new(),
+            env_system_baseline: std::collections::HashMap::new(),
+            env_dirty: false,
+            env_list_search: String::new(),
+            confirm_remove_env: None,
+            show_confirm_env_system: false,
+            env_show_change_summary: false,
+            env_change_summary_text: String::new(),
+            env_pending_saved_feedback: false,
+            env_saved_feedback_until: None,
+            env_show_confirm_discard: false,
+            env_locked_names: std::collections::HashSet::new(),
+            show_confirm_mode_switch: false,
+            pending_mode_switch: None,
         };
         app.reload_from_store();
         if let Some(msg) = config_err {
@@ -45,7 +64,14 @@ impl PathmanApp {
         app
     }
 
-    fn reload_from_store(&mut self) {
+    pub(crate) fn reload_from_store(&mut self) {
+        match self.mode {
+            AppMode::Path => self.reload_path_from_store(),
+            AppMode::Environment => self.reload_env_from_store(),
+        }
+    }
+
+    fn reload_path_from_store(&mut self) {
         self.confirm_remove_index = None;
         self.show_confirm_dedupe = false;
         self.show_confirm_discard = false;
@@ -83,7 +109,7 @@ impl PathmanApp {
         }
     }
 
-    fn read_machine_slice_for_marks(&self) -> Vec<String> {
+    pub(crate) fn read_machine_slice_for_marks(&self) -> Vec<String> {
         #[cfg(windows)]
         {
             path_model::split(
@@ -96,7 +122,7 @@ impl PathmanApp {
         }
     }
 
-    fn read_user_slice_for_marks(&self) -> Vec<String> {
+    pub(crate) fn read_user_slice_for_marks(&self) -> Vec<String> {
         #[cfg(windows)]
         {
             path_model::split(&crate::persist::read_user_path().unwrap_or_default())
@@ -134,12 +160,12 @@ impl PathmanApp {
     }
 
     /// Row is shown in the list: duplicate/missing filters and search box.
-    fn row_visible_in_path_list(&self, path_str: &str, is_marked_duplicate: bool) -> bool {
+    pub(crate) fn row_visible_in_path_list(&self, path_str: &str, is_marked_duplicate: bool) -> bool {
         self.row_passes_duplicate_filter(path_str, is_marked_duplicate)
             && self.entry_matches_list_search(path_str)
     }
 
-    fn toggle_path_duplicate_filter(&mut self, key: String, banner: String) {
+    pub(crate) fn toggle_path_duplicate_filter(&mut self, key: String, banner: String) {
         match &self.duplicate_view_filter {
             Some(DuplicateViewFilter::PathDuplicate { key: k, .. }) if k == &key => {
                 self.duplicate_view_filter = None;
@@ -150,7 +176,7 @@ impl PathmanApp {
         }
     }
 
-    fn toggle_missing_path_filter(&mut self) {
+    pub(crate) fn toggle_missing_path_filter(&mut self) {
         match self.duplicate_view_filter {
             Some(DuplicateViewFilter::MissingPaths) => self.duplicate_view_filter = None,
             _ => self.duplicate_view_filter = Some(DuplicateViewFilter::MissingPaths),
@@ -165,7 +191,7 @@ impl PathmanApp {
     }
 
     /// After filtering by duplicate PATH key from User or System tab, show the merged list.
-    fn switch_to_effective_for_path_dup_filter(&mut self) {
+    pub(crate) fn switch_to_effective_for_path_dup_filter(&mut self) {
         if !matches!(
             &self.duplicate_view_filter,
             Some(DuplicateViewFilter::PathDuplicate { .. })
@@ -326,7 +352,7 @@ impl PathmanApp {
                 &prev,
                 &backup_dir_win(),
             );
-            crate::persist::request_elevated_machine_apply(&joined)?;
+            crate::persist::request_elevated_machine_path(&joined)?;
         }
         #[cfg(not(windows))]
         {
@@ -337,23 +363,23 @@ impl PathmanApp {
         Ok(())
     }
 
-    fn status_clear(&mut self) {
+    pub(crate) fn status_clear(&mut self) {
         self.status.clear();
         self.status_err = false;
     }
 
-    fn set_status_ok(&mut self, s: String) {
+    pub(crate) fn set_status_ok(&mut self, s: String) {
         self.status = s;
         self.status_err = false;
     }
 
-    fn set_status_err(&mut self, s: String) {
+    pub(crate) fn set_status_err(&mut self, s: String) {
         self.status = s;
         self.status_err = true;
     }
 
     /// Open the expanded path in the system file manager (Explorer, Finder, xdg-open, …).
-    fn open_entry_directory(&mut self, raw_path: &str) {
+    pub(crate) fn open_entry_directory(&mut self, raw_path: &str) {
         let expanded = path_model::expanded_path(raw_path);
         let t = expanded.trim();
         if t.is_empty() {
@@ -449,7 +475,7 @@ impl PathmanApp {
     }
 
     /// Remove row immediately or open confirmation per [`AppConfig::skip_remove_confirmation`].
-    fn request_remove_row(&mut self, i: usize) {
+    pub(crate) fn request_remove_row(&mut self, i: usize) {
         if self.config.skip_remove_confirmation {
             self.apply_remove_row(i);
         } else {
@@ -469,14 +495,23 @@ impl PathmanApp {
             return;
         }
         self.set_status_ok("Shell file path saved to pathman.toml.".into());
-        match self.scope {
-            Scope::User => {
-                let _ = self.load_user();
+        if self.mode == AppMode::Environment {
+            match self.scope {
+                Scope::User | Scope::Effective => {
+                    self.reload_env_from_store();
+                }
+                Scope::System => {}
             }
-            Scope::Effective => {
-                let _ = self.load_effective();
+        } else {
+            match self.scope {
+                Scope::User => {
+                    let _ = self.load_user();
+                }
+                Scope::Effective => {
+                    let _ = self.load_effective();
+                }
+                Scope::System => {}
             }
-            Scope::System => {}
         }
     }
 }
@@ -508,19 +543,47 @@ impl eframe::App for PathmanApp {
             self.pending_saved_feedback = false;
             self.saved_feedback_until = Some(ctx.input(|i| i.time) + 2.0);
         }
+        if self.env_pending_saved_feedback {
+            self.env_pending_saved_feedback = false;
+            self.env_saved_feedback_until = Some(ctx.input(|i| i.time) + 2.0);
+        }
 
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("pathman");
-                ui.label(egui::RichText::new("PATH editor").weak());
+                let subtitle = match self.mode {
+                    AppMode::Path => "PATH editor",
+                    AppMode::Environment => "Environment variables",
+                };
+                ui.label(egui::RichText::new(subtitle).weak());
             });
             ui.scope(|ui| {
                 let s = &mut ui.style_mut().spacing;
-                // Slightly taller controls so scope tabs / buttons are not flat strips.
                 let min_h = 26.0_f32;
                 s.interact_size.y = s.interact_size.y.max(min_h);
                 s.button_padding = egui::vec2(10.0, 6.0);
                 ui.horizontal(|ui| {
+                    if path_top_bar_selectable(
+                        ui,
+                        self.mode == AppMode::Path,
+                        "PATH",
+                        TopBarIcon::ScopeEffective,
+                    )
+                    .clicked()
+                    {
+                        self.request_mode_switch(AppMode::Path);
+                    }
+                    if path_top_bar_selectable(
+                        ui,
+                        self.mode == AppMode::Environment,
+                        "Environment",
+                        TopBarIcon::ScopeUser,
+                    )
+                    .clicked()
+                    {
+                        self.request_mode_switch(AppMode::Environment);
+                    }
+                    ui.separator();
                 if path_top_bar_selectable(
                     ui,
                     self.scope == Scope::Effective,
@@ -568,7 +631,8 @@ impl eframe::App for PathmanApp {
                 {
                     self.reload_from_store();
                 }
-                let save_emphasis = if self.dirty {
+                let mode_dirty = self.is_mode_dirty();
+                let save_emphasis = if mode_dirty {
                     TopBarButtonEmphasis::Unsaved
                 } else {
                     TopBarButtonEmphasis::IdlePrimary
@@ -577,133 +641,166 @@ impl eframe::App for PathmanApp {
                     ui,
                     "Save",
                     TopBarIcon::Save,
-                    self.dirty,
+                    mode_dirty,
                     72.0,
                     Some("Write the current list to disk (enabled when there are unsaved changes)."),
                     save_emphasis,
                 )
                 .clicked();
-                let needs_confirm = matches!(self.scope, Scope::System)
-                    || (self.scope == Scope::Effective && self.effective_machine_save_pending_confirm());
+                let needs_confirm = match self.mode {
+                    AppMode::Path => {
+                        matches!(self.scope, Scope::System)
+                            || (self.scope == Scope::Effective
+                                && self.effective_machine_save_pending_confirm())
+                    }
+                    AppMode::Environment => {
+                        matches!(self.scope, Scope::System)
+                            || (self.scope == Scope::Effective
+                                && self.effective_env_machine_save_pending_confirm())
+                    }
+                };
                 let do_save = save_clicked
                     && if needs_confirm {
-                        self.show_confirm_system = true;
+                        match self.mode {
+                            AppMode::Path => self.show_confirm_system = true,
+                            AppMode::Environment => self.show_confirm_env_system = true,
+                        }
                         false
                     } else {
                         true
                     };
                 if do_save {
-                    self.save();
+                    match self.mode {
+                        AppMode::Path => self.save(),
+                        AppMode::Environment => self.save_env(),
+                    }
                 }
                 if path_top_bar_button(
                     ui,
                     "Discard",
                     TopBarIcon::Discard,
-                    self.dirty,
+                    mode_dirty,
                     0.0,
                     Some("Discard all unsaved changes and reload from disk."),
                     TopBarButtonEmphasis::Danger,
                 )
                 .clicked()
                 {
-                    self.show_confirm_discard = true;
+                    match self.mode {
+                        AppMode::Path => self.show_confirm_discard = true,
+                        AppMode::Environment => self.env_show_confirm_discard = true,
+                    }
                 }
                 let now = ctx.input(|i| i.time);
-                let show_saved_badge = !self.dirty
-                    && self
-                        .saved_feedback_until
-                        .is_some_and(|until| now < until);
+                let show_saved_badge = !mode_dirty
+                    && match self.mode {
+                        AppMode::Path => self
+                            .saved_feedback_until
+                            .is_some_and(|until| now < until),
+                        AppMode::Environment => self
+                            .env_saved_feedback_until
+                            .is_some_and(|until| now < until),
+                    };
                 if show_saved_badge {
                     ui.label(
                         egui::RichText::new("Saved")
                             .strong()
                             .color(egui::Color32::from_rgb(72, 175, 95)),
                     );
-                } else if self.dirty {
+                } else if mode_dirty {
                     ui.label(
                         egui::RichText::new("Unsaved changes")
                             .italics()
                             .color(egui::Color32::from_rgb(255, 165, 70)),
                     );
                 }
-                if path_top_bar_button(
-                    ui,
-                    "Changes…",
-                    TopBarIcon::Changes,
-                    true,
-                    0.0,
-                    None,
-                    TopBarButtonEmphasis::Info,
-                )
-                .clicked()
-                {
-                    self.change_summary_text = self.compute_change_summary();
-                    self.show_change_summary = true;
-                }
-                if path_top_bar_button(
-                    ui,
-                    "Dedupe",
-                    TopBarIcon::Dedupe,
-                    true,
-                    0.0,
-                    None,
-                    TopBarButtonEmphasis::Caution,
-                )
-                .clicked()
-                {
-                    let n_drop = match self.scope {
-                        Scope::Effective => {
-                            path_model::adjacent_dedupe_drop_count_tagged(&self.effective_segments)
+                match self.mode {
+                    AppMode::Path => {
+                        if path_top_bar_button(
+                            ui,
+                            "Changes…",
+                            TopBarIcon::Changes,
+                            true,
+                            0.0,
+                            None,
+                            TopBarButtonEmphasis::Info,
+                        )
+                        .clicked()
+                        {
+                            self.change_summary_text = self.compute_change_summary();
+                            self.show_change_summary = true;
                         }
-                        _ => path_model::adjacent_dedupe_drop_count(&self.entries),
-                    };
-                    if n_drop == 0 {
-                        self.set_status_ok("No adjacent duplicate entries to remove.".into());
-                    } else {
-                        self.show_confirm_dedupe = true;
+                        if path_top_bar_button(
+                            ui,
+                            "Dedupe",
+                            TopBarIcon::Dedupe,
+                            true,
+                            0.0,
+                            None,
+                            TopBarButtonEmphasis::Caution,
+                        )
+                        .clicked()
+                        {
+                            let n_drop = match self.scope {
+                                Scope::Effective => path_model::adjacent_dedupe_drop_count_tagged(
+                                    &self.effective_segments,
+                                ),
+                                _ => path_model::adjacent_dedupe_drop_count(&self.entries),
+                            };
+                            if n_drop == 0 {
+                                self.set_status_ok(
+                                    "No adjacent duplicate entries to remove.".into(),
+                                );
+                            } else {
+                                self.show_confirm_dedupe = true;
+                            }
+                        }
+                        if path_top_bar_button(
+                            ui,
+                            "Duplicates…",
+                            TopBarIcon::Duplicates,
+                            true,
+                            0.0,
+                            None,
+                            TopBarButtonEmphasis::Secondary,
+                        )
+                        .clicked()
+                        {
+                            self.show_duplicate_tool = true;
+                        }
+                        ui.separator();
+                        if path_top_bar_selectable(
+                            ui,
+                            matches!(
+                                self.duplicate_view_filter,
+                                Some(DuplicateViewFilter::OnlyDuplicates)
+                            ),
+                            "Only duplicates",
+                            TopBarIcon::FilterDuplicates,
+                        )
+                        .clicked()
+                        {
+                            self.toggle_only_duplicates_filter();
+                        }
+                        if path_top_bar_selectable(
+                            ui,
+                            matches!(
+                                self.duplicate_view_filter,
+                                Some(DuplicateViewFilter::MissingPaths)
+                            ),
+                            "Only missing",
+                            TopBarIcon::FilterMissing,
+                        )
+                        .clicked()
+                        {
+                            self.toggle_missing_path_filter();
+                        }
+                        ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
+                    }
+                    AppMode::Environment => {
+                        self.show_env_top_bar_extras(ui);
                     }
                 }
-                if path_top_bar_button(
-                    ui,
-                    "Duplicates…",
-                    TopBarIcon::Duplicates,
-                    true,
-                    0.0,
-                    None,
-                    TopBarButtonEmphasis::Secondary,
-                )
-                .clicked()
-                {
-                    self.show_duplicate_tool = true;
-                }
-                ui.separator();
-                if path_top_bar_selectable(
-                    ui,
-                    matches!(
-                        self.duplicate_view_filter,
-                        Some(DuplicateViewFilter::OnlyDuplicates)
-                    ),
-                    "Only duplicates",
-                    TopBarIcon::FilterDuplicates,
-                )
-                .clicked()
-                {
-                    self.toggle_only_duplicates_filter();
-                }
-                if path_top_bar_selectable(
-                    ui,
-                    matches!(
-                        self.duplicate_view_filter,
-                        Some(DuplicateViewFilter::MissingPaths)
-                    ),
-                    "Only missing",
-                    TopBarIcon::FilterMissing,
-                )
-                .clicked()
-                {
-                    self.toggle_missing_path_filter();
-                }
-                ui.checkbox(&mut self.warn_missing, "Warn if folder missing");
                 let skip_rm = ui
                     .checkbox(
                         &mut self.config.skip_remove_confirmation,
@@ -720,7 +817,7 @@ impl eframe::App for PathmanApp {
                 });
             });
             #[cfg(not(windows))]
-            if self.scope == Scope::User {
+            if self.mode == AppMode::Path && self.scope == Scope::User {
                 ui.horizontal(|ui| {
                     if path_top_bar_button(
                         ui,
@@ -742,15 +839,23 @@ impl eframe::App for PathmanApp {
                 });
             }
             if matches!(self.scope, Scope::System | Scope::Effective) {
+                let warn = match self.mode {
+                    AppMode::Path => {
+                        "Changing machine (system) PATH may trigger UAC (Windows) or an admin password (macOS/Linux)."
+                    }
+                    AppMode::Environment => {
+                        "Changing machine (system) environment variables may trigger UAC (Windows) or an admin password (macOS/Linux)."
+                    }
+                };
                 ui.label(
-                    egui::RichText::new(
-                        "Changing machine (system) PATH may trigger UAC (Windows) or an admin password (macOS/Linux).",
-                    )
-                    .small()
-                    .color(egui::Color32::from_rgb(200, 160, 80)),
+                    egui::RichText::new(warn)
+                        .small()
+                        .color(egui::Color32::from_rgb(200, 160, 80)),
                 );
             }
         });
+
+        self.show_env_dialogs(ctx);
 
         let mut apply_shell_path = false;
         if self.show_shell_settings {
@@ -1097,783 +1202,10 @@ impl eframe::App for PathmanApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.scope == Scope::Effective {
-                let (fill_u, acc_u, txt_u) = origin_add_button_theme(PathOrigin::User);
-                let (fill_m, acc_m, txt_m) = origin_add_button_theme(PathOrigin::Machine);
-                ui.horizontal(|ui| {
-                    path_add_origin_menu(
-                        ui,
-                        "Add user…",
-                        fill_u,
-                        acc_u,
-                        txt_u,
-                        "Add to user PATH: choose Text row or Folder",
-                        |ui| {
-                            if ui.button("Text row").clicked() {
-                                self.effective_segments
-                                    .push((PathOrigin::User, String::new()));
-                                self.dirty = true;
-                                ui.close_menu();
-                            }
-                            if ui.button("Folder").clicked() {
-                                ui.close_menu();
-                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                                    self.effective_segments.push((
-                                        PathOrigin::User,
-                                        p.to_string_lossy().to_string(),
-                                    ));
-                                    self.dirty = true;
-                                }
-                            }
-                        },
-                    );
-                    path_add_origin_menu(
-                        ui,
-                        "Add machine…",
-                        fill_m,
-                        acc_m,
-                        txt_m,
-                        "Add to machine PATH (before user entries): choose Text row or Folder",
-                        |ui| {
-                            if ui.button("Text row").clicked() {
-                                let pos = self
-                                    .effective_segments
-                                    .iter()
-                                    .position(|(o, _)| *o == PathOrigin::User)
-                                    .unwrap_or(self.effective_segments.len());
-                                self.effective_segments
-                                    .insert(pos, (PathOrigin::Machine, String::new()));
-                                self.dirty = true;
-                                ui.close_menu();
-                            }
-                            if ui.button("Folder").clicked() {
-                                ui.close_menu();
-                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                                    let pos = self
-                                        .effective_segments
-                                        .iter()
-                                        .position(|(o, _)| *o == PathOrigin::User)
-                                        .unwrap_or(self.effective_segments.len());
-                                    self.effective_segments.insert(
-                                        pos,
-                                        (PathOrigin::Machine, p.to_string_lossy().to_string()),
-                                    );
-                                    self.dirty = true;
-                                }
-                            }
-                        },
-                    );
-                });
-            } else {
-                let (row_origin, hint_scope) = match self.scope {
-                    Scope::User => (PathOrigin::User, "user"),
-                    Scope::System => (PathOrigin::Machine, "machine (system)"),
-                    Scope::Effective => unreachable!(),
-                };
-                let (fill, acc, txt) = origin_add_button_theme(row_origin);
-                let tip_folder = format!("Pick a folder to append to {hint_scope} PATH");
-                let tip_row = format!("Append an empty row to {hint_scope} PATH");
-                ui.horizontal(|ui| {
-                    if path_add_toolbar_button(
-                        ui,
-                        "Add folder…",
-                        AddToolbarIcon::Folder,
-                        fill,
-                        acc,
-                        txt,
-                        &tip_folder,
-                    )
-                    .clicked()
-                    {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            self.entries.push(p.to_string_lossy().to_string());
-                            self.dirty = true;
-                        }
-                    }
-                    if path_add_toolbar_button(
-                        ui,
-                        "Add text row",
-                        AddToolbarIcon::TextRow,
-                        fill,
-                        acc,
-                        txt,
-                        &tip_row,
-                    )
-                    .clicked()
-                    {
-                        self.entries.push(String::new());
-                        self.dirty = true;
-                    }
-                });
+            match self.mode {
+                AppMode::Path => self.show_path_central_panel(ui),
+                AppMode::Environment => self.show_env_central_panel(ui),
             }
-
-            ui.horizontal(|ui| {
-                ui.label("Search:");
-                ui.add(
-                    TextEdit::singleline(&mut self.list_search)
-                        .desired_width(280.0)
-                        .hint_text("Filter entries…"),
-                )
-                .on_hover_text(
-                    "Case-insensitive substring; matches the row text or expanded path (%VAR%, ~, …).",
-                );
-                if !self.list_search.is_empty() && ui.small_button("Clear").clicked() {
-                    self.list_search.clear();
-                }
-            });
-            ui.add_space(4.0);
-
-            if self.duplicate_view_filter.is_some() {
-                ui.horizontal(|ui| {
-                    match &self.duplicate_view_filter {
-                        Some(DuplicateViewFilter::PathDuplicate { banner, .. }) => {
-                            ui.label(
-                                egui::RichText::new(format!("Filtered — {banner}"))
-                                    .small()
-                                    .strong(),
-                            );
-                            ui.label(
-                                egui::RichText::new("(same PATH entry)").small().weak(),
-                            );
-                        }
-                        Some(DuplicateViewFilter::MissingPaths) => {
-                            ui.label(
-                                egui::RichText::new("Filtered — rows whose path is missing on disk")
-                                    .small()
-                                    .strong(),
-                            );
-                        }
-                        Some(DuplicateViewFilter::OnlyDuplicates) => {
-                            ui.label(
-                                egui::RichText::new(
-                                    "Filtered — duplicate entries (same path in both stores and/or repeated in one store)",
-                                )
-                                .small()
-                                .strong(),
-                            );
-                        }
-                        None => {}
-                    }
-                    if ui.small_button("Show all rows").clicked() {
-                        self.duplicate_view_filter = None;
-                        self.list_search.clear();
-                    }
-                });
-                ui.add_space(4.0);
-            }
-
-            let list_viewport_w = ui.available_width();
-            ScrollArea::vertical()
-                .id_salt(if self.scope == Scope::Effective {
-                    "path_entries_effective"
-                } else {
-                    "path_entries"
-                })
-                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
-                .max_width(list_viewport_w)
-                .auto_shrink([false, true])
-                .show(ui, |ui| {
-                // Without this, scroll content width can shrink to the widest *intrinsic* child.
-                // Long PATH strings would widen each row and push ^/v/X off-screen (stair-step layout).
-                let scroll_w = ui.available_width();
-                ui.set_min_width(scroll_w);
-                ui.set_max_width(scroll_w);
-
-                let mut move_up: Option<usize> = None;
-                let mut move_dn: Option<usize> = None;
-                let mut drag_reorder: Option<(usize, usize)> = None;
-                // Row action icons: square hit targets (avoid wide short rects).
-                const ICON_BTN: f32 = 26.0;
-                const MARK_W: f32 = 34.0;
-                const ORIGIN_W: f32 = 56.0;
-                let btn_h = ui.spacing().interact_size.y.max(ICON_BTN);
-                let gap = ui.spacing().item_spacing.x;
-
-                if self.scope == Scope::Effective {
-                    // [≡][^][v][mark][origin][text][open][X] → 8 widgets, 7 gaps.
-                    let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
-                    let text_column_w = (scroll_w - row_reserve).max(48.0);
-
-                    let (cross_keys_eff, cnt_m, cnt_u) =
-                        effective_split_cross_and_counts(&self.effective_segments);
-
-                    let n_seg = self.effective_segments.len();
-                    for i in 0..n_seg {
-                        let row_path_clone = self.effective_segments[i].1.clone();
-                        let is_dup = effective_row_is_duplicate(
-                            &self.effective_segments,
-                            i,
-                            &cross_keys_eff,
-                            &cnt_m,
-                            &cnt_u,
-                        );
-                        if !self
-                            .row_visible_in_path_list(row_path_clone.as_str(), is_dup)
-                        {
-                            continue;
-                        }
-
-                        let warn =
-                            self.warn_missing && !path_model::entry_exists(row_path_clone.as_str());
-                        let prev_vis = (0..i).rev().find(|&j| {
-                            let d = effective_row_is_duplicate(
-                                &self.effective_segments,
-                                j,
-                                &cross_keys_eff,
-                                &cnt_m,
-                                &cnt_u,
-                            );
-                            self.row_visible_in_path_list(
-                                self.effective_segments[j].1.as_str(),
-                                d,
-                            )
-                        });
-                        let can_up = prev_vis.map_or(false, |p| {
-                            self.effective_segments[i].0 == self.effective_segments[p].0
-                        });
-                        let next_vis = (i + 1..n_seg).find(|&j| {
-                            let d = effective_row_is_duplicate(
-                                &self.effective_segments,
-                                j,
-                                &cross_keys_eff,
-                                &cnt_m,
-                                &cnt_u,
-                            );
-                            self.row_visible_in_path_list(
-                                self.effective_segments[j].1.as_str(),
-                                d,
-                            )
-                        });
-                        let can_dn = next_vis.map_or(false, |n| {
-                            self.effective_segments[i].0 == self.effective_segments[n].0
-                        });
-
-                        let origin = self.effective_segments[i].0;
-                        let expanded = path_model::expanded_path(row_path_clone.as_str());
-                        let key = path_model::path_duplicate_key(row_path_clone.as_str());
-                        let cross = !key.is_empty() && cross_keys_eff.contains(&key);
-                        let within_n = match origin {
-                            PathOrigin::Machine => *cnt_m.get(&key).unwrap_or(&1),
-                            PathOrigin::User => *cnt_u.get(&key).unwrap_or(&1),
-                        };
-                        let (mark, mark_color, mark_tip) = path_row_mark(
-                            warn,
-                            cross,
-                            within_n,
-                            PathMarkContext::Effective(origin),
-                        );
-                        let mark_interactive = warn || cross || within_n > 1;
-                        let mark_tip = mark_tooltip_with_filter_hint(mark_tip, mark_interactive);
-
-                        let (strip_fill, origin_color) = effective_origin_style(origin);
-
-                        let row_frame = egui::Frame::none()
-                            .fill(strip_fill)
-                            .inner_margin(egui::Margin::symmetric(6.0, 3.0))
-                            .rounding(4.0);
-                        let row_id = ui.id().with(("eff_row_drag", i));
-                        let (_row_ir, dropped_payload) =
-                            ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.dnd_drag_source(row_id, i, |ui| {
-                                            path_row_icon_button(
-                                                ui,
-                                                [ICON_BTN, ICON_BTN],
-                                                PathRowIcon::DragHandle,
-                                                "Drag to reorder",
-                                            )
-                                        });
-                                        if ui
-                                            .add_enabled_ui(can_up, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveUp,
-                                                    if can_up {
-                                                        "Move up"
-                                                    } else {
-                                                        "Cannot cross machine / user boundary"
-                                                    },
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_up = Some(i);
-                                        }
-                                        if ui
-                                            .add_enabled_ui(can_dn, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveDown,
-                                                    if can_dn {
-                                                        "Move down"
-                                                    } else {
-                                                        "Cannot cross machine / user boundary"
-                                                    },
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_dn = Some(i);
-                                        }
-
-                                        let mut mark_resp = ui.add_sized(
-                                            [MARK_W, btn_h],
-                                            egui::Label::new(
-                                                egui::RichText::new(&mark)
-                                                    .small()
-                                                    .monospace()
-                                                    .color(mark_color),
-                                            )
-                                            .sense(if mark_interactive {
-                                                Sense::click()
-                                            } else {
-                                                Sense::hover()
-                                            }),
-                                        );
-                                        if let Some(t) = mark_tip {
-                                            mark_resp = mark_resp.on_hover_text(t);
-                                        }
-                                        if mark_resp.clicked() && mark_interactive {
-                                            if warn {
-                                                self.toggle_missing_path_filter();
-                                            } else if !key.is_empty() && (cross || within_n > 1) {
-                                                let ban =
-                                                    truncate_path_confirm(row_path_clone.as_str(), 56);
-                                                self.toggle_path_duplicate_filter(key, ban);
-                                            }
-                                        }
-
-                                        ui.add_sized(
-                                            [ORIGIN_W, btn_h],
-                                            egui::Label::new(
-                                                egui::RichText::new(origin_badge_label(origin))
-                                                    .small()
-                                                    .strong()
-                                                    .color(origin_color),
-                                            ),
-                                        );
-
-                                        let e = &mut self.effective_segments[i].1;
-                                        let te_resp = ui.add_sized(
-                                            egui::vec2(text_column_w, btn_h),
-                                            TextEdit::singleline(e)
-                                                .desired_width(text_column_w)
-                                                .clip_text(true)
-                                                .font(egui::TextStyle::Monospace)
-                                                .id_salt(("eff", i)),
-                                        );
-                                        if te_resp.changed() {
-                                            self.dirty = true;
-                                        }
-
-                                        let can_open = !path_model::expanded_path(
-                                            self.effective_segments[i].1.as_str(),
-                                        )
-                                        .trim()
-                                        .is_empty();
-                                        if ui
-                                            .add_enabled_ui(can_open, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::OpenDirectory,
-                                                    "Open in file manager",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            let p = self.effective_segments[i].1.clone();
-                                            self.open_entry_directory(&p);
-                                        }
-                                        if path_row_icon_button(
-                                            ui,
-                                            [ICON_BTN, ICON_BTN],
-                                            PathRowIcon::Remove,
-                                            "Remove row",
-                                        )
-                                        .clicked()
-                                        {
-                                            self.request_remove_row(i);
-                                        }
-                                    });
-
-                                    let row_text = self.effective_segments[i].1.clone();
-                                    if expanded != row_text {
-                                        ui.horizontal(|ui| {
-                                            ui.add_space(
-                                                3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
-                                            );
-                                            ui.label(
-                                                egui::RichText::new(format!("→ {expanded}"))
-                                                    .small()
-                                                    .color(origin_color.gamma_multiply(0.75))
-                                                    .monospace(),
-                                            );
-                                        });
-                                    }
-                                });
-                            });
-                        if let Some(from) = dropped_payload {
-                            let from = *from;
-                            if from != i {
-                                drag_reorder = Some((from, i));
-                            }
-                        }
-                    }
-                } else {
-                    // [≡][^][v][mark][Machine|User][text][open][X] — align with Effective scope layout.
-                    const ORIGIN_W: f32 = 56.0;
-                    let row_reserve = MARK_W + ORIGIN_W + 5.0 * ICON_BTN + 7.0 * gap;
-                    let text_column_w = (scroll_w - row_reserve).max(48.0);
-
-                    let row_origin = match self.scope {
-                        Scope::User => PathOrigin::User,
-                        Scope::System => PathOrigin::Machine,
-                        Scope::Effective => unreachable!(),
-                    };
-                    let (strip_fill, origin_color) = effective_origin_style(row_origin);
-
-                    let machine_for_cross = self.read_machine_slice_for_marks();
-                    let user_for_cross = self.read_user_slice_for_marks();
-                    let (cross_keys_tab, within_counts_tab) = tab_cross_keys_and_dup_counts(
-                        self.scope,
-                        &self.entries,
-                        &machine_for_cross,
-                        &user_for_cross,
-                    );
-                    let mark_ctx_tab = match self.scope {
-                        Scope::User => PathMarkContext::SingleUser,
-                        Scope::System => PathMarkContext::SingleSystem,
-                        Scope::Effective => unreachable!(),
-                    };
-
-                    let n_entries = self.entries.len();
-                    for i in 0..n_entries {
-                        let is_dup = tab_row_is_duplicate(
-                            &self.entries,
-                            i,
-                            &cross_keys_tab,
-                            &within_counts_tab,
-                        );
-                        if !self.row_visible_in_path_list(self.entries[i].as_str(), is_dup) {
-                            continue;
-                        }
-
-                        let prev_vis = (0..i).rev().find(|&j| {
-                            let d = tab_row_is_duplicate(
-                                &self.entries,
-                                j,
-                                &cross_keys_tab,
-                                &within_counts_tab,
-                            );
-                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
-                        });
-                        let can_up = prev_vis.is_some();
-                        let next_vis = (i + 1..n_entries).find(|&j| {
-                            let d = tab_row_is_duplicate(
-                                &self.entries,
-                                j,
-                                &cross_keys_tab,
-                                &within_counts_tab,
-                            );
-                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
-                        });
-                        let can_dn = next_vis.is_some();
-
-                        let expanded = path_model::expanded_path(self.entries[i].as_str());
-                        let warn =
-                            self.warn_missing && !path_model::entry_exists(self.entries[i].as_str());
-                        let key = path_model::path_duplicate_key(self.entries[i].as_str());
-                        let cross = !key.is_empty() && cross_keys_tab.contains(&key);
-                        let within_n = *within_counts_tab.get(&key).unwrap_or(&1);
-                        let (mark, mark_color, mark_tip) =
-                            path_row_mark(warn, cross, within_n, mark_ctx_tab);
-                        let mark_interactive = warn || cross || within_n > 1;
-                        let mark_tip =
-                            mark_tooltip_with_filter_hint(mark_tip, mark_interactive);
-
-                        let row_frame = egui::Frame::none()
-                            .fill(strip_fill)
-                            .inner_margin(egui::Margin::symmetric(6.0, 3.0))
-                            .rounding(4.0);
-                        let row_id = ui.id().with(("scope_row_drag", i));
-                        let (_row_ir, dropped_payload) =
-                            ui.dnd_drop_zone::<usize, _>(row_frame, |ui| {
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.dnd_drag_source(row_id, i, |ui| {
-                                            path_row_icon_button(
-                                                ui,
-                                                [ICON_BTN, ICON_BTN],
-                                                PathRowIcon::DragHandle,
-                                                "Drag to reorder",
-                                            )
-                                        });
-                                        if ui
-                                            .add_enabled_ui(can_up, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveUp,
-                                                    "Move up",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_up = Some(i);
-                                        }
-                                        if ui
-                                            .add_enabled_ui(can_dn, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::MoveDown,
-                                                    "Move down",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            move_dn = Some(i);
-                                        }
-
-                                        let mut mark_resp = ui.add_sized(
-                                            [MARK_W, btn_h],
-                                            egui::Label::new(
-                                                egui::RichText::new(&mark)
-                                                    .small()
-                                                    .monospace()
-                                                    .color(mark_color),
-                                            )
-                                            .sense(if mark_interactive {
-                                                Sense::click()
-                                            } else {
-                                                Sense::hover()
-                                            }),
-                                        );
-                                        if let Some(t) = mark_tip {
-                                            mark_resp = mark_resp.on_hover_text(t);
-                                        }
-                                        if mark_resp.clicked() && mark_interactive {
-                                            if warn {
-                                                self.toggle_missing_path_filter();
-                                            } else if !key.is_empty() && (cross || within_n > 1) {
-                                                let ban =
-                                                    truncate_path_confirm(self.entries[i].as_str(), 56);
-                                                self.toggle_path_duplicate_filter(key, ban);
-                                                self.switch_to_effective_for_path_dup_filter();
-                                            }
-                                        }
-
-                                        ui.add_sized(
-                                            [ORIGIN_W, btn_h],
-                                            egui::Label::new(
-                                                egui::RichText::new(origin_badge_label(row_origin))
-                                                    .small()
-                                                    .strong()
-                                                    .color(origin_color),
-                                            ),
-                                        );
-
-                                        let te_resp = ui.add_sized(
-                                            egui::vec2(text_column_w, btn_h),
-                                            TextEdit::singleline(&mut self.entries[i])
-                                                .desired_width(text_column_w)
-                                                .clip_text(true)
-                                                .font(egui::TextStyle::Monospace)
-                                                .id_salt(i),
-                                        );
-                                        if te_resp.changed() {
-                                            self.dirty = true;
-                                        }
-
-                                        let can_open = !path_model::expanded_path(self.entries[i].as_str())
-                                            .trim()
-                                            .is_empty();
-                                        if ui
-                                            .add_enabled_ui(can_open, |ui| {
-                                                path_row_icon_button(
-                                                    ui,
-                                                    [ICON_BTN, ICON_BTN],
-                                                    PathRowIcon::OpenDirectory,
-                                                    "Open in file manager",
-                                                )
-                                            })
-                                            .inner
-                                            .clicked()
-                                        {
-                                            let p = self.entries[i].clone();
-                                            self.open_entry_directory(&p);
-                                        }
-                                        if path_row_icon_button(
-                                            ui,
-                                            [ICON_BTN, ICON_BTN],
-                                            PathRowIcon::Remove,
-                                            "Remove row",
-                                        )
-                                        .clicked()
-                                        {
-                                            self.request_remove_row(i);
-                                        }
-                                    });
-
-                                    if expanded != self.entries[i] {
-                                        ui.horizontal(|ui| {
-                                            ui.add_space(
-                                                3.0 * ICON_BTN + 3.0 * gap + MARK_W + gap + ORIGIN_W + gap,
-                                            );
-                                            ui.label(
-                                                egui::RichText::new(format!("→ {expanded}"))
-                                                    .small()
-                                                    .color(origin_color.gamma_multiply(0.75))
-                                                    .monospace(),
-                                            );
-                                        });
-                                    }
-                                });
-                            });
-                        if let Some(from) = dropped_payload {
-                            let from = *from;
-                            if from != i {
-                                drag_reorder = Some((from, i));
-                            }
-                        }
-                    }
-                }
-
-                if let Some((from, to)) = drag_reorder {
-                    if self.scope == Scope::Effective {
-                        let n = self.effective_segments.len();
-                        if from < n && to < n && self.effective_segments[from].0 == self.effective_segments[to].0
-                        {
-                            let row = self.effective_segments.remove(from);
-                            let insert_at = if from < to { to - 1 } else { to };
-                            self.effective_segments.insert(insert_at, row);
-                            self.dirty = true;
-                        }
-                    } else {
-                        let n = self.entries.len();
-                        if from < n && to < n {
-                            let row = self.entries.remove(from);
-                            let insert_at = if from < to { to - 1 } else { to };
-                            self.entries.insert(insert_at, row);
-                            self.dirty = true;
-                        }
-                    }
-                }
-
-                if let Some(i) = move_up {
-                    if self.scope == Scope::Effective {
-                        let n = self.effective_segments.len();
-                        if i < n {
-                            let (cross_keys_eff, cnt_m, cnt_u) =
-                                effective_split_cross_and_counts(&self.effective_segments);
-                            let prev = (0..i).rev().find(|&j| {
-                                let d = effective_row_is_duplicate(
-                                    &self.effective_segments,
-                                    j,
-                                    &cross_keys_eff,
-                                    &cnt_m,
-                                    &cnt_u,
-                                );
-                                self.row_visible_in_path_list(
-                                    self.effective_segments[j].1.as_str(),
-                                    d,
-                                )
-                            });
-                            if let Some(p) = prev {
-                                if self.effective_segments[i].0 == self.effective_segments[p].0 {
-                                    self.effective_segments.swap(i, p);
-                                    self.dirty = true;
-                                }
-                            }
-                        }
-                    } else if i < self.entries.len() {
-                        let machine_for_cross = self.read_machine_slice_for_marks();
-                        let user_for_cross = self.read_user_slice_for_marks();
-                        let (cross_keys_tab, within_counts_tab) = tab_cross_keys_and_dup_counts(
-                            self.scope,
-                            &self.entries,
-                            &machine_for_cross,
-                            &user_for_cross,
-                        );
-                        let prev = (0..i).rev().find(|&j| {
-                            let d = tab_row_is_duplicate(
-                                &self.entries,
-                                j,
-                                &cross_keys_tab,
-                                &within_counts_tab,
-                            );
-                            self.row_visible_in_path_list(self.entries[j].as_str(), d)
-                        });
-                        if let Some(p) = prev {
-                            self.entries.swap(i, p);
-                            self.dirty = true;
-                        }
-                    }
-                }
-                if let Some(i) = move_dn {
-                    if self.scope == Scope::Effective {
-                        let n = self.effective_segments.len();
-                        if i < n {
-                            let (cross_keys_eff, cnt_m, cnt_u) =
-                                effective_split_cross_and_counts(&self.effective_segments);
-                            let next = (i + 1..n).find(|&j| {
-                                let d = effective_row_is_duplicate(
-                                    &self.effective_segments,
-                                    j,
-                                    &cross_keys_eff,
-                                    &cnt_m,
-                                    &cnt_u,
-                                );
-                                self.row_visible_in_path_list(
-                                    self.effective_segments[j].1.as_str(),
-                                    d,
-                                )
-                            });
-                            if let Some(ni) = next {
-                                if self.effective_segments[i].0 == self.effective_segments[ni].0 {
-                                    self.effective_segments.swap(i, ni);
-                                    self.dirty = true;
-                                }
-                            }
-                        }
-                    } else {
-                        let n = self.entries.len();
-                        if i < n {
-                            let machine_for_cross = self.read_machine_slice_for_marks();
-                            let user_for_cross = self.read_user_slice_for_marks();
-                            let (cross_keys_tab, within_counts_tab) = tab_cross_keys_and_dup_counts(
-                                self.scope,
-                                &self.entries,
-                                &machine_for_cross,
-                                &user_for_cross,
-                            );
-                            let next = (i + 1..n).find(|&j| {
-                                let d = tab_row_is_duplicate(
-                                    &self.entries,
-                                    j,
-                                    &cross_keys_tab,
-                                    &within_counts_tab,
-                                );
-                                self.row_visible_in_path_list(self.entries[j].as_str(), d)
-                            });
-                            if let Some(ni) = next {
-                                self.entries.swap(i, ni);
-                                self.dirty = true;
-                            }
-                        }
-                    }
-                }
-            });
-
             ui.add_space(8.0);
             if !self.status.is_empty() {
                 ui.add_space(6.0);

@@ -1,6 +1,8 @@
 #[allow(unused_imports)]
 use crate::config::AppConfig;
 #[allow(unused_imports)]
+use crate::env_model::EnvEntry;
+#[allow(unused_imports)]
 use crate::path_model::{self, PathOrigin};
 #[allow(unused_imports)]
 use eframe::egui;
@@ -16,6 +18,13 @@ use crate::row_icons::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum AppMode {
+    #[default]
+    Path,
+    Environment,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scope {
     User,
     System,
@@ -25,6 +34,7 @@ pub enum Scope {
 }
 
 pub struct PathmanApp {
+    mode: AppMode,
     scope: Scope,
     entries: Vec<String>,
     /// Editable merged PATH when [`Scope::Effective`] is active.
@@ -59,6 +69,25 @@ pub struct PathmanApp {
     pending_saved_feedback: bool,
     /// Show green "Saved" in the toolbar until this egui time (seconds).
     saved_feedback_until: Option<f64>,
+    /// Environment mode: merged segments when Effective scope is active.
+    env_segments: Vec<(PathOrigin, EnvEntry)>,
+    /// Environment mode: flat list for User/System scopes.
+    env_entries: Vec<EnvEntry>,
+    env_user_baseline: std::collections::HashMap<String, String>,
+    env_system_baseline: std::collections::HashMap<String, String>,
+    env_dirty: bool,
+    env_list_search: String,
+    confirm_remove_env: Option<usize>,
+    show_confirm_env_system: bool,
+    env_show_change_summary: bool,
+    env_change_summary_text: String,
+    env_pending_saved_feedback: bool,
+    env_saved_feedback_until: Option<f64>,
+    env_show_confirm_discard: bool,
+    /// Names locked after first successful validation (cannot rename in-place).
+    env_locked_names: std::collections::HashSet<usize>,
+    show_confirm_mode_switch: bool,
+    pending_mode_switch: Option<AppMode>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -69,5 +98,7 @@ pub(crate) enum DuplicateViewFilter {
     OnlyDuplicates,
 }
 
+mod env_panel;
 mod helpers;
 mod impls;
+mod path_panel;

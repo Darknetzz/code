@@ -3,7 +3,7 @@ name = "pathman"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.76"
-description = "Cross-platform GUI for editing user and system PATH"
+description = "Cross-platform GUI for editing user and system PATH and environment variables"
 license = "MIT"
 
 [build-dependencies]

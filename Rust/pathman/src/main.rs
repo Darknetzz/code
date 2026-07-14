@@ -1,9 +1,10 @@
-//! pathman — cross-platform GUI for editing user and system PATH.
+//! pathman — cross-platform GUI for editing user and system PATH and environment variables.
 
 use std::sync::Arc;
 
 mod app;
 mod config;
+mod env_model;
 mod path_model;
 mod persist;
 mod row_icons;
@@ -17,7 +18,7 @@ fn print_version() {
 }
 
 fn print_help() {
-    println!("pathman — cross-platform GUI for editing user and system PATH.");
+    println!("pathman — cross-platform GUI for editing user and system PATH and environment variables.");
     println!();
     println!("USAGE:");
     println!("    pathman");

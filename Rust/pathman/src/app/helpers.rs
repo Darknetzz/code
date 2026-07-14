@@ -248,3 +248,37 @@ pub(crate) fn format_path_store_diff(title: &str, baseline: &[String], pending: 
     out.push('\n');
     out
 }
+
+pub(crate) fn format_env_store_diff(
+    title: &str,
+    baseline: &std::collections::HashMap<String, String>,
+    pending: &std::collections::HashMap<String, String>,
+) -> String {
+    use crate::env_model::diff_env;
+    let d = diff_env(baseline, pending);
+    if d.added.is_empty() && d.changed.is_empty() && d.removed.is_empty() {
+        return format!("{title}\n  (no changes)\n\n");
+    }
+    let mut out = format!("{title}\n");
+    if !d.removed.is_empty() {
+        out.push_str("  Removed when saving:\n");
+        for name in &d.removed {
+            out.push_str(&format!("    − {name}\n"));
+        }
+    }
+    if !d.added.is_empty() {
+        out.push_str("  Added when saving:\n");
+        for (name, value) in &d.added {
+            out.push_str(&format!("    + {name}={value}\n"));
+        }
+    }
+    if !d.changed.is_empty() {
+        out.push_str("  Changed when saving:\n");
+        for (name, value) in &d.changed {
+            let old = baseline.get(name).map(String::as_str).unwrap_or("");
+            out.push_str(&format!("    ~ {name}: {old} → {value}\n"));
+        }
+    }
+    out.push('\n');
+    out
+}
