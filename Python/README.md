@@ -32,4 +32,5 @@ Scripts and projects in Python.
 | [pytree](pytree/) | > **Scan/report canonical implementation:** [`Rust/rust-sizetree`](../../Rust... See [pytree/README.md](pytree/README.md) for details. |
 | [snapbot](snapbot/) | **Version 2.0.0** - Selenium-based browser automation for Snapchat Web See [snapbot/README.md](snapbot/README.md) for details. |
 | [utils](utils/) | — |
+| [video-html-gallery](video-html-gallery/) | Local HTML gallery builder for videos and images with thumbnails, search, and sorting. See [video-html-gallery/README.md](video-html-gallery/README.md) for details. |
 | [webbot](webbot/) | Human-like browser automation with Playwright. Click and type on web pages wi... See [webbot/README.md](webbot/README.md) for details. |
