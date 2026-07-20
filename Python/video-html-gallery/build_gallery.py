@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Build a local HTML video gallery grouped by folder, with thumbnails.
+"""Build a local HTML media gallery (videos + images) grouped by folder, with thumbnails.
 
 Usage:
   python3 build_gallery.py --help
   python3 build_gallery.py
-  python3 build_gallery.py /path/to/video/library
-  python3 build_gallery.py /path/to/video/library -o /path/to/output/_gallery
+  python3 build_gallery.py /path/to/media/library
+  python3 build_gallery.py /path/to/media/library -o /path/to/output/_gallery
 
 Missing options are prompted interactively.
 
-Requires: ffmpegthumbnailer (preferred) or ffmpeg.
-For reliable seeking in the browser, serve the library root over HTTP with Range support.
+Requires: ffmpegthumbnailer (preferred for videos) or ffmpeg.
+For reliable video seeking in the browser, serve the library root over HTTP with Range support.
 """
 from __future__ import annotations
 
@@ -32,9 +32,19 @@ THUMBS: Path
 INDEX: Path
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
+MEDIA_EXTS = VIDEO_EXTS | IMAGE_EXTS
 SKIP_DIRS = {"_gallery", "_inbox"}
 THUMB_SIZE = 480
 WORKERS = 6
+
+
+def is_image(path: Path) -> bool:
+    return path.suffix.lower() in IMAGE_EXTS
+
+
+def is_video(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_EXTS
 
 
 def rel_posix(path: Path, start: Path) -> str:
@@ -50,16 +60,16 @@ def rel_url(path: Path, start: Path) -> str:
     )
 
 
-def thumb_path_for(video: Path) -> Path:
-    digest = hashlib.sha1(str(video.resolve()).encode()).hexdigest()[:16]
+def thumb_path_for(media: Path) -> Path:
+    digest = hashlib.sha1(str(media.resolve()).encode()).hexdigest()[:16]
     return THUMBS / f"{digest}.jpg"
 
 
-def list_videos() -> list[tuple[str, Path]]:
-    """Return (folder_label, video_path) sorted by folder then name."""
+def list_media() -> list[tuple[str, Path]]:
+    """Return (folder_label, media_path) sorted by folder then name."""
     items: list[tuple[str, Path]] = []
     for path in LIBRARY.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in VIDEO_EXTS:
+        if not path.is_file() or path.suffix.lower() not in MEDIA_EXTS:
             continue
         try:
             rel = path.relative_to(LIBRARY)
@@ -73,17 +83,45 @@ def list_videos() -> list[tuple[str, Path]]:
     return items
 
 
-def make_thumb(video: Path, thumb: Path) -> tuple[Path, str]:
-    if thumb.exists() and thumb.stat().st_mtime >= video.stat().st_mtime:
-        return video, "cached"
+def make_thumb(media: Path, thumb: Path) -> tuple[Path, str]:
+    if thumb.exists() and thumb.stat().st_mtime >= media.stat().st_mtime:
+        return media, "cached"
     thumb.parent.mkdir(parents=True, exist_ok=True)
     tmp = thumb.with_suffix(".tmp.jpg")
+
+    if is_image(media):
+        # Resize stills; fall back to copying the original via ffmpeg if needed.
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(media),
+                    "-vf",
+                    f"scale='min({THUMB_SIZE},iw)':-1",
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "4",
+                    str(tmp),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            tmp.replace(thumb)
+            return media, "ok"
+        except Exception as e:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
+            return media, f"fail:{e}"
+
     try:
         subprocess.run(
             [
                 "ffmpegthumbnailer",
                 "-i",
-                str(video),
+                str(media),
                 "-o",
                 str(tmp),
                 "-s",
@@ -96,7 +134,7 @@ def make_thumb(video: Path, thumb: Path) -> tuple[Path, str]:
             capture_output=True,
         )
         tmp.replace(thumb)
-        return video, "ok"
+        return media, "ok"
     except Exception as e:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
@@ -108,7 +146,7 @@ def make_thumb(video: Path, thumb: Path) -> tuple[Path, str]:
                     "-ss",
                     "5",
                     "-i",
-                    str(video),
+                    str(media),
                     "-frames:v",
                     "1",
                     "-q:v",
@@ -119,9 +157,9 @@ def make_thumb(video: Path, thumb: Path) -> tuple[Path, str]:
                 capture_output=True,
             )
             tmp.replace(thumb)
-            return video, "ffmpeg"
+            return media, "ffmpeg"
         except Exception:
-            return video, f"fail:{e}"
+            return media, f"fail:{e}"
 
 
 def format_size(n: int) -> str:
@@ -137,27 +175,33 @@ def format_date(ts: float) -> str:
 
 
 def build_html(items: list[tuple[str, Path, Path | None, int, float]]) -> str:
-    """items: folder, video, thumb_or_None, size, mtime"""
+    """items: folder, media, thumb_or_None, size, mtime"""
     groups: dict[str, list[tuple[Path, Path | None, int, float]]] = {}
-    for folder, video, thumb, size, mtime in items:
-        groups.setdefault(folder, []).append((video, thumb, size, mtime))
+    for folder, media, thumb, size, mtime in items:
+        groups.setdefault(folder, []).append((media, thumb, size, mtime))
+
+    video_count = sum(1 for _, media, *_ in items if is_video(media))
+    image_count = sum(1 for _, media, *_ in items if is_image(media))
 
     folder_links = []
     sections = []
     for folder in sorted(groups, key=str.casefold):
-        videos = groups[folder]
-        newest = max(m for *_, m in videos)
-        total_size = sum(s for _, _, s, _ in videos)
+        media_items = groups[folder]
+        newest = max(m for *_, m in media_items)
+        total_size = sum(s for _, _, s, _ in media_items)
         anchor = hashlib.sha1(folder.encode()).hexdigest()[:10]
         folder_links.append(
             f'<a href="#{html.escape(anchor)}" data-folder="{html.escape(folder)}" '
             f'data-name="{html.escape(folder.casefold())}" data-date="{newest:.0f}" data-size="{total_size}">'
-            f"{html.escape(folder)} <span>{len(videos)}</span></a>"
+            f"{html.escape(folder)} <span>{len(media_items)}</span></a>"
         )
         cards = []
-        for video, thumb, size, mtime in videos:
-            video_href = rel_url(video, GALLERY)
-            title = video.stem
+        for media, thumb, size, mtime in media_items:
+            media_href = rel_url(media, GALLERY)
+            title = media.stem
+            kind = "image" if is_image(media) else "video"
+            badge = "" if kind == "image" else '<span class="play">▶</span>'
+            open_label = "Open image" if kind == "image" else "Open video"
             thumb_html = (
                 f'<img src="{html.escape(rel_url(thumb, GALLERY))}" alt="" loading="lazy">'
                 if thumb and thumb.exists()
@@ -165,21 +209,21 @@ def build_html(items: list[tuple[str, Path, Path | None, int, float]]) -> str:
             )
             cards.append(
                 f"""
-<article class="card" data-name="{html.escape(title.casefold())}" data-folder="{html.escape(folder.casefold())}" data-date="{mtime:.0f}" data-size="{size}">
-  <a class="thumb" href="{html.escape(video_href)}" target="_blank" rel="noopener" title="Open video">
+<article class="card" data-name="{html.escape(title.casefold())}" data-folder="{html.escape(folder.casefold())}" data-date="{mtime:.0f}" data-size="{size}" data-kind="{kind}">
+  <a class="thumb" href="{html.escape(media_href)}" target="_blank" rel="noopener" title="{open_label}">
     {thumb_html}
-    <span class="play">▶</span>
+    {badge}
   </a>
   <div class="meta">
-    <a class="title" href="{html.escape(video_href)}" target="_blank" rel="noopener" title="{html.escape(video.name)}">{html.escape(title)}</a>
-    <div class="sub">{html.escape(format_size(size))} · {html.escape(format_date(mtime))}</div>
+    <a class="title" href="{html.escape(media_href)}" target="_blank" rel="noopener" title="{html.escape(media.name)}">{html.escape(title)}</a>
+    <div class="sub">{html.escape(format_size(size))} · {html.escape(format_date(mtime))} · {kind}</div>
   </div>
 </article>"""
             )
         sections.append(
             f"""
 <section class="group" id="{html.escape(anchor)}" data-folder="{html.escape(folder.casefold())}" data-name="{html.escape(folder.casefold())}" data-date="{newest:.0f}" data-size="{total_size}">
-  <h2>{html.escape(folder)} <span class="count">{len(videos)}</span></h2>
+  <h2>{html.escape(folder)} <span class="count">{len(media_items)}</span></h2>
   <div class="grid">
     {''.join(cards)}
   </div>
@@ -187,13 +231,21 @@ def build_html(items: list[tuple[str, Path, Path | None, int, float]]) -> str:
         )
 
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    total = len(items)
+    parts = []
+    if video_count:
+        parts.append(f"{video_count} video{'s' if video_count != 1 else ''}")
+    if image_count:
+        parts.append(f"{image_count} image{'s' if image_count != 1 else ''}")
+    if not parts:
+        parts.append("0 items")
+    stats = f"{' · '.join(parts)} · {len(groups)} folders · generated {html.escape(generated)}"
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Video Library</title>
+<title>Media Library</title>
 <style>
   :root {{
     --bg: #0f1115;
@@ -334,11 +386,11 @@ def build_html(items: list[tuple[str, Path, Path | None, int, float]]) -> str:
 <header>
   <div class="top">
     <div>
-      <h1>Video Library</h1>
-      <div class="stats">{total} videos · {len(groups)} folders · generated {html.escape(generated)}</div>
+      <h1>Media Library</h1>
+      <div class="stats">{stats}</div>
     </div>
     <div class="controls">
-      <input type="search" id="q" placeholder="Filter by title or folder…" autocomplete="off">
+      <input type="search" id="q" placeholder="Filter by title, folder, or kind…" autocomplete="off">
       <label class="control-label" for="sort-by">Sort</label>
       <select id="sort-by" aria-label="Sort by">
         <option value="name">Name</option>
@@ -359,7 +411,7 @@ def build_html(items: list[tuple[str, Path, Path | None, int, float]]) -> str:
   {''.join(sections)}
 </main>
 <footer>
-  Open videos via a local HTTP server for reliable seeking. Regenerate with <code>build_gallery.py</code>.
+  Open media via a local HTTP server for reliable video seeking. Regenerate with <code>build_gallery.py</code>.
 </footer>
 
 <script>
@@ -382,7 +434,7 @@ function groups() {{ return [...document.querySelectorAll('.group')]; }}
 function applyFilter() {{
   const term = q.value.trim().toLowerCase();
   cards().forEach(card => {{
-    const hay = card.dataset.name + ' ' + card.dataset.folder;
+    const hay = card.dataset.name + ' ' + card.dataset.folder + ' ' + (card.dataset.kind || '');
     card.classList.toggle('hidden', term && !hay.includes(term));
   }});
   groups().forEach(group => {{
@@ -492,7 +544,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="build_gallery.py",
-        description="Build a local HTML video gallery grouped by folder, with thumbnails.",
+        description="Build a local HTML media gallery (videos + images) grouped by folder, with thumbnails.",
         epilog=(
             "If library / output / workers are omitted, you will be prompted. "
             "Example: python3 build_gallery.py --help"
@@ -503,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         type=Path,
         default=None,
-        help="Root folder containing videos (usually one subfolder per group)",
+        help="Root folder containing videos/images (usually one subfolder per group)",
     )
     parser.add_argument(
         "-o",
@@ -523,9 +575,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Prompt for anything not provided on the command line
     if args.library is None:
-        print("Video HTML gallery builder")
+        print("Media HTML gallery builder")
         print("Press Enter to accept a default shown in [brackets].\n")
-        library = prompt_path("Video library folder", must_exist=True)
+        library = prompt_path("Media library folder", must_exist=True)
     else:
         library = args.library.expanduser().resolve()
         if not library.is_dir():
@@ -553,37 +605,37 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Workers : {workers}\n")
 
     THUMBS.mkdir(parents=True, exist_ok=True)
-    listed = list_videos()
-    print(f"Found {len(listed)} videos in {LIBRARY}")
+    listed = list_media()
+    print(f"Found {len(listed)} media files in {LIBRARY}")
 
     thumb_map: dict[Path, Path] = {}
     status_counts = {"ok": 0, "cached": 0, "ffmpeg": 0, "fail": 0}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(make_thumb, video, thumb_path_for(video)): video
-            for _, video in listed
+            pool.submit(make_thumb, media, thumb_path_for(media)): media
+            for _, media in listed
         }
         done = 0
         total = len(futures)
         for fut in as_completed(futures):
-            video, status = fut.result()
+            media, status = fut.result()
             done += 1
             if status.startswith("fail"):
                 status_counts["fail"] += 1
-                print(f"[{done}/{total}] FAIL {video.name}: {status}")
+                print(f"[{done}/{total}] FAIL {media.name}: {status}")
             else:
                 status_counts[status if status in status_counts else "ok"] += 1
-                thumb_map[video] = thumb_path_for(video)
+                thumb_map[media] = thumb_path_for(media)
                 if done % 25 == 0 or done == total:
                     print(f"[{done}/{total}] thumbs… ({status})")
 
     items = []
-    for folder, video in listed:
-        thumb = thumb_map.get(video)
+    for folder, media in listed:
+        thumb = thumb_map.get(media)
         if thumb and not thumb.exists():
             thumb = None
-        st = video.stat()
-        items.append((folder, video, thumb, st.st_size, st.st_mtime))
+        st = media.stat()
+        items.append((folder, media, thumb, st.st_size, st.st_mtime))
 
     INDEX.write_text(build_html(items), encoding="utf-8")
     print(f"Wrote {INDEX}")
