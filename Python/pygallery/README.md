@@ -35,7 +35,7 @@ and other common junk dirs.
 ```powershell
 cd Python/pygallery
 
-# Interactive (prompts for missing values)
+# Interactive (Tab completes paths; left/right arrows edit the line)
 python pygallery.py
 
 # Non-interactive

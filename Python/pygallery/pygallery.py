@@ -43,6 +43,7 @@ from _core import (
     print_summary,
     write_outputs,
 )
+from _prompt import prompt_int, prompt_path
 from _thumbs import DEFAULT_WORKERS, generate_thumbs
 
 
@@ -106,51 +107,6 @@ def _is_relative_to(path: Path, other: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def prompt_path(label: str, default: Path | None = None, *,
-                must_exist: bool = False) -> Path:
-    """Ask for a path on stdin; empty input keeps default when provided."""
-    while True:
-        suffix = f" [{default}]" if default is not None else ""
-        try:
-            raw = input(f"{label}{suffix}: ").strip()
-        except EOFError:
-            if default is not None:
-                return default.resolve()
-            print("\nCancelled: no path provided.", file=sys.stderr)
-            raise SystemExit(2) from None
-        if not raw:
-            if default is None:
-                print("Please enter a path.", file=sys.stderr)
-                continue
-            value = default
-        else:
-            value = Path(raw).expanduser()
-        value = value.resolve()
-        if must_exist and not value.is_dir():
-            print(f"Not a directory: {value}", file=sys.stderr)
-            continue
-        return value
-
-
-def prompt_int(label: str, default: int, *, minimum: int = 1) -> int:
-    while True:
-        try:
-            raw = input(f"{label} [{default}]: ").strip()
-        except EOFError:
-            return default
-        if not raw:
-            return default
-        try:
-            value = int(raw)
-        except ValueError:
-            print("Please enter a whole number.", file=sys.stderr)
-            continue
-        if value < minimum:
-            print(f"Please enter a number >= {minimum}.", file=sys.stderr)
-            continue
-        return value
 
 
 def main(argv: list[str] | None = None) -> int:
