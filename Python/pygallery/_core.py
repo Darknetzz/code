@@ -283,6 +283,17 @@ HTML_TEMPLATE = """<!doctype html>
         <option value="desc">Descending</option>
         <option value="asc">Ascending</option>
       </select>
+      <select id="tileSize" aria-label="Thumbnail size">
+        <option value="120">Tiles: S</option>
+        <option value="180" selected>Tiles: M</option>
+        <option value="240">Tiles: L</option>
+        <option value="320">Tiles: XL</option>
+      </select>
+      <select id="playerSize" aria-label="Player size">
+        <option value="60">Player: S</option>
+        <option value="75" selected>Player: M</option>
+        <option value="90">Player: L</option>
+      </select>
     </div>
   </div>
   <nav id="tabs" class="tabs" role="tablist"></nav>
@@ -302,7 +313,7 @@ HTML_TEMPLATE = """<!doctype html>
   <div class="lb-audio" id="lb-audio" hidden>
     <div class="lb-audio-row">
       <label class="lb-toggle" title="Evens out loud and quiet parts">
-        <input type="checkbox" id="fxNormalize" checked> Normalize
+        <input type="checkbox" id="fxNormalize"> Normalize
       </label>
       <label class="lb-toggle" title="Normalization strength">
         Strength
@@ -313,7 +324,7 @@ HTML_TEMPLATE = """<!doctype html>
         </select>
       </label>
       <label class="lb-toggle" title="Tone control (bass / mid / treble)">
-        <input type="checkbox" id="fxEqualize" checked> Equalize
+        <input type="checkbox" id="fxEqualize"> Equalize
       </label>
       <select id="fxPreset" aria-label="EQ preset">
         <option value="flat">EQ: Flat</option>
@@ -323,6 +334,7 @@ HTML_TEMPLATE = """<!doctype html>
         <option value="custom">EQ: Custom</option>
       </select>
       <div class="lb-meter" title="Output level"><span id="fxLevel"></span></div>
+      <a id="fxOpenRaw" class="lb-raw" href="#" target="_blank" rel="noopener">Open file</a>
     </div>
     <div class="lb-audio-row lb-eq-panel" id="fxEqPanel">
       <label class="lb-eq">Bass <input type="range" id="fxBass" min="-12" max="12" step="1" value="2"><output id="fxBassOut">+2</output></label>
@@ -356,6 +368,8 @@ CSS = r"""
   --accent-ink: #111;
   --border: #26262d;
   --shadow: 0 6px 24px rgba(0,0,0,.5);
+  --tile-min: 180px;
+  --player-max-h: 75vh;
 }
 
 * { box-sizing: border-box; }
@@ -445,7 +459,7 @@ body {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
   gap: 6px;
   padding: 12px;
 }
@@ -511,17 +525,26 @@ body {
 .lb-stage {
   position: relative;
   max-width: min(95vw, 1400px);
-  max-height: calc(100vh - 220px);
+  max-height: var(--player-max-h);
   display: flex; align-items: center; justify-content: center;
   min-width: 0;
 }
 .lb-stage img, .lb-stage video {
   max-width: min(95vw, 1400px);
-  max-height: calc(100vh - 220px);
+  max-height: var(--player-max-h);
+  width: auto;
+  height: auto;
   display: block;
   border-radius: 4px;
   background: #000;
 }
+.lb-raw {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.lb-raw:hover { text-decoration: underline; }
 .lb-stage .lb-overlay {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
@@ -588,7 +611,6 @@ body {
 .lb-next { right: 14px; top: 50%; transform: translateY(-50%); }
 
 @media (max-width: 640px) {
-  .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .topbar { padding: 10px; }
   .title h1 { font-size: 16px; max-width: 70vw; }
 }
@@ -599,7 +621,7 @@ JS = r"""
 (() => {
   const M = window.MANIFEST || { entries: [], stats: {} };
   const entries = M.entries || [];
-  const STORAGE_KEY = 'pygallery-sort';
+  const STORAGE_KEY = 'pygallery-ui';
 
   const grid = document.getElementById('grid');
   const countLabel = document.getElementById('countLabel');
@@ -609,6 +631,8 @@ JS = r"""
   const typeSel = document.getElementById('typeFilter');
   const sortBySel = document.getElementById('sortBy');
   const sortDirSel = document.getElementById('sortDir');
+  const tileSizeSel = document.getElementById('tileSize');
+  const playerSizeSel = document.getElementById('playerSize');
   const tabsEl = document.getElementById('tabs');
 
   // Build tabs from unique source values. Snapchat-ish labels are mapped, the
@@ -657,6 +681,7 @@ JS = r"""
   const fxLevel = document.getElementById('fxLevel');
   const fxStatus = document.getElementById('fxStatus');
   const fxEqReset = document.getElementById('fxEqReset');
+  const fxOpenRaw = document.getElementById('fxOpenRaw');
   const FX_STORAGE = 'pygallery-audio-fx';
   const EQ_PRESETS = {
     flat:   { bass: 0, mid: 0, treble: 0 },
@@ -700,41 +725,59 @@ JS = r"""
       treble: Number(fxTreble.value),
     }));
   }
+  function fxWanted() {
+    return fxNormalize.checked || fxEqualize.checked;
+  }
   function ensureAudioGraph() {
-    if (fxConnected) return;
+    if (fxConnected || !fxWanted()) return;
+    if (!lbVideo.src) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    fxCtx = new AC();
-    fxSource = fxCtx.createMediaElementSource(lbVideo);
-    fxBassFilter = fxCtx.createBiquadFilter();
-    fxBassFilter.type = 'lowshelf';
-    fxBassFilter.frequency.value = 120;
-    fxMidFilter = fxCtx.createBiquadFilter();
-    fxMidFilter.type = 'peaking';
-    fxMidFilter.frequency.value = 1000;
-    fxMidFilter.Q.value = 0.9;
-    fxTrebleFilter = fxCtx.createBiquadFilter();
-    fxTrebleFilter.type = 'highshelf';
-    fxTrebleFilter.frequency.value = 3500;
-    fxCompressor = fxCtx.createDynamicsCompressor();
-    fxMakeup = fxCtx.createGain();
-    fxAnalyser = fxCtx.createAnalyser();
-    fxAnalyser.fftSize = 2048;
-    fxSource.connect(fxBassFilter);
-    fxBassFilter.connect(fxMidFilter);
-    fxMidFilter.connect(fxTrebleFilter);
-    fxTrebleFilter.connect(fxCompressor);
-    fxCompressor.connect(fxMakeup);
-    fxMakeup.connect(fxAnalyser);
-    fxAnalyser.connect(fxCtx.destination);
-    fxConnected = true;
-    applyFxSettings();
-    if (!fxMeterOn) {
-      fxMeterOn = true;
-      tickFxMeter();
+    try {
+      const wasPlaying = !lbVideo.paused;
+      const t = lbVideo.currentTime || 0;
+      if (wasPlaying) lbVideo.pause();
+      fxCtx = new AC();
+      fxSource = fxCtx.createMediaElementSource(lbVideo);
+      fxBassFilter = fxCtx.createBiquadFilter();
+      fxBassFilter.type = 'lowshelf';
+      fxBassFilter.frequency.value = 120;
+      fxMidFilter = fxCtx.createBiquadFilter();
+      fxMidFilter.type = 'peaking';
+      fxMidFilter.frequency.value = 1000;
+      fxMidFilter.Q.value = 0.9;
+      fxTrebleFilter = fxCtx.createBiquadFilter();
+      fxTrebleFilter.type = 'highshelf';
+      fxTrebleFilter.frequency.value = 3500;
+      fxCompressor = fxCtx.createDynamicsCompressor();
+      fxMakeup = fxCtx.createGain();
+      fxAnalyser = fxCtx.createAnalyser();
+      fxAnalyser.fftSize = 2048;
+      fxSource.connect(fxBassFilter);
+      fxBassFilter.connect(fxMidFilter);
+      fxMidFilter.connect(fxTrebleFilter);
+      fxTrebleFilter.connect(fxCompressor);
+      fxCompressor.connect(fxMakeup);
+      fxMakeup.connect(fxAnalyser);
+      fxAnalyser.connect(fxCtx.destination);
+      fxConnected = true;
+      applyFxSettings();
+      if (!fxMeterOn) {
+        fxMeterOn = true;
+        tickFxMeter();
+      }
+      // Nudge decoder after MediaElementSource attach (avoids black frames).
+      if (t > 0) {
+        try { lbVideo.currentTime = t; } catch (_) { /* ignore */ }
+      }
+      if (wasPlaying) lbVideo.play().catch(() => {});
+    } catch (err) {
+      console.warn('Audio FX unavailable:', err);
+      fxStatus.textContent = 'Audio FX unavailable (play without FX, or Open file)';
     }
   }
   function applyNormalize() {
+    if (!fxConnected) return;
     const strength = Number(fxStrength.value) || 1;
     if (fxNormalize.checked) {
       fxCompressor.threshold.value = -28 - (strength * 6);
@@ -753,6 +796,7 @@ JS = r"""
     }
   }
   function applyEq() {
+    if (!fxConnected) return;
     if (fxEqualize.checked) {
       fxBassFilter.gain.value = Number(fxBass.value);
       fxMidFilter.gain.value = Number(fxMid.value);
@@ -777,6 +821,7 @@ JS = r"""
       ? ('EQ ' + fxPreset.value + ' (B' + fmtDb(fxBass.value)
          + ' M' + fmtDb(fxMid.value) + ' T' + fmtDb(fxTreble.value) + ')')
       : 'EQ off');
+    if (!fxConnected && fxWanted()) bits.push('FX arms on play');
     fxStatus.textContent = bits.join(' · ');
     saveFxPrefs();
   }
@@ -805,6 +850,7 @@ JS = r"""
     requestAnimationFrame(tickFxMeter);
   }
   async function unlockAudio() {
+    if (!fxWanted()) return;
     ensureAudioGraph();
     if (fxCtx && fxCtx.state === 'suspended') await fxCtx.resume();
   }
@@ -818,17 +864,24 @@ JS = r"""
   syncEqLabels();
   applyFxSettings();
 
-  fxNormalize.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
-  fxStrength.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
-  fxEqualize.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
+  function onFxToggle() {
+    if (fxWanted()) ensureAudioGraph();
+    applyFxSettings();
+  }
+  fxNormalize.addEventListener('change', onFxToggle);
+  fxStrength.addEventListener('change', () => {
+    if (fxWanted()) ensureAudioGraph();
+    applyFxSettings();
+  });
+  fxEqualize.addEventListener('change', onFxToggle);
   fxPreset.addEventListener('change', () => {
     if (fxPreset.value !== 'custom') applyEqPreset(fxPreset.value);
     else applyFxSettings();
-    ensureAudioGraph();
+    if (fxWanted()) ensureAudioGraph();
   });
   function onEqSlider() {
     fxPreset.value = 'custom';
-    ensureAudioGraph();
+    if (fxWanted()) ensureAudioGraph();
     applyFxSettings();
   }
   fxBass.addEventListener('input', onEqSlider);
@@ -837,7 +890,7 @@ JS = r"""
   fxEqReset.addEventListener('click', () => {
     fxPreset.value = 'flat';
     applyEqPreset('flat');
-    ensureAudioGraph();
+    if (fxWanted()) ensureAudioGraph();
   });
   lbVideo.addEventListener('play', unlockAudio);
 
@@ -849,9 +902,26 @@ JS = r"""
     query: '',
     sortBy: 'date',
     sortDir: 'desc',
+    tileMin: 180,
+    playerMax: 75,
     view: [],
     index: -1,
   };
+
+  function applyTileSize() {
+    document.documentElement.style.setProperty('--tile-min', state.tileMin + 'px');
+  }
+  function applyPlayerSize() {
+    document.documentElement.style.setProperty('--player-max-h', state.playerMax + 'vh');
+  }
+  function saveUiPrefs() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      sortBy: state.sortBy,
+      sortDir: state.sortDir,
+      tileMin: state.tileMin,
+      playerMax: state.playerMax,
+    }));
+  }
 
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -863,7 +933,17 @@ JS = r"""
       state.sortDir = saved.sortDir;
       sortDirSel.value = saved.sortDir;
     }
+    if ([120, 180, 240, 320].includes(Number(saved.tileMin))) {
+      state.tileMin = Number(saved.tileMin);
+      tileSizeSel.value = String(state.tileMin);
+    }
+    if ([60, 75, 90].includes(Number(saved.playerMax))) {
+      state.playerMax = Number(saved.playerMax);
+      playerSizeSel.value = String(state.playerMax);
+    }
   } catch (_) { /* ignore */ }
+  applyTileSize();
+  applyPlayerSize();
 
   const years = Array.from(new Set(entries.map((e) => e.date.slice(0, 4))))
     .sort()
@@ -910,12 +990,7 @@ JS = r"""
     });
     v.sort(cmp);
     state.view = v;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        sortBy: state.sortBy,
-        sortDir: state.sortDir,
-      }));
-    } catch (_) { /* ignore */ }
+    try { saveUiPrefs(); } catch (_) { /* ignore */ }
     render();
   }
 
@@ -1051,16 +1126,21 @@ JS = r"""
       lbImage.hidden = true;
       lbVideo.hidden = false;
       lbAudio.hidden = false;
+      fxOpenRaw.href = e.media;
+      fxOpenRaw.hidden = false;
       if (e.thumb) lbVideo.poster = e.thumb;
       else lbVideo.removeAttribute('poster');
       if (lbVideo.getAttribute('src') !== e.media) {
         lbVideo.src = e.media;
       }
+      // Attach FX before play when enabled (user click is already a gesture).
+      if (fxWanted()) ensureAudioGraph();
       lbVideo.play().catch(() => { /* autoplay may need gesture */ });
     } else {
       lbVideo.pause();
       lbVideo.hidden = true;
       lbAudio.hidden = true;
+      fxOpenRaw.hidden = true;
       lbImage.hidden = false;
       lbImage.src = e.media;
       lbImage.alt = e.name || '';
@@ -1099,6 +1179,16 @@ JS = r"""
   typeSel.addEventListener('change', () => { state.type = typeSel.value; applyFilters(); });
   sortBySel.addEventListener('change', () => { state.sortBy = sortBySel.value; applyFilters(); });
   sortDirSel.addEventListener('change', () => { state.sortDir = sortDirSel.value; applyFilters(); });
+  tileSizeSel.addEventListener('change', () => {
+    state.tileMin = Number(tileSizeSel.value) || 180;
+    applyTileSize();
+    saveUiPrefs();
+  });
+  playerSizeSel.addEventListener('change', () => {
+    state.playerMax = Number(playerSizeSel.value) || 75;
+    applyPlayerSize();
+    saveUiPrefs();
+  });
 
   lbClose.addEventListener('click', closeLightbox);
   lbPrev.addEventListener('click', () => step(-1));
