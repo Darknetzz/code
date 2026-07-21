@@ -6,8 +6,12 @@ extension, optionally builds ffmpeg thumbnails, and emits a self-contained
 ``gallery.html`` plus supporting assets in a ``gallery/`` subfolder via the
 shared :mod:`_core` module.
 
-The page works over ``file://`` (no web server needed). Tabs are auto-built
-from the first-level subfolders of the scanned root, so e.g.::
+By default a Range-capable HTTP server is started afterward so you can open
+the gallery from this machine or another on the LAN. Use ``--no-serve`` to
+only write files (``file://`` still works).
+
+Tabs are auto-built from the first-level subfolders of the scanned root, so
+e.g.::
 
     D:\\Photos\\
       Vacation2024\\...
@@ -18,11 +22,11 @@ gets three tabs. If there's only one top-level folder (or none), the tab bar
 is hidden and you get just the search / year / month / type filters.
 
 Usage:
-    python pygallery.py                      # interactive prompts
-    python pygallery.py D:\\Photos           # scan a specific folder
-    python pygallery.py D:\\Photos --title "My Photos"
-    python pygallery.py D:\\Photos -o D:\\Photos\\gallery -j 8
-    python pygallery.py D:\\Photos --no-thumbs
+    python pygallery.py                      # interactive; then serve
+    python pygallery.py D:\\Photos           # build + serve
+    python pygallery.py D:\\Photos --no-serve
+    python pygallery.py D:\\Photos --bind 127.0.0.1 --port 8080
+    python pygallery.py D:\\Photos --title "My Photos" -j 8
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ from _core import (
     write_outputs,
 )
 from _prompt import prompt_int, prompt_path
+from _serve import DEFAULT_BIND, DEFAULT_PORT, serve_directory
 from _thumbs import DEFAULT_WORKERS, generate_thumbs
 
 
@@ -139,6 +144,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip ffmpeg/ffmpegthumbnailer thumbnail generation.",
     )
     parser.add_argument(
+        "--no-serve",
+        action="store_true",
+        help="Only write gallery files; do not start the HTTP server.",
+    )
+    parser.add_argument(
+        "--bind",
+        default=DEFAULT_BIND,
+        help=f"HTTP bind address (default: {DEFAULT_BIND}).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"HTTP port (default: {DEFAULT_PORT}).",
+    )
+    parser.add_argument(
         "--title",
         default="Media Gallery",
         help="Page title shown in the header (default: 'Media Gallery').",
@@ -224,7 +245,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     print_summary(entries, stats, title=args.title, out_html=out_html,
                   extras=extras or None)
-    return 0
+
+    if args.no_serve:
+        return 0
+
+    return serve_directory(
+        root,
+        bind=args.bind,
+        port=args.port,
+        open_path=out_html.name,
+    )
 
 
 if __name__ == "__main__":
