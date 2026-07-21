@@ -306,14 +306,19 @@ HTML_TEMPLATE = """<!doctype html>
   <button class="lb-prev" aria-label="Previous">&#8249;</button>
   <button class="lb-next" aria-label="Next">&#8250;</button>
   <div class="lb-stage">
-    <video id="lb-video" controls playsinline preload="metadata" hidden></video>
-    <img id="lb-image" alt="" hidden>
-    <img id="lb-overlay" class="lb-overlay" alt="" hidden>
+    <div class="lb-media-wrap">
+      <video id="lb-video" class="lb-hidden" controls playsinline webkit-playsinline preload="auto"></video>
+      <img id="lb-image" class="lb-hidden" alt="">
+      <img id="lb-overlay" class="lb-overlay lb-hidden" alt="">
+    </div>
   </div>
   <div class="lb-audio" id="lb-audio" hidden>
     <div class="lb-audio-row">
+      <label class="lb-toggle" title="Route audio through loudness + EQ (video stays native)">
+        <input type="checkbox" id="fxEnable"> Audio FX
+      </label>
       <label class="lb-toggle" title="Evens out loud and quiet parts">
-        <input type="checkbox" id="fxNormalize"> Normalize
+        <input type="checkbox" id="fxNormalize" checked> Normalize
       </label>
       <label class="lb-toggle" title="Normalization strength">
         Strength
@@ -324,7 +329,7 @@ HTML_TEMPLATE = """<!doctype html>
         </select>
       </label>
       <label class="lb-toggle" title="Tone control (bass / mid / treble)">
-        <input type="checkbox" id="fxEqualize"> Equalize
+        <input type="checkbox" id="fxEqualize" checked> Equalize
       </label>
       <select id="fxPreset" aria-label="EQ preset">
         <option value="flat">EQ: Flat</option>
@@ -524,20 +529,32 @@ body {
 }
 .lb-stage {
   position: relative;
-  max-width: min(95vw, 1400px);
+  width: min(95vw, 1400px);
   max-height: var(--player-max-h);
-  display: flex; align-items: center; justify-content: center;
+  display: grid;
+  place-items: center;
   min-width: 0;
+  min-height: 120px;
 }
-.lb-stage img, .lb-stage video {
+.lb-media-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: var(--player-max-h);
+  line-height: 0;
+  background: #000;
+}
+.lb-media-wrap > video,
+.lb-media-wrap > img:not(.lb-overlay) {
   max-width: min(95vw, 1400px);
   max-height: var(--player-max-h);
   width: auto;
   height: auto;
-  display: block;
+  vertical-align: top;
   border-radius: 4px;
   background: #000;
 }
+.lb-hidden { display: none !important; }
 .lb-raw {
   color: var(--accent);
   text-decoration: none;
@@ -545,7 +562,7 @@ body {
   padding: 6px 10px;
 }
 .lb-raw:hover { text-decoration: underline; }
-.lb-stage .lb-overlay {
+.lb-media-wrap .lb-overlay {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: contain;
@@ -667,6 +684,7 @@ JS = r"""
   const lbPrev = lightbox.querySelector('.lb-prev');
   const lbNext = lightbox.querySelector('.lb-next');
 
+  const fxEnable = document.getElementById('fxEnable');
   const fxNormalize = document.getElementById('fxNormalize');
   const fxStrength = document.getElementById('fxStrength');
   const fxEqualize = document.getElementById('fxEqualize');
@@ -682,7 +700,8 @@ JS = r"""
   const fxStatus = document.getElementById('fxStatus');
   const fxEqReset = document.getElementById('fxEqReset');
   const fxOpenRaw = document.getElementById('fxOpenRaw');
-  const FX_STORAGE = 'pygallery-audio-fx';
+  // v3: never use createMediaElementSource (causes black video in Chromium).
+  const FX_STORAGE = 'pygallery-audio-fx-v3';
   const EQ_PRESETS = {
     flat:   { bass: 0, mid: 0, treble: 0 },
     voice:  { bass: -2, mid: 4, treble: 2 },
@@ -695,6 +714,7 @@ JS = r"""
 
   try {
     const savedFx = JSON.parse(localStorage.getItem(FX_STORAGE) || '{}');
+    if (typeof savedFx.enable === 'boolean') fxEnable.checked = savedFx.enable;
     if (typeof savedFx.normalize === 'boolean') fxNormalize.checked = savedFx.normalize;
     if (savedFx.strength) fxStrength.value = savedFx.strength;
     if (typeof savedFx.equalize === 'boolean') fxEqualize.checked = savedFx.equalize;
@@ -712,10 +732,11 @@ JS = r"""
     fxBassOut.textContent = fmtDb(fxBass.value) + ' dB';
     fxMidOut.textContent = fmtDb(fxMid.value) + ' dB';
     fxTrebleOut.textContent = fmtDb(fxTreble.value) + ' dB';
-    fxEqPanel.hidden = !fxEqualize.checked;
+    fxEqPanel.hidden = !(fxEnable.checked && fxEqualize.checked);
   }
   function saveFxPrefs() {
     localStorage.setItem(FX_STORAGE, JSON.stringify({
+      enable: fxEnable.checked,
       normalize: fxNormalize.checked,
       strength: fxStrength.value,
       equalize: fxEqualize.checked,
@@ -726,19 +747,47 @@ JS = r"""
     }));
   }
   function fxWanted() {
-    return fxNormalize.checked || fxEqualize.checked;
+    return fxEnable.checked && (fxNormalize.checked || fxEqualize.checked);
+  }
+  function stopFxGraph() {
+    try { if (fxSource) fxSource.disconnect(); } catch (_) { /* ignore */ }
+    try {
+      if (fxBassFilter) fxBassFilter.disconnect();
+      if (fxMidFilter) fxMidFilter.disconnect();
+      if (fxTrebleFilter) fxTrebleFilter.disconnect();
+      if (fxCompressor) fxCompressor.disconnect();
+      if (fxMakeup) fxMakeup.disconnect();
+      if (fxAnalyser) fxAnalyser.disconnect();
+    } catch (_) { /* ignore */ }
+    fxSource = null;
+    fxConnected = false;
+    lbVideo.muted = false;
   }
   function ensureAudioGraph() {
-    if (fxConnected || !fxWanted()) return;
+    if (!fxWanted()) {
+      stopFxGraph();
+      return;
+    }
+    if (fxConnected) {
+      applyFxSettings();
+      lbVideo.muted = true;
+      return;
+    }
     if (!lbVideo.src) return;
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
+    const capture = lbVideo.captureStream || lbVideo.mozCaptureStream;
+    if (!AC || !capture) {
+      fxStatus.textContent = 'Audio FX unsupported here — use Open file';
+      return;
+    }
     try {
-      const wasPlaying = !lbVideo.paused;
-      const t = lbVideo.currentTime || 0;
-      if (wasPlaying) lbVideo.pause();
-      fxCtx = new AC();
-      fxSource = fxCtx.createMediaElementSource(lbVideo);
+      fxCtx = fxCtx || new AC();
+      const stream = capture.call(lbVideo);
+      if (!stream.getAudioTracks().length) {
+        fxStatus.textContent = 'No audio track to process yet — press play';
+        return;
+      }
+      fxSource = fxCtx.createMediaStreamSource(stream);
       fxBassFilter = fxCtx.createBiquadFilter();
       fxBassFilter.type = 'lowshelf';
       fxBassFilter.frequency.value = 120;
@@ -761,19 +810,18 @@ JS = r"""
       fxMakeup.connect(fxAnalyser);
       fxAnalyser.connect(fxCtx.destination);
       fxConnected = true;
+      // Keep pixels on the <video>; only silence its own audio output.
+      lbVideo.muted = true;
       applyFxSettings();
       if (!fxMeterOn) {
         fxMeterOn = true;
         tickFxMeter();
       }
-      // Nudge decoder after MediaElementSource attach (avoids black frames).
-      if (t > 0) {
-        try { lbVideo.currentTime = t; } catch (_) { /* ignore */ }
-      }
-      if (wasPlaying) lbVideo.play().catch(() => {});
+      if (fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
     } catch (err) {
       console.warn('Audio FX unavailable:', err);
-      fxStatus.textContent = 'Audio FX unavailable (play without FX, or Open file)';
+      stopFxGraph();
+      fxStatus.textContent = 'Audio FX failed — video uses normal audio';
     }
   }
   function applyNormalize() {
@@ -814,14 +862,18 @@ JS = r"""
       applyEq();
     }
     const bits = [];
-    bits.push(fxNormalize.checked
-      ? ('Normalize ' + fxStrength.options[fxStrength.selectedIndex].text)
-      : 'Normalize off');
-    bits.push(fxEqualize.checked
-      ? ('EQ ' + fxPreset.value + ' (B' + fmtDb(fxBass.value)
-         + ' M' + fmtDb(fxMid.value) + ' T' + fmtDb(fxTreble.value) + ')')
-      : 'EQ off');
-    if (!fxConnected && fxWanted()) bits.push('FX arms on play');
+    if (!fxEnable.checked) {
+      bits.push('Audio FX off (native playback)');
+    } else {
+      bits.push(fxNormalize.checked
+        ? ('Normalize ' + fxStrength.options[fxStrength.selectedIndex].text)
+        : 'Normalize off');
+      bits.push(fxEqualize.checked
+        ? ('EQ ' + fxPreset.value + ' (B' + fmtDb(fxBass.value)
+           + ' M' + fmtDb(fxMid.value) + ' T' + fmtDb(fxTreble.value) + ')')
+        : 'EQ off');
+      if (!fxConnected) bits.push('arms after play');
+    }
     fxStatus.textContent = bits.join(' · ');
     saveFxPrefs();
   }
@@ -849,11 +901,6 @@ JS = r"""
     fxLevel.style.width = Math.min(100, Math.round(rms * 220)) + '%';
     requestAnimationFrame(tickFxMeter);
   }
-  async function unlockAudio() {
-    if (!fxWanted()) return;
-    ensureAudioGraph();
-    if (fxCtx && fxCtx.state === 'suspended') await fxCtx.resume();
-  }
 
   if (fxPreset.value !== 'custom' && EQ_PRESETS[fxPreset.value]) {
     const p = EQ_PRESETS[fxPreset.value];
@@ -865,9 +912,14 @@ JS = r"""
   applyFxSettings();
 
   function onFxToggle() {
-    if (fxWanted()) ensureAudioGraph();
+    if (fxWanted()) {
+      if (!lbVideo.paused) ensureAudioGraph();
+    } else {
+      stopFxGraph();
+    }
     applyFxSettings();
   }
+  fxEnable.addEventListener('change', onFxToggle);
   fxNormalize.addEventListener('change', onFxToggle);
   fxStrength.addEventListener('change', () => {
     if (fxWanted()) ensureAudioGraph();
@@ -892,7 +944,9 @@ JS = r"""
     applyEqPreset('flat');
     if (fxWanted()) ensureAudioGraph();
   });
-  lbVideo.addEventListener('play', unlockAudio);
+  lbVideo.addEventListener('playing', () => {
+    if (fxWanted()) ensureAudioGraph();
+  });
 
   const state = {
     source: 'all',
@@ -1105,11 +1159,12 @@ JS = r"""
   function closeLightbox() {
     lightbox.hidden = true;
     lbVideo.pause();
+    stopFxGraph();
     lbVideo.removeAttribute('src');
     lbVideo.load();
-    lbVideo.hidden = true;
-    lbImage.hidden = true;
-    lbOverlay.hidden = true;
+    lbVideo.classList.add('lb-hidden');
+    lbImage.classList.add('lb-hidden');
+    lbOverlay.classList.add('lb-hidden');
     lbAudio.hidden = true;
     document.body.style.overflow = '';
   }
@@ -1118,35 +1173,44 @@ JS = r"""
     state.index = (state.index + delta + state.view.length) % state.view.length;
     showCurrent();
   }
+  function playVideoWhenReady() {
+    const start = () => {
+      lbVideo.play().catch(() => { /* user can press play */ });
+    };
+    if (lbVideo.readyState >= 2) start();
+    else lbVideo.addEventListener('loadeddata', start, { once: true });
+  }
   function showCurrent() {
     const e = state.view[state.index];
     if (!e) return;
-    lbOverlay.hidden = true;
+    lbOverlay.classList.add('lb-hidden');
     if (e.type === 'video') {
-      lbImage.hidden = true;
-      lbVideo.hidden = false;
+      lbImage.classList.add('lb-hidden');
+      lbVideo.classList.remove('lb-hidden');
       lbAudio.hidden = false;
       fxOpenRaw.href = e.media;
       fxOpenRaw.hidden = false;
+      stopFxGraph();
       if (e.thumb) lbVideo.poster = e.thumb;
       else lbVideo.removeAttribute('poster');
-      if (lbVideo.getAttribute('src') !== e.media) {
-        lbVideo.src = e.media;
+      const next = e.media;
+      if (lbVideo.getAttribute('src') !== next) {
+        lbVideo.src = next;
+        lbVideo.load();
       }
-      // Attach FX before play when enabled (user click is already a gesture).
-      if (fxWanted()) ensureAudioGraph();
-      lbVideo.play().catch(() => { /* autoplay may need gesture */ });
+      playVideoWhenReady();
     } else {
       lbVideo.pause();
-      lbVideo.hidden = true;
+      stopFxGraph();
+      lbVideo.classList.add('lb-hidden');
       lbAudio.hidden = true;
       fxOpenRaw.hidden = true;
-      lbImage.hidden = false;
+      lbImage.classList.remove('lb-hidden');
       lbImage.src = e.media;
       lbImage.alt = e.name || '';
     }
     if (e.overlay) {
-      lbOverlay.hidden = false;
+      lbOverlay.classList.remove('lb-hidden');
       lbOverlay.src = e.overlay;
     }
 
