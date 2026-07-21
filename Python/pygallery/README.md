@@ -8,7 +8,8 @@ Generate a static HTML gallery from a directory tree of images and videos
 
 - Recursive scan with folder tabs, year/month/type filters, text search, and
   sort by date / name / size
-- Lightbox viewer (works over `file://` or HTTP)
+- Lightbox viewer with optional **loudness normalize** + **3-band EQ** (from the
+  earlier watch.html player; prefs in `localStorage`)
 - **Default:** starts a Range-capable HTTP server after building (LAN-friendly)
 - Optional parallel thumbnails via `ffmpegthumbnailer` (preferred for video)
   or `ffmpeg`

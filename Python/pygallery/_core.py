@@ -252,38 +252,40 @@ HTML_TEMPLATE = """<!doctype html>
 </head>
 <body>
 <header class="topbar">
-  <div class="title">
-    <h1>__TITLE__</h1>
-    <span id="countLabel" class="muted"></span>
+  <div class="topbar-main">
+    <div class="title">
+      <h1>__TITLE__</h1>
+      <span id="countLabel" class="muted"></span>
+    </div>
+    <div class="filters">
+      <input type="search" id="searchFilter" placeholder="Search title, folder…" autocomplete="off">
+      <select id="yearFilter"><option value="">All years</option></select>
+      <select id="monthFilter">
+        <option value="">All months</option>
+        <option value="01">Jan</option><option value="02">Feb</option>
+        <option value="03">Mar</option><option value="04">Apr</option>
+        <option value="05">May</option><option value="06">Jun</option>
+        <option value="07">Jul</option><option value="08">Aug</option>
+        <option value="09">Sep</option><option value="10">Oct</option>
+        <option value="11">Nov</option><option value="12">Dec</option>
+      </select>
+      <select id="typeFilter">
+        <option value="">All types</option>
+        <option value="image">Photos</option>
+        <option value="video">Videos</option>
+      </select>
+      <select id="sortBy" aria-label="Sort by">
+        <option value="date">Date</option>
+        <option value="name">Name</option>
+        <option value="size">Size</option>
+      </select>
+      <select id="sortDir" aria-label="Sort direction">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+    </div>
   </div>
   <nav id="tabs" class="tabs" role="tablist"></nav>
-  <div class="filters">
-    <input type="search" id="searchFilter" placeholder="Search title, folder…" autocomplete="off">
-    <select id="yearFilter"><option value="">All years</option></select>
-    <select id="monthFilter">
-      <option value="">All months</option>
-      <option value="01">Jan</option><option value="02">Feb</option>
-      <option value="03">Mar</option><option value="04">Apr</option>
-      <option value="05">May</option><option value="06">Jun</option>
-      <option value="07">Jul</option><option value="08">Aug</option>
-      <option value="09">Sep</option><option value="10">Oct</option>
-      <option value="11">Nov</option><option value="12">Dec</option>
-    </select>
-    <select id="typeFilter">
-      <option value="">All types</option>
-      <option value="image">Photos</option>
-      <option value="video">Videos</option>
-    </select>
-    <select id="sortBy" aria-label="Sort by">
-      <option value="date">Date</option>
-      <option value="name">Name</option>
-      <option value="size">Size</option>
-    </select>
-    <select id="sortDir" aria-label="Sort direction">
-      <option value="desc">Descending</option>
-      <option value="asc">Ascending</option>
-    </select>
-  </div>
 </header>
 
 <main id="grid" class="grid"></main>
@@ -292,7 +294,44 @@ HTML_TEMPLATE = """<!doctype html>
   <button class="lb-close" aria-label="Close">&times;</button>
   <button class="lb-prev" aria-label="Previous">&#8249;</button>
   <button class="lb-next" aria-label="Next">&#8250;</button>
-  <div class="lb-stage"></div>
+  <div class="lb-stage">
+    <video id="lb-video" controls playsinline preload="metadata" hidden></video>
+    <img id="lb-image" alt="" hidden>
+    <img id="lb-overlay" class="lb-overlay" alt="" hidden>
+  </div>
+  <div class="lb-audio" id="lb-audio" hidden>
+    <div class="lb-audio-row">
+      <label class="lb-toggle" title="Evens out loud and quiet parts">
+        <input type="checkbox" id="fxNormalize" checked> Normalize
+      </label>
+      <label class="lb-toggle" title="Normalization strength">
+        Strength
+        <select id="fxStrength" aria-label="Normalization strength">
+          <option value="0.6">Low</option>
+          <option value="1" selected>Medium</option>
+          <option value="1.4">High</option>
+        </select>
+      </label>
+      <label class="lb-toggle" title="Tone control (bass / mid / treble)">
+        <input type="checkbox" id="fxEqualize" checked> Equalize
+      </label>
+      <select id="fxPreset" aria-label="EQ preset">
+        <option value="flat">EQ: Flat</option>
+        <option value="voice" selected>EQ: Voice</option>
+        <option value="bass">EQ: Bass+</option>
+        <option value="bright">EQ: Bright</option>
+        <option value="custom">EQ: Custom</option>
+      </select>
+      <div class="lb-meter" title="Output level"><span id="fxLevel"></span></div>
+    </div>
+    <div class="lb-audio-row lb-eq-panel" id="fxEqPanel">
+      <label class="lb-eq">Bass <input type="range" id="fxBass" min="-12" max="12" step="1" value="2"><output id="fxBassOut">+2</output></label>
+      <label class="lb-eq">Mid <input type="range" id="fxMid" min="-12" max="12" step="1" value="3"><output id="fxMidOut">+3</output></label>
+      <label class="lb-eq">Treble <input type="range" id="fxTreble" min="-12" max="12" step="1" value="1"><output id="fxTrebleOut">+1</output></label>
+      <button type="button" id="fxEqReset">Reset EQ</button>
+      <span class="muted" id="fxStatus"></span>
+    </div>
+  </div>
   <footer class="lb-meta"></footer>
 </div>
 
@@ -320,7 +359,7 @@ CSS = r"""
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -334,32 +373,60 @@ body {
   top: 0;
   z-index: 50;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 18px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
   padding: 14px 20px;
   background: rgba(15,15,20,.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
-.title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
-.title h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+.topbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  min-width: 0;
+}
+.title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+.title h1 {
+  font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;
+}
 .muted { color: var(--muted); font-size: 12px; }
 
-.tabs { display: flex; gap: 4px; padding: 3px; background: var(--panel); border-radius: 10px; border: 1px solid var(--border); }
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: var(--panel);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  max-width: 100%;
+  max-height: 6.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+}
 .tabs:empty { display: none; }
 .tab {
   appearance: none; border: 0; background: transparent; color: var(--muted);
   padding: 6px 12px; border-radius: 7px; cursor: pointer; font: inherit;
+  white-space: nowrap; max-width: 14rem;
+  overflow: hidden; text-overflow: ellipsis;
 }
 .tab:hover { color: var(--text); }
 .tab.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
-.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0; }
 .filters select, .filters input[type="search"] {
   appearance: none; background: var(--panel); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px;
   font: inherit;
+  max-width: 100%;
 }
 .filters select {
   padding: 6px 28px 6px 10px; cursor: pointer;
@@ -370,7 +437,7 @@ body {
   background-repeat: no-repeat;
 }
 .filters input[type="search"] {
-  padding: 6px 10px; min-width: 180px;
+  padding: 6px 10px; min-width: 140px; flex: 1 1 160px; max-width: 280px;
 }
 .filters input[type="search"]:focus, .filters select:focus {
   outline: none; border-color: var(--muted);
@@ -438,16 +505,19 @@ body {
   background: rgba(0,0,0,.94);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
+  padding: 56px 12px 96px;
+  gap: 10px;
 }
 .lb-stage {
   position: relative;
-  max-width: 95vw;
-  max-height: calc(100vh - 80px);
+  max-width: min(95vw, 1400px);
+  max-height: calc(100vh - 220px);
   display: flex; align-items: center; justify-content: center;
+  min-width: 0;
 }
 .lb-stage img, .lb-stage video {
-  max-width: 95vw;
-  max-height: calc(100vh - 80px);
+  max-width: min(95vw, 1400px);
+  max-height: calc(100vh - 220px);
   display: block;
   border-radius: 4px;
   background: #000;
@@ -458,6 +528,35 @@ body {
   object-fit: contain;
   pointer-events: none;
 }
+.lb-audio {
+  width: min(95vw, 900px);
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px;
+  background: rgba(15,15,20,.92);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.lb-audio[hidden] { display: none !important; }
+.lb-audio-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lb-toggle, .lb-eq {
+  display: inline-flex; gap: 6px; align-items: center;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 10px; user-select: none; font-size: 12px;
+}
+.lb-toggle { cursor: pointer; }
+.lb-toggle input { accent-color: var(--accent); }
+.lb-eq input[type="range"] { width: 88px; accent-color: var(--accent); cursor: pointer; }
+.lb-eq output { min-width: 2.6em; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lb-audio select, .lb-audio button {
+  appearance: none; background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.lb-meter {
+  width: 120px; height: 8px; border-radius: 999px; background: var(--border); overflow: hidden;
+}
+.lb-meter > span { display: block; height: 100%; width: 0%; background: var(--accent); }
+.lb-eq-panel[hidden] { display: none !important; }
 .lb-meta {
   position: absolute;
   bottom: 10px; left: 50%;
@@ -481,6 +580,7 @@ body {
   font-size: 22px; line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  z-index: 2;
 }
 .lb-close:hover, .lb-prev:hover, .lb-next:hover { background: rgba(255,255,255,.18); }
 .lb-close { top: 14px; right: 14px; }
@@ -490,7 +590,7 @@ body {
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .topbar { padding: 10px; }
-  .title h1 { font-size: 16px; }
+  .title h1 { font-size: 16px; max-width: 70vw; }
 }
 """
 
@@ -534,10 +634,212 @@ JS = r"""
 
   const lightbox = document.getElementById('lightbox');
   const lbStage = lightbox.querySelector('.lb-stage');
+  const lbVideo = document.getElementById('lb-video');
+  const lbImage = document.getElementById('lb-image');
+  const lbOverlay = document.getElementById('lb-overlay');
+  const lbAudio = document.getElementById('lb-audio');
   const lbMeta = lightbox.querySelector('.lb-meta');
   const lbClose = lightbox.querySelector('.lb-close');
   const lbPrev = lightbox.querySelector('.lb-prev');
   const lbNext = lightbox.querySelector('.lb-next');
+
+  const fxNormalize = document.getElementById('fxNormalize');
+  const fxStrength = document.getElementById('fxStrength');
+  const fxEqualize = document.getElementById('fxEqualize');
+  const fxPreset = document.getElementById('fxPreset');
+  const fxEqPanel = document.getElementById('fxEqPanel');
+  const fxBass = document.getElementById('fxBass');
+  const fxMid = document.getElementById('fxMid');
+  const fxTreble = document.getElementById('fxTreble');
+  const fxBassOut = document.getElementById('fxBassOut');
+  const fxMidOut = document.getElementById('fxMidOut');
+  const fxTrebleOut = document.getElementById('fxTrebleOut');
+  const fxLevel = document.getElementById('fxLevel');
+  const fxStatus = document.getElementById('fxStatus');
+  const fxEqReset = document.getElementById('fxEqReset');
+  const FX_STORAGE = 'pygallery-audio-fx';
+  const EQ_PRESETS = {
+    flat:   { bass: 0, mid: 0, treble: 0 },
+    voice:  { bass: -2, mid: 4, treble: 2 },
+    bass:   { bass: 6, mid: 0, treble: -1 },
+    bright: { bass: -1, mid: 1, treble: 5 },
+  };
+
+  let fxCtx, fxSource, fxBassFilter, fxMidFilter, fxTrebleFilter;
+  let fxCompressor, fxMakeup, fxAnalyser, fxConnected = false, fxMeterOn = false;
+
+  try {
+    const savedFx = JSON.parse(localStorage.getItem(FX_STORAGE) || '{}');
+    if (typeof savedFx.normalize === 'boolean') fxNormalize.checked = savedFx.normalize;
+    if (savedFx.strength) fxStrength.value = savedFx.strength;
+    if (typeof savedFx.equalize === 'boolean') fxEqualize.checked = savedFx.equalize;
+    if (savedFx.preset) fxPreset.value = savedFx.preset;
+    if (typeof savedFx.bass === 'number') fxBass.value = savedFx.bass;
+    if (typeof savedFx.mid === 'number') fxMid.value = savedFx.mid;
+    if (typeof savedFx.treble === 'number') fxTreble.value = savedFx.treble;
+  } catch (_) { /* ignore */ }
+
+  function fmtDb(v) {
+    const n = Number(v);
+    return (n > 0 ? '+' : '') + n;
+  }
+  function syncEqLabels() {
+    fxBassOut.textContent = fmtDb(fxBass.value) + ' dB';
+    fxMidOut.textContent = fmtDb(fxMid.value) + ' dB';
+    fxTrebleOut.textContent = fmtDb(fxTreble.value) + ' dB';
+    fxEqPanel.hidden = !fxEqualize.checked;
+  }
+  function saveFxPrefs() {
+    localStorage.setItem(FX_STORAGE, JSON.stringify({
+      normalize: fxNormalize.checked,
+      strength: fxStrength.value,
+      equalize: fxEqualize.checked,
+      preset: fxPreset.value,
+      bass: Number(fxBass.value),
+      mid: Number(fxMid.value),
+      treble: Number(fxTreble.value),
+    }));
+  }
+  function ensureAudioGraph() {
+    if (fxConnected) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    fxCtx = new AC();
+    fxSource = fxCtx.createMediaElementSource(lbVideo);
+    fxBassFilter = fxCtx.createBiquadFilter();
+    fxBassFilter.type = 'lowshelf';
+    fxBassFilter.frequency.value = 120;
+    fxMidFilter = fxCtx.createBiquadFilter();
+    fxMidFilter.type = 'peaking';
+    fxMidFilter.frequency.value = 1000;
+    fxMidFilter.Q.value = 0.9;
+    fxTrebleFilter = fxCtx.createBiquadFilter();
+    fxTrebleFilter.type = 'highshelf';
+    fxTrebleFilter.frequency.value = 3500;
+    fxCompressor = fxCtx.createDynamicsCompressor();
+    fxMakeup = fxCtx.createGain();
+    fxAnalyser = fxCtx.createAnalyser();
+    fxAnalyser.fftSize = 2048;
+    fxSource.connect(fxBassFilter);
+    fxBassFilter.connect(fxMidFilter);
+    fxMidFilter.connect(fxTrebleFilter);
+    fxTrebleFilter.connect(fxCompressor);
+    fxCompressor.connect(fxMakeup);
+    fxMakeup.connect(fxAnalyser);
+    fxAnalyser.connect(fxCtx.destination);
+    fxConnected = true;
+    applyFxSettings();
+    if (!fxMeterOn) {
+      fxMeterOn = true;
+      tickFxMeter();
+    }
+  }
+  function applyNormalize() {
+    const strength = Number(fxStrength.value) || 1;
+    if (fxNormalize.checked) {
+      fxCompressor.threshold.value = -28 - (strength * 6);
+      fxCompressor.knee.value = 20;
+      fxCompressor.ratio.value = 6 + strength * 6;
+      fxCompressor.attack.value = 0.003;
+      fxCompressor.release.value = 0.25;
+      fxMakeup.gain.value = 1 + strength * 0.55;
+    } else {
+      fxCompressor.threshold.value = 0;
+      fxCompressor.knee.value = 0;
+      fxCompressor.ratio.value = 1;
+      fxCompressor.attack.value = 0.003;
+      fxCompressor.release.value = 0.05;
+      fxMakeup.gain.value = 1;
+    }
+  }
+  function applyEq() {
+    if (fxEqualize.checked) {
+      fxBassFilter.gain.value = Number(fxBass.value);
+      fxMidFilter.gain.value = Number(fxMid.value);
+      fxTrebleFilter.gain.value = Number(fxTreble.value);
+    } else {
+      fxBassFilter.gain.value = 0;
+      fxMidFilter.gain.value = 0;
+      fxTrebleFilter.gain.value = 0;
+    }
+  }
+  function applyFxSettings() {
+    syncEqLabels();
+    if (fxConnected) {
+      applyNormalize();
+      applyEq();
+    }
+    const bits = [];
+    bits.push(fxNormalize.checked
+      ? ('Normalize ' + fxStrength.options[fxStrength.selectedIndex].text)
+      : 'Normalize off');
+    bits.push(fxEqualize.checked
+      ? ('EQ ' + fxPreset.value + ' (B' + fmtDb(fxBass.value)
+         + ' M' + fmtDb(fxMid.value) + ' T' + fmtDb(fxTreble.value) + ')')
+      : 'EQ off');
+    fxStatus.textContent = bits.join(' · ');
+    saveFxPrefs();
+  }
+  function applyEqPreset(name) {
+    const p = EQ_PRESETS[name];
+    if (!p) return;
+    fxBass.value = p.bass;
+    fxMid.value = p.mid;
+    fxTreble.value = p.treble;
+    applyFxSettings();
+  }
+  function tickFxMeter() {
+    if (!fxAnalyser) {
+      requestAnimationFrame(tickFxMeter);
+      return;
+    }
+    const data = new Uint8Array(fxAnalyser.frequencyBinCount);
+    fxAnalyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    fxLevel.style.width = Math.min(100, Math.round(rms * 220)) + '%';
+    requestAnimationFrame(tickFxMeter);
+  }
+  async function unlockAudio() {
+    ensureAudioGraph();
+    if (fxCtx && fxCtx.state === 'suspended') await fxCtx.resume();
+  }
+
+  if (fxPreset.value !== 'custom' && EQ_PRESETS[fxPreset.value]) {
+    const p = EQ_PRESETS[fxPreset.value];
+    fxBass.value = p.bass;
+    fxMid.value = p.mid;
+    fxTreble.value = p.treble;
+  }
+  syncEqLabels();
+  applyFxSettings();
+
+  fxNormalize.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
+  fxStrength.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
+  fxEqualize.addEventListener('change', () => { ensureAudioGraph(); applyFxSettings(); });
+  fxPreset.addEventListener('change', () => {
+    if (fxPreset.value !== 'custom') applyEqPreset(fxPreset.value);
+    else applyFxSettings();
+    ensureAudioGraph();
+  });
+  function onEqSlider() {
+    fxPreset.value = 'custom';
+    ensureAudioGraph();
+    applyFxSettings();
+  }
+  fxBass.addEventListener('input', onEqSlider);
+  fxMid.addEventListener('input', onEqSlider);
+  fxTreble.addEventListener('input', onEqSlider);
+  fxEqReset.addEventListener('click', () => {
+    fxPreset.value = 'flat';
+    applyEqPreset('flat');
+    ensureAudioGraph();
+  });
+  lbVideo.addEventListener('play', unlockAudio);
 
   const state = {
     source: 'all',
@@ -727,7 +1029,13 @@ JS = r"""
   }
   function closeLightbox() {
     lightbox.hidden = true;
-    lbStage.innerHTML = '';
+    lbVideo.pause();
+    lbVideo.removeAttribute('src');
+    lbVideo.load();
+    lbVideo.hidden = true;
+    lbImage.hidden = true;
+    lbOverlay.hidden = true;
+    lbAudio.hidden = true;
     document.body.style.overflow = '';
   }
   function step(delta) {
@@ -738,26 +1046,28 @@ JS = r"""
   function showCurrent() {
     const e = state.view[state.index];
     if (!e) return;
-    lbStage.innerHTML = '';
+    lbOverlay.hidden = true;
     if (e.type === 'video') {
-      const v = document.createElement('video');
-      v.src = e.media;
-      v.controls = true;
-      v.autoplay = true;
-      v.playsInline = true;
-      if (e.thumb) v.poster = e.thumb;
-      lbStage.appendChild(v);
+      lbImage.hidden = true;
+      lbVideo.hidden = false;
+      lbAudio.hidden = false;
+      if (e.thumb) lbVideo.poster = e.thumb;
+      else lbVideo.removeAttribute('poster');
+      if (lbVideo.getAttribute('src') !== e.media) {
+        lbVideo.src = e.media;
+      }
+      lbVideo.play().catch(() => { /* autoplay may need gesture */ });
     } else {
-      const img = document.createElement('img');
-      img.src = e.media;
-      img.alt = e.name;
-      lbStage.appendChild(img);
+      lbVideo.pause();
+      lbVideo.hidden = true;
+      lbAudio.hidden = true;
+      lbImage.hidden = false;
+      lbImage.src = e.media;
+      lbImage.alt = e.name || '';
     }
     if (e.overlay) {
-      const ov = document.createElement('img');
-      ov.className = 'lb-overlay';
-      ov.src = e.overlay;
-      lbStage.appendChild(ov);
+      lbOverlay.hidden = false;
+      lbOverlay.src = e.overlay;
     }
 
     const parts = [
@@ -798,8 +1108,13 @@ JS = r"""
   });
   document.addEventListener('keydown', (ev) => {
     if (lightbox.hidden) return;
-    if (ev.key === 'Escape') closeLightbox();
-    else if (ev.key === 'ArrowLeft') step(-1);
+    if (ev.key === 'Escape') {
+      closeLightbox();
+      return;
+    }
+    const tag = (ev.target && ev.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'VIDEO') return;
+    if (ev.key === 'ArrowLeft') step(-1);
     else if (ev.key === 'ArrowRight') step(1);
   });
 
