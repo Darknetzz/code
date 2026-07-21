@@ -19,7 +19,7 @@ Generate a static HTML gallery from a directory tree of images and videos
 ## Requirements
 
 - Python 3.10+
-- Optional: [`ffmpeg`](https://ffmpeg.org/) on `PATH`
+- Optional: [`ffmpeg`](https://ffmpeg.org/) / `ffprobe` on `PATH` (thumbs + durations)
 - Optional but recommended for videos: [`ffmpegthumbnailer`](https://github.com/dirkvdb/ffmpegthumbnailer)
 
 ## Supported formats

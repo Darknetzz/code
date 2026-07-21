@@ -51,6 +51,7 @@ from _prompt import prompt_int, prompt_path
 from _serve import DEFAULT_BIND, DEFAULT_PORT, serve_directory
 from _thumbs import (
     DEFAULT_WORKERS,
+    ensure_durations,
     generate_thumbs,
     media_needing_thumbs,
     thumb_path_for,
@@ -253,13 +254,21 @@ def main(argv: list[str] | None = None) -> int:
             if tp.exists():
                 thumb_map[f.path] = tp
 
+    duration_map = ensure_durations(
+        [f.path for f in files],
+        thumbs_dir,
+        workers=workers if not args.no_thumbs else DEFAULT_WORKERS,
+    )
+
     entries: list[dict] = []
     for f in files:
         thumb_fi = None
         tp = thumb_map.get(f.path)
         if tp is not None and tp.exists():
             thumb_fi = make_file_info(tp, root, kind=KIND_THUMB)
-        entry = make_entry(f, thumb=thumb_fi)
+        entry = make_entry(
+            f, thumb=thumb_fi, duration=duration_map.get(f.path),
+        )
         if entry is not None:
             entries.append(entry)
 

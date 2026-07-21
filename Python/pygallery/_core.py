@@ -121,7 +121,8 @@ def make_file_info(p: Path, root: Path, *, kind: str = KIND_STANDALONE,
 
 
 def make_entry(primary: FileInfo, *, thumb: FileInfo | None = None,
-               overlay: FileInfo | None = None) -> dict | None:
+               overlay: FileInfo | None = None,
+               duration: float | None = None) -> dict | None:
     """Build a manifest entry for one displayable media file.
 
     Returns ``None`` if the extension isn't a recognized image or video.
@@ -145,6 +146,8 @@ def make_entry(primary: FileInfo, *, thumb: FileInfo | None = None,
         entry["thumb"] = thumb.rel
     if overlay is not None:
         entry["overlay"] = overlay.rel
+    if duration is not None and duration > 0:
+        entry["duration"] = round(float(duration), 3)
     return entry
 
 
@@ -501,6 +504,11 @@ body {
   pointer-events: none;
 }
 .tile .badge.play { right: 6px; left: auto; background: rgba(0,0,0,.75); }
+.tile .badge.duration {
+  top: auto; bottom: 6px; right: 6px; left: auto;
+  background: rgba(0,0,0,.75);
+  font-variant-numeric: tabular-nums;
+}
 .tile .date {
   position: absolute;
   bottom: 6px; left: 6px; right: 6px;
@@ -509,6 +517,7 @@ body {
   text-shadow: 0 1px 2px rgba(0,0,0,.8);
   pointer-events: none;
 }
+.tile .date.has-duration { right: 4.5rem; }
 
 .empty {
   grid-column: 1 / -1;
@@ -1054,6 +1063,17 @@ JS = r"""
     return (n / 1024 / 1024).toFixed(1) + ' MB';
   }
 
+  function fmtDuration(seconds) {
+    if (seconds == null || !(seconds > 0)) return '';
+    const s = Math.round(Number(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (h > 0) return h + ':' + pad(m) + ':' + pad(sec);
+    return m + ':' + pad(sec);
+  }
+
   function render() {
     countLabel.textContent = state.view.length + ' of ' + entries.length + ' items';
     grid.innerHTML = '';
@@ -1120,6 +1140,12 @@ JS = r"""
       badge.className = 'badge play';
       badge.textContent = 'Video';
       tile.appendChild(badge);
+      if (e.duration) {
+        const dur = document.createElement('span');
+        dur.className = 'badge duration';
+        dur.textContent = fmtDuration(e.duration);
+        tile.appendChild(dur);
+      }
     } else {
       const img = document.createElement('img');
       img.loading = 'lazy';
@@ -1142,7 +1168,7 @@ JS = r"""
     }
 
     const date = document.createElement('span');
-    date.className = 'date';
+    date.className = 'date' + (e.duration ? ' has-duration' : '');
     date.textContent = e.date;
     tile.appendChild(date);
 
@@ -1180,6 +1206,30 @@ JS = r"""
     if (lbVideo.readyState >= 2) start();
     else lbVideo.addEventListener('loadeddata', start, { once: true });
   }
+  function refreshLbMeta(e) {
+    const parts = [
+      e.exact_time || e.date,
+      e.source ? sourceLabel(e.source) : null,
+      e.folder,
+      e.type,
+      e.duration ? fmtDuration(e.duration) : null,
+      fmtSize(e.size),
+    ].filter(Boolean);
+    if (e.sender) parts.push('from ' + e.sender);
+    if (e.conversation) parts.push('in ' + e.conversation);
+    if (e.location) parts.push(e.location);
+    lbMeta.innerHTML = '<strong>' + (state.index + 1) + ' / ' + state.view.length + '</strong>'
+      + '<span class="muted">' + parts.join(' \u00b7 ') + '</span>';
+  }
+  lbVideo.addEventListener('loadedmetadata', () => {
+    const e = state.view[state.index];
+    if (!e || e.type !== 'video') return;
+    const d = lbVideo.duration;
+    if ((!e.duration || e.duration <= 0) && d && isFinite(d) && d > 0) {
+      e.duration = d;
+      refreshLbMeta(e);
+    }
+  });
   function showCurrent() {
     const e = state.view[state.index];
     if (!e) return;
@@ -1214,18 +1264,7 @@ JS = r"""
       lbOverlay.src = e.overlay;
     }
 
-    const parts = [
-      e.exact_time || e.date,
-      e.source ? sourceLabel(e.source) : null,
-      e.folder,
-      e.type,
-      fmtSize(e.size),
-    ].filter(Boolean);
-    if (e.sender) parts.push('from ' + e.sender);
-    if (e.conversation) parts.push('in ' + e.conversation);
-    if (e.location) parts.push(e.location);
-    lbMeta.innerHTML = '<strong>' + (state.index + 1) + ' / ' + state.view.length + '</strong>'
-      + '<span class="muted">' + parts.join(' \u00b7 ') + '</span>';
+    refreshLbMeta(e);
   }
 
   tabs.forEach((t) => t.addEventListener('click', () => {

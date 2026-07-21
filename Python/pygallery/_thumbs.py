@@ -11,7 +11,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from _core import IMG_EXTS
+from _core import IMG_EXTS, VIDEO_EXTS
 
 THUMB_SIZE = 480
 DEFAULT_WORKERS = 6
@@ -21,9 +21,20 @@ def tools_available() -> bool:
     return shutil.which("ffmpeg") is not None or shutil.which("ffmpegthumbnailer") is not None
 
 
+def ffprobe_available() -> bool:
+    return shutil.which("ffprobe") is not None
+
+
+def _media_digest(media: Path) -> str:
+    return hashlib.sha1(str(media.resolve()).encode()).hexdigest()[:16]
+
+
 def thumb_path_for(media: Path, thumbs_dir: Path) -> Path:
-    digest = hashlib.sha1(str(media.resolve()).encode()).hexdigest()[:16]
-    return thumbs_dir / f"{digest}.jpg"
+    return thumbs_dir / f"{_media_digest(media)}.jpg"
+
+
+def duration_cache_path(media: Path, thumbs_dir: Path) -> Path:
+    return thumbs_dir / f"{_media_digest(media)}.dur"
 
 
 def thumb_is_fresh(media: Path, thumb: Path) -> bool:
@@ -40,6 +51,107 @@ def media_needing_thumbs(media_paths: list[Path], thumbs_dir: Path) -> list[Path
         media for media in media_paths
         if not thumb_is_fresh(media, thumb_path_for(media, thumbs_dir))
     ]
+
+
+def probe_duration(media: Path) -> float | None:
+    """Return media duration in seconds via ffprobe, or ``None`` on failure."""
+    if not ffprobe_available():
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(media),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        value = float(proc.stdout.strip())
+        if value > 0 and value == value:  # not NaN
+            return value
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return None
+    return None
+
+
+def read_cached_duration(media: Path, thumbs_dir: Path) -> float | None:
+    cache = duration_cache_path(media, thumbs_dir)
+    if not thumb_is_fresh(media, cache):
+        return None
+    try:
+        return float(cache.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def write_cached_duration(media: Path, thumbs_dir: Path, seconds: float) -> None:
+    thumbs_dir.mkdir(parents=True, exist_ok=True)
+    cache = duration_cache_path(media, thumbs_dir)
+    tmp = cache.with_suffix(".dur.tmp")
+    tmp.write_text(f"{seconds:.3f}\n", encoding="utf-8")
+    tmp.replace(cache)
+
+
+def _duration_worker(media: Path, thumbs_dir: Path) -> tuple[Path, float | None]:
+    cached = read_cached_duration(media, thumbs_dir)
+    if cached is not None:
+        return media, cached
+    seconds = probe_duration(media)
+    if seconds is not None:
+        try:
+            write_cached_duration(media, thumbs_dir, seconds)
+        except OSError:
+            pass
+    return media, seconds
+
+
+def ensure_durations(
+    media_paths: list[Path],
+    thumbs_dir: Path,
+    *,
+    workers: int = DEFAULT_WORKERS,
+) -> dict[Path, float]:
+    """Probe (and cache) durations for video files. Returns path → seconds."""
+    videos = [p for p in media_paths if p.suffix.lower() in VIDEO_EXTS]
+    result: dict[Path, float] = {}
+    if not videos:
+        return result
+    if not ffprobe_available():
+        print("ffprobe not on PATH — video durations will be omitted.", flush=True)
+        return result
+
+    thumbs_dir.mkdir(parents=True, exist_ok=True)
+    pending = [p for p in videos if read_cached_duration(p, thumbs_dir) is None]
+    # Fill already-cached first
+    for p in videos:
+        cached = read_cached_duration(p, thumbs_dir)
+        if cached is not None:
+            result[p] = cached
+
+    if not pending:
+        return result
+
+    print(f"Probing duration for {len(pending)} video(s)…", flush=True)
+    workers = max(1, workers)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_duration_worker, media, thumbs_dir): media
+            for media in pending
+        }
+        done = 0
+        total = len(futures)
+        for fut in as_completed(futures):
+            media, seconds = fut.result()
+            done += 1
+            if seconds is not None:
+                result[media] = seconds
+            if done % 25 == 0 or done == total:
+                print(f"[{done}/{total}] durations…", flush=True)
+    return result
 
 
 def _is_image(path: Path) -> bool:
