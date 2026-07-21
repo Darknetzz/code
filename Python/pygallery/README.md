@@ -63,8 +63,8 @@ From another machine on the LAN, open the printed `LAN:` URL (e.g.
 | Argument | Description |
 |----------|-------------|
 | `root` | Directory to scan (prompted if omitted) |
-| `-o` / `--output` | Asset output dir (default: `<root>/gallery`) |
-| `-j` / `--workers` | Parallel thumbnail workers (default: `6`) |
+| `-o` / `--output` | Asset output dir (default: `<root>/gallery`; skipped if `gallery/thumbs` already exists) |
+| `-j` / `--workers` | Parallel thumbnail workers (default: `6`; skipped when all thumbs are fresh) |
 | `--no-thumbs` | Skip ffmpeg thumbnail generation |
 | `--no-serve` | Write files only; do not start HTTP server |
 | `--bind` | Bind address (default: `0.0.0.0`) |

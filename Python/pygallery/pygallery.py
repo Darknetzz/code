@@ -49,7 +49,12 @@ from _core import (
 )
 from _prompt import prompt_int, prompt_path
 from _serve import DEFAULT_BIND, DEFAULT_PORT, serve_directory
-from _thumbs import DEFAULT_WORKERS, generate_thumbs
+from _thumbs import (
+    DEFAULT_WORKERS,
+    generate_thumbs,
+    media_needing_thumbs,
+    thumb_path_for,
+)
 
 
 # Directory names we never descend into. Contains the output folder plus a
@@ -178,29 +183,21 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     default_output = root / "gallery"
+    default_thumbs = default_output / "thumbs"
     if args.output is None:
-        out_dir = (
-            prompt_path("Gallery output folder", default_output)
-            if sys.stdin.isatty()
-            else default_output
-        )
+        # Reuse existing gallery/thumbs without prompting when present.
+        if default_thumbs.is_dir():
+            out_dir = default_output
+            print(f"Using existing thumbnails at {default_thumbs}")
+        elif sys.stdin.isatty():
+            out_dir = prompt_path("Gallery output folder", default_output)
+        else:
+            out_dir = default_output
     else:
         out_dir = args.output.expanduser().resolve()
 
-    if args.workers is None:
-        workers = (
-            prompt_int("Thumbnail worker threads", DEFAULT_WORKERS, minimum=1)
-            if sys.stdin.isatty()
-            else DEFAULT_WORKERS
-        )
-    else:
-        workers = max(1, args.workers)
-
     print(f"\nLibrary : {root}")
     print(f"Output  : {out_dir}")
-    if not args.no_thumbs:
-        print(f"Workers : {workers}")
-    print()
 
     files = scan_tree(root, out_dir)
     if not files:
@@ -209,14 +206,52 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 1
 
+    thumbs_dir = out_dir / "thumbs"
+    pending_thumbs: list[Path] = []
+    if not args.no_thumbs:
+        pending_thumbs = media_needing_thumbs([f.path for f in files], thumbs_dir)
+
+    if args.workers is None:
+        if args.no_thumbs or not pending_thumbs:
+            workers = DEFAULT_WORKERS
+            if not args.no_thumbs and not pending_thumbs:
+                print(
+                    f"Thumbnails up to date "
+                    f"({len(files)} cached in {thumbs_dir})"
+                )
+        elif sys.stdin.isatty():
+            print(
+                f"{len(pending_thumbs)} of {len(files)} media "
+                f"need new/updated thumbnails"
+            )
+            workers = prompt_int(
+                "Thumbnail worker threads", DEFAULT_WORKERS, minimum=1,
+            )
+        else:
+            workers = DEFAULT_WORKERS
+    else:
+        workers = max(1, args.workers)
+
+    if not args.no_thumbs:
+        print(f"Workers : {workers}")
+    print()
+
     thumb_map: dict[Path, Path] = {}
     status_counts: dict[str, int] = {}
     if not args.no_thumbs:
+        # Still run the generator so cached paths are returned in thumb_map;
+        # make_thumb is a cheap mtime check for files already covered.
         thumb_map, status_counts = generate_thumbs(
             [f.path for f in files],
-            out_dir / "thumbs",
+            thumbs_dir,
             workers=workers,
         )
+    else:
+        # Even with --no-thumbs, reuse any existing cache files in the manifest.
+        for f in files:
+            tp = thumb_path_for(f.path, thumbs_dir)
+            if tp.exists():
+                thumb_map[f.path] = tp
 
     entries: list[dict] = []
     for f in files:

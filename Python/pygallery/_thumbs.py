@@ -26,17 +26,30 @@ def thumb_path_for(media: Path, thumbs_dir: Path) -> Path:
     return thumbs_dir / f"{digest}.jpg"
 
 
+def thumb_is_fresh(media: Path, thumb: Path) -> bool:
+    """True when ``thumb`` exists and is at least as new as ``media``."""
+    try:
+        return thumb.exists() and thumb.stat().st_mtime >= media.stat().st_mtime
+    except OSError:
+        return False
+
+
+def media_needing_thumbs(media_paths: list[Path], thumbs_dir: Path) -> list[Path]:
+    """Return media files that are missing a fresh cached thumbnail."""
+    return [
+        media for media in media_paths
+        if not thumb_is_fresh(media, thumb_path_for(media, thumbs_dir))
+    ]
+
+
 def _is_image(path: Path) -> bool:
     return path.suffix.lower() in IMG_EXTS
 
 
 def make_thumb(media: Path, thumb: Path) -> tuple[Path, str]:
     """Create or reuse a JPEG thumbnail. Returns ``(media, status)``."""
-    try:
-        if thumb.exists() and thumb.stat().st_mtime >= media.stat().st_mtime:
-            return media, "cached"
-    except OSError:
-        pass
+    if thumb_is_fresh(media, thumb):
+        return media, "cached"
 
     thumb.parent.mkdir(parents=True, exist_ok=True)
     tmp = thumb.with_suffix(".tmp.jpg")
