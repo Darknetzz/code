@@ -4,14 +4,15 @@ Exposes:
 - :class:`FileInfo` plus media classification constants and helpers.
 - :func:`make_file_info` / :func:`make_entry` to turn paths into manifest entries.
 - :func:`build_stats`, :func:`print_summary`, :func:`write_outputs` for output.
-- The static HTML / CSS / JS templates (data-driven tabs, configurable title).
+- The static HTML / CSS / JS templates (tabs, search, sort, lightbox).
 
-Stdlib only.
+Stdlib only. Thumbnail generation lives in :mod:`_thumbs`.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.parse
 from dataclasses import dataclass
@@ -23,8 +24,8 @@ from pathlib import Path
 # Constants
 # -----------------------------------------------------------------------------
 
-IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-VIDEO_EXTS = {".mp4", ".mov", ".webm", ".m4v"}
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
+VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
 MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
 
 KIND_MEDIA = "media"
@@ -197,14 +198,22 @@ def _html_escape(s: str) -> str:
 
 
 def write_outputs(entries: list[dict], stats: dict, *, root: Path,
-                  title: str = "Gallery") -> Path:
-    """Write ``gallery.html`` and ``gallery/`` assets into ``root``.
+                  title: str = "Gallery",
+                  out_dir: Path | None = None) -> Path:
+    """Write ``gallery.html`` and asset dir (CSS/JS/manifest/thumbs) under ``root``.
 
-    Returns the path to the generated HTML file.
+    ``out_dir`` defaults to ``root / "gallery"``. Returns the path to the HTML file.
     """
     out_html = root / "gallery.html"
-    out_dir = root / "gallery"
+    if out_dir is None:
+        out_dir = root / "gallery"
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    asset_rel = Path(os.path.relpath(out_dir, root.resolve())).as_posix()
+    if asset_rel == ".":
+        asset_rel = ""
+    asset_prefix = f"{asset_rel}/" if asset_rel else ""
 
     manifest = {
         "entries": entries,
@@ -220,6 +229,7 @@ def write_outputs(entries: list[dict], stats: dict, *, root: Path,
     inlined = json.dumps(manifest, ensure_ascii=False, separators=(",", ":"))
     html = (HTML_TEMPLATE
             .replace("__TITLE__", _html_escape(title))
+            .replace("__ASSET_DIR__", asset_prefix)
             .replace("__MANIFEST__", inlined))
     out_html.write_text(html, encoding="utf-8")
     (out_dir / "style.css").write_text(CSS, encoding="utf-8")
@@ -238,7 +248,7 @@ HTML_TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="gallery/style.css">
+<link rel="stylesheet" href="__ASSET_DIR__style.css">
 </head>
 <body>
 <header class="topbar">
@@ -248,6 +258,7 @@ HTML_TEMPLATE = """<!doctype html>
   </div>
   <nav id="tabs" class="tabs" role="tablist"></nav>
   <div class="filters">
+    <input type="search" id="searchFilter" placeholder="Search title, folder…" autocomplete="off">
     <select id="yearFilter"><option value="">All years</option></select>
     <select id="monthFilter">
       <option value="">All months</option>
@@ -263,9 +274,14 @@ HTML_TEMPLATE = """<!doctype html>
       <option value="image">Photos</option>
       <option value="video">Videos</option>
     </select>
-    <select id="sortFilter">
-      <option value="desc">Newest first</option>
-      <option value="asc">Oldest first</option>
+    <select id="sortBy" aria-label="Sort by">
+      <option value="date">Date</option>
+      <option value="name">Name</option>
+      <option value="size">Size</option>
+    </select>
+    <select id="sortDir" aria-label="Sort direction">
+      <option value="desc">Descending</option>
+      <option value="asc">Ascending</option>
     </select>
   </div>
 </header>
@@ -283,7 +299,7 @@ HTML_TEMPLATE = """<!doctype html>
 <script>
 window.MANIFEST = __MANIFEST__;
 </script>
-<script src="gallery/app.js"></script>
+<script src="__ASSET_DIR__app.js"></script>
 </body>
 </html>
 """
@@ -339,16 +355,25 @@ body {
 .tab:hover { color: var(--text); }
 .tab.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
-.filters { display: flex; gap: 8px; flex-wrap: wrap; }
-.filters select {
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters select, .filters input[type="search"] {
   appearance: none; background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px; padding: 6px 28px 6px 10px;
-  font: inherit; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  font: inherit;
+}
+.filters select {
+  padding: 6px 28px 6px 10px; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
                     linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
+}
+.filters input[type="search"] {
+  padding: 6px 10px; min-width: 180px;
+}
+.filters input[type="search"]:focus, .filters select:focus {
+  outline: none; border-color: var(--muted);
 }
 
 .grid {
@@ -474,13 +499,16 @@ JS = r"""
 (() => {
   const M = window.MANIFEST || { entries: [], stats: {} };
   const entries = M.entries || [];
+  const STORAGE_KEY = 'pygallery-sort';
 
   const grid = document.getElementById('grid');
   const countLabel = document.getElementById('countLabel');
+  const searchInput = document.getElementById('searchFilter');
   const yearSel = document.getElementById('yearFilter');
   const monthSel = document.getElementById('monthFilter');
   const typeSel = document.getElementById('typeFilter');
-  const sortSel = document.getElementById('sortFilter');
+  const sortBySel = document.getElementById('sortBy');
+  const sortDirSel = document.getElementById('sortDir');
   const tabsEl = document.getElementById('tabs');
 
   // Build tabs from unique source values. Snapchat-ish labels are mapped, the
@@ -516,10 +544,24 @@ JS = r"""
     year: '',
     month: '',
     type: '',
-    sort: 'desc',
+    query: '',
+    sortBy: 'date',
+    sortDir: 'desc',
     view: [],
     index: -1,
   };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (saved.sortBy === 'date' || saved.sortBy === 'name' || saved.sortBy === 'size') {
+      state.sortBy = saved.sortBy;
+      sortBySel.value = saved.sortBy;
+    }
+    if (saved.sortDir === 'asc' || saved.sortDir === 'desc') {
+      state.sortDir = saved.sortDir;
+      sortDirSel.value = saved.sortDir;
+    }
+  } catch (_) { /* ignore */ }
 
   const years = Array.from(new Set(entries.map((e) => e.date.slice(0, 4))))
     .sort()
@@ -530,16 +572,48 @@ JS = r"""
     yearSel.appendChild(opt);
   }
 
+  function cmp(a, b) {
+    let av, bv;
+    if (state.sortBy === 'name') {
+      av = (a.name || '').toLowerCase();
+      bv = (b.name || '').toLowerCase();
+      if (av < bv) return state.sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return state.sortDir === 'asc' ? 1 : -1;
+      return 0;
+    }
+    if (state.sortBy === 'size') {
+      av = a.size || 0;
+      bv = b.size || 0;
+    } else {
+      av = a.mtime || 0;
+      bv = b.mtime || 0;
+    }
+    return state.sortDir === 'asc' ? av - bv : bv - av;
+  }
+
   function applyFilters() {
+    const q = state.query.trim().toLowerCase();
     let v = entries.filter((e) => {
       if (state.source !== 'all' && e.source !== state.source) return false;
       if (state.year && e.date.slice(0, 4) !== state.year) return false;
       if (state.month && e.date.slice(5, 7) !== state.month) return false;
       if (state.type && e.type !== state.type) return false;
+      if (q) {
+        const hay = [
+          e.name, e.folder, e.source, e.type, e.date,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-    v.sort((a, b) => state.sort === 'desc' ? b.mtime - a.mtime : a.mtime - b.mtime);
+    v.sort(cmp);
     state.view = v;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
+      }));
+    } catch (_) { /* ignore */ }
     render();
   }
 
@@ -618,7 +692,7 @@ JS = r"""
     } else {
       const img = document.createElement('img');
       img.loading = 'lazy';
-      img.src = e.media;
+      img.src = e.thumb || e.media;
       tile.appendChild(img);
     }
     if (e.overlay) {
@@ -706,10 +780,15 @@ JS = r"""
     state.source = t.dataset.source;
     applyFilters();
   }));
+  searchInput.addEventListener('input', () => {
+    state.query = searchInput.value;
+    applyFilters();
+  });
   yearSel.addEventListener('change', () => { state.year = yearSel.value; applyFilters(); });
   monthSel.addEventListener('change', () => { state.month = monthSel.value; applyFilters(); });
   typeSel.addEventListener('change', () => { state.type = typeSel.value; applyFilters(); });
-  sortSel.addEventListener('change', () => { state.sort = sortSel.value; applyFilters(); });
+  sortBySel.addEventListener('change', () => { state.sortBy = sortBySel.value; applyFilters(); });
+  sortDirSel.addEventListener('change', () => { state.sortDir = sortDirSel.value; applyFilters(); });
 
   lbClose.addEventListener('click', closeLightbox);
   lbPrev.addEventListener('click', () => step(-1));

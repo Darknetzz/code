@@ -19,7 +19,7 @@ Scripts and projects in Python.
 | [pybin](pybin/) | Simple wrapper around PyInstaller to build a single-file executable from a Py... See [pybin/README.md](pybin/README.md) for details. |
 | [pyconvert](pyconvert/) | > **Future Rust candidate (tier 2):** No Rust port yet. A rewrite would targe... See [pyconvert/README.md](pyconvert/README.md) for details. |
 | [pycrawl](pycrawl/) | > **Legacy / reference implementation.** The canonical crawler is [`Rust/rust... See [pycrawl/README.md](pycrawl/README.md) for details. |
-| [pygallery](pygallery/) | — |
+| [pygallery](pygallery/) | Generate a static HTML gallery from a directory tree of images and videos (ge... See [pygallery/README.md](pygallery/README.md) for details. |
 | [pyhello](pyhello/) | — |
 | [pyimgen](pyimgen/) | > **Future Rust candidate (tier 2):** No Rust port yet. The procedural pixel... See [pyimgen/README.md](pyimgen/README.md) for details. |
 | [pyimgrmbg](pyimgrmbg/) | — |
@@ -32,5 +32,4 @@ Scripts and projects in Python.
 | [pytree](pytree/) | > **Scan/report canonical implementation:** [`Rust/rust-sizetree`](../../Rust... See [pytree/README.md](pytree/README.md) for details. |
 | [snapbot](snapbot/) | **Version 2.0.0** - Selenium-based browser automation for Snapchat Web See [snapbot/README.md](snapbot/README.md) for details. |
 | [utils](utils/) | — |
-| [video-html-gallery](video-html-gallery/) | Local HTML gallery builder for videos and images with thumbnails, search, and sorting. See [video-html-gallery/README.md](video-html-gallery/README.md) for details. |
 | [webbot](webbot/) | Human-like browser automation with Playwright. Click and type on web pages wi... See [webbot/README.md](webbot/README.md) for details. |
