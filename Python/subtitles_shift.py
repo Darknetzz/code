@@ -15,7 +15,10 @@ def shift_timestamp(match: re.Match, offset_seconds: float) -> str:
     delta = timedelta(hours=t.hour, minutes=t.minute, seconds=t.second, microseconds=t.microsecond)
     
     # Apply offset and clamp at 00:00:00,000
-    shifted = max(timedelta(0), delta + timedelta(seconds=offset_seconds))
+    # shifted = max(timedelta(0), delta + timedelta(seconds=offset_seconds))
+    shifted = delta + timedelta(seconds=offset_seconds)
+    if shifted < timedelta(0):
+        raise ValueError("Shift results in negative timestamp! Aborting to prevent file corruption.")
     
     total_seconds = int(shifted.total_seconds())
     hours = total_seconds // 3600
