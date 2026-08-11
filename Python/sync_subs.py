@@ -44,7 +44,6 @@ def sync(
 
         console.print(f"\n[bold blue]Processing:[/bold blue] {mkv.name}")
 
-        # Handle existing .srt overwrite logic
         if final_srt.exists():
             should_overwrite = overwrite
             if should_overwrite is None:
@@ -73,13 +72,12 @@ def sync(
                 tmp_srt.unlink()
             continue
 
-        # 2. Run ffsubsync
-        ffs_cmd = ["ffs", str(mkv), "-i", str(tmp_srt), "-o", str(final_srt)]
+        # 2. Run ffsubsync against the MKV audio track
+        ffs_cmd = ["ffsubsync", str(mkv), "-i", str(tmp_srt), "-o", str(final_srt)]
 
         with console.status("[dim]Running ffsubsync...[/dim]", spinner="dots"):
             ffs_res = subprocess.run(ffs_cmd, capture_output=True, text=True)
 
-        # Cleanup temporary extracted file
         if tmp_srt.exists():
             tmp_srt.unlink()
 
