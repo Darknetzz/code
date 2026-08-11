@@ -1,8 +1,9 @@
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional
-import typer
+
 import srt
+import typer
 from rich.console import Console
 from rich.prompt import FloatPrompt, Prompt
 
