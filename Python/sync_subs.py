@@ -102,7 +102,7 @@ def sync(
             "ffsubsync", str(tmp_wav),
             "-i", str(tmp_srt),
             "-o", str(final_srt),
-            "--no-fix-framerate",
+            "--max-offset-seconds", "300",
         ]
 
         with console.status("[dim]Syncing against audio track...[/dim]", spinner="dots"):
