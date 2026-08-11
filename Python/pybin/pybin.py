@@ -1,13 +1,16 @@
 import fnmatch
 import glob as _glob
+import io
 import re
-import sys
-import typer
-from typing import List, Optional
-import subprocess
 import shutil
+import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, UTC
+from typing import Optional
+
+import typer
+
 
 # Use UTF-8 for stdout/stderr so emojis work on Windows (e.g. when cp1252 is default)
 def _ensure_utf8():
@@ -19,9 +22,11 @@ def _ensure_utf8():
             kernel32.SetConsoleCP(65001)
         except Exception:
             pass
+            
     for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure") and getattr(stream, "encoding", "").lower() != "utf-8":
+        if isinstance(stream, io.TextIOWrapper) and getattr(stream, "encoding", "").lower() != "utf-8":
             try:
+                # Type checkers know stream is a TextIOWrapper here
                 stream.reconfigure(encoding="utf-8")
             except Exception:
                 pass
@@ -200,7 +205,7 @@ def _has_glob(path_str: str) -> bool:
     return any(ch in path_str for ch in _GLOB_CHARS)
 
 
-def _matches_any_pattern(path: Path, patterns: List[str]) -> bool:
+def _matches_any_pattern(path: Path, patterns: list[str]) -> bool:
     """True if `path.name` or the raw path string matches any fnmatch pattern."""
     s = str(path)
     for pat in patterns:
@@ -210,11 +215,11 @@ def _matches_any_pattern(path: Path, patterns: List[str]) -> bool:
 
 
 def _expand_inputs(
-    inputs: List[Path],
+    inputs: list[Path],
     *,
-    excludes: List[str],
+    excludes: list[str],
     include_underscore: bool,
-) -> List[Path]:
+) -> list[Path]:
     """
     Expand glob patterns, de-duplicate, and filter inputs.
 
@@ -227,7 +232,7 @@ def _expand_inputs(
       --include-underscore is set.
     - Any file matching an --exclude pattern is skipped.
     """
-    expanded: List[Path] = []
+    expanded: list[Path] = []
     seen: set = set()
 
     def _add(path: Path) -> None:
@@ -252,7 +257,7 @@ def _expand_inputs(
         else:
             _add(raw)
 
-    filtered: List[Path] = []
+    filtered: list[Path] = []
     multi = len(expanded) > 1
     for path in expanded:
         if path.suffix != ".py":
@@ -448,7 +453,7 @@ def _compile_one(
 # ============================================================================ #
 @app.command()
 def main(
-    files: List[Path] = typer.Argument(
+    files: list[Path] = typer.Argument(
         ...,
         help=(
             "One or more Python files to build. Glob patterns (e.g. 'src/*.py') are "
@@ -456,7 +461,7 @@ def main(
             "expanding it."
         ),
     ),
-    exclude: List[str] = typer.Option(
+    exclude: list[str] = typer.Option(
         [],
         "--exclude",
         "-x",
@@ -543,8 +548,8 @@ def main(
         )
         raise typer.Exit(code=1)
 
-    successes: List[Path] = []
-    failures: List[Path] = []
+    successes: list[Path] = []
+    failures: list[Path] = []
     total = len(resolved)
     multi = total > 1
 
