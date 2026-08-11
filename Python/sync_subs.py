@@ -12,7 +12,7 @@ console = Console()
 def sync(
     target_dir: Path = typer.Argument(
         Path("."),
-        help="Directory containing MKV files. Defaults to current directory.",
+        help="Directory containing MKV files.",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -28,10 +28,10 @@ def sync(
         None,
         "--overwrite/--no-overwrite",
         "-y/-n",
-        help="Overwrite existing .srt files. If omitted, you will be prompted per existing file.",
+        help="Overwrite existing .srt files.",
     ),
 ):
-    """Batch extract and sync integrated MKV subtitles using ffsubsync."""
+    """Batch extract and sync MKV subtitles against the audio stream."""
     mkv_files = list(target_dir.glob("*.mkv"))
 
     if not mkv_files:
@@ -41,6 +41,7 @@ def sync(
     for mkv in mkv_files:
         final_srt = mkv.with_suffix(".srt")
         tmp_srt = mkv.with_suffix(".tmp.srt")
+        tmp_wav = mkv.with_suffix(".tmp.wav")
 
         console.print(f"\n[bold blue]Processing:[/bold blue] {mkv.name}")
 
@@ -56,37 +57,48 @@ def sync(
                 console.print("  [yellow]Skipped:[/yellow] File exists and overwrite was declined.")
                 continue
 
-        # 1. Extract integrated subtitle stream
-        ffmpeg_cmd = [
+        # 1. Extract subtitle track
+        ffmpeg_sub_cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-i", str(mkv),
             "-map", sub_stream,
             str(tmp_srt),
         ]
+        res_sub = subprocess.run(ffmpeg_sub_cmd)
 
-        res = subprocess.run(ffmpeg_cmd)
-
-        if res.returncode != 0 or not tmp_srt.exists() or tmp_srt.stat().st_size == 0:
-            console.print(f"  [red]Skipped:[/red] No subtitle track found at stream {sub_stream}.")
+        if res_sub.returncode != 0 or not tmp_srt.exists() or tmp_srt.stat().st_size == 0:
+            console.print(f"  [red]Skipped:[/red] No subtitle track found at {sub_stream}.")
             if tmp_srt.exists():
                 tmp_srt.unlink()
             continue
 
-        # 2. Run ffsubsync against the MKV audio track
-        # ffs_cmd = ["ffsubsync", str(mkv), "-i", str(tmp_srt), "-o", str(final_srt)]
-        # 2. Run ffsubsync forced against the audio stream
-        ffs_cmd = [
-            "ffsubsync", str(mkv),
-            "--extract-audio-first",
-            "-i", str(tmp_srt),
-            "-o", str(final_srt)
+        # 2. Extract mono 16kHz audio track for speech detection
+        ffmpeg_audio_cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(mkv),
+            "-vn", "-ac", "1", "-ar", "16000",
+            str(tmp_wav),
         ]
+        res_audio = subprocess.run(ffmpeg_audio_cmd)
 
-        with console.status("[dim]Running ffsubsync...[/dim]", spinner="dots"):
+        if res_audio.returncode != 0 or not tmp_wav.exists():
+            console.print("  [red]Skipped:[/red] Audio extraction failed.")
+            if tmp_srt.exists():
+                tmp_srt.unlink()
+            if tmp_wav.exists():
+                tmp_wav.unlink()
+            continue
+
+        # 3. Run ffsubsync strictly against extracted WAV audio
+        ffs_cmd = ["ffsubsync", str(tmp_wav), "-i", str(tmp_srt), "-o", str(final_srt)]
+
+        with console.status("[dim]Syncing against audio track...[/dim]", spinner="dots"):
             ffs_res = subprocess.run(ffs_cmd, capture_output=True, text=True)
 
-        if tmp_srt.exists():
-            tmp_srt.unlink()
+        # Cleanup temp files
+        for tmp_file in (tmp_srt, tmp_wav):
+            if tmp_file.exists():
+                tmp_file.unlink()
 
         if ffs_res.returncode == 0:
             console.print(f"  [bold green]Success:[/bold green] Created {final_srt.name}")
