@@ -24,3 +24,5 @@ Python/pyspotify/exports
 *.exe
 *.bak
 snapchat_imagenames.md
+.pytest_cache/*
+.ruff_cache/*
