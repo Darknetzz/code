@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:/Kriss/Documents/Git/code/Python/subtitles_shift.py'],
+    ['D:/Kriss/Documents/Git/code/Python/pysubs/subtitles_shift.py'],
     pathex=[],
     binaries=[],
     datas=[],

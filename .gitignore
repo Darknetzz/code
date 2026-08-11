@@ -26,3 +26,4 @@ Python/pyspotify/exports
 snapchat_imagenames.md
 .pytest_cache/*
 .ruff_cache/*
+.vscode/settings.json
