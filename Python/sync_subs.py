@@ -73,10 +73,17 @@ def sync(
             continue
 
         # 2. Extract mono 16kHz audio track for speech detection
+        # ffmpeg_audio_cmd = [
+        #     "ffmpeg", "-y", "-loglevel", "error",
+        #     "-i", str(mkv),
+        #     "-vn", "-ac", "1", "-ar", "16000",
+        #     str(tmp_wav),
+        # ]
+        # Change -ar 16000 to -ar 44100
         ffmpeg_audio_cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-i", str(mkv),
-            "-vn", "-ac", "1", "-ar", "16000",
+            "-vn", "-ac", "1", "-ar", "44100",
             str(tmp_wav),
         ]
         res_audio = subprocess.run(ffmpeg_audio_cmd)
@@ -90,7 +97,13 @@ def sync(
             continue
 
         # 3. Run ffsubsync strictly against extracted WAV audio
-        ffs_cmd = ["ffsubsync", str(tmp_wav), "-i", str(tmp_srt), "-o", str(final_srt)]
+        # ffs_cmd = ["ffsubsync", str(tmp_wav), "-i", str(tmp_srt), "-o", str(final_srt)]
+        ffs_cmd = [
+            "ffsubsync", str(tmp_wav),
+            "-i", str(tmp_srt),
+            "-o", str(final_srt),
+            "--no-fix-framerate",
+        ]
 
         with console.status("[dim]Syncing against audio track...[/dim]", spinner="dots"):
             ffs_res = subprocess.run(ffs_cmd, capture_output=True, text=True)
