@@ -20,6 +20,31 @@ param(
     [string] $Source = 'Auto'
 )
 
+function Format-RelativeUptime {
+    param([Parameter(Mandatory)] [TimeSpan] $Uptime)
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    if ($Uptime.Days -gt 0) {
+        $unit = if ($Uptime.Days -eq 1) { 'day' } else { 'days' }
+        $parts.Add("$($Uptime.Days) $unit")
+    }
+    if ($Uptime.Hours -gt 0) {
+        $unit = if ($Uptime.Hours -eq 1) { 'hour' } else { 'hours' }
+        $parts.Add("$($Uptime.Hours) $unit")
+    }
+    if ($Uptime.Minutes -gt 0) {
+        $unit = if ($Uptime.Minutes -eq 1) { 'minute' } else { 'minutes' }
+        $parts.Add("$($Uptime.Minutes) $unit")
+    }
+    if ($parts.Count -eq 0) {
+        $seconds = [Math]::Max(0, [int][Math]::Floor($Uptime.TotalSeconds))
+        $unit = if ($seconds -eq 1) { 'second' } else { 'seconds' }
+        return "$seconds $unit"
+    }
+
+    return $parts -join ', '
+}
+
 function Test-SharedServiceProcess {
     param([Parameter(Mandatory)] $Service)
     return $Service.ServiceType -match 'Share Process'
@@ -185,7 +210,7 @@ foreach ($service in $services) {
         DisplayName = $service.DisplayName
         PID         = $service.ProcessId
         StartTime   = $resolved.StartTime
-        Uptime      = $now - $resolved.StartTime
+        Uptime      = Format-RelativeUptime -Uptime ($now - $resolved.StartTime)
         Source      = $resolved.Source
     }
 }
