@@ -1,14 +1,36 @@
-# Show uptime for Windows services by process start time or SCM event 7036.
-# Matches against service Name or DisplayName; wildcards supported.
-#
-# Shared-process services (e.g. svchost) default to Event Log 7036 for true
-# service start; own-process services use Win32_Process CreationDate.
-# Falls back to process time when no matching 7036 event is found.
-#
-# Usage: .\Get-ServiceUptime.ps1 Spooler
-#        .\Get-ServiceUptime.ps1 'SQL*'
-#        .\Get-ServiceUptime.ps1 '*Print*' -Source EventLog
-#        .\Get-ServiceUptime.ps1 wuauserv -Source Process
+<#
+.SYNOPSIS
+Show uptime for Windows services by process start time or SCM event 7036.
+
+.DESCRIPTION
+Matches against service Name or DisplayName; wildcards are supported.
+
+Shared-process services (e.g. svchost) default to Event Log 7036 for true
+service start; own-process services use Win32_Process CreationDate.
+Falls back to process time when no matching 7036 event is found.
+
+.PARAMETER Name
+Service name or display name. Wildcards (*, ?) are supported.
+
+.PARAMETER Source
+How to resolve start time: Auto (default), EventLog, or Process.
+
+.PARAMETER Short
+Format Uptime as shorthand (e.g. "2d 7h 12m") instead of
+"2 days, 7 hours, 12 minutes".
+
+.EXAMPLE
+.\Get-ServiceUptime.ps1 Spooler
+
+.EXAMPLE
+.\Get-ServiceUptime.ps1 'SQL*'
+
+.EXAMPLE
+.\Get-ServiceUptime.ps1 '*Print*' -Source EventLog
+
+.EXAMPLE
+.\Get-ServiceUptime.ps1 wuauserv -Source Process -Short
+#>
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -17,32 +39,43 @@ param(
 
     [Parameter()]
     [ValidateSet('Auto', 'EventLog', 'Process')]
-    [string] $Source = 'Auto'
+    [string] $Source = 'Auto',
+
+    [Parameter()]
+    [switch] $Short
 )
 
 function Format-RelativeUptime {
-    param([Parameter(Mandatory)] [TimeSpan] $Uptime)
+    param(
+        [Parameter(Mandatory)] [TimeSpan] $Uptime,
+        [switch] $Short
+    )
 
-    $parts = [System.Collections.Generic.List[string]]::new()
-    if ($Uptime.Days -gt 0) {
-        $unit = if ($Uptime.Days -eq 1) { 'day' } else { 'days' }
-        $parts.Add("$($Uptime.Days) $unit")
-    }
-    if ($Uptime.Hours -gt 0) {
-        $unit = if ($Uptime.Hours -eq 1) { 'hour' } else { 'hours' }
-        $parts.Add("$($Uptime.Hours) $unit")
-    }
-    if ($Uptime.Minutes -gt 0) {
-        $unit = if ($Uptime.Minutes -eq 1) { 'minute' } else { 'minutes' }
-        $parts.Add("$($Uptime.Minutes) $unit")
-    }
-    if ($parts.Count -eq 0) {
-        $seconds = [Math]::Max(0, [int][Math]::Floor($Uptime.TotalSeconds))
-        $unit = if ($seconds -eq 1) { 'second' } else { 'seconds' }
-        return "$seconds $unit"
+    $units = @(
+        @{ Value = $Uptime.Days;    Short = 'd'; Singular = 'day';    Plural = 'days' }
+        @{ Value = $Uptime.Hours;   Short = 'h'; Singular = 'hour';   Plural = 'hours' }
+        @{ Value = $Uptime.Minutes; Short = 'm'; Singular = 'minute'; Plural = 'minutes' }
+    )
+
+    $parts = foreach ($unit in $units) {
+        if ($unit.Value -le 0) { continue }
+        if ($Short) {
+            "$($unit.Value)$($unit.Short)"
+        }
+        else {
+            $label = if ($unit.Value -eq 1) { $unit.Singular } else { $unit.Plural }
+            "$($unit.Value) $label"
+        }
     }
 
-    return $parts -join ', '
+    if (@($parts).Count -gt 0) {
+        return $(if ($Short) { $parts -join ' ' } else { $parts -join ', ' })
+    }
+
+    $seconds = [Math]::Max(0, [int][Math]::Floor($Uptime.TotalSeconds))
+    if ($Short) { return "${seconds}s" }
+    $label = if ($seconds -eq 1) { 'second' } else { 'seconds' }
+    return "$seconds $label"
 }
 
 function Test-SharedServiceProcess {
@@ -210,7 +243,7 @@ foreach ($service in $services) {
         DisplayName = $service.DisplayName
         PID         = $service.ProcessId
         StartTime   = $resolved.StartTime
-        Uptime      = Format-RelativeUptime -Uptime ($now - $resolved.StartTime)
+        Uptime      = Format-RelativeUptime -Uptime ($now - $resolved.StartTime) -Short:$Short
         Source      = $resolved.Source
     }
 }
