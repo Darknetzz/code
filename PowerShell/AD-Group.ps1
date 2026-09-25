@@ -73,7 +73,8 @@
     .\AD-Group.ps1 -GroupName '*admins*' -AllMatchingGroups
 
 .NOTES
-    Requires the ActiveDirectory module (RSAT).
+    Requires the ActiveDirectory module (RSAT) and a reachable domain controller.
+    Both are checked before any prompt or lookup.
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Interactive')]
@@ -134,7 +135,20 @@ function Initialize-ActiveDirectoryModule {
     if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {
         throw 'ActiveDirectory module not found. Install RSAT Active Directory tools.'
     }
-    Import-Module ActiveDirectory -ErrorAction Stop
+
+    try {
+        Import-Module ActiveDirectory -ErrorAction Stop
+    }
+    catch {
+        throw "ActiveDirectory module failed to load. $($_.Exception.Message)"
+    }
+
+    try {
+        $null = Get-ADDomain -ErrorAction Stop
+    }
+    catch {
+        throw "Cannot reach a domain controller. Confirm this computer is domain-joined, a DC is reachable, and Active Directory Web Services is running. $($_.Exception.Message)"
+    }
 }
 
 function Read-HostText {
