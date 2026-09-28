@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pygallery\\pygallery.py'],
+    ['pygallery.py'],
     pathex=[],
     binaries=[],
     datas=[],

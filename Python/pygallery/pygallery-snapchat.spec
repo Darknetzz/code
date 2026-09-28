@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Kriss\\Documents\\Git\\code\\Python\\pygallery\\pygallery-snapchat.py'],
+    ['pygallery-snapchat.py'],
     pathex=[],
     binaries=[],
     datas=[],
