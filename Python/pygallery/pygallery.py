@@ -6,9 +6,9 @@ extension, optionally builds ffmpeg thumbnails, and emits a self-contained
 ``gallery.html`` plus supporting assets in a ``gallery/`` subfolder via the
 shared :mod:`_core` module.
 
-By default a Range-capable HTTP server is started afterward so you can open
-the gallery from this machine or another on the LAN. Use ``--no-serve`` to
-only write files (``file://`` still works).
+By default only gallery files are written (``file://`` works). Pass ``--serve``
+to start a Range-capable HTTP server afterward so you can open the gallery
+from this machine or another on the LAN.
 
 Tabs are auto-built from the first-level subfolders of the scanned root, so
 e.g.::
@@ -22,10 +22,10 @@ gets three tabs. If there's only one top-level folder (or none), the tab bar
 is hidden and you get just the search / year / month / type filters.
 
 Usage:
-    python pygallery.py                      # interactive; then serve
-    python pygallery.py D:\\Photos           # build + serve
-    python pygallery.py D:\\Photos --no-serve
-    python pygallery.py D:\\Photos --bind 127.0.0.1 --port 8080
+    python pygallery.py                      # interactive; build only
+    python pygallery.py D:\\Photos           # build only
+    python pygallery.py D:\\Photos --serve
+    python pygallery.py D:\\Photos --serve --bind 127.0.0.1 --port 8080
     python pygallery.py D:\\Photos --title "My Photos" -j 8
 """
 
@@ -150,9 +150,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip ffmpeg/ffmpegthumbnailer thumbnail generation.",
     )
     parser.add_argument(
-        "--no-serve",
+        "--serve",
         action="store_true",
-        help="Only write gallery files; do not start the HTTP server.",
+        help="Start the Range-capable HTTP server after writing gallery files.",
     )
     parser.add_argument(
         "--bind",
@@ -290,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     print_summary(entries, stats, title=args.title, out_html=out_html,
                   extras=extras or None)
 
-    if args.no_serve:
+    if not args.serve:
         return 0
 
     return serve_directory(

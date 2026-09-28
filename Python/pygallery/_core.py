@@ -281,6 +281,7 @@ HTML_TEMPLATE = """<!doctype html>
         <option value="date">Date</option>
         <option value="name">Name</option>
         <option value="size">Size</option>
+        <option value="duration">Duration</option>
       </select>
       <select id="sortDir" aria-label="Sort direction">
         <option value="desc">Descending</option>
@@ -297,6 +298,9 @@ HTML_TEMPLATE = """<!doctype html>
         <option value="75" selected>Player: M</option>
         <option value="90">Player: L</option>
       </select>
+      <label class="filter-toggle" title="Group tiles by parent folder">
+        <input type="checkbox" id="sectionsToggle"> Sections
+      </label>
     </div>
   </div>
   <nav id="tabs" class="tabs" role="tablist"></nav>
@@ -464,12 +468,30 @@ body {
 .filters input[type="search"]:focus, .filters select:focus {
   outline: none; border-color: var(--muted);
 }
+.filters .filter-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; cursor: pointer; user-select: none;
+  white-space: nowrap;
+}
+.filters .filter-toggle input { accent-color: var(--accent); cursor: pointer; }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
   gap: 6px;
   padding: 12px;
+}
+.grid-section {
+  grid-column: 1 / -1;
+  margin: 10px 0 2px;
+  padding: 8px 4px 4px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
 }
 .tile {
   position: relative;
@@ -659,6 +681,7 @@ JS = r"""
   const sortDirSel = document.getElementById('sortDir');
   const tileSizeSel = document.getElementById('tileSize');
   const playerSizeSel = document.getElementById('playerSize');
+  const sectionsToggle = document.getElementById('sectionsToggle');
   const tabsEl = document.getElementById('tabs');
 
   // Build tabs from unique source values. Snapchat-ish labels are mapped, the
@@ -720,6 +743,26 @@ JS = r"""
 
   let fxCtx, fxSource, fxBassFilter, fxMidFilter, fxTrebleFilter;
   let fxCompressor, fxMakeup, fxAnalyser, fxConnected = false, fxMeterOn = false;
+  let applyingAudioPrefs = false;
+  let userMuted = true;
+  let userVolume = 1;
+
+  function applyVideoAudioPrefs() {
+    applyingAudioPrefs = true;
+    try {
+      lbVideo.volume = userVolume;
+      lbVideo.muted = fxConnected ? true : userMuted;
+    } finally {
+      applyingAudioPrefs = false;
+    }
+  }
+  function persistUserAudioFromVideo() {
+    if (applyingAudioPrefs) return;
+    userVolume = lbVideo.volume;
+    if (!fxConnected) userMuted = lbVideo.muted;
+    try { saveUiPrefs(); } catch (_) { /* ignore */ }
+  }
+  lbVideo.addEventListener('volumechange', persistUserAudioFromVideo);
 
   try {
     const savedFx = JSON.parse(localStorage.getItem(FX_STORAGE) || '{}');
@@ -770,7 +813,7 @@ JS = r"""
     } catch (_) { /* ignore */ }
     fxSource = null;
     fxConnected = false;
-    lbVideo.muted = false;
+    applyVideoAudioPrefs();
   }
   function ensureAudioGraph() {
     if (!fxWanted()) {
@@ -779,7 +822,7 @@ JS = r"""
     }
     if (fxConnected) {
       applyFxSettings();
-      lbVideo.muted = true;
+      applyVideoAudioPrefs();
       return;
     }
     if (!lbVideo.src) return;
@@ -820,7 +863,7 @@ JS = r"""
       fxAnalyser.connect(fxCtx.destination);
       fxConnected = true;
       // Keep pixels on the <video>; only silence its own audio output.
-      lbVideo.muted = true;
+      applyVideoAudioPrefs();
       applyFxSettings();
       if (!fxMeterOn) {
         fxMeterOn = true;
@@ -967,6 +1010,7 @@ JS = r"""
     sortDir: 'desc',
     tileMin: 180,
     playerMax: 75,
+    sections: false,
     view: [],
     index: -1,
   };
@@ -983,12 +1027,16 @@ JS = r"""
       sortDir: state.sortDir,
       tileMin: state.tileMin,
       playerMax: state.playerMax,
+      sections: state.sections,
+      volume: userVolume,
+      muted: userMuted,
     }));
   }
 
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    if (saved.sortBy === 'date' || saved.sortBy === 'name' || saved.sortBy === 'size') {
+    if (saved.sortBy === 'date' || saved.sortBy === 'name'
+        || saved.sortBy === 'size' || saved.sortBy === 'duration') {
       state.sortBy = saved.sortBy;
       sortBySel.value = saved.sortBy;
     }
@@ -1004,9 +1052,20 @@ JS = r"""
       state.playerMax = Number(saved.playerMax);
       playerSizeSel.value = String(state.playerMax);
     }
+    if (typeof saved.sections === 'boolean') {
+      state.sections = saved.sections;
+      sectionsToggle.checked = saved.sections;
+    }
+    if (typeof saved.volume === 'number' && saved.volume >= 0 && saved.volume <= 1) {
+      userVolume = saved.volume;
+    }
+    if (typeof saved.muted === 'boolean') {
+      userMuted = saved.muted;
+    }
   } catch (_) { /* ignore */ }
   applyTileSize();
   applyPlayerSize();
+  applyVideoAudioPrefs();
 
   const years = Array.from(new Set(entries.map((e) => e.date.slice(0, 4))))
     .sort()
@@ -1029,6 +1088,9 @@ JS = r"""
     if (state.sortBy === 'size') {
       av = a.size || 0;
       bv = b.size || 0;
+    } else if (state.sortBy === 'duration') {
+      av = a.duration || 0;
+      bv = b.duration || 0;
     } else {
       av = a.mtime || 0;
       bv = b.mtime || 0;
@@ -1074,6 +1136,32 @@ JS = r"""
     return m + ':' + pad(sec);
   }
 
+  function folderLabel(e) {
+    return (e && e.folder) ? e.folder : '(root)';
+  }
+
+  function buildRenderList() {
+    if (!state.sections) {
+      return state.view.map((e, idx) => ({ kind: 'tile', e, idx }));
+    }
+    const groups = new Map();
+    for (let idx = 0; idx < state.view.length; idx++) {
+      const e = state.view[idx];
+      const key = folderLabel(e);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ kind: 'tile', e, idx });
+    }
+    const keys = Array.from(groups.keys()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+    const list = [];
+    for (const key of keys) {
+      list.push({ kind: 'section', label: key });
+      for (const item of groups.get(key)) list.push(item);
+    }
+    return list;
+  }
+
   function render() {
     countLabel.textContent = state.view.length + ' of ' + entries.length + ' items';
     grid.innerHTML = '';
@@ -1084,15 +1172,26 @@ JS = r"""
       grid.appendChild(empty);
       return;
     }
+    const list = buildRenderList();
     // Render in batches to keep first paint snappy on very large galleries.
     const BATCH = 300;
     let i = 0;
     function chunk() {
       const frag = document.createDocumentFragment();
-      const end = Math.min(i + BATCH, state.view.length);
-      for (; i < end; i++) frag.appendChild(buildTile(state.view[i], i));
+      const end = Math.min(i + BATCH, list.length);
+      for (; i < end; i++) {
+        const item = list[i];
+        if (item.kind === 'section') {
+          const h = document.createElement('div');
+          h.className = 'grid-section';
+          h.textContent = item.label;
+          frag.appendChild(h);
+        } else {
+          frag.appendChild(buildTile(item.e, item.idx));
+        }
+      }
       grid.appendChild(frag);
-      if (i < state.view.length) requestAnimationFrame(chunk);
+      if (i < list.length) requestAnimationFrame(chunk);
     }
     chunk();
   }
@@ -1221,6 +1320,22 @@ JS = r"""
     lbMeta.innerHTML = '<strong>' + (state.index + 1) + ' / ' + state.view.length + '</strong>'
       + '<span class="muted">' + parts.join(' \u00b7 ') + '</span>';
   }
+  function updateTileDuration(e) {
+    const idx = state.view.indexOf(e);
+    if (idx < 0) return;
+    const tile = grid.querySelector('.tile[data-idx="' + idx + '"]');
+    if (!tile) return;
+    let dur = tile.querySelector('.badge.duration');
+    if (!dur) {
+      dur = document.createElement('span');
+      dur.className = 'badge duration';
+      tile.appendChild(dur);
+    }
+    dur.textContent = fmtDuration(e.duration);
+    const date = tile.querySelector('.date');
+    if (date) date.classList.add('has-duration');
+  }
+
   lbVideo.addEventListener('loadedmetadata', () => {
     const e = state.view[state.index];
     if (!e || e.type !== 'video') return;
@@ -1228,6 +1343,7 @@ JS = r"""
     if ((!e.duration || e.duration <= 0) && d && isFinite(d) && d > 0) {
       e.duration = d;
       refreshLbMeta(e);
+      updateTileDuration(e);
     }
   });
   function showCurrent() {
@@ -1241,6 +1357,7 @@ JS = r"""
       fxOpenRaw.href = e.media;
       fxOpenRaw.hidden = false;
       stopFxGraph();
+      applyVideoAudioPrefs();
       if (e.thumb) lbVideo.poster = e.thumb;
       else lbVideo.removeAttribute('poster');
       const next = e.media;
@@ -1282,6 +1399,11 @@ JS = r"""
   typeSel.addEventListener('change', () => { state.type = typeSel.value; applyFilters(); });
   sortBySel.addEventListener('change', () => { state.sortBy = sortBySel.value; applyFilters(); });
   sortDirSel.addEventListener('change', () => { state.sortDir = sortDirSel.value; applyFilters(); });
+  sectionsToggle.addEventListener('change', () => {
+    state.sections = sectionsToggle.checked;
+    try { saveUiPrefs(); } catch (_) { /* ignore */ }
+    render();
+  });
   tileSizeSel.addEventListener('change', () => {
     state.tileMin = Number(tileSizeSel.value) || 180;
     applyTileSize();

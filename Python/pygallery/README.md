@@ -7,10 +7,12 @@ Generate a static HTML gallery from a directory tree of images and videos
 ## Features
 
 - Recursive scan with folder tabs, year/month/type filters, text search, and
-  sort by date / name / size
+  sort by date / name / size / duration
+- Optional **Sections** view that groups tiles by immediate parent folder
 - Lightbox viewer with optional **loudness normalize** + **3-band EQ** (from the
   earlier watch.html player; prefs in `localStorage`)
-- **Default:** starts a Range-capable HTTP server after building (LAN-friendly)
+- **Default:** write gallery files only; pass `--serve` for a LAN-friendly
+  Range-capable HTTP server
 - Optional parallel thumbnails via `ffmpegthumbnailer` (preferred for video)
   or `ffmpeg`
 - Snapchat export mode: groups media + thumbnail + overlay, optional chat
@@ -38,17 +40,17 @@ and other common junk dirs.
 cd Python/pygallery
 
 # Interactive (Tab completes paths; left/right arrows edit the line)
-# Then serves on http://0.0.0.0:18923/gallery.html
+# Writes gallery.html + gallery/ (no server)
 python pygallery.py
 
-# Build + serve
+# Build only
 python pygallery.py D:\Photos
 
-# Build only (no server)
-python pygallery.py D:\Photos --no-serve
+# Build + serve
+python pygallery.py D:\Photos --serve
 
 # Custom bind/port
-python pygallery.py D:\Photos --bind 127.0.0.1 --port 8080
+python pygallery.py D:\Photos --serve --bind 127.0.0.1 --port 8080
 
 python pygallery.py D:\Photos --title "My Photos"
 python pygallery.py D:\Photos -o D:\Photos\gallery -j 8
@@ -66,7 +68,7 @@ From another machine on the LAN, open the printed `LAN:` URL (e.g.
 | `-o` / `--output` | Asset output dir (default: `<root>/gallery`; skipped if `gallery/thumbs` already exists) |
 | `-j` / `--workers` | Parallel thumbnail workers (default: `6`; skipped when all thumbs are fresh) |
 | `--no-thumbs` | Skip ffmpeg thumbnail generation |
-| `--no-serve` | Write files only; do not start HTTP server |
+| `--serve` | Start HTTP server after writing gallery files |
 | `--bind` | Bind address (default: `0.0.0.0`) |
 | `--port` | Port (default: `18923`) |
 | `--title` | Page title (default: `Media Gallery`) |
@@ -99,7 +101,11 @@ Thumbnail generation is incremental: unchanged files reuse cached thumbs.
 
 ## Notes
 
-- Sort preference is stored in the browser (`localStorage`)
+- Sort, tile/player size, Sections, and lightbox volume/mute are stored in the
+  browser (`localStorage`). Videos start muted until you unmute; that choice
+  and volume carry across videos and reloads.
+- Duration badges come from `ffprobe` at build time; opening a video without a
+  stored duration also fills the tile badge once metadata loads.
 - The built-in server supports HTTP `Range` (video seeking in Chromium)
 - Binding `0.0.0.0` exposes the library on your LAN; use `--bind 127.0.0.1`
   for local-only access
