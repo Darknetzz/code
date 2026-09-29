@@ -140,3 +140,20 @@ def test_plain_51_layout_gets_no_channelmap():
     ]
     args, _ = av1._build_stream_map_args(streams, input_is_mkv=True)
     assert "-filter:a:0" not in args
+
+
+def test_opus_bitrate_scales_with_channels(monkeypatch):
+    monkeypatch.setattr(av1, "AUDIO_BITRATE", "64k")
+    assert av1._opus_bitrate_for_channels(None) == "64k"
+    assert av1._opus_bitrate_for_channels(1) == "64k"
+    assert av1._opus_bitrate_for_channels(2) == "64k"
+    assert av1._opus_bitrate_for_channels(6) == "192k"
+    assert av1._opus_bitrate_for_channels(8) == "256k"
+    monkeypatch.setattr(av1, "AUDIO_BITRATE", "96k")
+    assert av1._opus_bitrate_for_channels(6) == "288k"
+
+
+def test_stream_map_uses_channel_scaled_bitrate(monkeypatch):
+    monkeypatch.setattr(av1, "AUDIO_BITRATE", "64k")
+    args, _ = av1._build_stream_map_args(_streams(), input_is_mkv=True)
+    assert args[args.index("-b:a:0") + 1] == "192k"

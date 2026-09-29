@@ -227,7 +227,7 @@ $env:AV1_FFMPEG_PATH = "C:\custom\ffmpeg.exe"
 $env:AV1_FFPROBE_PATH = "C:\custom\ffprobe.exe"
 
 # Encoding parameters
-$env:AV1_AUDIO_BITRATE = "96k"               # Opus audio bitrate (default: 64k)
+$env:AV1_AUDIO_BITRATE = "96k"               # Opus stereo bitrate (default: 64k; 5.1 gets 3x)
 $env:AV1_MAX_VIDEO_WIDTH = "1280"            # Max output width (default: 1920)
 $env:AV1_BITRATE_REDUCTION_FACTOR = "0.6"    # Bitrate factor (default: 0.65, roughly 35% reduction)
 $env:AV1_BITRATE_FALLBACK = "1800000"        # Fallback in bps if probe fails (default: 2M)
@@ -261,7 +261,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 - **Output container**: always Matroska (`.mkv`). Note that the in-place rename step restores the *original* extension, so `movie.mp4` can end up as Matroska data named `.mp4`; use `--keep-mkv` to avoid that.
 - **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv` (requires FFmpeg with WMV/ASF support).
 - **Disk space safety**: Requires ~1.5× input file size free in output drive before encoding starts.
-- **Audio codec**: Opus at configurable bitrate (default 64k per stream) for smaller files and good quality.
+- **Audio codec**: Opus at configurable bitrate for smaller files and good quality. `AV1_AUDIO_BITRATE` (default 64k) is the stereo rate; multichannel tracks scale per channel (5.1 → 192k, 7.1 → 256k), mono stays at the base rate.
 - **Default log location**: `%TEMP%\av1-logs\` on Windows (can override with `--log-dir` or `AV1_LOG_DIR`).
 - **Progress display**: Shows real-time FPS, ETA per-file, cumulative bytes saved, and batch timeline.
 

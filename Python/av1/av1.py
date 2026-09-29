@@ -107,7 +107,7 @@ DISK_SPACE_SAFETY_MARGIN = 1.5  # Require 1.5x file size in free space
 # ============================================================================ #
 #                        ENCODING PARAMETER CONSTANTS                          #
 # ============================================================================ #
-AUDIO_BITRATE = "64k"  # Opus audio bitrate per stream
+AUDIO_BITRATE = "64k"  # Opus bitrate for a stereo track; multichannel scales per channel
 MAX_VIDEO_WIDTH = 1920  # Maximum video width (maintains aspect ratio)
 VIDEO_BITRATE_ESTIMATE_FACTOR = 0.9  # Factor to estimate video-only bitrate from total
 RECOMMENDED_BITRATE_MARGIN = 1.15  # Consider within +15% of recommended as "at target"
@@ -920,6 +920,17 @@ def _audio_bitrate_bps() -> int:
         return int(float(ab))
     except ValueError:
         return 64_000
+
+
+def _opus_bitrate_for_channels(channels: Optional[int]) -> str:
+    """
+    Opus bitrate for one track. AUDIO_BITRATE is the stereo rate; multichannel tracks get
+    the same per-channel share (64k stereo -> 192k for 5.1, 256k for 7.1). Mono/stereo/unknown
+    use AUDIO_BITRATE unchanged.
+    """
+    if not isinstance(channels, int) or channels <= 2:
+        return AUDIO_BITRATE
+    return f"{_audio_bitrate_bps() * channels // 2 // 1000}k"
 
 
 def _video_bps_cap_for_max_file_bytes(
@@ -2779,10 +2790,10 @@ def _build_audio_args(audio_channels: Optional[int], temp_output: str) -> list[s
             "-c:a",
             "libopus",
             "-b:a",
-            AUDIO_BITRATE,
+            _opus_bitrate_for_channels(audio_channels),
             temp_output,
         ]
-    return ["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output]
+    return ["-c:a", "libopus", "-b:a", _opus_bitrate_for_channels(audio_channels), temp_output]
 
 
 def probe_streams(file_path: str) -> Optional[list[dict]]:
@@ -2849,7 +2860,7 @@ def _build_stream_map_args(streams: list[dict], *, input_is_mkv: bool) -> tuple[
         if s["codec_name"] == "opus":
             args.extend([f"-c:a:{audio_out}", "copy"])
         else:
-            args.extend([f"-c:a:{audio_out}", "libopus", f"-b:a:{audio_out}", AUDIO_BITRATE])
+            args.extend([f"-c:a:{audio_out}", "libopus", f"-b:a:{audio_out}", _opus_bitrate_for_channels(s["channels"])])
             # libopus rejects 5.1(side); remap side channels to back (same speakers in practice).
             if s["channel_layout"] == "5.1(side)":
                 args.extend([f"-filter:a:{audio_out}", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR"])
