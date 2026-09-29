@@ -4,6 +4,8 @@ A fast, reliable video batch converter that targets the best available encoder o
 
 ## Features
 
+- **VMAF-targeted mode (`--vmaf`)**: per-file CRF chosen by [ab-av1](https://github.com/alexheretic/ab-av1) so every file lands at the same perceptual quality with the smallest size
+- **Keeps all tracks**: every audio track, subtitle, font attachment, chapter and metadata tag is carried over (not just ffmpeg's one-per-type default)
 - **Auto-detects best encoder**: `av1_nvenc` → `av1_amf` → `hevc_nvenc` → `hevc_amf` → `libsvtav1`
 - **Smart bitrate selection**: Probes input bitrate and targets ~35% reduction by default, with optional presets for stronger compression
 - **Preserves audio**: Multi-channel audio using Opus codec (configurable bitrate)
@@ -20,6 +22,7 @@ A fast, reliable video batch converter that targets the best available encoder o
 ## Requirements
 
 - FFmpeg and FFprobe installed and available on PATH
+- For `--vmaf`: [ab-av1](https://github.com/alexheretic/ab-av1) >= 0.11.5 on PATH, and an ffmpeg build with `libsvtav1` + `libvmaf` (e.g. gyan.dev "full" or BtbN builds)
 - Python 3.9+
 - Python packages: `typer`, `rich`
 
@@ -96,6 +99,28 @@ av1 "C:\Videos\Input" --ffmpeg "C:\custom\ffmpeg.exe" --ffprobe "C:\custom\ffpro
 av1 "C:\Videos\Input" --no-color
 ```
 
+## VMAF mode (recommended for archiving)
+
+```powershell
+# Smallest file per video that still scores VMAF >= 95
+av1 "D:\Videos" -r --vmaf 95
+
+# Slower preset = smaller files at the same quality
+av1 "D:\Videos" -r --vmaf 95 --preset 4
+
+# Only accept a file if it shrinks to <= 60% of the source video size
+av1 "D:\Videos" -r --vmaf 95 --max-encoded-percent 60
+```
+
+For each file, `ab-av1 crf-search` encodes a few short samples, measures VMAF, and binary-searches the highest CRF that still meets the target. `av1` then encodes the full file with CPU SVT-AV1 at that CRF (10-bit, same preset/keyframe settings ab-av1 measured), with its own progress bars, temp-file swap and logging.
+
+- Hardware encoders are not used in this mode; the CRF is only valid for the encoder that was measured.
+- A file is **skipped** (original kept) when no CRF reaches the target under `--max-encoded-percent` (default 80). Already-efficient sources skip themselves this way instead of being re-encoded for nothing.
+- `--min-shrink N` (or a `--size-preset`) maps to `--max-encoded-percent 100-N`. `--bitrate` and `--max-output-size` are rejected: VMAF mode picks quality, not size.
+- `--max-width` still applies; the crf-search measures the downscaled result.
+- Env: `AV1_VMAF`, `AV1_SVT_PRESET`, `AV1_MAX_ENCODED_PERCENT`, `AV1_AB_AV1_PATH`.
+- Typical targets: 93 (visibly OK, small), 95 (hard to tell apart), 97 (archival).
+
 ## Command reference
 
 ```text
@@ -129,6 +154,10 @@ Options:
   --max-output-size TEXT      Cap output file size (e.g. 10M)
   --min-shrink FLOAT          Minimum shrink percent vs source
   --size-preset TEXT          light | balanced | aggressive
+  --vmaf FLOAT                VMAF-targeted CRF mode via ab-av1 (e.g. 95)
+  --preset INT                SVT-AV1 preset in --vmaf mode [default: 6]
+  --max-encoded-percent FLOAT Skip if best CRF predicts > this % of source [default: 80]
+  --ab-av1 TEXT               Path to ab-av1 (overrides AV1_AB_AV1_PATH)
   --max-width INT             Max output video width
   --force, -f                 Force in-place replace + rename flow
   --rename-original, -R       Rename original after success
@@ -182,7 +211,7 @@ Options:
    - Probes input bitrate and calculates target (~35% reduction by default).
    - Applies safe scaling (max width 1920 by default, maintains aspect ratio, only downsizes sources wider than the active max width).
    - Encodes with VBR using `-b:v` (target), `-maxrate` (peak), `-bufsize` (buffer).
-   - Preserves audio channels, re-encodes to Opus (configurable).
+   - Maps every audio/subtitle/attachment stream plus chapters and metadata. Audio is re-encoded to Opus (existing Opus tracks are copied), text/bitmap subtitles are copied (MP4 `mov_text` becomes SRT). Cover art and data streams (timecode/telemetry) are dropped, and the drop is reported.
    - Writes to temp `.temp.mkv`, atomically swaps on success.
    - Optionally deletes or prompts to delete original; can rename output when converting in-place.
 4. **Displays progress**: Nested progress bars showing overall batch progress and per-file encoding progress with FPS/ETA.
@@ -229,7 +258,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 - **Scaling**: `min(1920, iw)` caps width at 1920px while preserving aspect ratio, so lower-resolution sources are not upscaled; override with `--max-width` or `AV1_MAX_VIDEO_WIDTH`.
 - **Portrait / rotation**: Phone videos with `rotate` metadata or a display matrix are physically uprighted during encode (`transpose` + `setsar=1`, rotation tag cleared) so players do not stretch or double-rotate AV1 output.
 - **HEVC compatibility**: Outputs tagged `hvc1` for broader device compatibility.
-- **Output container**: `.mkv` with `+faststart` flag for faster playback start.
+- **Output container**: always Matroska (`.mkv`). Note that the in-place rename step restores the *original* extension, so `movie.mp4` can end up as Matroska data named `.mp4`; use `--keep-mkv` to avoid that.
 - **Supported input formats**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv` (requires FFmpeg with WMV/ASF support).
 - **Disk space safety**: Requires ~1.5× input file size free in output drive before encoding starts.
 - **Audio codec**: Opus at configurable bitrate (default 64k per stream) for smaller files and good quality.
@@ -246,7 +275,7 @@ python .\av1.py "D:\Videos" --recursive --delete-original
 - **Environment overrides**: Set `AV1_*` env vars for system-wide defaults; CLI flags always take precedence.
 - Use `--recursive` to process entire folder trees, preserving directory structure when using separate output folder.
 - For archival quality, raise the bitrate and avoid strict `--min-shrink`/`--size-preset` caps; CPU AV1 usually produces better compression at the same bitrate.
-- If outputs are larger, source may already be efficient. The script warns and lets you choose deletion.
+- If an output is not smaller than its source, it is discarded and the original is kept (even with `--delete-original`).
 - Start with `--dry-run --recursive` to preview all files before committing to conversion.
 - Use `--keep-mkv` to preserve `.mkv` extension when converting in-place (useful for consistent naming).
 - Use `--ffmpeg` and `--ffprobe` flags to test different FFmpeg builds without modifying PATH.

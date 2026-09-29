@@ -42,7 +42,7 @@ from rich.table import Column, Table
 #                           APP & CLI CONFIGURATION                            #
 # ============================================================================ #
 __app_name__ = "av1"
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 try:
     from _pybin_build_info import BUILD_TIMESTAMP_UTC as __build_timestamp_utc__
@@ -120,6 +120,25 @@ PROGRESS_TIMEOUT = 10  # Timeout for ffprobe operations (seconds)
 ENCODER_TEST_TIMEOUT = 5  # Timeout for encoder detection tests (seconds)
 FFMPEG_STALL_TIMEOUT = 300  # Abort ffmpeg if it emits no progress/output for this many seconds
 PROMPT_YES_NO_ALL = "[Y/n/a] (y=yes, n=no, a=all): "
+
+# ============================================================================ #
+#                     VMAF / CRF MODE (ab-av1 crf-search)                       #
+# ============================================================================ #
+# When VMAF_TARGET is set (--vmaf / AV1_VMAF), each file gets its CRF chosen by
+# `ab-av1 crf-search` against a VMAF target, then is encoded here with libsvtav1
+# at that CRF. Bitrate heuristics (--bitrate, reduction factor, caps) are bypassed.
+AB_AV1_CMD = os.getenv("AV1_AB_AV1_PATH") or "ab-av1"
+AB_AV1_MIN_VERSION = (0, 11, 5)  # first release with `crf-search --stdout-format json`
+VMAF_TARGET: Optional[float] = None
+DEFAULT_VMAF_TARGET = 95.0
+SVT_PRESET = 6  # libsvtav1 preset used in VMAF mode (lower = slower/smaller)
+MAX_ENCODED_PERCENT = 80.0  # skip file if best CRF still predicts > this % of source video size
+VMAF_KEYINT_SECONDS = 10  # keyframe interval, matches ab-av1's default
+VMAF_PIX_FMT = "yuv420p10le"  # 10-bit AV1 compresses better even from 8-bit sources
+# Subtitle codecs Matroska can hold as-is; mov_text (MP4) is converted to SRT.
+MKV_COPYABLE_SUBTITLE_CODECS = frozenset({
+    "subrip", "srt", "ass", "ssa", "webvtt", "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "text",
+})
 SIZE_PRESETS: dict[str, dict[str, object]] = {
     "light": {
         "min_shrink_percent": 25.0,
@@ -143,7 +162,8 @@ SIZE_PRESETS: dict[str, dict[str, object]] = {
 #   AV1_BITRATE_FALLBACK, AV1_MAX_OUTPUT_SIZE, AV1_MIN_SHRINK, AV1_CPU_THREADS,
 #   AV1_NO_COLOR, AV1_NO_PROMPT, AV1_HIDE_FILENAMES, AV1_LOG_TYPE, AV1_LOG_DIR,
 #   AV1_FFMPEG_PATH, AV1_FFPROBE_PATH, AV1_FFMPEG_FALLBACK, AV1_IGNORE_LIBVA_WARNING,
-#   AV1_FFMPEG_STALL_TIMEOUT, AV1_OUTPUT_PREPEND, AV1_OUTPUT_APPEND, AV1_NO_RENAME
+#   AV1_FFMPEG_STALL_TIMEOUT, AV1_OUTPUT_PREPEND, AV1_OUTPUT_APPEND, AV1_NO_RENAME,
+#   AV1_VMAF, AV1_SVT_PRESET, AV1_MAX_ENCODED_PERCENT, AV1_AB_AV1_PATH
 
 def _env_bool(val: str) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
@@ -2676,9 +2696,11 @@ def _parse_bitrate_to_bps(bitrate: str) -> int:
     return int(normalized)
 
 
-def _select_pixel_format(hw_type: str) -> str:
+def _select_pixel_format(hw_type: str, *, crf_mode: bool = False) -> str:
     """Return the pixel format expected by the active encoder type."""
-    return "yuv420p" if hw_type == "cpu" else "nv12"
+    if hw_type == "cpu":
+        return VMAF_PIX_FMT if crf_mode else "yuv420p"
+    return "nv12"
 
 
 def _build_video_filter_chain(hw_type: str, max_video_width: int, pix_fmt: str, rotation: int = 0) -> str:
@@ -2697,14 +2719,39 @@ def _build_video_filter_chain(hw_type: str, max_video_width: int, pix_fmt: str, 
     return _compose_vf_filter(_rotation_filter_for_metadata(rotation), scale, "setsar=1")
 
 
+def _vmaf_keyint_frames(fps: Optional[float]) -> int:
+    """Keyframe interval in frames for CRF mode (mirrors ab-av1's 10s default)."""
+    if isinstance(fps, (int, float)) and fps > 0:
+        return max(1, int(round(float(fps) * VMAF_KEYINT_SECONDS)))
+    return 240
+
+
+def _format_crf(crf: float) -> str:
+    """Render a CRF for -svtav1-params (supports fractional steps, drops trailing .0)."""
+    value = round(float(crf), 2)
+    return str(int(value)) if value == int(value) else f"{value:g}"
+
+
 def _append_encoder_rate_control_args(
     command: list[str],
     *,
     hw_type: str,
     target_bitrate_int: int,
     effective_cpu_threads: int,
+    crf: Optional[float] = None,
+    keyint: Optional[int] = None,
 ) -> None:
     """Append encoder-specific options without mixing hardware and CPU-only flags."""
+    if crf is not None:
+        if hw_type != "cpu":
+            raise ValueError("CRF mode is only supported with libsvtav1 (CPU)")
+        # Same knobs ab-av1 used while searching, so the chosen CRF lands on the measured VMAF.
+        command.extend(["-preset", str(SVT_PRESET), "-g", str(keyint or 240)])
+        command.extend([
+            "-svtav1-params",
+            f"scd=1:crf={_format_crf(crf)}:lp={effective_cpu_threads}",
+        ])
+        return
     bitrate_args = [
         "-b:v", str(target_bitrate_int),
         "-maxrate", str(int(target_bitrate_int * BITRATE_MAXRATE_MULTIPLIER)),
@@ -2724,7 +2771,7 @@ def _append_encoder_rate_control_args(
 
 
 def _build_audio_args(audio_channels: Optional[int], temp_output: str) -> list[str]:
-    """Build audio encoding arguments, preserving the special 5.1(side) mapping."""
+    """Legacy audio args (first audio stream only). Used when stream probing is unavailable."""
     if audio_channels == 6:
         return [
             "-af",
@@ -2736,6 +2783,108 @@ def _build_audio_args(audio_channels: Optional[int], temp_output: str) -> list[s
             temp_output,
         ]
     return ["-c:a", "libopus", "-b:a", AUDIO_BITRATE, temp_output]
+
+
+def probe_streams(file_path: str) -> Optional[list[dict]]:
+    """
+    Return every stream in the file as a list of small dicts:
+      index, codec_type, codec_name, channels, channel_layout, attached_pic
+    Returns None if probing fails (callers fall back to legacy single-stream mapping).
+    """
+    try:
+        cmd = [
+            FFPROBE_CMD, "-v", "error",
+            "-show_entries",
+            "stream=index,codec_type,codec_name,channels,channel_layout:stream_disposition=attached_pic",
+            "-of", "json",
+            file_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=PROGRESS_TIMEOUT, **SUBPROCESS_TEXT_KWARGS)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        data = json.loads(result.stdout)
+    except Exception:
+        return None
+    streams: list[dict] = []
+    for s in data.get("streams", []):
+        if not isinstance(s.get("index"), int):
+            continue
+        streams.append({
+            "index": s["index"],
+            "codec_type": str(s.get("codec_type") or ""),
+            "codec_name": str(s.get("codec_name") or ""),
+            "channels": s.get("channels") if isinstance(s.get("channels"), int) else None,
+            "channel_layout": str(s.get("channel_layout") or ""),
+            "attached_pic": bool((s.get("disposition") or {}).get("attached_pic")),
+        })
+    return streams
+
+
+def _build_stream_map_args(streams: list[dict], *, input_is_mkv: bool) -> tuple[list[str], list[str]]:
+    """
+    Build -map / per-stream codec args that keep every audio track, subtitle and font
+    attachment instead of ffmpeg's default "one stream per type" selection.
+
+    Returns (args, notes) where notes lists anything intentionally dropped.
+    """
+    args: list[str] = []
+    notes: list[str] = []
+
+    videos = [s for s in streams if s["codec_type"] == "video" and not s["attached_pic"]]
+    if videos:
+        args.extend(["-map", f"0:{videos[0]['index']}"])
+        if len(videos) > 1:
+            notes.append(f"dropped {len(videos) - 1} extra video stream(s)")
+    else:
+        args.extend(["-map", "0:v:0"])
+    covers = [s for s in streams if s["codec_type"] == "video" and s["attached_pic"]]
+    if covers:
+        notes.append(f"dropped {len(covers)} cover art stream(s)")
+
+    audio_out = 0
+    for s in streams:
+        if s["codec_type"] != "audio":
+            continue
+        args.extend(["-map", f"0:{s['index']}"])
+        if s["codec_name"] == "opus":
+            args.extend([f"-c:a:{audio_out}", "copy"])
+        else:
+            args.extend([f"-c:a:{audio_out}", "libopus", f"-b:a:{audio_out}", AUDIO_BITRATE])
+            # libopus rejects 5.1(side); remap side channels to back (same speakers in practice).
+            if s["channel_layout"] == "5.1(side)":
+                args.extend([f"-filter:a:{audio_out}", "channelmap=map=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR"])
+        audio_out += 1
+
+    sub_out = 0
+    dropped_subs: list[str] = []
+    for s in streams:
+        if s["codec_type"] != "subtitle":
+            continue
+        codec_name = s["codec_name"]
+        if codec_name in MKV_COPYABLE_SUBTITLE_CODECS:
+            args.extend(["-map", f"0:{s['index']}", f"-c:s:{sub_out}", "copy"])
+        elif codec_name == "mov_text":
+            args.extend(["-map", f"0:{s['index']}", f"-c:s:{sub_out}", "srt"])
+        else:
+            dropped_subs.append(codec_name or "unknown")
+            continue
+        sub_out += 1
+    if dropped_subs:
+        notes.append(f"dropped subtitle(s) Matroska can't hold: {', '.join(dropped_subs)}")
+
+    if input_is_mkv:
+        attachments = [s for s in streams if s["codec_type"] == "attachment"]
+        for s in attachments:
+            args.extend(["-map", f"0:{s['index']}"])
+        if attachments:
+            args.extend(["-c:t", "copy"])
+
+    data_streams = [s for s in streams if s["codec_type"] == "data"]
+    if data_streams:
+        notes.append(f"dropped {len(data_streams)} data stream(s) (timecode/telemetry)")
+
+    args.extend(["-map_metadata", "0", "-map_chapters", "0"])
+    return args, notes
 
 
 def _build_ffmpeg_command(
@@ -2752,9 +2901,18 @@ def _build_ffmpeg_command(
     effective_max_width: int,
     audio_channels: Optional[int],
     rotation: int = 0,
+    streams: Optional[list[dict]] = None,
+    crf: Optional[float] = None,
+    fps: Optional[float] = None,
 ) -> tuple[list[str], str]:
-    """Build the ffmpeg command and return it with the selected pixel format."""
-    pix_fmt = _select_pixel_format(hw_type)
+    """
+    Build the ffmpeg command and return it with the selected pixel format.
+
+    With ``streams`` (from probe_streams) every audio/subtitle/attachment stream is kept;
+    without it, ffmpeg's default single-stream selection is used (legacy behaviour).
+    With ``crf`` the CPU encoder runs in CRF mode (VMAF-targeted) instead of VBR.
+    """
+    pix_fmt = _select_pixel_format(hw_type, crf_mode=crf is not None)
     command = [ffmpeg_cmd, "-y", "-hide_banner", "-progress", "pipe:1", "-nostats"]
     if hw_type == "vaapi":
         command.extend(["-vaapi_device", os.getenv("AV1_VAAPI_DEVICE", "/dev/dri/renderD128")])
@@ -2762,6 +2920,11 @@ def _build_ffmpeg_command(
     if rotation:
         command.append("-noautorotate")
     command.extend(["-i", input_path])
+    if streams is not None:
+        map_args, _ = _build_stream_map_args(
+            streams, input_is_mkv=input_path.lower().endswith((".mkv", ".webm"))
+        )
+        command.extend(map_args)
     command.extend(["-vf", _build_video_filter_chain(hw_type, effective_max_width, pix_fmt, rotation)])
     if rotation:
         command.extend(["-metadata:s:v:0", "rotate=0"])
@@ -2779,9 +2942,251 @@ def _build_ffmpeg_command(
         hw_type=hw_type,
         target_bitrate_int=target_bitrate_int,
         effective_cpu_threads=effective_cpu_threads,
+        crf=crf,
+        keyint=_vmaf_keyint_frames(fps) if crf is not None else None,
     )
-    command.extend(_build_audio_args(audio_channels, temp_output))
+    if streams is not None:
+        command.append(temp_output)
+    else:
+        command.extend(_build_audio_args(audio_channels, temp_output))
     return command, pix_fmt
+
+
+# ============================================================================ #
+#                     FUNCTION: ab-av1 crf-search (VMAF mode)                   #
+# ============================================================================ #
+def _parse_version_tuple(text: str) -> Optional[tuple[int, ...]]:
+    """Extract a dotted version like '0.11.7' from tool output."""
+    import re
+
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def check_ab_av1() -> str:
+    """Resolve ab-av1, verify it is new enough for JSON output, and return its version string."""
+    global AB_AV1_CMD
+    if AB_AV1_CMD != "ab-av1":
+        # Explicit --ab-av1 / AV1_AB_AV1_PATH: don't silently fall back to whatever is on PATH.
+        resolved = shutil.which(AB_AV1_CMD) or (AB_AV1_CMD if os.path.isfile(AB_AV1_CMD) else None)
+    else:
+        resolved = shutil.which("ab-av1")
+    if not resolved:
+        cprint(
+            "ab-av1 not found (needed for --vmaf). Install it (cargo install ab-av1, or a release binary) "
+            "and put it on PATH, or pass --ab-av1 / set AV1_AB_AV1_PATH.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+    AB_AV1_CMD = resolved
+    try:
+        result = subprocess.run(
+            [AB_AV1_CMD, "--version"], capture_output=True, timeout=ENCODER_TEST_TIMEOUT, **SUBPROCESS_TEXT_KWARGS
+        )
+        version_text = (result.stdout or result.stderr or "").strip()
+    except Exception as exc:
+        cprint(f"Could not run ab-av1: {exc}", "error")
+        raise typer.Exit(code=1)
+    version = _parse_version_tuple(version_text)
+    if version is not None and version < AB_AV1_MIN_VERSION:
+        need = ".".join(str(p) for p in AB_AV1_MIN_VERSION)
+        cprint(f"ab-av1 {version_text} is too old; --vmaf needs >= {need} (crf-search JSON output).", "error")
+        raise typer.Exit(code=1)
+    return version_text or "unknown"
+
+
+def _build_crf_search_command(
+    input_path: str,
+    *,
+    min_vmaf: float,
+    preset: int,
+    max_encoded_percent: float,
+    cpu_threads: int,
+    vfilter: Optional[str],
+) -> list[str]:
+    """Build the `ab-av1 crf-search` command mirroring the final encode settings."""
+    command = [
+        AB_AV1_CMD, "crf-search",
+        "-i", input_path,
+        "--encoder", "libsvtav1",
+        "--preset", str(preset),
+        "--pix-format", VMAF_PIX_FMT,
+        "--min-vmaf", f"{min_vmaf:g}",
+        "--max-encoded-percent", f"{max_encoded_percent:g}",
+        "--keyint", f"{VMAF_KEYINT_SECONDS}s",
+        "--scd", "true",
+        "--svt", f"lp={cpu_threads}",
+        "--stdout-format", "json",
+    ]
+    if vfilter:
+        command.extend(["--vfilter", vfilter])
+    return command
+
+
+def _crf_search_vfilter(
+    stream_info: dict,
+    max_video_width: int,
+) -> Optional[str]:
+    """
+    Scale filter for crf-search, only when the final encode will actually downscale.
+    ab-av1 lets ffmpeg autorotate, so the rotation transpose is not included here.
+    """
+    display_width = stream_info.get("display_width") or stream_info.get("width")
+    if isinstance(display_width, int) and display_width > max_video_width:
+        return f"scale='min({max_video_width},iw)':-2:force_original_aspect_ratio=decrease,setsar=1"
+    return None
+
+
+@dataclass
+class CrfSearchResult:
+    ok: bool
+    crf: Optional[float] = None
+    vmaf: Optional[float] = None
+    predicted_percent: Optional[float] = None
+    predicted_size: Optional[int] = None
+    predicted_seconds: Optional[float] = None
+    no_suitable_crf: bool = False
+    cancelled: bool = False
+    error: str = ""
+    last_attempt: Optional[dict] = None
+
+
+def parse_crf_search_output(lines: list[str]) -> CrfSearchResult:
+    """Interpret ab-av1 `crf-search --stdout-format json` NDJSON lines."""
+    last_attempt: Optional[dict] = None
+    for raw in lines:
+        raw = raw.strip()
+        if not raw.startswith("{"):
+            continue
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        kind = msg.get("type")
+        if kind == "sample-encode-done":
+            last_attempt = msg
+        elif kind == "crf-search-done":
+            return CrfSearchResult(
+                ok=True,
+                crf=float(msg["crf"]),
+                vmaf=float(msg["vmaf"]) if msg.get("vmaf") is not None else None,
+                predicted_percent=msg.get("predicted_encode_percent"),
+                predicted_size=msg.get("predicted_encode_size"),
+                predicted_seconds=msg.get("predicted_encode_seconds"),
+                last_attempt=last_attempt,
+            )
+        elif kind == "crf-search-error":
+            return CrfSearchResult(
+                ok=False,
+                no_suitable_crf=True,
+                error=str(msg.get("message") or "no suitable crf"),
+                last_attempt=last_attempt,
+            )
+    return CrfSearchResult(ok=False, error="no result from ab-av1", last_attempt=last_attempt)
+
+
+def run_crf_search(
+    input_path: str,
+    *,
+    stream_info: dict,
+    max_video_width: int,
+    cpu_threads: int,
+    progress_name: str,
+    show_progress: bool,
+    batch_index: Optional[int],
+    batch_total: Optional[int],
+) -> CrfSearchResult:
+    """Run `ab-av1 crf-search` for one file, showing attempts in the progress display."""
+    global _ACTIVE_FFMPEG_PROCESS
+    target = VMAF_TARGET if VMAF_TARGET is not None else DEFAULT_VMAF_TARGET
+    command = _build_crf_search_command(
+        input_path,
+        min_vmaf=target,
+        preset=SVT_PRESET,
+        max_encoded_percent=MAX_ENCODED_PERCENT,
+        cpu_threads=cpu_threads,
+        vfilter=_crf_search_vfilter(stream_info, max_video_width),
+    )
+    if os.getenv("AV1_DEBUG") and not _HIDE_FILENAMES:
+        cprint(f"   crf-search: {' '.join(command)}", "info")
+
+    stdout_lines: list[str] = []
+    stderr_tail: list[str] = []
+    task = None
+    # ab-av1 finds ffmpeg via PATH; put the resolved ffmpeg first so --ffmpeg / AV1_FFMPEG_PATH apply too.
+    env = os.environ.copy()
+    ffmpeg_dir = os.path.dirname(FFMPEG_CMD) if FFMPEG_CMD and os.path.isabs(FFMPEG_CMD) else ""
+    if ffmpeg_dir:
+        env["PATH"] = ffmpeg_dir + os.pathsep + env.get("PATH", "")
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=1,
+            env=env,
+            **SUBPROCESS_TEXT_KWARGS,
+        )
+    except OSError as exc:
+        return CrfSearchResult(ok=False, error=f"could not start ab-av1: {exc}")
+    _ACTIVE_FFMPEG_PROCESS = process
+
+    def _drain_stderr() -> None:
+        assert process.stderr is not None
+        for err_line in process.stderr:
+            err_line = err_line.strip()
+            if err_line:
+                stderr_tail.append(err_line)
+                del stderr_tail[:-20]
+
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+    stderr_thread.start()
+
+    try:
+        if _PROGRESS_CONTEXT and show_progress:
+            task = _PROGRESS_CONTEXT.add_task(
+                _format_file_progress_description(f"{progress_name} (crf-search)", batch_index, batch_total),
+                total=None,
+                fps=_progress_field(""),
+                eta=_progress_field(""),
+                size=_progress_field(""),
+                saved=_progress_field(""),
+                progress_text=_progress_field(f"VMAF ≥ {target:g}"),
+            )
+        # Blocking read until EOF so the final result line is never lost when ab-av1 exits fast
+        # (cache hits). No stall timeout: a long sample can be silent for minutes. Ctrl+C
+        # terminates the process via _ACTIVE_FFMPEG_PROCESS, which closes stdout and ends the loop.
+        assert process.stdout is not None
+        for line in process.stdout:
+            stdout_lines.append(line)
+            try:
+                msg = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if msg.get("type") == "sample-encode-done" and task is not None and _PROGRESS_CONTEXT:
+                attempt = f"crf {_format_crf(msg.get('crf', 0))} → VMAF {float(msg.get('vmaf') or 0):.2f}"
+                pct = msg.get("predicted_encode_percent")
+                if isinstance(pct, (int, float)):
+                    attempt += f" ({pct:.0f}%)"
+                _PROGRESS_CONTEXT.update(task, progress_text=_progress_field(attempt))
+        process.wait()
+    finally:
+        if _ACTIVE_FFMPEG_PROCESS is process:
+            _ACTIVE_FFMPEG_PROCESS = None
+        if task is not None and _PROGRESS_CONTEXT:
+            _PROGRESS_CONTEXT.remove_task(task)
+        stderr_thread.join(timeout=2)
+
+    if _USER_CANCELLED:
+        return CrfSearchResult(ok=False, cancelled=True, error="cancelled")
+    result = parse_crf_search_output(stdout_lines)
+    if not result.ok and not result.no_suitable_crf:
+        detail = next((l for l in reversed(stderr_tail) if l.lower().startswith("error")), None)
+        detail = detail or (stderr_tail[-1] if stderr_tail else "")
+        result.error = f"ab-av1 exited {process.returncode}: {detail}".strip()
+    return result
 
 
 # ============================================================================ #
@@ -2914,82 +3319,137 @@ def convert_single_file(
     bitrate_str = _format_bitrate_display(stream_info.get("bitrate"))
     media_info = _build_media_info(stream_info)
 
-    # --- CALCULATE TARGET BITRATE ---
+    # --- CALCULATE TARGET: VMAF-targeted CRF (ab-av1) or bitrate heuristics ---
     target_bitrate_int = 0
     bitrate_decision = "auto"
     manual_bitrate = False
-    if bitrate:
-        try:
-            target_bitrate_int = _parse_bitrate_to_bps(bitrate)
-            manual_bitrate = True
-            bitrate_decision = f"manual {target_bitrate_int/1_000_000:.2f}M"
-        except ValueError:
-            cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
-            bitrate = None
-    
-    if not bitrate:
-        input_bitrate = stream_info.get("bitrate")
-
-        if isinstance(input_bitrate, int) and input_bitrate > 0:
-            recommended_bitrate = None
-            bitrate_width = display_width if isinstance(display_width, int) else width
-            bitrate_height = display_height if isinstance(display_height, int) else height
-            if (
-                isinstance(bitrate_width, int)
-                and isinstance(bitrate_height, int)
-                and isinstance(fps, (int, float))
-                and fps > 0
-            ):
-                recommended_bitrate = get_recommended_bitrate(bitrate_width, bitrate_height, float(fps))
-
-            if recommended_bitrate and input_bitrate <= int(recommended_bitrate * RECOMMENDED_BITRATE_MARGIN):
-                # Already efficient for this resolution/FPS: keep source bitrate.
-                target_bitrate_int = input_bitrate
-                bitrate_decision = (
-                    f"kept {input_bitrate/1_000_000:.2f}M "
-                    f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {bitrate_width}x{bitrate_height} {float(fps):.2f}fps)"
-                )
-            else:
-                target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
-                bitrate_decision = f"reduced {input_bitrate/1_000_000:.2f}M→{target_bitrate_int/1_000_000:.2f}M"
+    crf_value: Optional[float] = None
+    crf_result: Optional[CrfSearchResult] = None
+    vmaf_mode = VMAF_TARGET is not None
+    if vmaf_mode:
+        if dry_run:
+            bitrate_decision = f"vmaf≥{VMAF_TARGET:g} preset {SVT_PRESET} (crf-search skipped in dry run)"
         else:
             if not _SUPPRESS_OUTPUT:
-                cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
-            target_bitrate_int = BITRATE_FALLBACK
-            bitrate_decision = f"fallback {BITRATE_FALLBACK/1_000_000:.1f}M"
+                cprint(
+                    f"🔎 crf-search: VMAF ≥ {VMAF_TARGET:g}, preset {SVT_PRESET}, max {MAX_ENCODED_PERCENT:g}% of source",
+                    "info",
+                )
+            crf_result = run_crf_search(
+                input_path,
+                stream_info=stream_info,
+                max_video_width=effective_max_width,
+                cpu_threads=effective_cpu_threads,
+                progress_name=progress_name,
+                show_progress=show_progress,
+                batch_index=batch_index,
+                batch_total=batch_total,
+            )
+            if crf_result.cancelled:
+                return delete_original, 0, "cancelled", media_info
+            if not crf_result.ok:
+                if crf_result.no_suitable_crf:
+                    last = crf_result.last_attempt or {}
+                    detail = ""
+                    if last:
+                        detail = (
+                            f" (last try: crf {_format_crf(last.get('crf', 0))}, "
+                            f"VMAF {float(last.get('vmaf') or 0):.2f}, "
+                            f"{float(last.get('predicted_encode_percent') or 0):.0f}% of source)"
+                        )
+                    cprint(
+                        f"⏭️  Skipping: {display_name} — can't reach VMAF {VMAF_TARGET:g} under "
+                        f"{MAX_ENCODED_PERCENT:g}% of source size{detail}. Keeping original.",
+                        "info",
+                        log_body=(
+                            f"⏭️  Skipping: {display_name_log} — no CRF meets VMAF {VMAF_TARGET:g} "
+                            f"within {MAX_ENCODED_PERCENT:g}%{detail}"
+                        ),
+                    )
+                    return delete_original, 0, "skip-vmaf", media_info
+                cprint(f"❌ crf-search failed for {display_name}: {crf_result.error}", "error")
+                return delete_original, 0, "error-crf-search", media_info
+            crf_value = crf_result.crf
+            pct = crf_result.predicted_percent
+            pct_text = f", ~{pct:.0f}% of source" if isinstance(pct, (int, float)) else ""
+            vmaf_text = f"VMAF {crf_result.vmaf:.2f}" if crf_result.vmaf is not None else "VMAF ?"
+            bitrate_decision = f"crf {_format_crf(crf_value)} ({vmaf_text}{pct_text})"
+    else:
+        target_bitrate_int = 0
+        bitrate_decision = "auto"
+        manual_bitrate = False
+        if bitrate:
+            try:
+                target_bitrate_int = _parse_bitrate_to_bps(bitrate)
+                manual_bitrate = True
+                bitrate_decision = f"manual {target_bitrate_int/1_000_000:.2f}M"
+            except ValueError:
+                cprint(f"Invalid bitrate format: {bitrate}. Using auto-detection.", "warning")
+                bitrate = None
+    
+        if not bitrate:
+            input_bitrate = stream_info.get("bitrate")
 
-    _pre_cap_bps = target_bitrate_int
-    try:
-        _in_sz = os.path.getsize(input_path)
-    except OSError:
-        _in_sz = 0
-    target_bitrate_int, _cap_notes = apply_output_size_bitrate_caps(
-        target_bitrate_int,
-        input_file_bytes=_in_sz,
-        duration_sec=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
-        input_stream_bps=stream_info.get("bitrate") if isinstance(stream_info.get("bitrate"), int) else None,
-        max_output_bytes=max_output_bytes,
-        min_shrink_percent=min_shrink_percent,
-    )
-    if _cap_notes and target_bitrate_int < _pre_cap_bps:
-        bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
+            if isinstance(input_bitrate, int) and input_bitrate > 0:
+                recommended_bitrate = None
+                bitrate_width = display_width if isinstance(display_width, int) else width
+                bitrate_height = display_height if isinstance(display_height, int) else height
+                if (
+                    isinstance(bitrate_width, int)
+                    and isinstance(bitrate_height, int)
+                    and isinstance(fps, (int, float))
+                    and fps > 0
+                ):
+                    recommended_bitrate = get_recommended_bitrate(bitrate_width, bitrate_height, float(fps))
 
-    noticeable_quality, quality_reasons = assess_noticeable_quality_impact(
-        stream_info=stream_info,
-        target_bitrate_int=target_bitrate_int,
-        pre_cap_bitrate_int=_pre_cap_bps,
-        effective_max_width=effective_max_width,
-        cap_notes=_cap_notes,
-        manual_bitrate=manual_bitrate,
-    )
-    if noticeable_quality:
-        if dry_run:
-            if not _SUPPRESS_OUTPUT:
-                cprint("⚠️  Dry run: compression would noticeably affect quality:", "warning")
-                for reason in quality_reasons:
-                    cprint(f"   • {reason}", "warning")
-        elif not maybe_confirm_noticeable_quality_impact(input_path, quality_reasons):
-            return delete_original, 0, "skip-quality", media_info
+                if recommended_bitrate and input_bitrate <= int(recommended_bitrate * RECOMMENDED_BITRATE_MARGIN):
+                    # Already efficient for this resolution/FPS: keep source bitrate.
+                    target_bitrate_int = input_bitrate
+                    bitrate_decision = (
+                        f"kept {input_bitrate/1_000_000:.2f}M "
+                        f"(<= rec {recommended_bitrate/1_000_000:.2f}M @ {bitrate_width}x{bitrate_height} {float(fps):.2f}fps)"
+                    )
+                else:
+                    target_bitrate_int = int(input_bitrate * BITRATE_REDUCTION_FACTOR)
+                    bitrate_decision = f"reduced {input_bitrate/1_000_000:.2f}M→{target_bitrate_int/1_000_000:.2f}M"
+            else:
+                if not _SUPPRESS_OUTPUT:
+                    cprint(f"⚠️  Bitrate unknown, using {BITRATE_FALLBACK/1_000_000:.1f}M fallback", "warning")
+                target_bitrate_int = BITRATE_FALLBACK
+                bitrate_decision = f"fallback {BITRATE_FALLBACK/1_000_000:.1f}M"
+
+        _pre_cap_bps = target_bitrate_int
+        try:
+            _in_sz = os.path.getsize(input_path)
+        except OSError:
+            _in_sz = 0
+        target_bitrate_int, _cap_notes = apply_output_size_bitrate_caps(
+            target_bitrate_int,
+            input_file_bytes=_in_sz,
+            duration_sec=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+            input_stream_bps=stream_info.get("bitrate") if isinstance(stream_info.get("bitrate"), int) else None,
+            max_output_bytes=max_output_bytes,
+            min_shrink_percent=min_shrink_percent,
+        )
+        if _cap_notes and target_bitrate_int < _pre_cap_bps:
+            bitrate_decision = f"{bitrate_decision} | cap: {', '.join(_cap_notes)} → {target_bitrate_int/1_000_000:.2f}M"
+
+        noticeable_quality, quality_reasons = assess_noticeable_quality_impact(
+            stream_info=stream_info,
+            target_bitrate_int=target_bitrate_int,
+            pre_cap_bitrate_int=_pre_cap_bps,
+            effective_max_width=effective_max_width,
+            cap_notes=_cap_notes,
+            manual_bitrate=manual_bitrate,
+        )
+        if noticeable_quality:
+            if dry_run:
+                if not _SUPPRESS_OUTPUT:
+                    cprint("⚠️  Dry run: compression would noticeably affect quality:", "warning")
+                    for reason in quality_reasons:
+                        cprint(f"   • {reason}", "warning")
+            elif not maybe_confirm_noticeable_quality_impact(input_path, quality_reasons):
+                return delete_original, 0, "skip-quality", media_info
 
     if not _SUPPRESS_OUTPUT:
         cprint(
@@ -3009,6 +3469,19 @@ def convert_single_file(
     codec = ACTIVE_ENCODER["codec"]
 
     audio_channels = get_audio_channels(input_path)
+    # Map every audio/subtitle/attachment stream (ffmpeg's default keeps one per type).
+    streams = probe_streams(input_path)
+    if streams is None:
+        cprint("⚠️  Stream probe failed; falling back to default stream selection (extra tracks may be dropped).", "warning")
+    elif not _SUPPRESS_OUTPUT:
+        _, map_notes = _build_stream_map_args(
+            streams, input_is_mkv=input_path.lower().endswith((".mkv", ".webm"))
+        )
+        n_audio = sum(1 for st in streams if st["codec_type"] == "audio")
+        n_subs = sum(1 for st in streams if st["codec_type"] == "subtitle")
+        cprint(f"   Streams:    {n_audio} audio, {n_subs} subtitle", "info")
+        for note in map_notes:
+            cprint(f"   Note:       {note}", "warning")
     command, pix_fmt = _build_ffmpeg_command(
         ffmpeg_cmd=FFMPEG_CMD,
         input_path=input_path,
@@ -3022,6 +3495,9 @@ def convert_single_file(
         effective_max_width=effective_max_width,
         audio_channels=audio_channels,
         rotation=rotation,
+        streams=streams,
+        crf=crf_value,
+        fps=fps if isinstance(fps, (int, float)) else None,
     )
 
     if not _SUPPRESS_OUTPUT:
@@ -3043,6 +3519,13 @@ def convert_single_file(
         "codec": codec,
         "target_bps": target_bitrate_int,
     }
+    if vmaf_mode:
+        file_event["vmaf_target"] = VMAF_TARGET
+        file_event["svt_preset"] = SVT_PRESET
+    if crf_result is not None and crf_result.ok:
+        file_event["crf"] = crf_result.crf
+        file_event["vmaf_predicted"] = crf_result.vmaf
+        file_event["predicted_percent"] = crf_result.predicted_percent
     if max_output_bytes is not None:
         file_event["max_output_bytes"] = max_output_bytes
     if min_shrink_percent is not None:
@@ -3078,8 +3561,8 @@ def convert_single_file(
             "output": output_path,
             "encoder": encoder_name,
             "codec": codec,
-            "pix_fmt": pix_fmt,
-            "bitrate": target_bitrate_int,
+            "pix_fmt": VMAF_PIX_FMT if vmaf_mode else pix_fmt,
+            "bitrate": target_bitrate_int if not vmaf_mode else f"crf-search VMAF≥{VMAF_TARGET:g}",
         }
         if max_output_bytes is not None:
             summary["max_output_bytes"] = max_output_bytes
@@ -3275,19 +3758,22 @@ def convert_single_file(
                     pass
                 
                 if file_size <= new_file_size:
+                    # Never delete/replace the original with something that isn't smaller.
                     cprint(
-                        "Warning: Output file is larger than input (entropy/quality issue)",
+                        "Output is not smaller than input — discarding it and keeping the original.",
                         "warning",
                         log_body=(
-                            f"{_log_path} | output not smaller than input "
+                            f"{_log_path} | output not smaller than input, discarded "
                             f"(before {mb_before:.2f} MB / {file_size} bytes, "
                             f"after {mb_after:.2f} MB / {new_file_size} bytes)"
                         ),
                         log_only=_SUPPRESS_OUTPUT,
                     )
-                    delete_original = _finalize_output_file(
-                        input_path, output_path, keep_mkv, delete_original, no_rename=no_rename
-                    )
+                    try:
+                        os.remove(output_path)
+                    except OSError as exc:
+                        cprint(f"Could not remove discarded output: {exc}", "warning")
+                    return delete_original, 0, f"{bitrate_decision} | discarded (not smaller)", media_info
                 else:
                     delete_original = _finalize_output_file(
                         input_path, output_path, keep_mkv, delete_original, no_rename=no_rename
@@ -4030,6 +4516,37 @@ def main(
         help="Quick filesize/resolution profile. Choices: light, balanced, aggressive. Applies defaults for shrink and max-width, but explicit flags still win.",
         rich_help_panel="Input/Output",
     ),
+    vmaf: Optional[float] = typer.Option(
+        None,
+        "--vmaf",
+        help=(
+            "Quality-targeted mode: let ab-av1 find, per file, the highest CRF whose VMAF is at least this "
+            "(e.g. 95), then encode with CPU SVT-AV1 at that CRF. Replaces the bitrate heuristics; requires "
+            "ab-av1 >= 0.11.5 on PATH. Files that can't hit the target under --max-encoded-percent are skipped."
+        ),
+        rich_help_panel="Quality (VMAF)",
+    ),
+    preset: Optional[int] = typer.Option(
+        None,
+        "--preset",
+        help=f"SVT-AV1 preset for --vmaf mode (0-13, lower = slower + smaller). Default: {SVT_PRESET}.",
+        rich_help_panel="Quality (VMAF)",
+    ),
+    max_encoded_percent: Optional[float] = typer.Option(
+        None,
+        "--max-encoded-percent",
+        help=(
+            f"--vmaf mode: skip a file when the best CRF still predicts more than this percent of the source "
+            f"video size. Default: {MAX_ENCODED_PERCENT:g} (or 100 - --min-shrink when that is given)."
+        ),
+        rich_help_panel="Quality (VMAF)",
+    ),
+    ab_av1: Optional[str] = typer.Option(
+        None,
+        "--ab-av1",
+        help="Path to the ab-av1 executable (overrides AV1_AB_AV1_PATH). Default: ab-av1 on PATH.",
+        rich_help_panel="Quality (VMAF)",
+    ),
     max_width: Optional[int] = typer.Option(
         None,
         "--max-width",
@@ -4164,6 +4681,9 @@ def main(
             [yellow]Preset + explicit width override[/]:
                 $ av1 "C:\\Videos" --size-preset aggressive --max-width 720
 
+            [yellow]Quality-targeted: smallest file that still scores VMAF 95[/]:
+                $ av1 "C:\\Videos" -r --vmaf 95
+
             [yellow]Remove stale temp files (same as `av1 clean`)[/]:
                 $ av1 --clean "C:\\Videos" -r
 
@@ -4222,6 +4742,8 @@ def main(
             incompatible.append("--reencode-av1")
         if cpu_threads is not None:
             incompatible.append("--cpu-threads / --cpu-cores")
+        if vmaf is not None or preset is not None or max_encoded_percent is not None or ab_av1 is not None:
+            incompatible.append("--vmaf / --preset / --max-encoded-percent / --ab-av1")
         if incompatible:
             cprint(
                 f"--clean/--cleanup cannot be combined with: {', '.join(incompatible)}",
@@ -4285,6 +4807,7 @@ def main(
             cprint(f"Invalid AV1_MAX_OUTPUT_SIZE: {env_spec!r}", "error")
             raise typer.Exit(code=1)
 
+    min_shrink_explicit = min_shrink is not None or bool(os.getenv("AV1_MIN_SHRINK"))
     min_shrink_percent: Optional[float] = min_shrink
     if min_shrink_percent is None and os.getenv("AV1_MIN_SHRINK"):
         try:
@@ -4349,6 +4872,60 @@ def main(
 
     effective_cpu_threads = _resolve_cpu_threads(cpu_threads)
 
+    # --- VMAF / CRF mode settings ---
+    global VMAF_TARGET, SVT_PRESET, MAX_ENCODED_PERCENT, AB_AV1_CMD
+    if vmaf is None and os.getenv("AV1_VMAF"):
+        try:
+            vmaf = float(os.getenv("AV1_VMAF", "").strip())
+        except ValueError:
+            cprint(f"Invalid AV1_VMAF: {os.getenv('AV1_VMAF')!r}", "error")
+            raise typer.Exit(code=1)
+    if preset is None and os.getenv("AV1_SVT_PRESET"):
+        try:
+            preset = int(os.getenv("AV1_SVT_PRESET", "").strip())
+        except ValueError:
+            cprint(f"Invalid AV1_SVT_PRESET: {os.getenv('AV1_SVT_PRESET')!r}", "error")
+            raise typer.Exit(code=1)
+    if max_encoded_percent is None and os.getenv("AV1_MAX_ENCODED_PERCENT"):
+        try:
+            max_encoded_percent = float(os.getenv("AV1_MAX_ENCODED_PERCENT", "").strip())
+        except ValueError:
+            cprint(f"Invalid AV1_MAX_ENCODED_PERCENT: {os.getenv('AV1_MAX_ENCODED_PERCENT')!r}", "error")
+            raise typer.Exit(code=1)
+    if vmaf is None and (preset is not None or max_encoded_percent is not None or ab_av1 is not None):
+        cprint("--preset / --max-encoded-percent / --ab-av1 only apply together with --vmaf.", "error")
+        raise typer.Exit(code=1)
+    if vmaf is not None:
+        if not 0 < vmaf <= 100:
+            cprint("--vmaf must be between 0 and 100 (typical: 93-97).", "error")
+            raise typer.Exit(code=1)
+        conflicting = [
+            name for name, given in (
+                ("--bitrate", bitrate is not None),
+                ("--max-output-size / -S", max_output_bytes is not None),
+            ) if given
+        ]
+        if conflicting:
+            cprint(f"--vmaf picks quality, not size; it cannot be combined with: {', '.join(conflicting)}", "error")
+            raise typer.Exit(code=1)
+        if preset is not None and not 0 <= preset <= 13:
+            cprint("--preset must be between 0 and 13.", "error")
+            raise typer.Exit(code=1)
+        if max_encoded_percent is None and min_shrink_explicit and min_shrink_percent is not None:
+            max_encoded_percent = 100.0 - float(min_shrink_percent)
+        if max_encoded_percent is not None and not 0 < max_encoded_percent <= 100:
+            cprint("--max-encoded-percent must be between 0 and 100.", "error")
+            raise typer.Exit(code=1)
+        VMAF_TARGET = float(vmaf)
+        if preset is not None:
+            SVT_PRESET = int(preset)
+        if max_encoded_percent is not None:
+            MAX_ENCODED_PERCENT = float(max_encoded_percent)
+        if ab_av1:
+            AB_AV1_CMD = ab_av1
+    else:
+        VMAF_TARGET = None
+
     # Override ffmpeg/ffprobe paths from CLI if provided
     if ffmpeg:
         FFMPEG_CMD = ffmpeg
@@ -4406,6 +4983,19 @@ def main(
     else:
         _confirm_root_like_input_paths(input_paths, intent="convert", recursive=recursive)
         check_ffmpeg()
+        if VMAF_TARGET is not None:
+            # CRF search is only meaningful for the encoder ab-av1 measured: CPU SVT-AV1.
+            global ACTIVE_ENCODER
+            if not check_encoder_support("libsvtav1"):
+                cprint("--vmaf needs an ffmpeg build with libsvtav1.", "error")
+                raise typer.Exit(code=1)
+            ACTIVE_ENCODER = {"encoder": "libsvtav1", "codec": "av1", "hw_type": "cpu"}
+            ab_version = check_ab_av1()
+            cprint(
+                f"VMAF mode: target {VMAF_TARGET:g}, SVT-AV1 preset {SVT_PRESET}, 10-bit, "
+                f"skip if > {MAX_ENCODED_PERCENT:g}% of source ({ab_version}).",
+                "success",
+            )
 
         global _AUTO_REENCODE_AV1, _AUTO_CONFIRM_QUALITY_RISK, _AUTO_OVERWRITE_EXISTING, _AUTO_RENAME_TO_ORIGINAL
         _AUTO_REENCODE_AV1 = False
