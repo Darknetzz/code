@@ -296,14 +296,20 @@ impl eframe::App for SizeTreeApp {
                         let max_size = children.first().map(|c| c.1).unwrap_or(1).max(1);
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for (cname, csize, cis_dir) in children.iter().take(40) {
+                                let color = entry_color(*cis_dir, cname);
+                                let icon = if *cis_dir { "📁" } else { "📄" };
                                 ui.horizontal(|ui| {
-                                    let icon = if *cis_dir { "📁" } else { "📄" };
-                                    ui.label(format!("{icon} {}", truncate_middle(cname, 28)));
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{icon} {}",
+                                            truncate_middle(cname, 28)
+                                        ))
+                                        .color(color),
+                                    );
                                 });
                                 let frac = *csize as f32 / max_size as f32;
-                                let bar =
-                                    egui::ProgressBar::new(frac.clamp(0.0, 1.0))
-                                        .text(format_size(*csize));
+                                let bar = egui::ProgressBar::new(frac.clamp(0.0, 1.0))
+                                    .text(format_size(*csize));
                                 ui.add(bar);
                             }
                         });
@@ -316,13 +322,11 @@ impl eframe::App for SizeTreeApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Size tree");
             ui.separator();
-            // Collect paint data under the lock, then draw.
             let snapshot = self.with_tree(|tree| {
                 let root = tree.root?;
                 Some(TreeSnapshot {
                     root,
                     phase: tree.phase,
-                    // Clone enough to draw one frame.
                     nodes: tree
                         .nodes
                         .iter()
@@ -343,13 +347,21 @@ impl eframe::App for SizeTreeApp {
 
             match snapshot {
                 Some(Some(snap)) => {
-                    // Expand root by default
                     if self.expanded.is_empty() {
                         self.expanded.insert(snap.root);
                     }
-                    egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-                        self.draw_tree_node(ui, &snap, snap.root, 0, snap.nodes[snap.root].size.max(1));
-                    });
+                    draw_column_headers(ui);
+                    egui::ScrollArea::both()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            self.draw_tree_node(
+                                ui,
+                                &snap,
+                                snap.root,
+                                0,
+                                snap.nodes[snap.root].size.max(1),
+                            );
+                        });
                 }
                 _ => {
                     ui.label("Starting scan…");
@@ -379,6 +391,49 @@ struct NodeSnap {
     error: Option<String>,
 }
 
+const COL_BAR: f32 = 100.0;
+const COL_SIZE: f32 = 88.0;
+const COL_PCT: f32 = 56.0;
+const COL_COUNTS: f32 = 110.0;
+const COL_GAP: f32 = 8.0;
+
+fn metrics_width() -> f32 {
+    COL_BAR + COL_GAP + COL_SIZE + COL_GAP + COL_PCT + COL_GAP + COL_COUNTS
+}
+
+fn draw_column_headers(ui: &mut Ui) {
+    let row_h = ui.spacing().interact_size.y;
+    ui.horizontal(|ui| {
+        let name_w = (ui.available_width() - metrics_width()).max(160.0);
+        ui.allocate_ui_with_layout(
+            Vec2::new(name_w, row_h),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.label(RichText::new("Name").strong().color(Color32::GRAY));
+            },
+        );
+        ui.add_space(COL_GAP);
+        header_cell(ui, COL_BAR, "Share");
+        ui.add_space(COL_GAP);
+        header_cell(ui, COL_SIZE, "Size");
+        ui.add_space(COL_GAP);
+        header_cell(ui, COL_PCT, "%");
+        ui.add_space(COL_GAP);
+        header_cell(ui, COL_COUNTS, "Files / Dirs");
+    });
+    ui.separator();
+}
+
+fn header_cell(ui: &mut Ui, width: f32, text: &str) {
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, ui.spacing().interact_size.y),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            ui.label(RichText::new(text).strong().color(Color32::GRAY));
+        },
+    );
+}
+
 impl SizeTreeApp {
     fn draw_tree_node(
         &mut self,
@@ -406,75 +461,106 @@ impl SizeTreeApp {
 
         let has_kids = node.is_dir && !children.is_empty();
         let expanded = self.expanded.contains(&id);
+        let pct = if parent_size > 0 {
+            (node.size as f64 / parent_size as f64) * 100.0
+        } else {
+            0.0
+        };
+        let selected = self.selected == Some(id);
+        let type_color = entry_color(node.is_dir, &node.name);
+        let row_h = ui.spacing().interact_size.y.max(20.0);
 
         ui.horizontal(|ui| {
-            ui.add_space(depth as f32 * 14.0);
-            if has_kids {
-                let symbol = if expanded { "▼" } else { "▶" };
-                if ui.small_button(symbol).clicked() {
-                    if expanded {
-                        self.expanded.remove(&id);
-                    } else {
-                        self.expanded.insert(id);
-                    }
-                }
-            } else {
-                ui.add_space(22.0);
-            }
+            let name_w = (ui.available_width() - metrics_width()).max(160.0);
+            let name_clicked = ui
+                .allocate_ui_with_layout(
+                    Vec2::new(name_w, row_h),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.add_space(depth as f32 * 14.0);
+                        if has_kids {
+                            let symbol = if expanded { "▼" } else { "▶" };
+                            if ui.small_button(symbol).clicked() {
+                                if expanded {
+                                    self.expanded.remove(&id);
+                                } else {
+                                    self.expanded.insert(id);
+                                }
+                            }
+                        } else {
+                            ui.add_space(22.0);
+                        }
 
-            let icon = if node.is_dir { "📁" } else { "📄" };
-            let mut label = format!("{icon} {}", node.name);
-            if !node.complete && node.is_dir {
-                label.push_str(" …");
-            }
-            if node.error.is_some() {
-                label.push_str(" ⚠");
-            }
+                        let icon = if node.is_dir { "📁" } else { "📄" };
+                        let mut label = format!("{icon} {}", node.name);
+                        if !node.complete && node.is_dir {
+                            label.push_str(" …");
+                        }
+                        if node.error.is_some() {
+                            label.push_str(" ⚠");
+                        }
 
-            let selected = self.selected == Some(id);
-            let text = if selected {
-                RichText::new(label).strong().color(Color32::from_rgb(120, 180, 255))
-            } else {
-                RichText::new(label)
-            };
-            if ui.selectable_label(selected, text).clicked() {
+                        let text = if selected {
+                            RichText::new(label).strong().color(Color32::from_rgb(180, 210, 255))
+                        } else {
+                            RichText::new(label).color(type_color)
+                        };
+                        ui.add(egui::Label::new(text).truncate().sense(Sense::click()))
+                    },
+                )
+                .inner;
+
+            if name_clicked.clicked() {
                 self.selected = Some(id);
             }
 
-            let pct = if parent_size > 0 {
-                (node.size as f64 / parent_size as f64) * 100.0
-            } else {
-                0.0
-            };
-            let bar_w = 90.0;
-            let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(bar_w, 12.0), Sense::hover());
-            let filled = egui::Rect::from_min_size(
-                bar_rect.min,
-                Vec2::new(
-                    bar_rect.width() * (pct as f32 / 100.0).clamp(0.0, 1.0),
-                    bar_rect.height(),
-                ),
+            ui.add_space(COL_GAP);
+            // Share bar
+            ui.allocate_ui_with_layout(
+                Vec2::new(COL_BAR, row_h),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    let (bar_rect, _) =
+                        ui.allocate_exact_size(Vec2::new(COL_BAR, 12.0), Sense::hover());
+                    let filled = egui::Rect::from_min_size(
+                        bar_rect.min,
+                        Vec2::new(
+                            bar_rect.width() * (pct as f32 / 100.0).clamp(0.0, 1.0),
+                            bar_rect.height(),
+                        ),
+                    );
+                    ui.painter()
+                        .rect_filled(bar_rect, 2.0, Color32::from_rgb(40, 44, 52));
+                    ui.painter()
+                        .rect_filled(filled, 2.0, heat_color(pct));
+                },
             );
-            ui.painter()
-                .rect_filled(bar_rect, 2.0, Color32::from_rgb(40, 44, 52));
-            ui.painter()
-                .rect_filled(filled, 2.0, heat_color(pct));
 
-            ui.label(format!(
-                "{:>8}  {:>5.1}%",
-                format_size(node.size),
-                pct
-            ));
-            if node.is_dir {
-                ui.colored_label(
-                    Color32::GRAY,
-                    format!(
-                        "F:{} D:{}",
-                        format_count(node.file_count),
-                        format_count(node.dir_count)
-                    ),
-                );
-            }
+            ui.add_space(COL_GAP);
+            metric_cell(
+                ui,
+                COL_SIZE,
+                &format_size(node.size),
+                Color32::from_rgb(220, 220, 220),
+            );
+            ui.add_space(COL_GAP);
+            metric_cell(
+                ui,
+                COL_PCT,
+                &format!("{pct:>5.1}%"),
+                Color32::from_rgb(180, 180, 180),
+            );
+            ui.add_space(COL_GAP);
+            let counts = if node.is_dir {
+                format!(
+                    "F:{} D:{}",
+                    format_count(node.file_count),
+                    format_count(node.dir_count)
+                )
+            } else {
+                String::new()
+            };
+            metric_cell(ui, COL_COUNTS, &counts, Color32::GRAY);
         });
 
         if has_kids && expanded {
@@ -484,6 +570,16 @@ impl SizeTreeApp {
             }
         }
     }
+}
+
+fn metric_cell(ui: &mut Ui, width: f32, text: &str, color: Color32) {
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, ui.spacing().interact_size.y.max(20.0)),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            ui.label(RichText::new(text).monospace().color(color));
+        },
+    );
 }
 
 fn node_matches_filter(snap: &TreeSnapshot, id: NodeId, filter: &str) -> bool {
@@ -498,8 +594,51 @@ fn node_matches_filter(snap: &TreeSnapshot, id: NodeId, filter: &str) -> bool {
         .any(|&cid| node_matches_filter(snap, cid, filter))
 }
 
+fn entry_color(is_dir: bool, name: &str) -> Color32 {
+    if is_dir {
+        return Color32::from_rgb(230, 190, 90); // folders: amber
+    }
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        // Video
+        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "m4v" | "ts" | "flv" => {
+            Color32::from_rgb(190, 120, 255)
+        }
+        // Audio
+        "mp3" | "flac" | "wav" | "aac" | "ogg" | "m4a" | "wma" | "opus" => {
+            Color32::from_rgb(80, 200, 220)
+        }
+        // Images
+        "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "tiff" | "ico" => {
+            Color32::from_rgb(110, 210, 130)
+        }
+        // Archives
+        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" => {
+            Color32::from_rgb(255, 150, 80)
+        }
+        // Documents
+        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "rtf" => {
+            Color32::from_rgb(255, 120, 120)
+        }
+        // Text / markup
+        "txt" | "md" | "markdown" | "log" | "csv" | "json" | "xml" | "yaml" | "yml" | "toml" => {
+            Color32::from_rgb(160, 200, 255)
+        }
+        // Code
+        "rs" | "py" | "js" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "cs" | "go"
+        | "java" | "kt" | "swift" | "php" | "rb" | "sh" | "ps1" | "bat" | "cmd" => {
+            Color32::from_rgb(120, 220, 180)
+        }
+        // Executables / libs
+        "exe" | "dll" | "msi" | "sys" | "bin" | "so" | "dylib" => Color32::from_rgb(255, 100, 140),
+        _ => Color32::from_rgb(200, 200, 200),
+    }
+}
+
 fn heat_color(pct: f64) -> Color32 {
-    // Green → yellow → red by share of parent
     let t = (pct / 100.0).clamp(0.0, 1.0) as f32;
     let r = (80.0 + 175.0 * t) as u8;
     let g = (180.0 * (1.0 - t * 0.7)) as u8;
