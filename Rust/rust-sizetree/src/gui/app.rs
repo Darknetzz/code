@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use egui::{Color32, RichText, Sense, Ui, Vec2};
+use egui_extras::{Column, TableBuilder};
 
 use crate::gui::disk::{volume_for_path, VolumeInfo};
 use crate::models::{format_count, format_size};
@@ -24,6 +25,9 @@ pub struct SizeTreeApp {
     scan: Option<LiveScanHandle>,
     last_poll: Instant,
     expanded: HashSet<NodeId>,
+    /// True after we've auto-expanded the root once for the current scan.
+    /// Separate from `expanded` so collapsing the root doesn't get undone next frame.
+    root_seeded: bool,
     selected: Option<NodeId>,
     volume: Option<VolumeInfo>,
     status_note: String,
@@ -50,6 +54,7 @@ impl SizeTreeApp {
             scan: None,
             last_poll: Instant::now() - POLL_INTERVAL,
             expanded: HashSet::new(),
+            root_seeded: false,
             selected: None,
             volume: None,
             status_note: String::new(),
@@ -85,6 +90,7 @@ impl SizeTreeApp {
         self.path_edit = target.display().to_string();
         let opts = self.current_opts();
         self.expanded.clear();
+        self.root_seeded = false;
         self.selected = None;
         self.refresh_volume();
         self.status_note.clear();
@@ -363,30 +369,33 @@ impl eframe::App for SizeTreeApp {
 
             match snapshot {
                 Some(Some(snap)) => {
-                    if self.expanded.is_empty() {
+                    if !self.root_seeded {
                         self.expanded.insert(snap.root);
+                        self.root_seeded = true;
                     }
-                    let metrics = COL_BAR + COL_SIZE + COL_PCT + COL_FILES + COL_DIRS;
-                    let gaps = ui.spacing().item_spacing.x * 5.0;
-                    let name_w = (ui.available_width() - metrics - gaps - 20.0).max(180.0);
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            egui::Grid::new("size_tree_grid")
-                                .num_columns(6)
-                                .spacing([8.0, 2.0])
-                                .striped(true)
-                                .show(ui, |ui| {
-                                    self.draw_header_row(ui, name_w);
-                                    self.draw_tree_node(
-                                        ui,
-                                        &snap,
-                                        snap.root,
-                                        0,
-                                        snap.nodes[snap.root].size.max(1),
-                                        name_w,
-                                    );
-                                });
+                    let rows = self.collect_visible_rows(&snap);
+                    TableBuilder::new(ui)
+                        .striped(true)
+                        .resizable(true)
+                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                        .column(Column::remainder().at_least(160.0).clip(true))
+                        .column(Column::initial(COL_BAR).range(40.0..=280.0).clip(true))
+                        .column(Column::initial(COL_SIZE).range(72.0..=200.0).clip(true))
+                        .column(Column::initial(COL_PCT).range(56.0..=120.0).clip(true))
+                        .column(Column::initial(COL_FILES).range(48.0..=160.0).clip(true))
+                        .column(Column::initial(COL_DIRS).range(48.0..=160.0).clip(true))
+                        .header(ROW_H, |mut header| {
+                            self.draw_table_header(&mut header);
+                        })
+                        .body(|body| {
+                            body.rows(ROW_H, rows.len(), |mut row| {
+                                let VisibleRow {
+                                    id,
+                                    depth,
+                                    parent_size,
+                                } = rows[row.index()];
+                                self.draw_table_row(&mut row, &snap, id, depth, parent_size);
+                            });
                         });
                 }
                 _ => {
@@ -444,55 +453,123 @@ struct NodeSnap {
 }
 
 const COL_BAR: f32 = 120.0;
-const COL_SIZE: f32 = 96.0;
+const COL_SIZE: f32 = 108.0;
 const COL_PCT: f32 = 72.0;
 const COL_FILES: f32 = 80.0;
 const COL_DIRS: f32 = 72.0;
 const ROW_H: f32 = 22.0;
 
+struct VisibleRow {
+    id: NodeId,
+    depth: u32,
+    parent_size: u64,
+}
+
 impl SizeTreeApp {
-    fn draw_header_row(&mut self, ui: &mut Ui, name_w: f32) {
-        self.sort_header(ui, name_w, "Name", SortKey::Name, false);
-        self.sort_header(ui, COL_BAR, "Share", SortKey::Percent, false);
-        self.sort_header(ui, COL_SIZE, "Size", SortKey::Size, true);
-        self.sort_header(ui, COL_PCT, "%", SortKey::Percent, true);
-        self.sort_header(ui, COL_FILES, "Files", SortKey::Files, true);
-        self.sort_header(ui, COL_DIRS, "Dirs", SortKey::Dirs, true);
-        ui.end_row();
+    fn collect_visible_rows(&self, snap: &TreeSnapshot) -> Vec<VisibleRow> {
+        let mut rows = Vec::new();
+        let filter = self.name_filter.trim().to_ascii_lowercase();
+        self.collect_visible_rows_rec(
+            snap,
+            snap.root,
+            0,
+            snap.nodes[snap.root].size.max(1),
+            &filter,
+            &mut rows,
+        );
+        rows
     }
 
-    fn sort_header(&mut self, ui: &mut Ui, width: f32, title: &str, key: SortKey, right: bool) {
+    fn collect_visible_rows_rec(
+        &self,
+        snap: &TreeSnapshot,
+        id: NodeId,
+        depth: u32,
+        parent_size: u64,
+        filter: &str,
+        out: &mut Vec<VisibleRow>,
+    ) {
+        if !node_visible(snap, id, filter, self.kind_filter) {
+            return;
+        }
+        let Some(node) = snap.nodes.get(id) else {
+            return;
+        };
+        out.push(VisibleRow {
+            id,
+            depth,
+            parent_size,
+        });
+
+        let mut children: Vec<NodeId> = node
+            .children
+            .iter()
+            .copied()
+            .filter(|&cid| node_visible(snap, cid, filter, self.kind_filter))
+            .collect();
+        if node.is_dir && !children.is_empty() && self.expanded.contains(&id) {
+            sort_ids(&mut children, snap, self.sort_key, self.sort_asc);
+            let self_size = node.size.max(1);
+            for cid in children {
+                self.collect_visible_rows_rec(snap, cid, depth + 1, self_size, filter, out);
+            }
+        }
+    }
+
+    fn draw_table_header(&mut self, header: &mut egui_extras::TableRow<'_, '_>) {
+        header.col(|ui| {
+            self.sort_header_label(ui, "Name", SortKey::Name, false);
+        });
+        header.col(|ui| {
+            self.sort_header_label(ui, "Share", SortKey::Percent, false);
+        });
+        header.col(|ui| {
+            self.sort_header_label(ui, "Size", SortKey::Size, true);
+        });
+        header.col(|ui| {
+            self.sort_header_label(ui, "%", SortKey::Percent, true);
+        });
+        header.col(|ui| {
+            self.sort_header_label(ui, "Files", SortKey::Files, true);
+        });
+        header.col(|ui| {
+            self.sort_header_label(ui, "Dirs", SortKey::Dirs, true);
+        });
+    }
+
+    fn sort_header_label(&mut self, ui: &mut Ui, title: &str, key: SortKey, right: bool) {
         let active = self.sort_key == key;
         let layout = if right {
             egui::Layout::right_to_left(egui::Align::Center)
         } else {
             egui::Layout::left_to_right(egui::Align::Center)
         };
-        let response = ui
-            .allocate_ui_with_layout(Vec2::new(width, ROW_H), layout, |ui| {
+        let clicked = ui
+            .with_layout(layout, |ui| {
                 let label = ui.add(
                     egui::Label::new(RichText::new(title).strong().color(Color32::GRAY))
                         .sense(Sense::click()),
                 );
-                let icon = if active {
+                let icon_clicked = if active {
                     let icon = if self.sort_asc {
                         egui_lucide::Lucide::ChevronUp
                     } else {
                         egui_lucide::Lucide::ChevronDown
                     };
-                    Some(ui.add(
+                    ui.add(
                         icon.size(14.0)
                             .color(Color32::GRAY)
                             .image()
                             .sense(Sense::click()),
-                    ))
+                    )
+                    .clicked()
                 } else {
-                    None
+                    false
                 };
-                label.clicked() || icon.is_some_and(|r| r.clicked())
+                label.clicked() || icon_clicked
             })
             .inner;
-        if response {
+        if clicked {
             if self.sort_key == key {
                 self.sort_asc = !self.sort_asc;
             } else {
@@ -502,31 +579,24 @@ impl SizeTreeApp {
         }
     }
 
-    fn draw_tree_node(
+    fn draw_table_row(
         &mut self,
-        ui: &mut Ui,
+        row: &mut egui_extras::TableRow<'_, '_>,
         snap: &TreeSnapshot,
         id: NodeId,
         depth: u32,
         parent_size: u64,
-        name_w: f32,
     ) {
         let Some(node) = snap.nodes.get(id) else {
             return;
         };
         let filter = self.name_filter.trim().to_ascii_lowercase();
-        if !node_visible(snap, id, &filter, self.kind_filter) {
-            return;
-        }
-
-        let mut children: Vec<NodeId> = node
+        let children: Vec<NodeId> = node
             .children
             .iter()
             .copied()
             .filter(|&cid| node_visible(snap, cid, &filter, self.kind_filter))
             .collect();
-        sort_ids(&mut children, snap, self.sort_key, self.sort_asc);
-
         let has_kids = node.is_dir && !children.is_empty();
         let expanded = self.expanded.contains(&id);
         let pct = if parent_size > 0 {
@@ -537,106 +607,99 @@ impl SizeTreeApp {
         let selected = self.selected == Some(id);
         let type_color = entry_color(node.is_dir, &node.name);
 
-        let name_clicked = ui
-            .allocate_ui_with_layout(
-                Vec2::new(name_w, ROW_H),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.set_min_width(name_w);
-                    ui.add_space(depth as f32 * 14.0);
-                    if has_kids {
-                        let icon = if expanded {
-                            egui_lucide::Lucide::ChevronDown
-                        } else {
-                            egui_lucide::Lucide::ChevronRight
-                        };
-                        if ui
-                            .add(icon.size(16.0).color(Color32::GRAY).image().sense(Sense::click()))
-                            .clicked() {
-                            if expanded {
-                                self.expanded.remove(&id);
-                            } else {
-                                self.expanded.insert(id);
-                            }
-                        }
+        row.col(|ui| {
+            ui.add_space(depth as f32 * 14.0);
+            if has_kids {
+                let icon = if expanded {
+                    egui_lucide::Lucide::ChevronDown
+                } else {
+                    egui_lucide::Lucide::ChevronRight
+                };
+                if ui
+                    .add(icon.size(16.0).color(Color32::GRAY).image().sense(Sense::click()))
+                    .clicked()
+                {
+                    if expanded {
+                        self.expanded.remove(&id);
                     } else {
-                        ui.add_space(16.0);
+                        self.expanded.insert(id);
                     }
-
-                    let icon = if node.is_dir { "📁" } else { "📄" };
-                    let mut label = format!("{icon} {}", node.name);
-                    if !node.complete && node.is_dir {
-                        label.push_str(" …");
-                    }
-                    if node.error.is_some() {
-                        label.push_str(" ⚠");
-                    }
-                    let text = if selected {
-                        RichText::new(label).strong().color(Color32::from_rgb(180, 210, 255))
-                    } else {
-                        RichText::new(label).color(type_color)
-                    };
-                    ui.add(egui::Label::new(text).truncate().sense(Sense::click()))
-                },
-            )
-            .inner;
-        if name_clicked.clicked() {
-            self.selected = Some(id);
-        }
-
-        bar_cell(ui, pct);
-        metric_cell(ui, COL_SIZE, &format_size(node.size));
-        metric_cell(ui, COL_PCT, &format!("{pct:.1}%"));
-        if node.is_dir {
-            metric_cell(ui, COL_FILES, &format_count(node.file_count));
-            metric_cell(ui, COL_DIRS, &format_count(node.dir_count));
-        } else {
-            metric_cell(ui, COL_FILES, "");
-            metric_cell(ui, COL_DIRS, "");
-        }
-        ui.end_row();
-
-        if has_kids && expanded {
-            let self_size = node.size.max(1);
-            for cid in children {
-                self.draw_tree_node(ui, snap, cid, depth + 1, self_size, name_w);
+                }
+            } else {
+                ui.add_space(16.0);
             }
-        }
+
+            let icon = if node.is_dir { "📁" } else { "📄" };
+            let mut label = format!("{icon} {}", node.name);
+            if !node.complete && node.is_dir {
+                label.push_str(" …");
+            }
+            if node.error.is_some() {
+                label.push_str(" ⚠");
+            }
+            let text = if selected {
+                RichText::new(label)
+                    .strong()
+                    .color(Color32::from_rgb(180, 210, 255))
+            } else {
+                RichText::new(label).color(type_color)
+            };
+            if ui
+                .add(egui::Label::new(text).truncate().sense(Sense::click()))
+                .clicked()
+            {
+                self.selected = Some(id);
+            }
+        });
+
+        row.col(|ui| {
+            bar_cell(ui, pct);
+        });
+        row.col(|ui| {
+            metric_label(ui, &format_size(node.size));
+        });
+        row.col(|ui| {
+            metric_label(ui, &format!("{pct:.1}%"));
+        });
+        row.col(|ui| {
+            if node.is_dir {
+                metric_label(ui, &format_count(node.file_count));
+            }
+        });
+        row.col(|ui| {
+            if node.is_dir {
+                metric_label(ui, &format_count(node.dir_count));
+            }
+        });
     }
 }
 
 fn bar_cell(ui: &mut Ui, pct: f64) {
-    ui.allocate_ui_with_layout(
-        Vec2::new(COL_BAR, ROW_H),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(COL_BAR, 12.0), Sense::hover());
-            let filled = egui::Rect::from_min_size(
-                bar_rect.min,
-                Vec2::new(
-                    bar_rect.width() * (pct as f32 / 100.0).clamp(0.0, 1.0),
-                    bar_rect.height(),
-                ),
-            );
-            ui.painter()
-                .rect_filled(bar_rect, 2.0, Color32::from_rgb(40, 44, 52));
-            ui.painter().rect_filled(filled, 2.0, heat_color(pct));
-        },
+    let width = ui.available_width().max(8.0);
+    let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(width, 12.0), Sense::hover());
+    let filled = egui::Rect::from_min_size(
+        bar_rect.min,
+        Vec2::new(
+            bar_rect.width() * (pct as f32 / 100.0).clamp(0.0, 1.0),
+            bar_rect.height(),
+        ),
     );
+    ui.painter()
+        .rect_filled(bar_rect, 2.0, Color32::from_rgb(40, 44, 52));
+    ui.painter().rect_filled(filled, 2.0, heat_color(pct));
 }
 
-fn metric_cell(ui: &mut Ui, width: f32, text: &str) {
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, ROW_H),
-        egui::Layout::right_to_left(egui::Align::Center),
-        |ui| {
-            ui.label(
+fn metric_label(ui: &mut Ui, text: &str) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.add(
+            egui::Label::new(
                 RichText::new(text)
                     .monospace()
                     .color(Color32::from_rgb(210, 210, 210)),
-            );
-        },
-    );
+            )
+            .truncate(),
+        );
+    });
 }
 
 fn sort_ids(ids: &mut [NodeId], snap: &TreeSnapshot, key: SortKey, ascending: bool) {
