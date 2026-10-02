@@ -38,12 +38,15 @@ pub struct ScanArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
 
+    /// Maximum directory depth to scan (omit for unlimited)
     #[arg(short = 'd', long = "depth")]
     pub depth: Option<u32>,
 
+    /// Max entries to show (largest first)
     #[arg(short = 'l', long = "limit", default_value_t = 20)]
     pub limit: usize,
 
+    /// Print an indented tree instead of a table
     #[arg(short = 't', long = "tree")]
     pub tree: bool,
 
@@ -58,18 +61,23 @@ pub struct ReportArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
 
+    /// Output file path (default: temp HTML file)
     #[arg(short = 'o', long = "output")]
     pub output: Option<PathBuf>,
 
+    /// Report format: html, json, markdown, or text [default: from -o extension, else html]
     #[arg(short = 'f', long = "format")]
     pub format: Option<String>,
 
+    /// Maximum directory depth to scan (omit for unlimited)
     #[arg(short = 'd', long = "depth")]
     pub depth: Option<u32>,
 
+    /// Max entries to include (largest first)
     #[arg(short = 'l', long = "limit", default_value_t = 50)]
     pub limit: usize,
 
+    /// Prefer tree-style layout in text/markdown reports
     #[arg(short = 't', long = "tree")]
     pub tree: bool,
 
