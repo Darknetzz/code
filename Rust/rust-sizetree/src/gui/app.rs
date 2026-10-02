@@ -31,10 +31,11 @@ pub struct SizeTreeApp {
 
 impl SizeTreeApp {
     pub fn new(
-        _cc: &eframe::CreationContext<'_>,
+        cc: &eframe::CreationContext<'_>,
         path: PathBuf,
         opts: ScanOptions,
     ) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         let path_edit = path.display().to_string();
         let mut app = Self {
             path_edit,
@@ -108,7 +109,8 @@ impl SizeTreeApp {
 }
 
 impl eframe::App for SizeTreeApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         if let Some(scan) = self.scan.as_mut() {
             let _ = scan.is_finished();
         }
@@ -120,7 +122,7 @@ impl eframe::App for SizeTreeApp {
             ctx.request_repaint_after(POLL_INTERVAL.saturating_sub(self.last_poll.elapsed()));
         }
 
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+        egui::Panel::top("toolbar").show(ui, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label("Path:");
@@ -191,7 +193,7 @@ impl eframe::App for SizeTreeApp {
             ui.add_space(2.0);
         });
 
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
+        egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (phase, stats) = self
                     .with_tree(|t| (t.phase, t.stats.clone()))
@@ -237,10 +239,10 @@ impl eframe::App for SizeTreeApp {
             }
         });
 
-        egui::SidePanel::right("detail")
-            .default_width(320.0)
-            .min_width(240.0)
-            .show(ctx, |ui| {
+        egui::Panel::right("detail")
+            .default_size(320.0)
+            .min_size(240.0)
+            .show(ui, |ui| {
                 ui.heading("Details");
                 ui.separator();
                 let selected = self.selected;
@@ -333,7 +335,7 @@ impl eframe::App for SizeTreeApp {
                 }
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("Size tree");
             ui.separator();
             let snapshot = self.with_tree(|tree| {
@@ -460,27 +462,37 @@ impl SizeTreeApp {
     }
 
     fn sort_header(&mut self, ui: &mut Ui, width: f32, title: &str, key: SortKey, right: bool) {
-        let arrow = if self.sort_key == key {
-            if self.sort_asc { " ▲" } else { " ▼" }
-        } else {
-            ""
-        };
-        let label = format!("{title}{arrow}");
+        let active = self.sort_key == key;
         let layout = if right {
             egui::Layout::right_to_left(egui::Align::Center)
         } else {
             egui::Layout::left_to_right(egui::Align::Center)
         };
-        let clicked = ui
+        let response = ui
             .allocate_ui_with_layout(Vec2::new(width, ROW_H), layout, |ui| {
-                ui.add(
-                    egui::Label::new(RichText::new(label).strong().color(Color32::GRAY))
+                let label = ui.add(
+                    egui::Label::new(RichText::new(title).strong().color(Color32::GRAY))
                         .sense(Sense::click()),
-                )
+                );
+                let icon = if active {
+                    let icon = if self.sort_asc {
+                        egui_lucide::Lucide::ChevronUp
+                    } else {
+                        egui_lucide::Lucide::ChevronDown
+                    };
+                    Some(ui.add(
+                        icon.size(14.0)
+                            .color(Color32::GRAY)
+                            .image()
+                            .sense(Sense::click()),
+                    ))
+                } else {
+                    None
+                };
+                label.clicked() || icon.is_some_and(|r| r.clicked())
             })
-            .inner
-            .clicked();
-        if clicked {
+            .inner;
+        if response {
             if self.sort_key == key {
                 self.sort_asc = !self.sort_asc;
             } else {
@@ -533,8 +545,14 @@ impl SizeTreeApp {
                     ui.set_min_width(name_w);
                     ui.add_space(depth as f32 * 14.0);
                     if has_kids {
-                        let symbol = if expanded { "▼" } else { "▶" };
-                        if ui.small_button(symbol).clicked() {
+                        let icon = if expanded {
+                            egui_lucide::Lucide::ChevronDown
+                        } else {
+                            egui_lucide::Lucide::ChevronRight
+                        };
+                        if ui
+                            .add(icon.size(16.0).color(Color32::GRAY).image().sense(Sense::click()))
+                            .clicked() {
                             if expanded {
                                 self.expanded.remove(&id);
                             } else {
@@ -542,7 +560,7 @@ impl SizeTreeApp {
                             }
                         }
                     } else {
-                        ui.add_space(22.0);
+                        ui.add_space(16.0);
                     }
 
                     let icon = if node.is_dir { "📁" } else { "📄" };
