@@ -12,22 +12,6 @@ pub struct ScanOptions {
     pub include_hidden: bool,
 }
 
-pub fn scan_directory(
-    path: &Path,
-    max_depth: Option<u32>,
-    current_depth: u32,
-) -> Result<DirInfo> {
-    scan_directory_with(
-        path,
-        &ScanOptions {
-            max_depth,
-            include_hidden: false,
-        },
-        current_depth,
-        None,
-    )
-}
-
 pub fn scan_directory_with(
     path: &Path,
     opts: &ScanOptions,
