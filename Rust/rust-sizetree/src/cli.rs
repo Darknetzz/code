@@ -14,7 +14,7 @@ use crate::scan::{scan_directory_with, ScanOptions};
 #[derive(Parser)]
 #[command(
     name = "rust-sizetree",
-    about = "Disk space analyzer (scan + report)",
+    about = "Disk space analyzer (scan, report, gui)",
     version
 )]
 pub struct Cli {
@@ -28,6 +28,8 @@ pub enum Commands {
     Scan(ScanArgs),
     /// Write an HTML/JSON/Markdown/text report file
     Report(ReportArgs),
+    /// Open the native SizeTree window
+    Gui(GuiArgs),
     /// Show version information
     Version,
 }
@@ -88,6 +90,29 @@ pub struct ReportArgs {
     /// Do not launch the browser for HTML reports
     #[arg(long = "no-open")]
     pub no_open: bool,
+}
+
+#[derive(Parser)]
+pub struct GuiArgs {
+    /// Directory to scan
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+
+    /// Maximum directory depth to scan (omit for unlimited)
+    #[arg(short = 'd', long = "depth")]
+    pub depth: Option<u32>,
+
+    /// Include hidden files and directories
+    #[arg(long = "hidden")]
+    pub hidden: bool,
+}
+
+pub fn run_gui(args: GuiArgs) -> Result<u8> {
+    let opts = ScanOptions {
+        max_depth: args.depth,
+        include_hidden: args.hidden,
+    };
+    crate::gui::run_gui(args.path, opts)
 }
 
 pub fn run_scan(args: ScanArgs) -> Result<u8> {

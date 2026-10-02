@@ -1,9 +1,11 @@
 mod browser;
 mod cli;
+mod gui;
 mod models;
 mod progress;
 mod report;
 mod scan;
+mod tree;
 
 use std::process::ExitCode;
 
@@ -27,9 +29,9 @@ fn run() -> Result<u8> {
     match cli.command {
         Commands::Scan(args) => cli::run_scan(args),
         Commands::Report(args) => cli::run_report(args),
+        Commands::Gui(args) => cli::run_gui(args),
         Commands::Version => {
             println!("SizeTree v0.1.0");
-            println!("Interactive TUI is available in the Python pytree version only.");
             Ok(0)
         }
     }

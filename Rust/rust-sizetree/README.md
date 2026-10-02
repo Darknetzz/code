@@ -1,8 +1,8 @@
 # rust-sizetree
 
-Disk space analyzer (scan + report). Rust port of the legacy Python tool in `Python/pytree/`. Interactive TUI (`pytree tui`) remains Python-only (Textual).
+Disk space analyzer (scan + report + native GUI). Rust port of the legacy Python tool in `Python/pytree/`.
 
-TreeSize-like recursive directory scanning with CLI table/tree output and interactive HTML reports (expandable tree table, donut/stacked-bar viz, sort, filter).
+TreeSize-like recursive directory scanning with CLI table/tree output, interactive HTML reports, and an egui desktop window with a live-updating size tree.
 
 ## Build
 
@@ -10,6 +10,8 @@ TreeSize-like recursive directory scanning with CLI table/tree output and intera
 cd Rust/rust-sizetree
 cargo build --release
 ```
+
+The PATH symlink `rust-sizetree` points at `target/release/rust-sizetree.exe`, so a release build updates the command on PATH.
 
 ## Usage
 
@@ -24,6 +26,11 @@ cargo run --release -- report .
 cargo run --release -- report . --no-open -o sizes.html
 cargo run --release -- report . --format json -o out.json
 cargo run --release -- report . --format markdown -o out.md -t
+
+# Native GUI (live tree while scanning)
+cargo run --release -- gui .
+cargo run --release -- gui D:\Kriss\Videos --hidden
+rust-sizetree gui D:\Kriss\Videos
 ```
 
 ## Commands
@@ -32,7 +39,19 @@ cargo run --release -- report . --format markdown -o out.md -t
 |---------|-------------|
 | `scan` | Terminal table or tree view (`-d` depth, `-l` limit, `-t` tree, `--hidden`) |
 | `report` | HTML/JSON/Markdown/text report (`-o`, `--format`, `--no-open`, same scan flags) |
+| `gui` | Native SizeTree window (live tree, filters, free space, open in Explorer) |
 | `version` | Show version |
+
+## GUI
+
+`gui` opens a desktop window:
+
+- Toolbar: path, Browse, Rescan, Cancel, show hidden, max depth, name filter
+- Live tree: folders appear as they are entered; sizes grow until each folder completes
+- Status: files/dirs/size, current path, volume used/free
+- Details: child size bars, Open in Explorer, Copy path
+
+Cancel keeps the partial tree. Name filter is display-only; hidden/depth apply on the next scan.
 
 ## HTML reports
 

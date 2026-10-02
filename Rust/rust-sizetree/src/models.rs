@@ -81,7 +81,7 @@ fn child_count_cells(info: &DirInfo) -> (String, String) {
     )
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ScanStats {
     pub files: u64,
     pub dirs: u64,
