@@ -38,6 +38,22 @@ pub fn format_size(size: u64) -> String {
     format!("{size_f:.1} PB")
 }
 
+/// Strip Windows extended-length prefixes (`\\?\`, `\\?\UNC\`) for readable display.
+/// Keep the raw/`canonicalize`d path for filesystem operations.
+pub fn display_path(path: &Path) -> String {
+    strip_verbatim_prefix(&path.display().to_string())
+}
+
+pub fn strip_verbatim_prefix(s: &str) -> String {
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn entry_is_directory(info: &DirInfo) -> bool {
     info.path.is_dir() || !info.children.is_empty()
 }

@@ -11,7 +11,8 @@ use crate::gui::disk::{volume_for_path, VolumeInfo};
 use crate::gui::entry_icons::{entry_color, entry_icon};
 use crate::gui::prefs::{GuiPrefs, GUI_PREFS_KEY};
 use crate::models::{
-    format_count, format_size, infer_report_format, DirInfo, ReportFormat,
+    display_path, format_count, format_size, infer_report_format, strip_verbatim_prefix, DirInfo,
+    ReportFormat, ScanStats,
 };
 use crate::report::{make_temp_report_path, slugify_for_filename, write_scan_report};
 use crate::scan::{LiveScanHandle, ScanOptions};
@@ -62,7 +63,7 @@ impl SizeTreeApp {
             .storage
             .and_then(|s| eframe::get_value::<GuiPrefs>(s, GUI_PREFS_KEY))
             .unwrap_or_default();
-        let path_edit = path.display().to_string();
+        let path_edit = display_path(&path);
         let mut app = Self {
             path_edit,
             scan_path: path,
@@ -109,11 +110,11 @@ impl SizeTreeApp {
         let path = PathBuf::from(self.path_edit.trim());
         let target = path.canonicalize().unwrap_or(path);
         if !target.is_dir() {
-            self.status_note = format!("Not a directory: {}", target.display());
+            self.status_note = format!("Not a directory: {}", display_path(&target));
             return;
         }
         self.scan_path = target.clone();
-        self.path_edit = target.display().to_string();
+        self.path_edit = display_path(&target);
         let opts = self.current_opts();
         self.expanded.clear();
         self.root_seeded = false;
@@ -288,7 +289,13 @@ impl eframe::App for SizeTreeApp {
         }
         self.poll_report_job();
 
-        if self.last_poll.elapsed() >= POLL_INTERVAL {
+        let scanning = self
+            .with_tree(|t| t.phase == ScanPhase::Running)
+            .unwrap_or(false);
+        if scanning {
+            // Keep the indeterminate progress bar / spinner animating.
+            ctx.request_repaint();
+        } else if self.last_poll.elapsed() >= POLL_INTERVAL {
             self.last_poll = Instant::now();
             ctx.request_repaint_after(POLL_INTERVAL);
         } else {
@@ -311,7 +318,7 @@ impl eframe::App for SizeTreeApp {
                         .set_directory(&self.scan_path)
                         .pick_folder()
                     {
-                        self.path_edit = folder.display().to_string();
+                        self.path_edit = display_path(&folder);
                         self.start_scan();
                     }
                 }
@@ -439,13 +446,7 @@ impl eframe::App for SizeTreeApp {
                 let (phase, stats) = self
                     .with_tree(|t| (t.phase, t.stats.clone()))
                     .unwrap_or((ScanPhase::Idle, Default::default()));
-                let phase_label = match phase {
-                    ScanPhase::Idle => "Idle",
-                    ScanPhase::Running => "Scanning…",
-                    ScanPhase::Done => "Done",
-                    ScanPhase::Cancelled => "Cancelled",
-                };
-                ui.strong(phase_label);
+                phase_status_badge(ui, phase);
                 ui.separator();
                 ui.label(format!(
                     "{} files · {} dirs · {}",
@@ -455,7 +456,10 @@ impl eframe::App for SizeTreeApp {
                 ));
                 if let Some(cur) = stats.current.as_ref() {
                     ui.separator();
-                    ui.colored_label(Color32::GRAY, truncate_middle(cur, 72));
+                    ui.colored_label(
+                        Color32::GRAY,
+                        truncate_middle(&strip_verbatim_prefix(cur), 72),
+                    );
                 }
                 if let Some(vol) = &self.volume {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -486,6 +490,19 @@ impl eframe::App for SizeTreeApp {
             .show(ui, |ui| {
                 ui.heading("Details");
                 ui.separator();
+
+                let (phase, stats) = self
+                    .with_tree(|t| (t.phase, t.stats.clone()))
+                    .unwrap_or((ScanPhase::Idle, Default::default()));
+                let scanning = phase == ScanPhase::Running;
+
+                if scanning {
+                    draw_scan_progress_panel(ui, &stats);
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                }
+
                 let selected = self.selected;
                 let detail = self.with_tree(|tree| {
                     selected.and_then(|id| {
@@ -523,7 +540,7 @@ impl eframe::App for SizeTreeApp {
                 ))) = detail
                 {
                     ui.label(RichText::new(&name).strong().size(16.0));
-                    ui.label(path.display().to_string());
+                    ui.label(display_path(&path));
                     ui.add_space(6.0);
                     ui.label(format!("Size: {}", format_size(size)));
                     if is_dir {
@@ -547,7 +564,7 @@ impl eframe::App for SizeTreeApp {
                             open_in_explorer(&path);
                         }
                         if ui.button("Copy path").clicked() {
-                            ui.ctx().copy_text(path.display().to_string());
+                            ui.ctx().copy_text(display_path(&path));
                             self.status_note = "Path copied".into();
                         }
                     });
@@ -571,7 +588,7 @@ impl eframe::App for SizeTreeApp {
                             }
                         });
                     }
-                } else {
+                } else if !scanning {
                     ui.label("Select an item in the tree.");
                 }
             });
@@ -1071,6 +1088,77 @@ fn heat_color(pct: f64) -> Color32 {
     let g = (180.0 * (1.0 - t * 0.7)) as u8;
     let b = 70;
     Color32::from_rgb(r, g, b)
+}
+
+fn phase_status_badge(ui: &mut Ui, phase: ScanPhase) {
+    let (label, fg, bg) = match phase {
+        ScanPhase::Idle => (
+            "Idle",
+            Color32::from_rgb(210, 210, 210),
+            Color32::from_rgb(70, 70, 75),
+        ),
+        ScanPhase::Running => (
+            "Scanning…",
+            Color32::from_rgb(220, 240, 255),
+            Color32::from_rgb(30, 95, 170),
+        ),
+        ScanPhase::Done => (
+            "Done",
+            Color32::from_rgb(220, 255, 225),
+            Color32::from_rgb(30, 120, 55),
+        ),
+        ScanPhase::Cancelled => (
+            "Cancelled",
+            Color32::from_rgb(255, 235, 210),
+            Color32::from_rgb(150, 85, 25),
+        ),
+    };
+    egui::Frame::new()
+        .fill(bg)
+        .corner_radius(4.0)
+        .inner_margin(egui::Margin::symmetric(8, 3))
+        .show(ui, |ui| {
+            ui.label(RichText::new(label).color(fg).strong());
+        });
+}
+
+fn draw_scan_progress_panel(ui: &mut Ui, stats: &ScanStats) {
+    ui.horizontal(|ui| {
+        ui.spinner();
+        ui.label(
+            RichText::new("Scanning…")
+                .strong()
+                .size(16.0)
+                .color(Color32::from_rgb(120, 190, 255)),
+        );
+    });
+    ui.add_space(6.0);
+
+    // Indeterminate pulse — directory walks have no known total.
+    let t = ui.input(|i| i.time) as f32;
+    let pulse = ((t * 1.15).sin() as f32 * 0.5 + 0.5).clamp(0.05, 0.95);
+    ui.add(
+        egui::ProgressBar::new(pulse)
+            .animate(true)
+            .desired_width(ui.available_width()),
+    );
+    ui.add_space(8.0);
+
+    ui.label(format!(
+        "{} files · {} dirs · {}",
+        format_count(stats.files),
+        format_count(stats.dirs),
+        format_size(stats.size)
+    ));
+    if let Some(cur) = stats.current.as_ref() {
+        ui.add_space(4.0);
+        ui.label(RichText::new("Current:").small().color(Color32::GRAY));
+        ui.label(
+            RichText::new(truncate_middle(&strip_verbatim_prefix(cur), 56))
+                .small()
+                .color(Color32::LIGHT_GRAY),
+        );
+    }
 }
 
 fn truncate_middle(s: &str, max: usize) -> String {

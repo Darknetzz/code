@@ -29,6 +29,7 @@ Scripts and projects in Python.
 | [pyrat](pyrat/) | — |
 | [pysound](pysound/) | A Python library and CLI tool for generating and playing audio tones using Nu... See [pysound/README.md](pysound/README.md) for details. |
 | [pyspotify](pyspotify/) | Export your Spotify playlists (including tracks) to `txt`, `json`, and `csv`. See [pyspotify/README.md](pyspotify/README.md) for details. |
+| [pysubs](pysubs/) | — |
 | [pytree](pytree/) | > **Scan/report canonical implementation:** [`Rust/rust-sizetree`](../../Rust... See [pytree/README.md](pytree/README.md) for details. |
 | [snapbot](snapbot/) | **Version 2.0.0** - Selenium-based browser automation for Snapchat Web See [snapbot/README.md](snapbot/README.md) for details. |
 | [utils](utils/) | — |

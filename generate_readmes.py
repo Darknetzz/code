@@ -51,11 +51,6 @@ PRESERVE_README_DIRS = {
     "Shell",
 }
 
-# Subdirs that exist on disk but should not appear in parent indexes
-SKIP_INDEX_SUBDIRS = {
-    "rustdl",  # moved to external repo; keep manual table row instead
-}
-
 SUBDIR_ROW_RE = re.compile(r"^\|\s*\[([^\]]+)\]\(([^)]+)/?\)\s*\|")
 SEPARATOR_ROW_RE = re.compile(r"^\|\s*[-:|]+\s*\|")
 
@@ -87,7 +82,7 @@ def get_direct_subdirs(path: Path) -> list[Path]:
     return sorted(
         p
         for p in path.iterdir()
-        if p.is_dir() and not is_skipped(p.name) and p.name not in SKIP_INDEX_SUBDIRS
+        if p.is_dir() and not is_skipped(p.name)
     )
 
 
@@ -157,8 +152,7 @@ def parse_readme_tail(readme_path: Path) -> tuple[list[str], str]:
     """
     Return (manual_table_rows, body_after_table) from an existing README.
 
-    Manual rows are table lines whose first column is not a [name](name/) subdir link
-    (e.g. external-project notes like rustdl).
+    Manual rows are table lines whose first column is not a [name](name/) subdir link.
     """
     if not readme_path.is_file():
         return [], ""

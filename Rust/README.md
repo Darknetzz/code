@@ -16,6 +16,5 @@ Scripts and projects in Rust.
 | [rust-hash-zero](rust-hash-zero/) | **Canonical implementation** for CPU hash brute-force with leading/trailing z... See [rust-hash-zero/README.md](rust-hash-zero/README.md) for details. |
 | [rust-lhp](rust-lhp/) | Rust port of the Python network protocol in `Python/pyprotocol/`. See [rust-lhp/README.md](rust-lhp/README.md) for details. |
 | [rust-portscan](rust-portscan/) | Rust port of the Python TCP port scanner in `Python/pyportscanner/`. See [rust-portscan/README.md](rust-portscan/README.md) for details. |
-| [rust-sizetree](rust-sizetree/) | Disk space analyzer (scan + report). Rust port of the legacy Python tool in `... See [rust-sizetree/README.md](rust-sizetree/README.md) for details. |
+| [rust-sizetree](rust-sizetree/) | Disk space analyzer (scan + report + native GUI). Rust port of the legacy Pyt... See [rust-sizetree/README.md](rust-sizetree/README.md) for details. |
 | [superping](superping/) | Feature-rich ICMP/TCP ping CLI — multi-host parallel probes, rich RTT statist... See [superping/README.md](superping/README.md) for details. |
-| **rustdl** | Moved to [github.com/Darknetzz/rustdl](https://github.com/Darknetzz/rustdl) (mirror: [gitlab.roste.org/kriss/rustdl](https://gitlab.roste.org/kriss/rustdl)). |

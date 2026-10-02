@@ -39,7 +39,7 @@ Run this from the repository root before committing structural changes. The scri
 
 - Updates the root index and auto-managed language indexes (`Go/`, `Lua/`, `PHP/`, `Python/`, `Rust/`, etc.)
 - Pulls one-line descriptions from each project's first README paragraph
-- Preserves **manual table rows** (e.g. external-repo notes like `rustdl` in `Rust/README.md`)
+- Preserves **manual table rows** (non-subdir link rows in index tables)
 - Preserves **custom READMEs** that are not simple indexes: `AutoHotkey/`, `PowerShell/`, `Shell/`
 
 When adding a new project, also add a `README.md` in the project folder with a short intro paragraph under the `# Title` — that text becomes the parent's index description.
