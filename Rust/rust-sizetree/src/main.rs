@@ -1,5 +1,6 @@
 mod browser;
 mod cli;
+mod file_kind;
 mod gui;
 mod models;
 mod progress;

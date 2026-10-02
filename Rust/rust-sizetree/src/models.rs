@@ -148,11 +148,13 @@ pub fn infer_report_format(path: &Path) -> Option<ReportFormat> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ReportFormat {
     Text,
     Json,
     Markdown,
+    #[default]
     Html,
 }
 
@@ -172,6 +174,15 @@ impl ReportFormat {
             Self::Json => "json",
             Self::Markdown => "markdown",
             Self::Html => "html",
+        }
+    }
+
+    pub fn display_label(self) -> &'static str {
+        match self {
+            Self::Text => "Text",
+            Self::Json => "JSON",
+            Self::Markdown => "Markdown",
+            Self::Html => "HTML",
         }
     }
 }

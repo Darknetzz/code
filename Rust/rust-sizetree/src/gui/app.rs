@@ -1,16 +1,30 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
 use egui::{Color32, RichText, Sense, Ui, Vec2};
 use egui_extras::{Column, TableBuilder};
 
+use crate::browser::open_in_browser;
 use crate::gui::disk::{volume_for_path, VolumeInfo};
-use crate::models::{format_count, format_size};
+use crate::gui::entry_icons::{entry_color, entry_icon};
+use crate::gui::prefs::{GuiPrefs, GUI_PREFS_KEY};
+use crate::models::{
+    format_count, format_size, infer_report_format, DirInfo, ReportFormat,
+};
+use crate::report::{make_temp_report_path, slugify_for_filename, write_scan_report};
 use crate::scan::{LiveScanHandle, ScanOptions};
 use crate::tree::{NodeId, ScanPhase, ScanTree};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+struct ReportJobOutcome {
+    path: PathBuf,
+    fmt: ReportFormat,
+    opened: bool,
+    error: Option<String>,
+}
 
 pub struct SizeTreeApp {
     path_edit: String,
@@ -31,6 +45,10 @@ pub struct SizeTreeApp {
     selected: Option<NodeId>,
     volume: Option<VolumeInfo>,
     status_note: String,
+    prefs: GuiPrefs,
+    options_open: bool,
+    report_rx: Option<Receiver<ReportJobOutcome>>,
+    report_busy: bool,
 }
 
 impl SizeTreeApp {
@@ -40,6 +58,10 @@ impl SizeTreeApp {
         opts: ScanOptions,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        let prefs = cc
+            .storage
+            .and_then(|s| eframe::get_value::<GuiPrefs>(s, GUI_PREFS_KEY))
+            .unwrap_or_default();
         let path_edit = path.display().to_string();
         let mut app = Self {
             path_edit,
@@ -58,6 +80,10 @@ impl SizeTreeApp {
             selected: None,
             volume: None,
             status_note: String::new(),
+            prefs,
+            options_open: false,
+            report_rx: None,
+            report_busy: false,
         };
         app.refresh_volume();
         app.start_scan();
@@ -112,14 +138,155 @@ impl SizeTreeApp {
         let tree = scan.tree.read().ok()?;
         Some(f(&tree))
     }
+
+    fn snapshot_dir_info(&self) -> Option<(DirInfo, PathBuf)> {
+        self.with_tree(|tree| {
+            tree.to_dir_info()
+                .map(|info| (info, self.scan_path.clone()))
+        })
+        .flatten()
+    }
+
+    fn poll_report_job(&mut self) {
+        let Some(rx) = self.report_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(outcome) => {
+                self.report_rx = None;
+                self.report_busy = false;
+                if let Some(err) = outcome.error {
+                    self.status_note = format!("Report failed: {err}");
+                } else if outcome.opened {
+                    self.status_note = format!(
+                        "Opened {} report: {}",
+                        outcome.fmt.display_label(),
+                        outcome.path.display()
+                    );
+                } else {
+                    self.status_note = format!(
+                        "Wrote {} report: {}",
+                        outcome.fmt.display_label(),
+                        outcome.path.display()
+                    );
+                }
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.report_rx = None;
+                self.report_busy = false;
+                self.status_note = "Report failed: worker disconnected".into();
+            }
+        }
+    }
+
+    fn start_report_job(
+        &mut self,
+        info: DirInfo,
+        target: PathBuf,
+        out: PathBuf,
+        fmt: ReportFormat,
+        open_after: bool,
+    ) {
+        let limit = self.prefs.report_limit.max(1);
+        let (tx, rx) = mpsc::channel();
+        self.report_rx = Some(rx);
+        self.report_busy = true;
+        self.status_note = "Writing report…".into();
+        std::thread::spawn(move || {
+            let write_result = write_scan_report(&info, &target, &out, fmt, false, limit);
+            let outcome = match write_result {
+                Ok(()) => {
+                    let opened = open_after && fmt == ReportFormat::Html && open_in_browser(&out);
+                    ReportJobOutcome {
+                        path: out,
+                        fmt,
+                        opened,
+                        error: None,
+                    }
+                }
+                Err(e) => ReportJobOutcome {
+                    path: out,
+                    fmt,
+                    opened: false,
+                    error: Some(e.to_string()),
+                },
+            };
+            let _ = tx.send(outcome);
+        });
+    }
+
+    fn report_html_open(&mut self) {
+        let Some((info, target)) = self.snapshot_dir_info() else {
+            self.status_note = "No scan data to export".into();
+            return;
+        };
+        let out = make_temp_report_path(&target, ReportFormat::Html);
+        self.start_report_job(info, target, out, ReportFormat::Html, true);
+    }
+
+    fn report_save_as(&mut self) {
+        let Some((info, target)) = self.snapshot_dir_info() else {
+            self.status_note = "No scan data to export".into();
+            return;
+        };
+        let fmt = self.prefs.report_format;
+        let ext = fmt.extension().trim_start_matches('.');
+        let slug = slugify_for_filename(
+            target
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("root"),
+        );
+        let suggested = format!("rust-sizetree-{slug}{}", fmt.extension());
+        let Some(mut out) = rfd::FileDialog::new()
+            .set_file_name(&suggested)
+            .add_filter(fmt.display_label(), &[ext])
+            .add_filter("All files", &["*"])
+            .save_file()
+        else {
+            return;
+        };
+        if out.extension().is_none() {
+            out.set_extension(ext);
+        }
+        let resolved = infer_report_format(&out).unwrap_or(fmt);
+        let open_after = self.prefs.open_html_after_save && resolved == ReportFormat::Html;
+        self.start_report_job(info, target, out, resolved, open_after);
+    }
+
+    fn visible_columns(&self) -> Vec<TableCol> {
+        let mut cols = vec![TableCol::Name];
+        if self.prefs.show_share {
+            cols.push(TableCol::Share);
+        }
+        if self.prefs.show_size {
+            cols.push(TableCol::Size);
+        }
+        if self.prefs.show_percent {
+            cols.push(TableCol::Percent);
+        }
+        if self.prefs.show_files {
+            cols.push(TableCol::Files);
+        }
+        if self.prefs.show_dirs {
+            cols.push(TableCol::Dirs);
+        }
+        cols
+    }
 }
 
 impl eframe::App for SizeTreeApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, GUI_PREFS_KEY, &self.prefs);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if let Some(scan) = self.scan.as_mut() {
             let _ = scan.is_finished();
         }
+        self.poll_report_job();
 
         if self.last_poll.elapsed() >= POLL_INTERVAL {
             self.last_poll = Instant::now();
@@ -134,7 +301,7 @@ impl eframe::App for SizeTreeApp {
                 ui.label("Path:");
                 let response = ui.add(
                     egui::TextEdit::singleline(&mut self.path_edit)
-                        .desired_width(ui.available_width() - 220.0),
+                        .desired_width(ui.available_width() - 360.0),
                 );
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     self.start_scan();
@@ -154,6 +321,27 @@ impl eframe::App for SizeTreeApp {
                 let scanning = self.with_tree(|t| t.phase == ScanPhase::Running).unwrap_or(false);
                 if scanning && ui.button("Cancel").clicked() {
                     self.cancel_scan();
+                }
+
+                ui.separator();
+                let can_report = !self.report_busy
+                    && self
+                        .with_tree(|t| t.to_dir_info().is_some())
+                        .unwrap_or(false);
+                ui.add_enabled_ui(can_report, |ui| {
+                    ui.menu_button("Report", |ui| {
+                        if ui.button("HTML (open)").clicked() {
+                            ui.close();
+                            self.report_html_open();
+                        }
+                        if ui.button("Save as…").clicked() {
+                            ui.close();
+                            self.report_save_as();
+                        }
+                    });
+                });
+                if ui.button("Options…").clicked() {
+                    self.options_open = true;
                 }
             });
 
@@ -198,6 +386,53 @@ impl eframe::App for SizeTreeApp {
             });
             ui.add_space(2.0);
         });
+
+        let mut options_open = self.options_open;
+        egui::Window::new("Options")
+            .open(&mut options_open)
+            .resizable(false)
+            .collapsible(false)
+            .show(&ctx, |ui| {
+                ui.heading("Columns");
+                ui.checkbox(&mut self.prefs.show_share, "Share");
+                ui.checkbox(&mut self.prefs.show_size, "Size");
+                ui.checkbox(&mut self.prefs.show_percent, "%");
+                ui.checkbox(&mut self.prefs.show_files, "Files");
+                ui.checkbox(&mut self.prefs.show_dirs, "Dirs");
+                ui.label(
+                    RichText::new("Name is always visible")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+
+                ui.add_space(10.0);
+                ui.heading("Report defaults");
+                egui::ComboBox::from_id_salt("report_format")
+                    .selected_text(self.prefs.report_format.display_label())
+                    .show_ui(ui, |ui| {
+                        for fmt in [
+                            ReportFormat::Html,
+                            ReportFormat::Json,
+                            ReportFormat::Markdown,
+                            ReportFormat::Text,
+                        ] {
+                            ui.selectable_value(
+                                &mut self.prefs.report_format,
+                                fmt,
+                                fmt.display_label(),
+                            );
+                        }
+                    });
+                ui.horizontal(|ui| {
+                    ui.label("Child limit:");
+                    ui.add(egui::DragValue::new(&mut self.prefs.report_limit).range(1..=10_000));
+                });
+                ui.checkbox(
+                    &mut self.prefs.open_html_after_save,
+                    "Open HTML after save",
+                );
+            });
+        self.options_open = options_open;
 
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -297,7 +532,11 @@ impl eframe::App for SizeTreeApp {
                             format_count(files),
                             format_count(dirs)
                         ));
-                        ui.label(if complete { "Status: complete" } else { "Status: scanning…" });
+                        ui.label(if complete {
+                            "Status: complete"
+                        } else {
+                            "Status: scanning…"
+                        });
                     }
                     if let Some(err) = error {
                         ui.colored_label(Color32::from_rgb(255, 100, 100), err);
@@ -319,14 +558,10 @@ impl eframe::App for SizeTreeApp {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for (cname, csize, cis_dir) in children.iter().take(40) {
                                 let color = entry_color(*cis_dir, cname);
-                                let icon = if *cis_dir { "📁" } else { "📄" };
                                 ui.horizontal(|ui| {
+                                    entry_icon(ui, *cis_dir, cname, 14.0);
                                     ui.label(
-                                        RichText::new(format!(
-                                            "{icon} {}",
-                                            truncate_middle(cname, 28)
-                                        ))
-                                        .color(color),
+                                        RichText::new(truncate_middle(cname, 28)).color(color),
                                     );
                                 });
                                 let frac = *csize as f32 / max_size as f32;
@@ -374,18 +609,17 @@ impl eframe::App for SizeTreeApp {
                         self.root_seeded = true;
                     }
                     let rows = self.collect_visible_rows(&snap);
-                    TableBuilder::new(ui)
+                    let columns = self.visible_columns();
+                    let mut table = TableBuilder::new(ui)
                         .striped(true)
                         .resizable(true)
-                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                        .column(Column::remainder().at_least(160.0).clip(true))
-                        .column(Column::initial(COL_BAR).range(40.0..=280.0).clip(true))
-                        .column(Column::initial(COL_SIZE).range(72.0..=200.0).clip(true))
-                        .column(Column::initial(COL_PCT).range(56.0..=120.0).clip(true))
-                        .column(Column::initial(COL_FILES).range(48.0..=160.0).clip(true))
-                        .column(Column::initial(COL_DIRS).range(48.0..=160.0).clip(true))
+                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center));
+                    for col in &columns {
+                        table = table.column(col.builder());
+                    }
+                    table
                         .header(ROW_H, |mut header| {
-                            self.draw_table_header(&mut header);
+                            self.draw_table_header(&mut header, &columns);
                         })
                         .body(|body| {
                             body.rows(ROW_H, rows.len(), |mut row| {
@@ -394,7 +628,14 @@ impl eframe::App for SizeTreeApp {
                                     depth,
                                     parent_size,
                                 } = rows[row.index()];
-                                self.draw_table_row(&mut row, &snap, id, depth, parent_size);
+                                self.draw_table_row(
+                                    &mut row,
+                                    &snap,
+                                    id,
+                                    depth,
+                                    parent_size,
+                                    &columns,
+                                );
                             });
                         });
                 }
@@ -429,6 +670,57 @@ impl KindFilter {
             Self::Folders => "Folders",
             Self::Files => "Files",
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TableCol {
+    Name,
+    Share,
+    Size,
+    Percent,
+    Files,
+    Dirs,
+}
+
+impl TableCol {
+    fn builder(self) -> Column {
+        match self {
+            Self::Name => Column::remainder().at_least(160.0).clip(true),
+            Self::Share => Column::initial(COL_BAR).range(40.0..=280.0).clip(true),
+            Self::Size => Column::initial(COL_SIZE).range(72.0..=200.0).clip(true),
+            Self::Percent => Column::initial(COL_PCT).range(56.0..=120.0).clip(true),
+            Self::Files => Column::initial(COL_FILES).range(48.0..=160.0).clip(true),
+            Self::Dirs => Column::initial(COL_DIRS).range(48.0..=160.0).clip(true),
+        }
+    }
+
+    fn sort_key(self) -> SortKey {
+        match self {
+            Self::Name => SortKey::Name,
+            Self::Share | Self::Percent => SortKey::Percent,
+            Self::Size => SortKey::Size,
+            Self::Files => SortKey::Files,
+            Self::Dirs => SortKey::Dirs,
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::Name => "Name",
+            Self::Share => "Share",
+            Self::Size => "Size",
+            Self::Percent => "%",
+            Self::Files => "Files",
+            Self::Dirs => "Dirs",
+        }
+    }
+
+    fn right_align_header(self) -> bool {
+        matches!(
+            self,
+            Self::Size | Self::Percent | Self::Files | Self::Dirs
+        )
     }
 }
 
@@ -516,25 +808,21 @@ impl SizeTreeApp {
         }
     }
 
-    fn draw_table_header(&mut self, header: &mut egui_extras::TableRow<'_, '_>) {
-        header.col(|ui| {
-            self.sort_header_label(ui, "Name", SortKey::Name, false);
-        });
-        header.col(|ui| {
-            self.sort_header_label(ui, "Share", SortKey::Percent, false);
-        });
-        header.col(|ui| {
-            self.sort_header_label(ui, "Size", SortKey::Size, true);
-        });
-        header.col(|ui| {
-            self.sort_header_label(ui, "%", SortKey::Percent, true);
-        });
-        header.col(|ui| {
-            self.sort_header_label(ui, "Files", SortKey::Files, true);
-        });
-        header.col(|ui| {
-            self.sort_header_label(ui, "Dirs", SortKey::Dirs, true);
-        });
+    fn draw_table_header(
+        &mut self,
+        header: &mut egui_extras::TableRow<'_, '_>,
+        columns: &[TableCol],
+    ) {
+        for col in columns {
+            header.col(|ui| {
+                self.sort_header_label(
+                    ui,
+                    col.title(),
+                    col.sort_key(),
+                    col.right_align_header(),
+                );
+            });
+        }
     }
 
     fn sort_header_label(&mut self, ui: &mut Ui, title: &str, key: SortKey, right: bool) {
@@ -586,6 +874,7 @@ impl SizeTreeApp {
         id: NodeId,
         depth: u32,
         parent_size: u64,
+        columns: &[TableCol],
     ) {
         let Some(node) = snap.nodes.get(id) else {
             return;
@@ -607,70 +896,91 @@ impl SizeTreeApp {
         let selected = self.selected == Some(id);
         let type_color = entry_color(node.is_dir, &node.name);
 
-        row.col(|ui| {
-            ui.add_space(depth as f32 * 14.0);
-            if has_kids {
-                let icon = if expanded {
-                    egui_lucide::Lucide::ChevronDown
-                } else {
-                    egui_lucide::Lucide::ChevronRight
-                };
-                if ui
-                    .add(icon.size(16.0).color(Color32::GRAY).image().sense(Sense::click()))
-                    .clicked()
-                {
-                    if expanded {
-                        self.expanded.remove(&id);
-                    } else {
-                        self.expanded.insert(id);
-                    }
+        for col in columns {
+            match col {
+                TableCol::Name => {
+                    row.col(|ui| {
+                        ui.add_space(depth as f32 * 14.0);
+                        if has_kids {
+                            let icon = if expanded {
+                                egui_lucide::Lucide::ChevronDown
+                            } else {
+                                egui_lucide::Lucide::ChevronRight
+                            };
+                            if ui
+                                .add(
+                                    icon.size(16.0)
+                                        .color(Color32::GRAY)
+                                        .image()
+                                        .sense(Sense::click()),
+                                )
+                                .clicked()
+                            {
+                                if expanded {
+                                    self.expanded.remove(&id);
+                                } else {
+                                    self.expanded.insert(id);
+                                }
+                            }
+                        } else {
+                            ui.add_space(16.0);
+                        }
+
+                        entry_icon(ui, node.is_dir, &node.name, 16.0);
+                        ui.add_space(4.0);
+                        let mut label = node.name.clone();
+                        if !node.complete && node.is_dir {
+                            label.push_str(" …");
+                        }
+                        if node.error.is_some() {
+                            label.push_str(" ⚠");
+                        }
+                        let text = if selected {
+                            RichText::new(label)
+                                .strong()
+                                .color(Color32::from_rgb(180, 210, 255))
+                        } else {
+                            RichText::new(label).color(type_color)
+                        };
+                        if ui
+                            .add(egui::Label::new(text).truncate().sense(Sense::click()))
+                            .clicked()
+                        {
+                            self.selected = Some(id);
+                        }
+                    });
                 }
-            } else {
-                ui.add_space(16.0);
+                TableCol::Share => {
+                    row.col(|ui| {
+                        bar_cell(ui, pct);
+                    });
+                }
+                TableCol::Size => {
+                    row.col(|ui| {
+                        metric_label(ui, &format_size(node.size));
+                    });
+                }
+                TableCol::Percent => {
+                    row.col(|ui| {
+                        metric_label(ui, &format!("{pct:.1}%"));
+                    });
+                }
+                TableCol::Files => {
+                    row.col(|ui| {
+                        if node.is_dir {
+                            metric_label(ui, &format_count(node.file_count));
+                        }
+                    });
+                }
+                TableCol::Dirs => {
+                    row.col(|ui| {
+                        if node.is_dir {
+                            metric_label(ui, &format_count(node.dir_count));
+                        }
+                    });
+                }
             }
-
-            let icon = if node.is_dir { "📁" } else { "📄" };
-            let mut label = format!("{icon} {}", node.name);
-            if !node.complete && node.is_dir {
-                label.push_str(" …");
-            }
-            if node.error.is_some() {
-                label.push_str(" ⚠");
-            }
-            let text = if selected {
-                RichText::new(label)
-                    .strong()
-                    .color(Color32::from_rgb(180, 210, 255))
-            } else {
-                RichText::new(label).color(type_color)
-            };
-            if ui
-                .add(egui::Label::new(text).truncate().sense(Sense::click()))
-                .clicked()
-            {
-                self.selected = Some(id);
-            }
-        });
-
-        row.col(|ui| {
-            bar_cell(ui, pct);
-        });
-        row.col(|ui| {
-            metric_label(ui, &format_size(node.size));
-        });
-        row.col(|ui| {
-            metric_label(ui, &format!("{pct:.1}%"));
-        });
-        row.col(|ui| {
-            if node.is_dir {
-                metric_label(ui, &format_count(node.file_count));
-            }
-        });
-        row.col(|ui| {
-            if node.is_dir {
-                metric_label(ui, &format_count(node.dir_count));
-            }
-        });
+        }
     }
 }
 
@@ -753,50 +1063,6 @@ fn node_matches_filter(snap: &TreeSnapshot, id: NodeId, filter: &str) -> bool {
     node.children
         .iter()
         .any(|&cid| node_matches_filter(snap, cid, filter))
-}
-
-fn entry_color(is_dir: bool, name: &str) -> Color32 {
-    if is_dir {
-        return Color32::from_rgb(230, 190, 90); // folders: amber
-    }
-    let ext = name
-        .rsplit_once('.')
-        .map(|(_, e)| e.to_ascii_lowercase())
-        .unwrap_or_default();
-    match ext.as_str() {
-        // Video
-        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "m4v" | "ts" | "flv" => {
-            Color32::from_rgb(190, 120, 255)
-        }
-        // Audio
-        "mp3" | "flac" | "wav" | "aac" | "ogg" | "m4a" | "wma" | "opus" => {
-            Color32::from_rgb(80, 200, 220)
-        }
-        // Images
-        "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "tiff" | "ico" => {
-            Color32::from_rgb(110, 210, 130)
-        }
-        // Archives
-        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" => {
-            Color32::from_rgb(255, 150, 80)
-        }
-        // Documents
-        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "rtf" => {
-            Color32::from_rgb(255, 120, 120)
-        }
-        // Text / markup
-        "txt" | "md" | "markdown" | "log" | "csv" | "json" | "xml" | "yaml" | "yml" | "toml" => {
-            Color32::from_rgb(160, 200, 255)
-        }
-        // Code
-        "rs" | "py" | "js" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "cs" | "go"
-        | "java" | "kt" | "swift" | "php" | "rb" | "sh" | "ps1" | "bat" | "cmd" => {
-            Color32::from_rgb(120, 220, 180)
-        }
-        // Executables / libs
-        "exe" | "dll" | "msi" | "sys" | "bin" | "so" | "dylib" => Color32::from_rgb(255, 100, 140),
-        _ => Color32::from_rgb(200, 200, 200),
-    }
 }
 
 fn heat_color(pct: f64) -> Color32 {

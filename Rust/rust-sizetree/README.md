@@ -46,12 +46,14 @@ rust-sizetree gui D:\Kriss\Videos
 
 `gui` opens a desktop window:
 
-- Toolbar: path, Browse, Rescan, Cancel, show hidden, max depth, name filter
+- Toolbar: path, Browse, Rescan, Cancel, **Report** menu, **Options…**, show hidden, max depth, name filter
+- Report: **HTML (open)** writes a temp HTML report from the current scan and opens it; **Save as…** picks a path (format from extension or Options default)
+- Options: toggle visible columns (Share / Size / % / Files / Dirs; Name always on) and report defaults (format, child limit, open HTML after save) — prefs persist across launches
 - Live tree: folders appear as they are entered; sizes grow until each folder completes
 - Status: files/dirs/size, current path, volume used/free
 - Details: child size bars, Open in Explorer, Copy path
 
-Cancel keeps the partial tree. Name filter is display-only; hidden/depth apply on the next scan.
+Cancel keeps the partial tree (and reports can export that partial data). Name filter is display-only; hidden/depth apply on the next scan.
 
 ## HTML reports
 

@@ -1,5 +1,7 @@
 mod app;
 mod disk;
+mod entry_icons;
+mod prefs;
 
 use std::path::PathBuf;
 

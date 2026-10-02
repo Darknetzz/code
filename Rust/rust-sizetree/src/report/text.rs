@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::env;
+use std::path::{Path, PathBuf};
 
 use crate::models::{
     dir_info_to_json_dict, format_size, iter_child_rows, DirInfo, ReportFormat,
@@ -25,6 +26,38 @@ pub fn write_scan_report(
     }
     std::fs::write(out_path, text)?;
     Ok(())
+}
+
+pub fn slugify_for_filename(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches(|c| c == '.' || c == '_');
+    if trimmed.is_empty() {
+        "root".to_string()
+    } else {
+        trimmed.chars().take(40).collect()
+    }
+}
+
+pub fn make_temp_report_path(target_path: &Path, fmt: ReportFormat) -> PathBuf {
+    let name = target_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("root");
+    let slug = slugify_for_filename(name);
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    env::temp_dir().join(format!(
+        "rust-sizetree-{slug}-{stamp}{}",
+        fmt.extension()
+    ))
 }
 
 fn now_iso() -> String {
