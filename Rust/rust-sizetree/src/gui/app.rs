@@ -390,6 +390,9 @@ impl eframe::App for SizeTreeApp {
                         ui.selectable_value(&mut self.kind_filter, KindFilter::Folders, "Folders");
                         ui.selectable_value(&mut self.kind_filter, KindFilter::Files, "Files");
                     });
+                ui.separator();
+                ui.checkbox(&mut self.prefs.folders_first, "Folders first")
+                    .on_hover_text("Always show folders before files, regardless of sort column");
             });
             ui.add_space(2.0);
         });
@@ -504,10 +507,26 @@ impl eframe::App for SizeTreeApp {
                 }
 
                 let selected = self.selected;
+                let folders_first = self.prefs.folders_first;
                 let detail = self.with_tree(|tree| {
                     selected.and_then(|id| {
                         let node = tree.get(id)?;
                         let kids = tree.sorted_children(id);
+                        let mut children: Vec<_> = kids
+                            .iter()
+                            .filter_map(|&cid| {
+                                let c = tree.get(cid)?;
+                                Some((c.name(), c.size, c.is_dir))
+                            })
+                            .collect();
+                        if folders_first {
+                            children.sort_by(|a, b| {
+                                (!a.2)
+                                    .cmp(&(!b.2))
+                                    .then_with(|| b.1.cmp(&a.1))
+                                    .then_with(|| a.0.to_ascii_lowercase().cmp(&b.0.to_ascii_lowercase()))
+                            });
+                        }
                         Some((
                             node.path.clone(),
                             node.name(),
@@ -517,12 +536,7 @@ impl eframe::App for SizeTreeApp {
                             node.is_dir,
                             node.complete,
                             node.error.clone(),
-                            kids.iter()
-                                .filter_map(|&cid| {
-                                    let c = tree.get(cid)?;
-                                    Some((c.name(), c.size, c.is_dir))
-                                })
-                                .collect::<Vec<_>>(),
+                            children,
                         ))
                     })
                 });
@@ -571,7 +585,7 @@ impl eframe::App for SizeTreeApp {
                     if is_dir && !children.is_empty() {
                         ui.add_space(10.0);
                         ui.heading("Children");
-                        let max_size = children.first().map(|c| c.1).unwrap_or(1).max(1);
+                        let max_size = children.iter().map(|c| c.1).max().unwrap_or(1).max(1);
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for (cname, csize, cis_dir) in children.iter().take(40) {
                                 let color = entry_color(*cis_dir, cname);
@@ -817,7 +831,13 @@ impl SizeTreeApp {
             .filter(|&cid| node_visible(snap, cid, filter, self.kind_filter))
             .collect();
         if node.is_dir && !children.is_empty() && self.expanded.contains(&id) {
-            sort_ids(&mut children, snap, self.sort_key, self.sort_asc);
+            sort_ids(
+                &mut children,
+                snap,
+                self.sort_key,
+                self.sort_asc,
+                self.prefs.folders_first,
+            );
             let self_size = node.size.max(1);
             for cid in children {
                 self.collect_visible_rows_rec(snap, cid, depth + 1, self_size, filter, out);
@@ -1029,10 +1049,20 @@ fn metric_label(ui: &mut Ui, text: &str) {
     });
 }
 
-fn sort_ids(ids: &mut [NodeId], snap: &TreeSnapshot, key: SortKey, ascending: bool) {
+fn sort_ids(
+    ids: &mut [NodeId],
+    snap: &TreeSnapshot,
+    key: SortKey,
+    ascending: bool,
+    folders_first: bool,
+) {
     ids.sort_by(|&a, &b| {
         let na = &snap.nodes[a];
         let nb = &snap.nodes[b];
+        if folders_first && na.is_dir != nb.is_dir {
+            // Directories (is_dir=true) before files.
+            return (!na.is_dir).cmp(&(!nb.is_dir));
+        }
         let ord = match key {
             SortKey::Name => na.name.to_ascii_lowercase().cmp(&nb.name.to_ascii_lowercase()),
             SortKey::Size | SortKey::Percent => na.size.cmp(&nb.size),
