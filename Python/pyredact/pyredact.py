@@ -15,16 +15,19 @@ Redact sensitive information from Scandinavian financial exports.
 - Scanned/image-only PDFs (no text layer) are skipped and flagged as
   NOT REDACTED — they are never written to the output folder.
 - Redacts Norwegian personal numbers, account numbers, payment references, and
-  any 9+ digit number.
+  any 9+ digit number. Optional templates cover email, phone, and URLs.
+  Extra rules: --template / --pattern, or an interactive checklist.
 
 Requires:
-    pip install rich pymupdf typer openpyxl beautifulsoup4
+    pip install rich pymupdf typer openpyxl beautifulsoup4 askr
 
 Usage:
     python pyredact.py --help
     python pyredact.py
     python pyredact.py -i ./exports -o ./redacted
     python pyredact.py -i ./exports -r --dry-run
+    python pyredact.py -i ./exports -t email -t phone -t url
+    python pyredact.py -i ./exports --replace-patterns -t email -p "\\bIBAN[:\\s]*[A-Z0-9]+=>[IBAN]"
     python pyredact.py -i statement.pdf --dry-run
 """
 
@@ -52,7 +55,8 @@ app = typer.Typer(
     help=(
         "Redact sensitive fields from Scandinavian financial exports "
         "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF and OFX/QIF).\n\n"
-        "Missing [bold]--input[/bold] / [bold]--output[/bold] are prompted interactively."
+        "Missing [bold]--input[/bold] / [bold]--output[/bold] are prompted interactively. "
+        "Pattern templates are a checklist unless [bold]--template[/bold] is given."
     ),
 )
 
@@ -117,11 +121,74 @@ KEEP = {
     "inn",
     "ut",
 }
-PATTERNS = [
-    (re.compile(r"\b\d{6}\s?\d{5}\b"), "[ID]"),  # fnr
-    (re.compile(r"\b\d{4}[. ]?\d{2}[. ]?\d{5}\b"), "[ACCT]"),  # kontonr
-    (re.compile(r"\bKID[:\s]*\d+", re.I), "KID"),
-    (re.compile(r"\b\d{9,}\b"), "[NUM]"),  # any other long number
+
+PATTERN_SEP = "=>"
+
+
+@dataclass(frozen=True)
+class PatternTemplate:
+    id: str
+    description: str
+    regex: str
+    replacement: str
+    flags: int = 0
+
+
+TEMPLATES: tuple[PatternTemplate, ...] = (
+    PatternTemplate(
+        "id",
+        "Norwegian personal number (fødselsnummer)",
+        r"\b\d{6}\s?\d{5}\b",
+        "[ID]",
+    ),
+    PatternTemplate(
+        "acct",
+        "Norwegian account number (kontonr)",
+        r"\b\d{4}[. ]?\d{2}[. ]?\d{5}\b",
+        "[ACCT]",
+    ),
+    PatternTemplate(
+        "kid",
+        "Payment reference (KID)",
+        r"\bKID[:\s]*\d+",
+        "KID",
+        flags=re.I,
+    ),
+    PatternTemplate(
+        "num",
+        "Any other 9+ digit number",
+        r"\b\d{9,}\b",
+        "[NUM]",
+    ),
+    PatternTemplate(
+        "email",
+        "Email address",
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+        "[EMAIL]",
+    ),
+    PatternTemplate(
+        "phone",
+        "Phone number (Nordic +47/+46/+45/+358, or other +country)",
+        r"(?<!\d)\+(?:47|46|45|358|[1-9]\d{0,2})(?:[\s./-]*\d){6,12}(?!\d)",
+        "[PHONE]",
+    ),
+    PatternTemplate(
+        "url",
+        "Webpage URL (http/https or www)",
+        r"(?:https?://|www\.)[^\s<>\"']+",
+        "[URL]",
+        flags=re.I,
+    ),
+)
+TEMPLATES_BY_ID = {t.id: t for t in TEMPLATES}
+FINANCE_TEMPLATE_IDS = ("id", "acct", "kid", "num")
+TEMPLATE_IDS = tuple(t.id for t in TEMPLATES)
+
+# Active compiled rules; replaced in main() after CLI/prompt resolve.
+PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(t.regex, t.flags), t.replacement)
+    for t in TEMPLATES
+    if t.id in FINANCE_TEMPLATE_IDS
 ]
 
 
@@ -146,6 +213,165 @@ def iter_sensitive_matches(text: str) -> list[tuple[str, str]]:
 def count_sensitive_replacements(text: str) -> int:
     """Count replacements scrub() would make (same sequential rules)."""
     return scrub(text)[1]
+
+
+def _require_askr():
+    try:
+        import askr
+    except ImportError as exc:
+        raise SystemExit(
+            "askr is required for interactive pattern selection. "
+            "Install with: pip install askr"
+        ) from exc
+    return askr
+
+
+def parse_pattern_spec(raw: str) -> tuple[str, str]:
+    """Parse 'REGEX=>REPLACEMENT'. Raises ValueError on bad input."""
+    if PATTERN_SEP not in raw:
+        raise ValueError(
+            f"Custom pattern must be REGEX{PATTERN_SEP}REPLACEMENT, got: {raw}"
+        )
+    regex, replacement = raw.split(PATTERN_SEP, 1)
+    regex = regex.strip()
+    replacement = replacement.strip()
+    if not regex:
+        raise ValueError("Custom pattern regex is empty")
+    try:
+        re.compile(regex)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex {regex!r}: {exc}") from exc
+    return regex, replacement
+
+
+def compile_pattern_specs(
+    specs: list[tuple[str, str, int]],
+) -> list[tuple[re.Pattern[str], str]]:
+    compiled: list[tuple[re.Pattern[str], str]] = []
+    for regex, replacement, flags in specs:
+        compiled.append((re.compile(regex, flags), replacement))
+    return compiled
+
+
+def normalize_template_ids(names: list[str]) -> list[str]:
+    """Deduplicate template ids; raise ValueError on unknown names."""
+    seen: list[str] = []
+    unknown: list[str] = []
+    for name in names:
+        key = name.strip().lower()
+        if key not in TEMPLATES_BY_ID:
+            unknown.append(name)
+            continue
+        if key not in seen:
+            seen.append(key)
+    if unknown:
+        valid = ", ".join(TEMPLATE_IDS)
+        bad = ", ".join(unknown)
+        raise ValueError(f"Unknown template(s): {bad}. Valid: {valid}")
+    return seen
+
+
+def specs_from_templates(template_ids: list[str]) -> list[tuple[str, str, int]]:
+    return [
+        (TEMPLATES_BY_ID[tid].regex, TEMPLATES_BY_ID[tid].replacement, TEMPLATES_BY_ID[tid].flags)
+        for tid in template_ids
+    ]
+
+
+def prompt_template_ids(*, replace: bool) -> list[str]:
+    askr = _require_askr()
+    labels = [f"{t.id} ({t.description})" for t in TEMPLATES]
+    label_to_id = dict(zip(labels, TEMPLATE_IDS, strict=True))
+    default_labels = (
+        None
+        if replace
+        else [lab for lab, tid in zip(labels, TEMPLATE_IDS, strict=True) if tid in FINANCE_TEMPLATE_IDS]
+    )
+    table = Table(show_header=True, header_style="bold", title="Pattern templates")
+    table.add_column("Id")
+    table.add_column("Replacement")
+    table.add_column("Description")
+    for t in TEMPLATES:
+        table.add_row(t.id, t.replacement, t.description)
+    console.print(table)
+    chosen = askr.ask_multi_choice(
+        "Which patterns?",
+        labels,
+        min_selections=0 if replace else 1,
+        default=default_labels,
+    )
+    return [label_to_id[item] for item in chosen]
+
+
+def prompt_custom_specs() -> list[tuple[str, str, int]]:
+    extra: list[tuple[str, str, int]] = []
+    while True:
+        raw = Prompt.ask(
+            f"[bold]Add extra pattern[/bold] (regex{PATTERN_SEP}replacement, blank to finish)",
+            default="",
+        ).strip()
+        if not raw:
+            break
+        try:
+            regex, replacement = parse_pattern_spec(raw)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            continue
+        extra.append((regex, replacement, 0))
+    return extra
+
+
+def resolve_pattern_specs(
+    cli_templates: list[str] | None,
+    cli_patterns: list[str] | None,
+    *,
+    replace: bool,
+) -> tuple[list[str], int]:
+    """
+    Return (template_ids, custom_count) and set module-level PATTERNS.
+
+    If --template is omitted, prompt with askr. Custom -p skips the extra-pattern loop.
+    """
+    try:
+        if cli_templates is not None:
+            selected = normalize_template_ids(cli_templates)
+            if not replace:
+                merged: list[str] = []
+                for tid in (*FINANCE_TEMPLATE_IDS, *selected):
+                    if tid not in merged:
+                        merged.append(tid)
+                selected = merged
+        else:
+            selected = prompt_template_ids(replace=replace)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    specs = specs_from_templates(selected)
+
+    custom: list[tuple[str, str, int]] = []
+    for raw in cli_patterns or []:
+        try:
+            regex, replacement = parse_pattern_spec(raw)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from exc
+        custom.append((regex, replacement, 0))
+
+    if not cli_patterns:
+        custom.extend(prompt_custom_specs())
+
+    if replace and not selected and not custom:
+        console.print(
+            "[red]No patterns selected. Choose a template or add a custom "
+            f"regex{PATTERN_SEP}replacement.[/red]"
+        )
+        raise typer.Exit(1)
+
+    specs.extend(custom)
+    global PATTERNS
+    PATTERNS = compile_pattern_specs(specs)
+    return selected, len(custom)
 
 
 def default_output_dir(input_path: Path) -> Path:
@@ -839,6 +1065,39 @@ def main(
             show_default=False,
         ),
     ] = None,
+    template: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--template",
+            "-t",
+            help=(
+                "Named pattern template to enable "
+                f"({', '.join(TEMPLATE_IDS)}). Repeatable. "
+                "Finance templates stay on unless --replace-patterns. "
+                "Prompted when omitted."
+            ),
+            show_default=False,
+        ),
+    ] = None,
+    pattern: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--pattern",
+            "-p",
+            help=(
+                f"Custom rule as REGEX{PATTERN_SEP}REPLACEMENT. Repeatable. "
+                "Prompted when omitted."
+            ),
+            show_default=False,
+        ),
+    ] = None,
+    replace_patterns: Annotated[
+        bool,
+        typer.Option(
+            "--replace-patterns",
+            help="Do not auto-include the default finance templates.",
+        ),
+    ] = False,
 ) -> None:
     """Redact sensitive fields from Scandinavian financial exports."""
     input_path = resolve_input_path(str(input) if input is not None else None)
@@ -847,6 +1106,11 @@ def main(
         input_path,
     )
     recursive = resolve_recursive(recursive, input_path)
+    selected_templates, custom_count = resolve_pattern_specs(
+        template,
+        pattern,
+        replace=replace_patterns,
+    )
     skip_under = output_dir if _is_under(output_dir, input_path) else None
     files = collect_files(input_path, recursive=recursive, skip_under=skip_under)
 
@@ -862,11 +1126,17 @@ def main(
         mode_bits.append("[dim](recursive)[/dim]")
     if dry_run:
         mode_bits.append("[dim](dry-run)[/dim]")
+    if replace_patterns:
+        mode_bits.append("[dim](replace patterns)[/dim]")
+    template_note = ", ".join(selected_templates) if selected_templates else "(none)"
+    if custom_count:
+        template_note += f" + {custom_count} custom"
     console.print(
         Panel.fit(
             f"[bold]Input[/bold]  {input_path}\n"
             f"[bold]Output[/bold] {output_dir}\n"
-            f"[bold]Files[/bold]  {len(files)} ({counts})"
+            f"[bold]Files[/bold]  {len(files)} ({counts})\n"
+            f"[bold]Patterns[/bold] {template_note}"
             + (("  " + " ".join(mode_bits)) if mode_bits else ""),
             title="pyredact",
             border_style="cyan",

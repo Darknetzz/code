@@ -1,29 +1,10 @@
-# pyredact — Bulk PDF, CSV, XML, HTML, XLSX Redaction Tool
+# pyredact
 
-`pyredact` is a Python-based CLI utility for detecting and **permanently removing sensitive data** (names, account numbers, addresses, etc.) from downloadable PDFs and other financial/electronic documents. It is designed for use-cases like preparing redacted bank statements, invoices, or transaction exports for sharing or audits.
+Redact sensitive fields from Scandinavian financial exports (CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF and OFX/QIF).
 
-It **overwrites sensitive text**, not just overlays or draws boxes, making it safe for disclosure.
-
-## Features
-
-- Redacts PDFs **in-place**—removes matched values using MuPDF (PyMuPDF)
-- Supports CSV, XML, HTML, XLSX in addition to PDF
-- Customizable patterns for names, bank details, addresses, transaction IDs, etc.
-- **Dry-run mode:** preview what will be redacted before writing changes
-- Table output summarizes redactions, partials, errors
-- Handles both single files and directories (with file type auto-detection)
-- Skips files with no extractable text layer (and warns if likely scanned/image-only)
-- Partial page warnings if some PDF pages have no text layer (image-only scans)
-- Clear report and warnings for unredactable files
+PDF redaction uses PyMuPDF annotations so matched text is removed from the content stream, not merely covered. Scanned/image-only PDFs are skipped and never written to the output folder.
 
 ## Requirements
-
-- Python 3.8+
-- For PDFs: [`pymupdf`](https://github.com/pymupdf/PyMuPDF)
-- For Excel: [`openpyxl`](https://openpyxl.readthedocs.io/en/stable/)
-- For HTML: [`beautifulsoup4`](https://www.crummy.com/software/BeautifulSoup/)
-
-Install all dependencies using:
 
 ```sh
 pip install -r requirements.txt
@@ -32,95 +13,52 @@ pip install -r requirements.txt
 ## Usage
 
 ```sh
-python pyredact.py [OPTIONS] [FILES or DIRECTORIES ...]
+python pyredact.py --help
+python pyredact.py
+python pyredact.py -i ./exports -o ./redacted
+python pyredact.py -i ./exports -r --dry-run
+python pyredact.py -i statement.pdf --dry-run
 ```
 
-### Example commands
+Missing `--input` / `--output` are prompted. Subdirectories trigger a recursive prompt unless `-r` / `--no-recursive` is set.
 
-**Dry-run on a sample folder (see what would be redacted):**
+### Pattern templates
+
+Default finance templates: `id` (fødselsnummer), `acct` (kontonr), `kid`, `num` (9+ digits).
+
+Optional templates: `email`, `phone` (Nordic/international `+`), `url`.
+
 ```sh
-python pyredact.py --dry-run input-folder/
+python pyredact.py -i ./exports -t email -t phone -t url
+python pyredact.py -i ./exports --replace-patterns -t email -p "\bIBAN[:\s]*[A-Z0-9]+=>[IBAN]"
 ```
 
-**Redact all PDFs in a directory and save to output folder (`--output`):**
-```sh
-python pyredact.py --output redacted/ input-folder/
-```
+- `--template` / `-t` — enable a named template (repeatable). Finance templates stay on unless `--replace-patterns`. Omitted: interactive checklist (askr).
+- `--pattern` / `-p` — extra `REGEX=>REPLACEMENT` (repeatable). Omitted: prompted until blank.
+- `--replace-patterns` — do not auto-include the finance four.
 
-**Redact a single file, overwriting if allowed:**
-```sh
-python pyredact.py statement.pdf --overwrite
-```
+## Common options
 
-**Custom config/pattern set:**
-```sh
-python pyredact.py --config my_patterns.yaml --output safe/ docs/
-```
+- `--input` / `-i` — file or directory
+- `--output` / `-o` — output directory (default: `redacted` next to input)
+- `--encoding` / `-e` — text encoding (default: `utf-8-sig`; not used for PDF/XLSX)
+- `--dry-run` / `-n` — list what would be written
+- `--overwrite` / `-y` — overwrite existing outputs without asking
+- `--recursive` / `-r` — include subdirectories (mirrors layout under output)
 
-### Common Options
+## Supported formats
 
-- `--dry-run` — Don't write files; display what **would** change
-- `--output DIR` — Where to write redacted files (default: output/ or alongside input)
-- `--overwrite` — Overwrite existing output files without prompt
-- `--config FILE` — YAML config of additional/custom patterns to redact
-- `--no-pdf` — Skip PDF files
-- `--no-txt` — Skip text/CSV/XML/HTML files
+- **CSV/TSV:** whitelist of date/description/amount columns; values scrubbed in-place
+- **TXT/OFX/QFX/QIF:** whole-file scrub
+- **JSON:** walk objects/arrays; scrub strings and sensitive integers
+- **XML:** element text, tails, and attributes
+- **HTML/HTM:** text nodes and attributes (BeautifulSoup)
+- **XLSX:** all sheets/cells (openpyxl)
+- **PDF:** text-layer redaction (PyMuPDF)
 
-## Supported Formats
+## Exit codes
 
-- **PDF:** Redacts actual text layer (uses PyMuPDF). Warns/skips scanned/image-only.
-- **CSV/TXT:** Overwrites matched values in all cells/fields.
-- **XML:** Redacts content in elements/attributes.
-- **HTML:** Redacts all text nodes and string attributes (BeautifulSoup).
-- **XLSX:** Redacts in-place (with openpyxl).
-
-## Output
-
-Upon completion, a summary table is displayed indicating:
-
-- File name/type
-- What was redacted and how many values were replaced
-- Warnings for partially processed PDFs (no text layer)
-- Errors/skips with reasons (e.g., can't redact images)
-
-**Exit codes:**
-- `0`: Success, all files processed/redacted
-- `2`: Some files not redacted or skipped
-
-## Caveats & Tips
-
-- **Image/Scanned PDFs:** If your PDF is a scanned image, there is no extractable text layer. Use an OCR tool to convert to searchable PDF first (then re-run).
-- **Redact before sharing:** Always review output and never rely on manual inspection alone.
-- **Sensitive patterns:** Default config includes financial/accounting patterns; edit config for custom needs.
-
-## Example YAML config for Custom Patterns
-
-```yaml
-patterns:
-  - name: SSN
-    regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-    replacement: "***-**-****"
-  - name: DriverLicense
-    regex: "[A-Z]\\d{7}"
-    replacement: "DL-REDACTED"
-```
-
-Then run with `--config my_patterns.yaml`.
-
-## Troubleshooting
-
-- **Module not found:** Install missing dependencies as prompted (e.g. `pymupdf`, `openpyxl`, or `beautifulsoup4`).
-- **Scanned PDFs not redacted:** Use OCR tools (e.g. Adobe, Tesseract) to create a text layer.
-- **See skipped or partially redacted files?** Review the summary for details and fix source files as needed.
-
-## Development
-
-- Core: `pyredact.py`
-- See code for detailed logic/documentation.
-- Tests and new pattern configs welcome via PR!
-
-## License
-
-MIT License. See [LICENSE](../../LICENSE).
-
----
+- `0` — success
+- `1` — no matching files, bad options, or missing dependency
+- `2` — at least one PDF was not redacted
+- `130` — interrupted
