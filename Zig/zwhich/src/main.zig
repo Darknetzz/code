@@ -2,9 +2,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 const zwhich = @import("zwhich");
+const zcommon = @import("zcommon");
 
 pub const usage =
-    \\zwhich - PATH lookup (every match, winner first)
+    \\zwhich — PATH lookup (every match, winner first)
     \\
     \\Usage:
     \\  zwhich [OPTIONS] NAME [NAME...]
@@ -31,6 +32,7 @@ fn pathExists(ctx: *anyopaque, full_path: []const u8) bool {
 }
 
 pub fn main(init: std.process.Init) !void {
+    zcommon.enableUtf8();
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
 

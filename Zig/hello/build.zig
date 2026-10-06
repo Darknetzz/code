@@ -17,6 +17,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "hello", .module = mod },
+                .{ .name = "zcommon", .module = b.dependency("zcommon", .{
+                    .target = target,
+                    .optimize = optimize,
+                }).module("zcommon") },
             },
         }),
     });

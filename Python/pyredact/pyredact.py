@@ -12,8 +12,10 @@ Redact sensitive information from Scandinavian financial exports.
 - XLSX: scrubs cell values across all sheets (openpyxl).
 - PDF: uses PyMuPDF redaction annotations so matched text is removed from the
   content stream (not merely covered by black boxes).
-- Scanned/image-only PDFs (no text layer) are skipped and flagged as
-  NOT REDACTED — they are never written to the output folder.
+- Images (PNG/JPEG/TIFF/BMP/GIF/WebP) and scanned PDF pages are OCR'd with
+  Tesseract (tessdata) and the matched pixels are blanked.
+- Scanned/image-only PDFs are skipped only when OCR is unavailable — they are
+  never written to the output folder in that case.
 - Redacts Norwegian personal numbers, account numbers, payment references, and
   any 9+ digit number. Optional templates cover email, phone, and URLs.
   Extra rules: --template / --pattern, or an interactive checklist.
@@ -54,7 +56,7 @@ app = typer.Typer(
     rich_markup_mode="rich",
     help=(
         "Redact sensitive fields from Scandinavian financial exports "
-        "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF and OFX/QIF).\n\n"
+        "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF/images and OFX/QIF).\n\n"
         "Missing [bold]--input[/bold] / [bold]--output[/bold] are prompted interactively. "
         "Pattern templates are a checklist unless [bold]--template[/bold] is given."
     ),
@@ -69,6 +71,7 @@ XML_SUFFIXES = {".xml"}
 HTML_SUFFIXES = {".html", ".htm"}
 XLSX_SUFFIXES = {".xlsx"}
 PDF_SUFFIXES = {".pdf"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp"}
 SUPPORTED_SUFFIXES = (
     CSV_SUFFIXES
     | TEXT_SUFFIXES
@@ -77,7 +80,10 @@ SUPPORTED_SUFFIXES = (
     | HTML_SUFFIXES
     | XLSX_SUFFIXES
     | PDF_SUFFIXES
+    | IMAGE_SUFFIXES
 )
+OCR_DPI = 300
+DEFAULT_OCR_LANG = "eng+nor"
 _FILE_COUNT_ORDER = (
     "CSV",
     "TSV",
@@ -91,6 +97,14 @@ _FILE_COUNT_ORDER = (
     "HTM",
     "XLSX",
     "PDF",
+    "PNG",
+    "JPG",
+    "JPEG",
+    "TIF",
+    "TIFF",
+    "BMP",
+    "GIF",
+    "WEBP",
 )
 _FILE_COUNT_STYLE = {
     "CSV": "cyan",
@@ -105,6 +119,14 @@ _FILE_COUNT_STYLE = {
     "HTM": "blue",
     "XLSX": "yellow",
     "PDF": "magenta",
+    "PNG": "bright_magenta",
+    "JPG": "bright_magenta",
+    "JPEG": "bright_magenta",
+    "TIF": "bright_magenta",
+    "TIFF": "bright_magenta",
+    "BMP": "bright_magenta",
+    "GIF": "bright_magenta",
+    "WEBP": "bright_magenta",
 }
 # Pages with fewer alphanumeric chars than this are treated as having no usable text layer.
 MIN_PAGE_ALNUM = 20
@@ -796,21 +818,29 @@ def redact_xlsx(src: Path, dest: Path) -> tuple[int, int, int]:
         wb.close()
 
 
-class UnredactablePdfError(Exception):
-    """PDF has no usable text layer; content cannot be safely redacted."""
+class UnredactableError(Exception):
+    """Source has no usable text (and OCR could not recover it)."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
 
 
+@dataclass(frozen=True)
+class OcrConfig:
+    enabled: bool = True
+    tessdata: str | None = None
+    language: str = DEFAULT_OCR_LANG
+
+
 @dataclass
 class PdfTextReport:
     page_count: int
     usable_pages: int
-    empty_text_pages: list[int]  # 1-based page numbers
+    empty_text_pages: list[int]  # 1-based page numbers still without text
     match_count: int
     image_pages: int
+    ocr_pages: int = 0
 
     @property
     def has_usable_text(self) -> bool:
@@ -826,7 +856,8 @@ def _require_pymupdf():
         import pymupdf
     except ImportError as exc:
         raise SystemExit(
-            "PyMuPDF is required for PDF redaction. Install with: pip install pymupdf"
+            "PyMuPDF is required for PDF and image redaction. "
+            "Install with: pip install pymupdf"
         ) from exc
     return pymupdf
 
@@ -835,8 +866,115 @@ def _page_alnum_count(text: str) -> int:
     return sum(1 for c in text if c.isalnum())
 
 
-def analyze_pdf(src: Path) -> PdfTextReport:
+def _ocr_missing_reason(*, enabled: bool) -> str:
+    if not enabled:
+        return (
+            "no extractable text layer (likely scanned/image-only) — "
+            "OCR is off (--no-ocr); sensitive data may still be visible in images"
+        )
+    return (
+        "no extractable text layer (likely scanned/image-only) — "
+        "OCR needs Tesseract language data (tessdata). "
+        "Install Tesseract, set TESSDATA_PREFIX, or pass --tessdata"
+    )
+
+
+def resolve_ocr_config(ocr: OcrConfig) -> OcrConfig:
+    """Fill tessdata path and drop language codes that are not installed."""
+    if not ocr.enabled:
+        return ocr
+    pymupdf = _require_pymupdf()
+    try:
+        tessdata = pymupdf.get_tessdata(ocr.tessdata)
+    except Exception:
+        return OcrConfig(enabled=True, tessdata=None, language=ocr.language)
+    return OcrConfig(
+        enabled=True,
+        tessdata=tessdata,
+        language=_ocr_languages_in(tessdata, ocr.language),
+    )
+
+
+def _ocr_languages_in(tessdata: str, requested: str) -> str:
+    root = Path(tessdata)
+    kept = [
+        code
+        for code in requested.split("+")
+        if code and (root / f"{code}.traineddata").is_file()
+    ]
+    if kept:
+        return "+".join(kept)
+    if (root / "eng.traineddata").is_file():
+        return "eng"
+    return requested
+
+
+def _pixmap_for_ocr(pymupdf: Any, pix: Any) -> Any:
+    if pix.alpha:
+        return pymupdf.Pixmap(pix, 0)
+    return pix
+
+
+def ocr_textpage(page: Any, pymupdf: Any, ocr: OcrConfig) -> Any:
+    if not ocr.tessdata:
+        raise UnredactableError(_ocr_missing_reason(enabled=ocr.enabled))
+    return page.get_textpage_ocr(
+        dpi=OCR_DPI,
+        full=True,
+        language=ocr.language,
+        tessdata=ocr.tessdata,
+    )
+
+
+def _add_match_redactions(
+    page: Any,
+    pymupdf: Any,
+    hits: list[tuple[str, str]],
+    *,
+    textpage: Any | None = None,
+) -> int:
+    count = 0
+    seen: set[str] = set()
+    search_kw: dict[str, Any] = {}
+    if textpage is not None:
+        search_kw["textpage"] = textpage
+    for matched_text, replacement in hits:
+        if matched_text in seen:
+            continue
+        seen.add(matched_text)
+        for rect in page.search_for(matched_text, **search_kw):
+            page.add_redact_annot(
+                rect,
+                text=replacement,
+                fill=(0, 0, 0),
+                text_color=(1, 1, 1),
+                align=pymupdf.TEXT_ALIGN_CENTER,
+                cross_out=False,
+            )
+            count += 1
+    return count
+
+
+def _apply_page_redactions(page: Any, pymupdf: Any, *, covering_images: bool) -> None:
+    page.apply_redactions(
+        images=(
+            pymupdf.PDF_REDACT_IMAGE_PIXELS
+            if covering_images
+            else pymupdf.PDF_REDACT_IMAGE_NONE
+        ),
+        graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
+    )
+
+
+def _unredactable_reason(report: PdfTextReport, ocr: OcrConfig) -> str:
+    if report.is_likely_scanned:
+        return _ocr_missing_reason(enabled=ocr.enabled)
+    return "no extractable text layer — cannot locate or remove sensitive values"
+
+
+def analyze_pdf(src: Path, ocr: OcrConfig | None = None) -> PdfTextReport:
     """Inspect extractable text / images without modifying the file."""
+    ocr = ocr or OcrConfig(enabled=False)
     pymupdf = _require_pymupdf()
     doc = pymupdf.open(src)
     try:
@@ -844,78 +982,107 @@ def analyze_pdf(src: Path) -> PdfTextReport:
         usable_pages = 0
         match_count = 0
         image_pages = 0
+        ocr_pages = 0
         for index, page in enumerate(doc, start=1):
             text = page.get_text()
-            match_count += len(iter_sensitive_matches(text))
             if page.get_images(full=True):
                 image_pages += 1
             if _page_alnum_count(text) >= MIN_PAGE_ALNUM:
                 usable_pages += 1
-            else:
-                empty_text_pages.append(index)
+                match_count += len(iter_sensitive_matches(text))
+                continue
+            if ocr.enabled and ocr.tessdata:
+                try:
+                    textpage = ocr_textpage(page, pymupdf, ocr)
+                    text = page.get_text(textpage=textpage)
+                except Exception:
+                    empty_text_pages.append(index)
+                    continue
+                ocr_pages += 1
+                if _page_alnum_count(text) >= MIN_PAGE_ALNUM:
+                    usable_pages += 1
+                    match_count += len(iter_sensitive_matches(text))
+                else:
+                    empty_text_pages.append(index)
+                continue
+            empty_text_pages.append(index)
         return PdfTextReport(
             page_count=doc.page_count,
             usable_pages=usable_pages,
             empty_text_pages=empty_text_pages,
             match_count=match_count,
             image_pages=image_pages,
+            ocr_pages=ocr_pages,
         )
     finally:
         doc.close()
 
 
-def _unredactable_reason(report: PdfTextReport) -> str:
-    if report.is_likely_scanned:
-        return (
-            "no extractable text layer (likely scanned/image-only) — "
-            "sensitive data may still be visible in images"
-        )
-    return (
-        "no extractable text layer — cannot locate or remove sensitive values"
-    )
-
-
-def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
+def redact_pdf(
+    src: Path,
+    dest: Path,
+    ocr: OcrConfig,
+) -> tuple[int, int, list[int], int]:
     """
     Physically remove matched text via PyMuPDF redaction annotations.
 
-    Returns (page_count, redaction_count, empty_text_pages).
-    Raises UnredactablePdfError when the PDF has no usable text layer.
+    Returns (page_count, redaction_count, empty_text_pages, ocr_pages).
+    Raises UnredactableError when the PDF has no usable text layer and OCR cannot help.
     """
-    report = analyze_pdf(src)
-    if not report.has_usable_text:
-        raise UnredactablePdfError(_unredactable_reason(report))
-
     pymupdf = _require_pymupdf()
     # Tighter glyph boxes reduce accidental removal of neighboring lines.
     pymupdf.TOOLS.set_small_glyph_heights(True)
 
     doc = pymupdf.open(src)
     redaction_count = 0
+    empty_text_pages: list[int] = []
+    ocr_pages = 0
+    usable_pages = 0
+    image_pages = 0
     try:
-        for page in doc:
-            hits = iter_sensitive_matches(page.get_text())
-            # Deduplicate identical strings on the page; search_for finds all instances.
-            seen: set[str] = set()
-            for matched_text, replacement in hits:
-                if matched_text in seen:
+        for index, page in enumerate(doc, start=1):
+            if page.get_images(full=True):
+                image_pages += 1
+            native = page.get_text()
+            textpage = None
+            covering_images = False
+            text = native
+            if _page_alnum_count(native) < MIN_PAGE_ALNUM:
+                if ocr.enabled and ocr.tessdata:
+                    try:
+                        textpage = ocr_textpage(page, pymupdf, ocr)
+                        text = page.get_text(textpage=textpage)
+                        covering_images = True
+                        ocr_pages += 1
+                    except Exception:
+                        empty_text_pages.append(index)
+                        continue
+                else:
+                    empty_text_pages.append(index)
                     continue
-                seen.add(matched_text)
-                for rect in page.search_for(matched_text):
-                    page.add_redact_annot(
-                        rect,
-                        text=replacement,
-                        fill=(0, 0, 0),
-                        text_color=(1, 1, 1),
-                        align=pymupdf.TEXT_ALIGN_CENTER,
-                        cross_out=False,
-                    )
-                    redaction_count += 1
-            # Remove overlapping text from the content stream (not just cover it).
-            page.apply_redactions(
-                images=pymupdf.PDF_REDACT_IMAGE_NONE,
-                graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
+                if _page_alnum_count(text) < MIN_PAGE_ALNUM:
+                    empty_text_pages.append(index)
+                else:
+                    usable_pages += 1
+            else:
+                usable_pages += 1
+            hits = iter_sensitive_matches(text)
+            redaction_count += _add_match_redactions(
+                page, pymupdf, hits, textpage=textpage
             )
+            # Remove overlapping text from the content stream (not just cover it).
+            _apply_page_redactions(page, pymupdf, covering_images=covering_images)
+
+        if usable_pages == 0:
+            report = PdfTextReport(
+                page_count=doc.page_count,
+                usable_pages=0,
+                empty_text_pages=empty_text_pages,
+                match_count=0,
+                image_pages=image_pages,
+                ocr_pages=ocr_pages,
+            )
+            raise UnredactableError(_unredactable_reason(report, ocr))
 
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Strip Title/Author/Subject/etc. and XMP so they cannot leak identifiers.
@@ -923,9 +1090,57 @@ def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
         doc.del_xml_metadata()
         # garbage/deflate purge removed content so it is not extractable later.
         doc.save(dest, garbage=4, deflate=True, clean=True)
-        return doc.page_count, redaction_count, report.empty_text_pages
+        return doc.page_count, redaction_count, empty_text_pages, ocr_pages
     finally:
         doc.close()
+
+
+def redact_image(
+    src: Path,
+    dest: Path,
+    ocr: OcrConfig,
+    *,
+    write: bool,
+) -> tuple[str, int]:
+    """OCR an image, blank matched pixels, optionally write dest. Returns (detail, count)."""
+    if not ocr.enabled or not ocr.tessdata:
+        if not ocr.enabled:
+            raise UnredactableError("OCR is off (--no-ocr); cannot redact image pixels")
+        raise UnredactableError(
+            "image OCR needs Tesseract language data (tessdata). "
+            "Install Tesseract, set TESSDATA_PREFIX, or pass --tessdata"
+        )
+
+    pymupdf = _require_pymupdf()
+    pymupdf.TOOLS.set_small_glyph_heights(True)
+    pix = _pixmap_for_ocr(pymupdf, pymupdf.Pixmap(src))
+    width, height = pix.width, pix.height
+    try:
+        ocr_pdf = pymupdf.open(
+            "pdf",
+            pix.pdfocr_tobytes(language=ocr.language, tessdata=ocr.tessdata),
+        )
+    finally:
+        pix = None
+
+    try:
+        page = ocr_pdf[0]
+        hits = iter_sensitive_matches(page.get_text())
+        redactions = _add_match_redactions(page, pymupdf, hits)
+        if write:
+            _apply_page_redactions(page, pymupdf, covering_images=True)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            out = page.get_pixmap(
+                matrix=pymupdf.Matrix(
+                    width / page.rect.width,
+                    height / page.rect.height,
+                ),
+                alpha=False,
+            )
+            out.save(dest)
+        return f"{width}×{height}", redactions
+    finally:
+        ocr_pdf.close()
 
 
 @dataclass
@@ -934,6 +1149,7 @@ class FileWork:
     redactions: int
     empty_pages: list[int] = field(default_factory=list)
     skip_reason: str | None = None
+    used_ocr: bool = False
 
 
 def format_file_counts(files: list[Path]) -> str:
@@ -956,29 +1172,38 @@ def process_source(
     encoding: str,
     *,
     write: bool,
+    ocr: OcrConfig,
 ) -> FileWork:
-    """Inspect or redact one file. Unredactable PDFs return skip_reason instead of raising."""
+    """Inspect or redact one file. Unredactable sources return skip_reason instead of raising."""
     suffix = src.suffix.lower()
     if suffix in PDF_SUFFIXES:
         if not write:
-            report = analyze_pdf(src)
+            report = analyze_pdf(src, ocr)
             work = FileWork(
                 detail=f"{report.page_count}p",
                 redactions=report.match_count,
                 empty_pages=report.empty_text_pages,
+                used_ocr=report.ocr_pages > 0,
             )
             if not report.has_usable_text:
-                work.skip_reason = _unredactable_reason(report)
+                work.skip_reason = _unredactable_reason(report, ocr)
             return work
         try:
-            pages, redactions, empty_pages = redact_pdf(src, dest)
-        except UnredactablePdfError as exc:
+            pages, redactions, empty_pages, ocr_pages = redact_pdf(src, dest, ocr)
+        except UnredactableError as exc:
             return FileWork(detail="—", redactions=0, skip_reason=exc.reason)
         return FileWork(
             detail=f"{pages}p",
             redactions=redactions,
             empty_pages=empty_pages,
+            used_ocr=ocr_pages > 0,
         )
+    if suffix in IMAGE_SUFFIXES:
+        try:
+            detail, redactions = redact_image(src, dest, ocr, write=write)
+        except UnredactableError as exc:
+            return FileWork(detail="—", redactions=0, skip_reason=exc.reason)
+        return FileWork(detail=detail, redactions=redactions, used_ocr=True)
     if suffix in CSV_SUFFIXES:
         if write:
             rows, cols, redactions = redact_csv(src, dest, encoding)
@@ -1033,7 +1258,7 @@ def main(
             "-i",
             help=(
                 "Supported file or directory "
-                "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF, OFX/QIF). "
+                "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF/PNG/JPEG/TIFF, OFX/QIF). "
                 "Prompt default: current directory."
             ),
             show_default=False,
@@ -1056,7 +1281,7 @@ def main(
         typer.Option(
             "--encoding",
             "-e",
-            help="Text encoding for text-based formats (not PDF/XLSX).",
+            help="Text encoding for text-based formats (not PDF/XLSX/images).",
         ),
     ] = "utf-8-sig",
     dry_run: Annotated[
@@ -1120,6 +1345,31 @@ def main(
             help="Do not auto-include the default finance templates.",
         ),
     ] = False,
+    ocr: Annotated[
+        bool,
+        typer.Option(
+            "--ocr/--no-ocr",
+            help=(
+                "OCR image files and scanned PDF pages. "
+                "Needs Tesseract language data (tessdata)."
+            ),
+        ),
+    ] = True,
+    tessdata: Annotated[
+        Path | None,
+        typer.Option(
+            "--tessdata",
+            help="Tesseract tessdata folder (default: TESSDATA_PREFIX or Tesseract install).",
+            show_default=False,
+        ),
+    ] = None,
+    ocr_lang: Annotated[
+        str,
+        typer.Option(
+            "--ocr-lang",
+            help="Tesseract language codes, '+' separated (missing codes are dropped).",
+        ),
+    ] = DEFAULT_OCR_LANG,
 ) -> None:
     """Redact sensitive fields from Scandinavian financial exports."""
     input_path = resolve_input_path(str(input) if input is not None else None)
@@ -1142,6 +1392,19 @@ def main(
         console.print(f"[yellow]No {kinds} files found {scope}[/yellow] {input_path}")
         raise typer.Exit(1)
 
+    if tessdata is not None and not tessdata.is_dir():
+        console.print(f"[red]tessdata folder not found:[/red] {tessdata}")
+        raise typer.Exit(1)
+
+    ocr_config = OcrConfig(
+        enabled=ocr,
+        tessdata=str(tessdata) if tessdata is not None else None,
+        language=ocr_lang,
+    )
+    needs_ocr = any(p.suffix.lower() in IMAGE_SUFFIXES | PDF_SUFFIXES for p in files)
+    if needs_ocr and ocr_config.enabled:
+        ocr_config = resolve_ocr_config(ocr_config)
+
     counts = format_file_counts(files)
     mode_bits = []
     if recursive:
@@ -1150,6 +1413,12 @@ def main(
         mode_bits.append("[dim](dry-run)[/dim]")
     if replace_patterns:
         mode_bits.append("[dim](replace patterns)[/dim]")
+    if needs_ocr and not ocr_config.enabled:
+        mode_bits.append("[yellow](OCR off)[/yellow]")
+    elif needs_ocr and ocr_config.tessdata:
+        mode_bits.append(f"[dim](OCR {ocr_config.language})[/dim]")
+    elif needs_ocr:
+        mode_bits.append("[yellow](OCR unavailable — install Tesseract tessdata)[/yellow]")
     template_note = ", ".join(selected_templates) if selected_templates else "(none)"
     if custom_count:
         template_note += f" + {custom_count} custom"
@@ -1208,7 +1477,9 @@ def main(
                     )
                     continue
 
-                work = process_source(src, dest, encoding, write=not dry_run)
+                work = process_source(
+                    src, dest, encoding, write=not dry_run, ocr=ocr_config
+                )
                 if work.skip_reason:
                     not_redacted.append((label, work.skip_reason))
                     results.add_row(
@@ -1237,6 +1508,8 @@ def main(
                     if dry_run
                     else "[green]ok[/green]"
                 )
+                if work.used_ocr:
+                    status += " [dim](OCR)[/dim]"
                 if work.empty_pages:
                     partial_warnings.append((label, work.empty_pages))
                     status += " [yellow](partial text)[/yellow]"
@@ -1287,9 +1560,9 @@ def main(
         console.print(
             Panel(
                 "[bold yellow]PARTIAL TEXT LAYER[/bold yellow]\n\n"
-                "These PDFs were processed, but some pages have little/no extractable "
-                "text. Anything only present as an image on those pages was "
-                "[bold]not[/bold] redacted.\n\n"
+                "These files were processed, but some pages have little/no extractable "
+                "text even after OCR. Anything still only present as unread pixels "
+                "was [bold]not[/bold] redacted.\n\n"
                 f"{lines}",
                 title="Warning",
                 border_style="yellow",
@@ -1303,11 +1576,11 @@ def main(
         console.print(
             Panel(
                 "[bold white on red] NOT REDACTED [/bold white on red]\n\n"
-                "These PDFs were [bold]skipped[/bold] and [bold]not[/bold] written to "
+                "These files were [bold]skipped[/bold] and [bold]not[/bold] written to "
                 "the output folder. Treat the originals as still sensitive.\n\n"
                 f"{lines}\n\n"
-                "[dim]Tip: export a text-based PDF from your bank, or OCR first, "
-                "then re-run.[/dim]",
+                "[dim]Tip: install Tesseract language data (tessdata), or export a "
+                "text-based PDF from your bank, then re-run.[/dim]",
                 title="⚠ DO NOT SHARE AS REDACTED",
                 border_style="red",
             )
@@ -1318,7 +1591,7 @@ def main(
     elif wrote_any:
         console.print(f"[green]Done.[/green] Wrote to {output_dir}")
     elif not_redacted and not skipped_overwrite:
-        console.print("[red]Nothing was written — no PDF could be safely redacted.[/red]")
+        console.print("[red]Nothing was written — no file could be safely redacted.[/red]")
     elif skipped_overwrite and not wrote_any:
         console.print("[yellow]Nothing was written — existing outputs were left untouched.[/yellow]")
 

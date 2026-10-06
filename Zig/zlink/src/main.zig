@@ -2,10 +2,11 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 const zlink = @import("zlink");
+const zcommon = @import("zcommon");
 const win32 = @import("win32.zig");
 
 pub const usage =
-    \\zlink - Windows symlink / junction / hardlink CLI (no cmd mklink)
+    \\zlink — Windows symlink / junction / hardlink CLI (no cmd mklink)
     \\
     \\Usage:
     \\  zlink TARGET [LINK] [OPTIONS]
@@ -37,6 +38,7 @@ const App = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    zcommon.enableUtf8();
     if (builtin.os.tag != .windows) {
         std.debug.print("Error: zlink only supports Windows.\n", .{});
         return error.WindowsOnly;

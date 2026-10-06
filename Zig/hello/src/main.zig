@@ -1,8 +1,10 @@
 const std = @import("std");
 const Io = std.Io;
 const hello = @import("hello");
+const zcommon = @import("zcommon");
 
 pub fn main(init: std.process.Init) !void {
+    zcommon.enableUtf8();
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
 
