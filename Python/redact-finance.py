@@ -13,9 +13,10 @@ Redact sensitive information from Scandinavian financial CSV/PDF exports.
   any 9+ digit number.
 
 Requires:
-    pip install rich pymupdf
+    pip install rich pymupdf typer
 
 Usage:
+    python redact-finance.py --help
     python redact-finance.py
     python redact-finance.py -i ./exports -o ./redacted
     python redact-finance.py -i statement.pdf --dry-run
@@ -23,18 +24,27 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import csv
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Optional
 
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
+
+app = typer.Typer(
+    add_completion=False,
+    rich_markup_mode="rich",
+    help=(
+        "Redact sensitive fields from Scandinavian financial CSV/PDF exports.\n\n"
+        "Missing [bold]--input[/bold] / [bold]--output[/bold] are prompted interactively."
+    ),
+)
 
 console = Console()
 
@@ -268,46 +278,54 @@ def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
         doc.close()
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog=Path(__file__).name,
-        description="Redact sensitive fields from Scandinavian financial CSV/PDF exports.",
+@app.command()
+def main(
+    input: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--input",
+            "-i",
+            help="CSV/PDF file or directory containing such files.",
+            show_default=False,
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output directory (prompt default: redacted next to input).",
+            show_default=False,
+        ),
+    ] = None,
+    encoding: Annotated[
+        str,
+        typer.Option(
+            "--encoding",
+            "-e",
+            help="Text encoding for reading/writing CSVs.",
+        ),
+    ] = "utf-8-sig",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            "-n",
+            help="List files that would be written without creating them.",
+        ),
+    ] = False,
+) -> None:
+    """Redact sensitive fields from Scandinavian financial CSV/PDF exports."""
+    input_path = resolve_input_path(str(input) if input is not None else None)
+    output_dir = resolve_output_dir(
+        str(output) if output is not None else None,
+        input_path,
     )
-    parser.add_argument(
-        "-i",
-        "--input",
-        help="CSV/PDF file or directory containing such files",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        help="Output directory (default when prompted: redacted next to input)",
-    )
-    parser.add_argument(
-        "-e",
-        "--encoding",
-        default="utf-8-sig",
-        help="Text encoding for reading/writing CSVs (default: utf-8-sig)",
-    )
-    parser.add_argument(
-        "-n",
-        "--dry-run",
-        action="store_true",
-        help="List files that would be written without creating them",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-
-    input_path = resolve_input_path(args.input)
-    output_dir = resolve_output_dir(args.output, input_path)
     files = collect_files(input_path)
 
     if not files:
         console.print(f"[yellow]No CSV/PDF files found in[/yellow] {input_path}")
-        return 1
+        raise typer.Exit(1)
 
     csv_n = sum(1 for f in files if f.suffix.lower() == ".csv")
     pdf_n = sum(1 for f in files if f.suffix.lower() == ".pdf")
@@ -317,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
             f"[bold]Output[/bold] {output_dir}\n"
             f"[bold]Files[/bold]  {len(files)} "
             f"([cyan]{csv_n} CSV[/cyan], [magenta]{pdf_n} PDF[/magenta])"
-            + ("  [dim](dry-run)[/dim]" if args.dry_run else ""),
+            + ("  [dim](dry-run)[/dim]" if dry_run else ""),
             title="redact-finance",
             border_style="cyan",
         )
@@ -347,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             dest = output_dir / src.name
             kind = src.suffix.lower().lstrip(".").upper()
             try:
-                if args.dry_run:
+                if dry_run:
                     if src.suffix.lower() == ".pdf":
                         report = analyze_pdf(src)
                         detail = f"{report.page_count}p / {report.match_count} hits"
@@ -383,7 +401,7 @@ def main(argv: list[str] | None = None) -> int:
                             "[cyan]would write[/cyan]",
                         )
                 elif src.suffix.lower() == ".csv":
-                    rows, cols = redact_csv(src, dest, args.encoding)
+                    rows, cols = redact_csv(src, dest, encoding)
                     wrote_any = True
                     results.add_row(
                         kind,
@@ -464,15 +482,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
 
-    if args.dry_run:
+    if dry_run:
         console.print("[dim]Dry-run complete — no files written.[/dim]")
     elif wrote_any:
         console.print(f"[green]Done.[/green] Wrote to {output_dir}")
     elif not_redacted:
         console.print("[red]Nothing was written — no PDF could be safely redacted.[/red]")
 
-    return 2 if not_redacted else 0
+    if not_redacted:
+        raise typer.Exit(2)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    app()

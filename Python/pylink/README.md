@@ -6,7 +6,7 @@ Windows CLI for creating file symlinks, directory symlinks, junctions, and hard 
 
 - Windows only
 - Python 3.9+
-- `pip install -r requirements.txt` (Typer)
+- `pip install -r requirements.txt` (Typer + Rich)
 - **Symlinks:** Administrator or [Developer Mode](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development)
 - **Junctions:** Usually work without Developer Mode for directory targets on **local NTFS** (not network shares)
 

@@ -5,15 +5,125 @@ from pathlib import Path
 from typing import Annotated, Callable, Optional
 
 import typer
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from typer.core import TyperCommand, TyperGroup
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
+
+console = Console()
+
+_EXAMPLE_TARGET = r"C:\Users\You\Bin\somebinary.exe"
+_EXAMPLE_LINK = r"C:\Bin\linkbinary.exe"
+
+
+def print_error(message: str) -> None:
+    console.print(message, style="bold red", markup=False)
+
+
+def print_warning(message: str) -> None:
+    console.print(message, style="yellow", markup=False)
+
+
+def print_success(message: str) -> None:
+    console.print(message, style="bold green", markup=False)
+
+
+def print_info(message: str) -> None:
+    console.print(message, style="blue", markup=False)
+
+
+def print_plain(message: str = "") -> None:
+    console.print(message, markup=False)
+
+
+def print_link_display(link_path: Path | str, target_path: Path | str) -> None:
+    """Print ``link -> dest`` with LINK and TARGET styled differently."""
+    text = Text()
+    text.append(str(link_path), style="bold magenta")
+    text.append(" -> ")
+    text.append(str(target_path), style="bold cyan")
+    console.print(text)
+
+
+def print_create_example() -> None:
+    """Rich Panel + Table clarifying TARGET vs LINK for help output."""
+    roles = Table(show_header=True, header_style="bold", pad_edge=False, expand=False)
+    roles.add_column("Role", style="bold")
+    roles.add_column("Example path")
+    roles.add_column("Meaning")
+    roles.add_row(
+        Text("TARGET", style="bold cyan"),
+        Text(_EXAMPLE_TARGET, style="cyan"),
+        "Existing file or folder to point at",
+    )
+    roles.add_row(
+        Text("LINK", style="bold magenta"),
+        Text(_EXAMPLE_LINK, style="magenta"),
+        "New link path you create",
+    )
+
+    demo = Table(show_header=False, box=None, pad_edge=False, padding=(0, 1))
+    demo.add_column(style="bold dim", justify="right")
+    demo.add_column()
+    command = Text.assemble(
+        "pylink ",
+        (f'"{_EXAMPLE_TARGET}"', "cyan"),
+        " ",
+        (f'"{_EXAMPLE_LINK}"', "magenta"),
+    )
+    creates = Text.assemble(
+        (_EXAMPLE_LINK, "bold magenta"),
+        " -> ",
+        (_EXAMPLE_TARGET, "bold cyan"),
+    )
+    demo.add_row("Command", command)
+    demo.add_row("Creates", creates)
+
+    title = Text.assemble(
+        "Create a link: pylink ",
+        ("TARGET", "bold cyan"),
+        " [",
+        ("LINK", "bold magenta"),
+        "] [OPTIONS]",
+    )
+    console.print()
+    console.print(
+        Panel(
+            Group(roles, Text(""), demo),
+            title=title,
+            border_style="dim",
+            padding=(1, 1),
+        )
+    )
+
+
+class PylinkGroup(TyperGroup):
+    """Root CLI group that appends the TARGET/LINK example after help."""
+
+    def format_help(self, ctx, formatter) -> None:
+        super().format_help(ctx, formatter)
+        print_create_example()
+
+
+class PylinkCommand(TyperCommand):
+    """Command class that appends the TARGET/LINK example for create-link help."""
+
+    def format_help(self, ctx, formatter) -> None:
+        super().format_help(ctx, formatter)
+        if self.name == "create-link":
+            print_create_example()
+
 
 app = typer.Typer(
+    cls=PylinkGroup,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=(
         "A modern wrapper for Windows mklink.\n\n"
-        "Create a link: pylink TARGET [LINK] [OPTIONS]\n\n"
-        "If TARGET is a directory and no type flag is given, pylink defaults to Junction "
+        "If [cyan]TARGET[/cyan] is a directory and no type flag is given, pylink defaults to Junction "
         "(/J) on local NTFS with an absolute target. Relative targets and network paths "
         "default to a directory symlink (/D) so the stored target stays portable."
     ),
@@ -94,11 +204,11 @@ def show_link_context(
     resolved_target: Optional[Path] = None,
 ) -> None:
     """Print link creation context, showing the stored target string."""
-    typer.echo(format_link_display(link_path, stored_target))
+    print_link_display(link_path, stored_target)
     if resolved_target is not None and str(resolved_target) != str(stored_target):
-        typer.echo(f"Resolves to: {resolved_target}")
+        print_plain(f"Resolves to: {resolved_target}")
     if flag is not None:
-        typer.echo(f"Type:   {format_link_type(flag)}")
+        print_plain(f"Type:   {format_link_type(flag)}")
 
 
 def normalize_absolute_path(path: Path) -> Path:
@@ -257,9 +367,11 @@ def resolve_default_directory_flag(
         return default_flag
 
     if remote:
-        typer.echo("This path is on a network share. Junctions require local NTFS.")
+        print_warning("This path is on a network share. Junctions require local NTFS.")
     if relative_target:
-        typer.echo("Target is relative. Junctions always store an absolute path, which breaks Linux consumers.")
+        print_warning(
+            "Target is relative. Junctions always store an absolute path, which breaks Linux consumers."
+        )
 
     default_choice = "D" if prefer_symlink else "J"
     choice = typer.prompt(
@@ -359,7 +471,7 @@ def _remove_link_path(link_path: Path) -> None:
 
 def _require_windows() -> None:
     if sys.platform != "win32":
-        typer.secho("Error: pylink only supports Windows.", fg=typer.colors.RED, bold=True)
+        print_error("Error: pylink only supports Windows.")
         raise typer.Exit(code=1)
 
 
@@ -368,12 +480,11 @@ def _warn_r2r_if_needed(link_path: Path, flag: str) -> None:
         return
     if not is_remote_path(link_path):
         return
-    typer.secho(
-        "Warning: Windows will not follow a remote-to-remote symlink until R2R is enabled:",
-        fg=typer.colors.YELLOW,
+    print_warning(
+        "Warning: Windows will not follow a remote-to-remote symlink until R2R is enabled:"
     )
-    typer.echo("  fsutil behavior set SymlinkEvaluation R2R:1")
-    typer.echo("Linux/Samba may still follow a POSIX symlink created on the server.")
+    print_plain("  fsutil behavior set SymlinkEvaluation R2R:1")
+    print_plain("Linux/Samba may still follow a POSIX symlink created on the server.")
 
 
 def _warn_nonportable_target(stored_target: str, flag: str) -> None:
@@ -381,16 +492,15 @@ def _warn_nonportable_target(stored_target: str, flag: str) -> None:
         return
     if not target_looks_nonportable(stored_target):
         return
-    typer.secho(
-        "Warning: stored target is absolute (drive letter or UNC). Linux will not follow this link.",
-        fg=typer.colors.YELLOW,
+    print_warning(
+        "Warning: stored target is absolute (drive letter or UNC). Linux will not follow this link."
     )
 
 
 @app.command("version")
 def version_cmd() -> None:
     """Show version."""
-    typer.echo(f"pylink {__version__}")
+    print_plain(f"pylink {__version__}")
 
 
 @app.command("info")
@@ -401,23 +511,22 @@ def info_cmd(
     _require_windows()
     link_path = normalize_absolute_path(Path(link_path_raw))
     if not path_lexists(link_path):
-        typer.secho(f"Path does not exist: {link_path}", fg=typer.colors.RED)
+        print_error(f"Path does not exist: {link_path}")
         raise typer.Exit(code=1)
     is_link = is_reparse_point(link_path)
     if is_link:
         target = _read_link_target(link_path)
-        typer.echo(format_link_display(link_path, target or "(unavailable)"))
+        print_link_display(link_path, target or "(unavailable)")
         if target:
             if target_looks_nonportable(target):
-                typer.secho(
+                print_warning(
                     "Note: stored target is absolute (drive letter, UNC, or NT prefix); "
-                    "Linux will not follow this path.",
-                    fg=typer.colors.YELLOW,
+                    "Linux will not follow this path."
                 )
             else:
-                typer.echo("Stored target is relative (portable across Windows and Linux).")
+                print_plain("Stored target is relative (portable across Windows and Linux).")
     else:
-        typer.echo(f"Path: {link_path} (not a link)")
+        print_plain(f"Path: {link_path} (not a link)")
 
 
 @app.command("remove")
@@ -429,23 +538,23 @@ def remove_cmd(
     _require_windows()
     link_path = normalize_absolute_path(Path(link_path_raw))
     if not path_lexists(link_path):
-        typer.secho(f"Path does not exist: {link_path}", fg=typer.colors.RED)
+        print_error(f"Path does not exist: {link_path}")
         raise typer.Exit(code=1)
     if not is_reparse_point(link_path):
-        typer.secho("Error: Path is not a link/junction.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Path is not a link/junction.")
         raise typer.Exit(code=1)
     if is_drive_root(link_path):
-        typer.secho("Error: Refusing to remove a drive root.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Refusing to remove a drive root.")
         raise typer.Exit(code=1)
     if not yes and not typer.confirm(f"Remove link at {link_path}?", default=False):
-        typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+        print_warning("Cancelled.")
         raise typer.Exit(code=0)
     try:
         _remove_link_path(link_path)
     except OSError as e:
-        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        print_error(f"Error: {e}")
         raise typer.Exit(code=1)
-    typer.secho("Removed.", fg=typer.colors.GREEN)
+    print_success("Removed.")
 
 
 def _run_create_link(
@@ -464,12 +573,12 @@ def _run_create_link(
 
     flag_err = validate_link_flags(directory=directory, junction=junction, hard=hard)
     if flag_err:
-        typer.secho(f"Error: {flag_err}", fg=typer.colors.RED)
+        print_error(f"Error: {flag_err}")
         raise typer.Exit(code=1)
 
     rel_err = validate_relative_flag(relative=relative, junction=junction, hard=hard)
     if rel_err:
-        typer.secho(f"Error: {rel_err}", fg=typer.colors.RED)
+        print_error(f"Error: {rel_err}")
         raise typer.Exit(code=1)
 
     target_raw_path = Path(target_path_raw)
@@ -485,25 +594,25 @@ def _run_create_link(
     remote = is_remote_path(link_path) or is_remote_path(target_abs)
 
     if not no_validate_target and not target_abs.exists():
-        typer.secho("Error: Target path does not exist.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Target path does not exist.")
         show_link_context(link_path, target_abs)
         raise typer.Exit(code=1)
 
     if path_lexists(link_path):
         if not replace:
-            typer.secho("Error: Link path already exists.", fg=typer.colors.RED, bold=True)
-            typer.secho(f"  Existing: {link_path}", fg=typer.colors.RED)
-            typer.echo("Use --replace to remove and recreate the destination path.")
+            print_error("Error: Link path already exists.")
+            print_error(f"  Existing: {link_path}")
+            print_plain("Use --replace to remove and recreate the destination path.")
             raise typer.Exit(code=1)
 
         if is_drive_root(link_path):
-            typer.secho("Error: Refusing to replace a drive root path.", fg=typer.colors.RED, bold=True)
+            print_error("Error: Refusing to replace a drive root path.")
             raise typer.Exit(code=1)
 
         existing_is_link = is_reparse_point(link_path)
         if yes and not existing_is_link:
-            typer.secho("Error: Refusing non-interactive deletion of a real file/folder.", fg=typer.colors.RED, bold=True)
-            typer.secho("Run again without --yes to complete interactive safety confirmation.", fg=typer.colors.RED)
+            print_error("Error: Refusing non-interactive deletion of a real file/folder.")
+            print_error("Run again without --yes to complete interactive safety confirmation.")
             raise typer.Exit(code=1)
 
         if not yes:
@@ -512,20 +621,20 @@ def _run_create_link(
                     f"'{link_path}' already exists as a link/junction. Remove and recreate it?",
                     default=False,
                 ):
-                    typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+                    print_warning("Cancelled.")
                     raise typer.Exit(code=0)
             else:
-                typer.secho("WARNING: Existing destination is a real file/folder (not a link).", fg=typer.colors.YELLOW, bold=True)
-                typer.secho("This will permanently delete it before creating the new link.", fg=typer.colors.YELLOW)
+                print_warning("WARNING: Existing destination is a real file/folder (not a link).")
+                print_warning("This will permanently delete it before creating the new link.")
                 if not typer.confirm("Confirm deletion of existing destination?", default=False):
-                    typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+                    print_warning("Cancelled.")
                     raise typer.Exit(code=0)
                 if not typer.confirm("Are you absolutely sure?", default=False):
-                    typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+                    print_warning("Cancelled.")
                     raise typer.Exit(code=0)
                 typed_path = typer.prompt("Type the full destination path exactly to continue")
                 if typed_path.strip() != str(link_path):
-                    typer.secho("Cancelled: typed path did not match.", fg=typer.colors.YELLOW)
+                    print_warning("Cancelled: typed path did not match.")
                     raise typer.Exit(code=0)
 
         try:
@@ -539,15 +648,17 @@ def _run_create_link(
             else:
                 link_path.unlink()
         except OSError as remove_error:
-            typer.secho("Error: Could not remove existing link path.", fg=typer.colors.RED, bold=True)
-            typer.secho(f"  {remove_error}", fg=typer.colors.RED)
+            print_error("Error: Could not remove existing link path.")
+            print_error(f"  {remove_error}")
             raise typer.Exit(code=1)
 
     if link_path == target_abs or link_path == target_resolved:
-        typer.secho("Error: Link path and target path cannot be the same.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Link path and target path cannot be the same.")
         show_link_context(link_path, target_abs)
-        typer.echo("\nSpecify a different link name or location. Example:")
-        typer.echo(f"  pylink {target_abs} {target_abs.parent / (target_abs.stem + '_link' + target_abs.suffix)}")
+        print_plain("\nSpecify a different link name or location. Example:")
+        print_plain(
+            f"  pylink {target_abs} {target_abs.parent / (target_abs.stem + '_link' + target_abs.suffix)}"
+        )
         raise typer.Exit(code=1)
 
     flag = ""
@@ -567,16 +678,13 @@ def _run_create_link(
     if flag == "/J":
         junc_err = junction_remote_error_message(link_path, target_abs)
         if junc_err:
-            typer.secho(f"Error: {junc_err}", fg=typer.colors.RED, bold=True)
+            print_error(f"Error: {junc_err}")
             raise typer.Exit(code=1)
 
     if flag in ("/J", "/H"):
         stored_target = str(target_abs)
         if flag == "/J" and relative_input:
-            typer.secho(
-                "Note: junctions always store an absolute target.",
-                fg=typer.colors.YELLOW,
-            )
+            print_warning("Note: junctions always store an absolute target.")
     else:
         stored_target = stored_symlink_target(
             target_path_raw,
@@ -584,17 +692,16 @@ def _run_create_link(
             force_relative=relative,
         )
         if relative and target_looks_nonportable(stored_target):
-            typer.secho(
-                "Warning: could not store a relative target (different drive). Using an absolute path.",
-                fg=typer.colors.YELLOW,
+            print_warning(
+                "Warning: could not store a relative target (different drive). Using an absolute path."
             )
 
     if not no_validate_target and flag in ("/D", "/J") and not target_abs.is_dir():
-        typer.secho("Error: Directory links require a directory target.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Directory links require a directory target.")
         show_link_context(link_path, stored_target, flag, resolved_target=target_abs)
         raise typer.Exit(code=1)
     if not no_validate_target and flag == "/H" and target_abs.is_dir():
-        typer.secho("Error: Hard links only support file targets.", fg=typer.colors.RED, bold=True)
+        print_error("Error: Hard links only support file targets.")
         show_link_context(link_path, stored_target, flag, resolved_target=target_abs)
         raise typer.Exit(code=1)
 
@@ -604,37 +711,51 @@ def _run_create_link(
     if not yes:
         show_link_context(link_path, stored_target, flag, resolved_target=target_abs)
         if not typer.confirm("Proceed?", default=True):
-            typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+            print_warning("Cancelled.")
             raise typer.Exit(code=0)
 
-    typer.secho("Executing:", fg=typer.colors.BLUE)
+    print_info("Executing:")
     try:
         detail = create_windows_link(link_path, stored_target, flag)
-        typer.secho(f"  {detail}", fg=typer.colors.BLUE)
-        typer.secho("Success!", fg=typer.colors.GREEN, bold=True)
+        print_info(f"  {detail}")
+        print_success("Success!")
         show_link_context(link_path, stored_target, flag, resolved_target=target_abs)
     except OSError as e:
-        typer.secho("\n==============================", fg=typer.colors.RED)
-        typer.secho("  FAILED TO CREATE LINK", fg=typer.colors.RED, bold=True)
-        typer.secho("==============================\n", fg=typer.colors.RED)
-        typer.secho(f"  {e}", fg=typer.colors.RED)
-        typer.secho("\nPossible causes:", fg=typer.colors.YELLOW, bold=True)
-        for hint in create_link_error_hints(
+        hints = create_link_error_hints(
             e,
             flag=flag,
             remote=remote,
             stored_target=stored_target,
             link_path=link_path,
-        ):
-            typer.echo(f"  • {hint}")
-        typer.echo(f"\n  pylink create-link {target_path_raw} {link_path}")
+        )
+        body = Text()
+        body.append(str(e), style="red")
+        body.append("\n\n")
+        body.append("Possible causes:", style="bold yellow")
+        for hint in hints:
+            body.append(f"\n  • {hint}")
+        body.append(f"\n\n  pylink create-link {target_path_raw} {link_path}", style="dim")
+        console.print()
+        console.print(
+            Panel(
+                body,
+                title="[bold red]FAILED TO CREATE LINK[/bold red]",
+                border_style="red",
+                padding=(1, 1),
+            )
+        )
         raise typer.Exit(code=1)
 
 
-@app.command("create-link")
+@app.command("create-link", cls=PylinkCommand)
 def create_link(
-    target_path_raw: Annotated[str, typer.Argument(help="TARGET path")],
-    link_path_raw: Annotated[Optional[str], typer.Argument(help="LINK path (optional)")] = None,
+    target_path_raw: Annotated[
+        str, typer.Argument(help="[cyan]TARGET[/cyan] — existing file or folder to point at")
+    ],
+    link_path_raw: Annotated[
+        Optional[str],
+        typer.Argument(help="[magenta]LINK[/magenta] — new link path (optional; defaults to ./<target name>)"),
+    ] = None,
     directory: bool = typer.Option(False, "--dir", "-d", help="Force a directory symbolic link (/D)"),
     junction: bool = typer.Option(False, "--junction", "-j", help="Force a directory junction (/J)"),
     hard: bool = typer.Option(False, "--hard", "-H", help="Force a hard link (/H, files only, same volume)"),
