@@ -823,12 +823,12 @@ class PdfTextReport:
 
 def _require_pymupdf():
     try:
-        import fitz  # PyMuPDF
+        import pymupdf
     except ImportError as exc:
         raise SystemExit(
             "PyMuPDF is required for PDF redaction. Install with: pip install pymupdf"
         ) from exc
-    return fitz
+    return pymupdf
 
 
 def _page_alnum_count(text: str) -> int:
@@ -837,8 +837,8 @@ def _page_alnum_count(text: str) -> int:
 
 def analyze_pdf(src: Path) -> PdfTextReport:
     """Inspect extractable text / images without modifying the file."""
-    fitz = _require_pymupdf()
-    doc = fitz.open(src)
+    pymupdf = _require_pymupdf()
+    doc = pymupdf.open(src)
     try:
         empty_text_pages: list[int] = []
         usable_pages = 0
@@ -886,11 +886,11 @@ def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
     if not report.has_usable_text:
         raise UnredactablePdfError(_unredactable_reason(report))
 
-    fitz = _require_pymupdf()
+    pymupdf = _require_pymupdf()
     # Tighter glyph boxes reduce accidental removal of neighboring lines.
-    fitz.TOOLS.set_small_glyph_heights(True)
+    pymupdf.TOOLS.set_small_glyph_heights(True)
 
-    doc = fitz.open(src)
+    doc = pymupdf.open(src)
     redaction_count = 0
     try:
         for page in doc:
@@ -907,14 +907,14 @@ def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
                         text=replacement,
                         fill=(0, 0, 0),
                         text_color=(1, 1, 1),
-                        align=fitz.TEXT_ALIGN_CENTER,
+                        align=pymupdf.TEXT_ALIGN_CENTER,
                         cross_out=False,
                     )
                     redaction_count += 1
             # Remove overlapping text from the content stream (not just cover it).
             page.apply_redactions(
-                images=fitz.PDF_REDACT_IMAGE_NONE,
-                graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                images=pymupdf.PDF_REDACT_IMAGE_NONE,
+                graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
             )
 
         dest.parent.mkdir(parents=True, exist_ok=True)
