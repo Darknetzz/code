@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-redact-finance.py
+pyredact.py
 
 Redact sensitive information from Scandinavian financial exports.
 
@@ -21,11 +21,11 @@ Requires:
     pip install rich pymupdf typer openpyxl beautifulsoup4
 
 Usage:
-    python redact-finance.py --help
-    python redact-finance.py
-    python redact-finance.py -i ./exports -o ./redacted
-    python redact-finance.py -i ./exports -r --dry-run
-    python redact-finance.py -i statement.pdf --dry-run
+    python pyredact.py --help
+    python pyredact.py
+    python pyredact.py -i ./exports -o ./redacted
+    python pyredact.py -i ./exports -r --dry-run
+    python pyredact.py -i statement.pdf --dry-run
 """
 
 from __future__ import annotations
@@ -868,7 +868,7 @@ def main(
             f"[bold]Output[/bold] {output_dir}\n"
             f"[bold]Files[/bold]  {len(files)} ({counts})"
             + (("  " + " ".join(mode_bits)) if mode_bits else ""),
-            title="redact-finance",
+            title="pyredact",
             border_style="cyan",
         )
     )
