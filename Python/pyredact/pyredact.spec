@@ -3,6 +3,8 @@ from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = []
 hiddenimports += collect_submodules("rich._unicode_data")
+hiddenimports += collect_submodules("questionary")
+hiddenimports += collect_submodules("prompt_toolkit")
 
 # Global-site-packages leftovers PyInstaller must never pack into this CLI.
 excludes = [

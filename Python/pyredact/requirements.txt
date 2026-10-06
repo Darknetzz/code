@@ -3,4 +3,4 @@ rich>=15.0.0
 pymupdf>=1.28.2
 openpyxl>=3.1.5
 beautifulsoup4>=4.14.3
-askr>=0.2.0
+questionary>=2.1.1

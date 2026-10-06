@@ -19,7 +19,7 @@ Redact sensitive information from Scandinavian financial exports.
   Extra rules: --template / --pattern, or an interactive checklist.
 
 Requires:
-    pip install rich pymupdf typer openpyxl beautifulsoup4 askr
+    pip install rich pymupdf typer openpyxl beautifulsoup4 questionary
 
 Usage:
     python pyredact.py --help
@@ -215,15 +215,15 @@ def count_sensitive_replacements(text: str) -> int:
     return scrub(text)[1]
 
 
-def _require_askr():
+def _require_questionary():
     try:
-        import askr
+        import questionary
     except ImportError as exc:
         raise SystemExit(
-            "askr is required for interactive pattern selection. "
-            "Install with: pip install askr"
+            "questionary is required for interactive pattern selection. "
+            "Install with: pip install questionary"
         ) from exc
-    return askr
+    return questionary
 
 
 def parse_pattern_spec(raw: str) -> tuple[str, str]:
@@ -279,28 +279,30 @@ def specs_from_templates(template_ids: list[str]) -> list[tuple[str, str, int]]:
 
 
 def prompt_template_ids(*, replace: bool) -> list[str]:
-    askr = _require_askr()
-    labels = [f"{t.id} ({t.description})" for t in TEMPLATES]
-    label_to_id = dict(zip(labels, TEMPLATE_IDS, strict=True))
-    default_labels = (
-        None
-        if replace
-        else [lab for lab, tid in zip(labels, TEMPLATE_IDS, strict=True) if tid in FINANCE_TEMPLATE_IDS]
-    )
-    table = Table(show_header=True, header_style="bold", title="Pattern templates")
-    table.add_column("Id")
-    table.add_column("Replacement")
-    table.add_column("Description")
-    for t in TEMPLATES:
-        table.add_row(t.id, t.replacement, t.description)
-    console.print(table)
-    chosen = askr.ask_multi_choice(
+    questionary = _require_questionary()
+    choices = [
+        questionary.Choice(
+            title=f"{t.id}  {t.description}  → {t.replacement}",
+            value=t.id,
+            checked=(not replace and t.id in FINANCE_TEMPLATE_IDS),
+        )
+        for t in TEMPLATES
+    ]
+
+    def _enough(selected: list[str]) -> bool | str:
+        if replace or selected:
+            return True
+        return "Select at least one pattern."
+
+    chosen = questionary.checkbox(
         "Which patterns?",
-        labels,
-        min_selections=0 if replace else 1,
-        default=default_labels,
-    )
-    return [label_to_id[item] for item in chosen]
+        choices=choices,
+        validate=_enough,
+        instruction="(space to toggle, enter to confirm)",
+    ).ask()
+    if chosen is None:
+        raise typer.Exit(130)
+    return chosen
 
 
 def prompt_custom_specs() -> list[tuple[str, str, int]]:
@@ -330,7 +332,7 @@ def resolve_pattern_specs(
     """
     Return (template_ids, custom_count) and set module-level PATTERNS.
 
-    If --template is omitted, prompt with askr. Custom -p skips the extra-pattern loop.
+    If --template is omitted, prompt with a checkbox list. Custom -p skips the extra-pattern loop.
     """
     try:
         if cli_templates is not None:

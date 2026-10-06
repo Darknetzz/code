@@ -41,7 +41,7 @@ python pyredact.py -i ./exports -t email -t phone -t url
 python pyredact.py -i ./exports --replace-patterns -t email -p "\bIBAN[:\s]*[A-Z0-9]+=>[IBAN]"
 ```
 
-- `--template` / `-t` — enable a named template (repeatable). Finance templates stay on unless `--replace-patterns`. Omitted: interactive checklist (askr).
+- `--template` / `-t` — enable a named template (repeatable). Finance templates stay on unless `--replace-patterns`. Omitted: checkbox list (space to toggle, enter to confirm).
 - `--pattern` / `-p` — extra `REGEX=>REPLACEMENT` (repeatable). Omitted: prompted until blank.
 - `--replace-patterns` — do not auto-include the finance four.
 
