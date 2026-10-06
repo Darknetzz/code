@@ -316,6 +316,9 @@ def redact_pdf(src: Path, dest: Path) -> tuple[int, int, list[int]]:
             )
 
         dest.parent.mkdir(parents=True, exist_ok=True)
+        # Strip Title/Author/Subject/etc. and XMP so they cannot leak identifiers.
+        doc.set_metadata({})
+        doc.del_xml_metadata()
         # garbage/deflate purge removed content so it is not extractable later.
         doc.save(dest, garbage=4, deflate=True, clean=True)
         return doc.page_count, redaction_count, report.empty_text_pages
