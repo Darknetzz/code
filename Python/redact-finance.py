@@ -24,6 +24,7 @@ Usage:
     python redact-finance.py --help
     python redact-finance.py
     python redact-finance.py -i ./exports -o ./redacted
+    python redact-finance.py -i ./exports -r --dry-run
     python redact-finance.py -i statement.pdf --dry-run
 """
 
@@ -179,15 +180,74 @@ def resolve_output_dir(raw: str | None, input_path: Path) -> Path:
     return Path(value).expanduser().resolve()
 
 
-def collect_files(input_path: Path) -> list[Path]:
+def has_subdirectories(path: Path) -> bool:
+    return path.is_dir() and any(p.is_dir() for p in path.iterdir())
+
+
+def resolve_recursive(recursive: bool | None, input_path: Path) -> bool:
+    """Return whether to scan subdirs; prompt when present and flag was omitted."""
+    if input_path.is_file():
+        return False
+    if recursive is not None:
+        return recursive
+    if not has_subdirectories(input_path):
+        return False
+    return Confirm.ask(
+        "[bold]Subdirectories found.[/bold] Scan recursively?",
+        default=False,
+    )
+
+
+def _is_under(path: Path, root: Path | None) -> bool:
+    if root is None:
+        return False
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def collect_files(
+    input_path: Path,
+    *,
+    recursive: bool = False,
+    skip_under: Path | None = None,
+) -> list[Path]:
     if input_path.is_file():
         return [input_path]
+    iterator = input_path.rglob("*") if recursive else input_path.iterdir()
     files = [
         p
-        for p in input_path.iterdir()
-        if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+        for p in iterator
+        if p.is_file()
+        and p.suffix.lower() in SUPPORTED_SUFFIXES
+        and not _is_under(p, skip_under)
     ]
-    return sorted(files, key=lambda p: (p.suffix.lower(), p.name.lower()))
+    return sorted(files, key=lambda p: (p.suffix.lower(), str(p).lower()))
+
+
+def source_label(src: Path, input_path: Path) -> str:
+    """Path shown in the results table (relative when scanning a directory)."""
+    if input_path.is_file():
+        return src.name
+    try:
+        return str(src.relative_to(input_path))
+    except ValueError:
+        return src.name
+
+
+def destination_for(
+    src: Path,
+    input_path: Path,
+    output_dir: Path,
+    *,
+    recursive: bool,
+) -> Path:
+    """Mirror subdirectory layout under output_dir when scanning recursively."""
+    if input_path.is_file() or not recursive:
+        return output_dir / src.name
+    return output_dir / src.relative_to(input_path)
 
 
 def confirm_write(dest: Path, *, overwrite: bool) -> bool:
@@ -767,6 +827,18 @@ def main(
             help="Overwrite existing output files without asking.",
         ),
     ] = False,
+    recursive: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--recursive/--no-recursive",
+            "-r",
+            help=(
+                "Include files in subdirectories. "
+                "Prompted when omitted and subdirectories are present."
+            ),
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
     """Redact sensitive fields from Scandinavian financial exports."""
     input_path = resolve_input_path(str(input) if input is not None else None)
@@ -774,20 +846,28 @@ def main(
         str(output) if output is not None else None,
         input_path,
     )
-    files = collect_files(input_path)
+    recursive = resolve_recursive(recursive, input_path)
+    skip_under = output_dir if _is_under(output_dir, input_path) else None
+    files = collect_files(input_path, recursive=recursive, skip_under=skip_under)
 
     if not files:
         kinds = ", ".join(sorted(s.lstrip(".").upper() for s in SUPPORTED_SUFFIXES))
-        console.print(f"[yellow]No {kinds} files found in[/yellow] {input_path}")
+        scope = "recursively under" if recursive else "in"
+        console.print(f"[yellow]No {kinds} files found {scope}[/yellow] {input_path}")
         raise typer.Exit(1)
 
     counts = format_file_counts(files)
+    mode_bits = []
+    if recursive:
+        mode_bits.append("[dim](recursive)[/dim]")
+    if dry_run:
+        mode_bits.append("[dim](dry-run)[/dim]")
     console.print(
         Panel.fit(
             f"[bold]Input[/bold]  {input_path}\n"
             f"[bold]Output[/bold] {output_dir}\n"
             f"[bold]Files[/bold]  {len(files)} ({counts})"
-            + ("  [dim](dry-run)[/dim]" if dry_run else ""),
+            + (("  " + " ".join(mode_bits)) if mode_bits else ""),
             title="redact-finance",
             border_style="cyan",
         )
@@ -818,14 +898,17 @@ def main(
     ) as progress:
         task = progress.add_task("Redacting", total=len(files))
         for src in files:
-            dest = output_dir / src.name
+            dest = destination_for(
+                src, input_path, output_dir, recursive=recursive
+            )
+            label = source_label(src, input_path)
             kind = src.suffix.lower().lstrip(".").upper()
             try:
                 if not dry_run and not confirm_write(dest, overwrite=overwrite):
                     skipped_overwrite += 1
                     results.add_row(
                         kind,
-                        src.name,
+                        label,
                         str(dest),
                         "—",
                         "—",
@@ -835,10 +918,10 @@ def main(
 
                 work = process_source(src, dest, encoding, write=not dry_run)
                 if work.skip_reason:
-                    not_redacted.append((src.name, work.skip_reason))
+                    not_redacted.append((label, work.skip_reason))
                     results.add_row(
                         kind,
-                        src.name,
+                        label,
                         "—",
                         work.detail,
                         str(work.redactions),
@@ -863,11 +946,11 @@ def main(
                     else "[green]ok[/green]"
                 )
                 if work.empty_pages:
-                    partial_warnings.append((src.name, work.empty_pages))
+                    partial_warnings.append((label, work.empty_pages))
                     status += " [yellow](partial text)[/yellow]"
                 results.add_row(
                     kind,
-                    src.name,
+                    label,
                     str(dest),
                     work.detail,
                     str(work.redactions),
@@ -878,7 +961,7 @@ def main(
             except Exception as exc:  # noqa: BLE001 - surface per-file errors
                 results.add_row(
                     kind,
-                    src.name,
+                    label,
                     str(dest),
                     "—",
                     "—",
