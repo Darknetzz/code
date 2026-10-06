@@ -280,6 +280,15 @@ def specs_from_templates(template_ids: list[str]) -> list[tuple[str, str, int]]:
 
 def prompt_template_ids(*, replace: bool) -> list[str]:
     questionary = _require_questionary()
+    from questionary.prompts import common as qcommon
+
+    qcommon.INDICATOR_SELECTED = "✅"
+    qcommon.INDICATOR_UNSELECTED = "○ "
+    checkbox_style = questionary.Style(
+        [
+            ("selected", "fg:ansigreen bold"),
+        ]
+    )
     choices = [
         questionary.Choice(
             title=f"{t.id}  {t.description}  → {t.replacement}",
@@ -299,6 +308,7 @@ def prompt_template_ids(*, replace: bool) -> list[str]:
         choices=choices,
         validate=_enough,
         instruction="(space to toggle, enter to confirm)",
+        style=checkbox_style,
     ).ask()
     if chosen is None:
         raise typer.Exit(130)
