@@ -375,13 +375,19 @@ def resolve_pattern_specs(
 
 
 def default_output_dir(input_path: Path) -> Path:
-    """Place a 'redacted' folder next to the input file or directory."""
-    return input_path.parent / "redacted"
+    """Place a 'redacted' folder next to a file, or inside an input directory."""
+    if input_path.is_file():
+        return input_path.parent / "redacted"
+    return input_path / "redacted"
 
 
 def resolve_input_path(raw: str | None) -> Path:
+    cwd = str(Path.cwd())
     while True:
-        value = raw or Prompt.ask("[bold]Input[/bold] file or directory")
+        value = raw or Prompt.ask(
+            "[bold]Input[/bold] file or directory",
+            default=cwd,
+        )
         path = Path(value).expanduser().resolve()
         if not path.exists():
             console.print(f"[red]Path does not exist:[/red] {path}")
@@ -1015,7 +1021,8 @@ def main(
             "-i",
             help=(
                 "Supported file or directory "
-                "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF, OFX/QIF)."
+                "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF, OFX/QIF). "
+                "Prompt default: current directory."
             ),
             show_default=False,
         ),
@@ -1025,7 +1032,10 @@ def main(
         typer.Option(
             "--output",
             "-o",
-            help="Output directory (prompt default: redacted next to input).",
+            help=(
+                "Output directory (prompt default: redacted next to a file, "
+                "or inside an input directory)."
+            ),
             show_default=False,
         ),
     ] = None,

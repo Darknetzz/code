@@ -20,7 +20,7 @@ python pyredact.py -i ./exports -r --dry-run
 python pyredact.py -i statement.pdf --dry-run
 ```
 
-Missing `--input` / `--output` are prompted. Subdirectories trigger a recursive prompt unless `-r` / `--no-recursive` is set.
+Missing `--input` / `--output` are prompted (input defaults to the current directory). Subdirectories trigger a recursive prompt unless `-r` / `--no-recursive` is set.
 
 ### Pattern templates
 
@@ -40,7 +40,7 @@ python pyredact.py -i ./exports --replace-patterns -t email -p "\bIBAN[:\s]*[A-Z
 ## Common options
 
 - `--input` / `-i` — file or directory
-- `--output` / `-o` — output directory (default: `redacted` next to input)
+- `--output` / `-o` — output directory (default: `redacted` next to a file, or inside an input directory)
 - `--encoding` / `-e` — text encoding (default: `utf-8-sig`; not used for PDF/XLSX)
 - `--dry-run` / `-n` — list what would be written
 - `--overwrite` / `-y` — overwrite existing outputs without asking
