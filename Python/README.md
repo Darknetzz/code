@@ -27,6 +27,7 @@ Scripts and projects in Python.
 | [pyportscanner](pyportscanner/) | > **Canonical implementation:** Use [`Rust/rust-portscan`](../../Rust/rust-po... See [pyportscanner/README.md](pyportscanner/README.md) for details. |
 | [pyprotocol](pyprotocol/) | > **Canonical implementation:** [`Rust/rust-lhp`](../../Rust/rust-lhp/) (`rus... See [pyprotocol/README.md](pyprotocol/README.md) for details. |
 | [pyrat](pyrat/) | — |
+| [pyredact](pyredact/) | Redact sensitive fields from Scandinavian financial exports (CSV/TSV/TXT/JSON... See [pyredact/README.md](pyredact/README.md) for details. |
 | [pysound](pysound/) | A Python library and CLI tool for generating and playing audio tones using Nu... See [pysound/README.md](pysound/README.md) for details. |
 | [pyspotify](pyspotify/) | Export your Spotify playlists (including tracks) to `txt`, `json`, and `csv`. See [pyspotify/README.md](pyspotify/README.md) for details. |
 | [pysubs](pysubs/) | — |
