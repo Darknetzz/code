@@ -4,7 +4,7 @@ const Io = std.Io;
 const zwhich = @import("zwhich");
 
 pub const usage =
-    \\zwhich — PATH lookup (every match, winner first)
+    \\zwhich - PATH lookup (every match, winner first)
     \\
     \\Usage:
     \\  zwhich [OPTIONS] NAME [NAME...]

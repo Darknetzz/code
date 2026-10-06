@@ -5,7 +5,7 @@ const zlink = @import("zlink");
 const win32 = @import("win32.zig");
 
 pub const usage =
-    \\zlink — Windows symlink / junction / hardlink CLI (no cmd mklink)
+    \\zlink - Windows symlink / junction / hardlink CLI (no cmd mklink)
     \\
     \\Usage:
     \\  zlink TARGET [LINK] [OPTIONS]
