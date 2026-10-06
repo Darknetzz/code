@@ -34,7 +34,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 app = typer.Typer(
@@ -72,10 +72,13 @@ PATTERNS = [
 ]
 
 
-def scrub(value: str) -> str:
+def scrub(value: str) -> tuple[str, int]:
+    """Replace sensitive values. Returns (scrubbed_text, replacement_count)."""
+    total = 0
     for pattern, replacement in PATTERNS:
-        value = pattern.sub(replacement, value)
-    return value
+        value, n = pattern.subn(replacement, value)
+        total += n
+    return value, total
 
 
 def iter_sensitive_matches(text: str) -> list[tuple[str, str]]:
@@ -87,6 +90,11 @@ def iter_sensitive_matches(text: str) -> list[tuple[str, str]]:
     return found
 
 
+def count_sensitive_replacements(text: str) -> int:
+    """Count replacements scrub() would make (same sequential rules)."""
+    return scrub(text)[1]
+
+
 def default_output_dir(input_path: Path) -> Path:
     """Place a 'redacted' folder next to the input file or directory."""
     return input_path.parent / "redacted"
@@ -96,13 +104,16 @@ def resolve_input_path(raw: str | None) -> Path:
     while True:
         value = raw or Prompt.ask("[bold]Input[/bold] CSV/PDF file or directory")
         path = Path(value).expanduser().resolve()
-        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+        if not path.exists():
+            console.print(f"[red]Path does not exist:[/red] {path}")
+        elif path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
             return path
-        if path.is_dir():
+        elif path.is_dir():
             return path
-        console.print(
-            f"[red]Not a CSV/PDF file or directory:[/red] {path}",
-        )
+        else:
+            console.print(
+                f"[red]Not a CSV/PDF file or directory:[/red] {path}",
+            )
         raw = None
 
 
@@ -126,27 +137,61 @@ def collect_files(input_path: Path) -> list[Path]:
     return sorted(files, key=lambda p: (p.suffix.lower(), p.name.lower()))
 
 
-def redact_csv(src: Path, dest: Path, encoding: str) -> tuple[int, int]:
-    """Write a redacted CSV. Returns (row_count, column_count)."""
+def confirm_write(dest: Path, *, overwrite: bool) -> bool:
+    """Return True if dest may be written. Existing files require confirmation."""
+    if not dest.exists() or overwrite:
+        return True
+    return Confirm.ask(
+        f"[yellow]Overwrite existing file?[/yellow] {dest}",
+        default=False,
+    )
+
+
+def read_csv_rows(src: Path, encoding: str) -> tuple[list[dict[str, str]], list[str]]:
+    """Return (rows, kept_columns)."""
     with src.open(newline="", encoding=encoding) as fin:
         sample = fin.read(2048)
         fin.seek(0)
         dialect = csv.Sniffer().sniff(sample, delimiters=";,\t")
         rows = list(csv.DictReader(fin, dialect=dialect))
-
     if not rows:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text("", encoding=encoding)
-        return 0, 0
-
+        return [], []
     cols = [c for c in rows[0] if c.strip().lower() in KEEP]
+    return rows, cols
+
+
+def count_csv_redactions(src: Path, encoding: str) -> tuple[int, int, int]:
+    """Return (row_count, column_count, redaction_count) without writing."""
+    rows, cols = read_csv_rows(src, encoding)
+    if not rows:
+        return 0, 0, 0
+    redactions = 0
+    for row in rows:
+        for col in cols:
+            redactions += count_sensitive_replacements(row[col])
+    return len(rows), len(cols), redactions
+
+
+def redact_csv(src: Path, dest: Path, encoding: str) -> tuple[int, int, int]:
+    """Write a redacted CSV. Returns (row_count, column_count, redaction_count)."""
+    rows, cols = read_csv_rows(src, encoding)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        dest.write_text("", encoding=encoding)
+        return 0, 0, 0
+
+    redactions = 0
     with dest.open("w", newline="", encoding=encoding) as fout:
         writer = csv.writer(fout)
         writer.writerow(cols)
         for row in rows:
-            writer.writerow([scrub(row[c]) for c in cols])
-    return len(rows), len(cols)
+            out_row = []
+            for col in cols:
+                scrubbed, n = scrub(row[col])
+                redactions += n
+                out_row.append(scrubbed)
+            writer.writerow(out_row)
+    return len(rows), len(cols), redactions
 
 
 class UnredactablePdfError(Exception):
@@ -314,6 +359,14 @@ def main(
             help="List files that would be written without creating them.",
         ),
     ] = False,
+    overwrite: Annotated[
+        bool,
+        typer.Option(
+            "--overwrite",
+            "-y",
+            help="Overwrite existing output files without asking.",
+        ),
+    ] = False,
 ) -> None:
     """Redact sensitive fields from Scandinavian financial CSV/PDF exports."""
     input_path = resolve_input_path(str(input) if input is not None else None)
@@ -346,11 +399,15 @@ def main(
     results.add_column("Source")
     results.add_column("Destination")
     results.add_column("Detail", justify="right")
+    results.add_column("Redactions", justify="right")
     results.add_column("Status")
 
     not_redacted: list[tuple[str, str]] = []
     partial_warnings: list[tuple[str, list[int]]] = []
     wrote_any = False
+    skipped_overwrite = 0
+    total_redactions = 0
+    files_with_redactions = 0
 
     with Progress(
         SpinnerColumn(),
@@ -366,9 +423,15 @@ def main(
             kind = src.suffix.lower().lstrip(".").upper()
             try:
                 if dry_run:
+                    exists_note = (
+                        " [yellow](would overwrite)[/yellow]"
+                        if dest.exists()
+                        else ""
+                    )
                     if src.suffix.lower() == ".pdf":
                         report = analyze_pdf(src)
-                        detail = f"{report.page_count}p / {report.match_count} hits"
+                        detail = f"{report.page_count}p"
+                        redactions = report.match_count
                         if not report.has_usable_text:
                             reason = _unredactable_reason(report)
                             not_redacted.append((src.name, reason))
@@ -377,42 +440,73 @@ def main(
                                 src.name,
                                 "—",
                                 detail,
+                                str(redactions),
                                 "[bold red]NOT REDACTED[/bold red]",
                             )
                         else:
-                            status = "[cyan]would write[/cyan]"
+                            status = f"[cyan]would write[/cyan]{exists_note}"
                             if report.empty_text_pages:
                                 partial_warnings.append(
                                     (src.name, report.empty_text_pages)
                                 )
                                 status = (
-                                    "[cyan]would write[/cyan] "
+                                    f"[cyan]would write[/cyan]{exists_note} "
                                     "[yellow](partial text)[/yellow]"
                                 )
+                            total_redactions += redactions
+                            if redactions:
+                                files_with_redactions += 1
                             results.add_row(
-                                kind, src.name, str(dest), detail, status
+                                kind,
+                                src.name,
+                                str(dest),
+                                detail,
+                                str(redactions),
+                                status,
                             )
                     else:
+                        rows, cols, redactions = count_csv_redactions(src, encoding)
+                        total_redactions += redactions
+                        if redactions:
+                            files_with_redactions += 1
                         results.add_row(
                             kind,
                             src.name,
                             str(dest),
-                            "—",
-                            "[cyan]would write[/cyan]",
+                            f"{rows} rows / {cols} cols",
+                            str(redactions),
+                            f"[cyan]would write[/cyan]{exists_note}",
                         )
+                elif not confirm_write(dest, overwrite=overwrite):
+                    skipped_overwrite += 1
+                    results.add_row(
+                        kind,
+                        src.name,
+                        str(dest),
+                        "—",
+                        "—",
+                        "[yellow]skipped (exists)[/yellow]",
+                    )
                 elif src.suffix.lower() == ".csv":
-                    rows, cols = redact_csv(src, dest, encoding)
+                    rows, cols, redactions = redact_csv(src, dest, encoding)
                     wrote_any = True
+                    total_redactions += redactions
+                    if redactions:
+                        files_with_redactions += 1
                     results.add_row(
                         kind,
                         src.name,
                         str(dest),
                         f"{rows} rows / {cols} cols",
+                        str(redactions),
                         "[green]ok[/green]",
                     )
                 else:
                     pages, redactions, empty_pages = redact_pdf(src, dest)
                     wrote_any = True
+                    total_redactions += redactions
+                    if redactions:
+                        files_with_redactions += 1
                     status = "[green]ok[/green]"
                     if empty_pages:
                         partial_warnings.append((src.name, empty_pages))
@@ -421,7 +515,8 @@ def main(
                         kind,
                         src.name,
                         str(dest),
-                        f"{pages}p / {redactions} redacted",
+                        f"{pages}p",
+                        str(redactions),
                         status,
                     )
             except UnredactablePdfError as exc:
@@ -429,6 +524,7 @@ def main(
                 results.add_row(
                     kind,
                     src.name,
+                    "—",
                     "—",
                     "—",
                     "[bold red]NOT REDACTED[/bold red]",
@@ -441,11 +537,26 @@ def main(
                     src.name,
                     str(dest),
                     "—",
+                    "—",
                     f"[red]error: {exc}[/red]",
                 )
             progress.advance(task)
 
     console.print(results)
+
+    summary_bits = [
+        f"[bold]{total_redactions}[/bold] redaction(s)",
+        f"across [bold]{files_with_redactions}[/bold] file(s)",
+    ]
+    if skipped_overwrite:
+        summary_bits.append(f"[yellow]{skipped_overwrite} skipped (exists)[/yellow]")
+    console.print(
+        Panel.fit(
+            " · ".join(summary_bits),
+            title="Summary",
+            border_style="cyan",
+        )
+    )
 
     if partial_warnings:
         lines = "\n".join(
@@ -486,8 +597,10 @@ def main(
         console.print("[dim]Dry-run complete — no files written.[/dim]")
     elif wrote_any:
         console.print(f"[green]Done.[/green] Wrote to {output_dir}")
-    elif not_redacted:
+    elif not_redacted and not skipped_overwrite:
         console.print("[red]Nothing was written — no PDF could be safely redacted.[/red]")
+    elif skipped_overwrite and not wrote_any:
+        console.print("[yellow]Nothing was written — existing outputs were left untouched.[/yellow]")
 
     if not_redacted:
         raise typer.Exit(2)
