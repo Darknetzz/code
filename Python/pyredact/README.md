@@ -10,6 +10,14 @@ PDF redaction uses PyMuPDF annotations so matched text is removed from the conte
 pip install -r requirements.txt
 ```
 
+## Build the exe
+
+Build from a **clean venv** (not the global Python). A global PyInstaller run will pack unrelated site-packages and balloon the binary:
+
+```powershell
+.\build.ps1
+```
+
 ## Usage
 
 ```sh

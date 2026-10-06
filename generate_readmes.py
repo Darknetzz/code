@@ -244,7 +244,7 @@ def build_root_readme(root: Path) -> str:
     readme_path = root / "README.md"
     intro = get_existing_intro(readme_path) or (
         "Scripts and CLI tools in various languages "
-        "(AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell)."
+        "(AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell, Zig)."
     )
 
     lines = [

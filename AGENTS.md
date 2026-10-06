@@ -6,13 +6,14 @@ This repository is a multi-language monorepo. Keep new work inside the language/
 
 - `Python/`: Python scripts, projects, and shared Python tooling.
 - `PowerShell/`: PowerShell modules and scripts.
-- `Go/`, `Rust/`, `PHP/`, `Lua/`, `Shell/`, `AutoHotkey/`: language-specific workspaces.
+- `Go/`, `Rust/`, `PHP/`, `Lua/`, `Shell/`, `AutoHotkey/`, `Zig/`: language-specific workspaces.
 - `.cursor/`, `.github/`, `.vscode/`: editor, automation, and CI metadata.
 - `!scripts/`: repo-level utility scripts.
 
 ## Placement rules
 
 - Put new Python projects under `Python/<project-name>/`.
+- Put new Zig projects under `Zig/<project-name>/`.
 - Keep project-local dependencies in `Python/<project-name>/requirements.txt`.
 - Keep examples/configs in the same project directory.
 - Avoid placing runnable project files directly in the repo root.
@@ -37,7 +38,7 @@ python generate_readmes.py
 
 Run this from the repository root before committing structural changes. The script:
 
-- Updates the root index and auto-managed language indexes (`Go/`, `Lua/`, `PHP/`, `Python/`, `Rust/`, etc.)
+- Updates the root index and auto-managed language indexes (`Go/`, `Lua/`, `PHP/`, `Python/`, `Rust/`, `Zig/`, etc.)
 - Pulls one-line descriptions from each project's first README paragraph
 - Preserves **manual table rows** (non-subdir link rows in index tables)
 - Preserves **custom READMEs** that are not simple indexes: `AutoHotkey/`, `PowerShell/`, `Shell/`

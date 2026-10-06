@@ -1,6 +1,6 @@
 # code
 
-Scripts and CLI tools in various languages (AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell).
+Scripts and CLI tools in various languages (AutoHotkey, Go, Lua, PHP, PowerShell, Python, Rust, Shell, Zig).
 
 ## Index
 
@@ -14,3 +14,4 @@ Scripts and CLI tools in various languages (AutoHotkey, Go, Lua, PHP, PowerShell
 | [Python](Python/) |
 | [Rust](Rust/) |
 | [Shell](Shell/) |
+| [Zig](Zig/) |

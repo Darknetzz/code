@@ -2,11 +2,35 @@
 from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = []
-hiddenimports += collect_submodules('rich._unicode_data')
+hiddenimports += collect_submodules("rich._unicode_data")
+
+# Global-site-packages leftovers PyInstaller must never pack into this CLI.
+excludes = [
+    "IPython",
+    "PIL",
+    "babel",
+    "cryptography",
+    "jedi",
+    "llvmlite",
+    "lxml",
+    "matplotlib",
+    "numba",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pytest",
+    "scipy",
+    "sphinx",
+    "tkinter",
+]
+
+
+def _drop_devel(entries):
+    return [e for e in entries if "mupdf-devel" not in str(e).replace("\\", "/")]
 
 
 a = Analysis(
-    ['pyredact.py'],
+    ["pyredact.py"],
     pathex=[],
     binaries=[],
     datas=[],
@@ -14,10 +38,12 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
     optimize=0,
 )
+a.binaries = _drop_devel(a.binaries)
+a.datas = _drop_devel(a.datas)
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -26,7 +52,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='pyredact',
+    name="pyredact",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

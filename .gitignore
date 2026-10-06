@@ -4,6 +4,10 @@
 
 # Cargo (any crate, not only repo root)
 target/
+# Zig build artifacts
+zig-cache/
+.zig-cache/
+zig-out/
 lib
 logs
 chromium
@@ -21,6 +25,7 @@ Python/pyspotify/exports
 *.exe
 *.bak
 snapchat_imagenames.md
+.venv-build/
 .pytest_cache/*
 .ruff_cache/*
 .vscode/settings.json
