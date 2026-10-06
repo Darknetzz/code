@@ -52,6 +52,7 @@ python .\Python\pyspotify\pyspotify.py --formats txt json csv --output-dir expor
 - `--auth-timeout`: seconds to wait for callback URL input (default: `180`, use `0` for no timeout)
 - `--playlist`: filter playlist(s) by ID, exact name, or name substring (repeatable)
 - `--interactive-playlist`: pick playlist(s) from a numbered list at runtime
+- `--from-spotify-log-dir`: load playlist IDs from Spotify "Technical Log Information" folder
 
 Examples:
 
@@ -64,6 +65,9 @@ python .\Python\pyspotify\pyspotify.py --playlist 37i9dQZF1DXcBWIGoYBM5M
 
 # Export selected playlists interactively
 python .\Python\pyspotify\pyspotify.py --interactive-playlist
+
+# Build selectors from Spotify technical log files, then export those playlists
+python .\Python\pyspotify\pyspotify.py --from-spotify-log-dir "D:\Kriss\Downloads\my_spotify_data\Spotify Technical Log Information"
 ```
 
 ### OAuth Login Flow

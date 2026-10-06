@@ -75,6 +75,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Choose playlist(s) interactively from a numbered list.",
     )
+    parser.add_argument(
+        "--from-spotify-log-dir",
+        default="",
+        help=(
+            "Path to Spotify 'Technical Log Information' directory. "
+            "Playlist IDs found in logs are used as selectors."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -227,6 +235,70 @@ def fetch_all_playlist_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dic
             additional_types=("track",),
         )
     )
+
+
+def playlist_id_from_uri(uri: str | None) -> str | None:
+    if not uri:
+        return None
+    prefix = "spotify:playlist:"
+    if not uri.startswith(prefix):
+        return None
+    playlist_id = uri[len(prefix):].strip()
+    return playlist_id or None
+
+
+def collect_playlist_ids_from_log_file(log_file: Path) -> set[str]:
+    ids: set[str] = set()
+    try:
+        rows = json.loads(log_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ids
+
+    if not isinstance(rows, list):
+        return ids
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        candidates = [
+            row.get("message_playlist_uri"),
+            row.get("message_item_uri"),
+            row.get("playlist_uri"),
+            row.get("item_uri"),
+        ]
+        for candidate in candidates:
+            playlist_id = playlist_id_from_uri(candidate)
+            if playlist_id:
+                ids.add(playlist_id)
+    return ids
+
+
+def collect_playlist_ids_from_spotify_log_dir(log_dir: Path) -> list[str]:
+    if not log_dir.exists() or not log_dir.is_dir():
+        raise FileNotFoundError(f"Spotify log directory not found: {log_dir}")
+
+    candidate_files = [
+        "AddedToPlaylist.json",
+        "RemovedFromPlaylist.json",
+        "AddToPlaylist.json",
+        "AddedToRootlist.json",
+        "RemovedFromRootlist.json",
+    ]
+
+    found_ids: set[str] = set()
+    for file_name in candidate_files:
+        log_file = log_dir / file_name
+        if log_file.exists():
+            found_ids.update(collect_playlist_ids_from_log_file(log_file))
+
+    if not found_ids:
+        print(
+            "Warning: no playlist IDs found in expected Spotify log files. "
+            "Falling back to other selectors."
+        )
+    else:
+        print(f"Found {len(found_ids)} playlist IDs from Spotify logs.")
+    return sorted(found_ids)
 
 
 def flatten_terms(values: list[str]) -> list[str]:
@@ -505,9 +577,13 @@ def main() -> None:
 
     sp = get_spotify_client(auth_timeout=args.auth_timeout)
     playlists = fetch_all_playlists(sp)
+    playlist_selectors = list(args.playlist)
+    if args.from_spotify_log_dir:
+        log_dir = Path(args.from_spotify_log_dir)
+        playlist_selectors.extend(collect_playlist_ids_from_spotify_log_dir(log_dir))
     selected_playlists = select_playlists(
         playlists=playlists,
-        selectors=args.playlist,
+        selectors=playlist_selectors,
         interactive=args.interactive_playlist,
     )
     if not selected_playlists:
