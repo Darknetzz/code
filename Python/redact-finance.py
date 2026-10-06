@@ -6,6 +6,10 @@ Redact sensitive information from Scandinavian financial exports.
 
 - CSV/TSV: keeps a whitelist of common columns; scrubs sensitive values in-place.
 - TXT/OFX/QFX/QIF: scrubs the whole file in-place (plain-text bank dumps).
+- JSON: walks objects/arrays and scrubs string (and sensitive numeric) values.
+- XML: scrubs element text, tails, and attributes.
+- HTML/HTM: scrubs text nodes and attributes (BeautifulSoup).
+- XLSX: scrubs cell values across all sheets (openpyxl).
 - PDF: uses PyMuPDF redaction annotations so matched text is removed from the
   content stream (not merely covered by black boxes).
 - Scanned/image-only PDFs (no text layer) are skipped and flagged as
@@ -14,7 +18,7 @@ Redact sensitive information from Scandinavian financial exports.
   any 9+ digit number.
 
 Requires:
-    pip install rich pymupdf typer
+    pip install rich pymupdf typer openpyxl beautifulsoup4
 
 Usage:
     python redact-finance.py --help
@@ -26,11 +30,13 @@ Usage:
 from __future__ import annotations
 
 import csv
+import json
 import re
+import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 from rich.console import Console
@@ -43,8 +49,8 @@ app = typer.Typer(
     add_completion=False,
     rich_markup_mode="rich",
     help=(
-        "Redact sensitive fields from Scandinavian financial CSV/TSV/TXT/PDF "
-        "(and OFX/QIF) exports.\n\n"
+        "Redact sensitive fields from Scandinavian financial exports "
+        "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF and OFX/QIF).\n\n"
         "Missing [bold]--input[/bold] / [bold]--output[/bold] are prompted interactively."
     ),
 )
@@ -53,9 +59,34 @@ console = Console()
 
 CSV_SUFFIXES = {".csv", ".tsv"}
 TEXT_SUFFIXES = {".txt", ".ofx", ".qfx", ".qif"}
+JSON_SUFFIXES = {".json"}
+XML_SUFFIXES = {".xml"}
+HTML_SUFFIXES = {".html", ".htm"}
+XLSX_SUFFIXES = {".xlsx"}
 PDF_SUFFIXES = {".pdf"}
-SUPPORTED_SUFFIXES = CSV_SUFFIXES | TEXT_SUFFIXES | PDF_SUFFIXES
-_FILE_COUNT_ORDER = ("CSV", "TSV", "TXT", "OFX", "QFX", "QIF", "PDF")
+SUPPORTED_SUFFIXES = (
+    CSV_SUFFIXES
+    | TEXT_SUFFIXES
+    | JSON_SUFFIXES
+    | XML_SUFFIXES
+    | HTML_SUFFIXES
+    | XLSX_SUFFIXES
+    | PDF_SUFFIXES
+)
+_FILE_COUNT_ORDER = (
+    "CSV",
+    "TSV",
+    "TXT",
+    "OFX",
+    "QFX",
+    "QIF",
+    "JSON",
+    "XML",
+    "HTML",
+    "HTM",
+    "XLSX",
+    "PDF",
+)
 _FILE_COUNT_STYLE = {
     "CSV": "cyan",
     "TSV": "cyan",
@@ -63,6 +94,11 @@ _FILE_COUNT_STYLE = {
     "OFX": "green",
     "QFX": "green",
     "QIF": "green",
+    "JSON": "blue",
+    "XML": "blue",
+    "HTML": "blue",
+    "HTM": "blue",
+    "XLSX": "yellow",
     "PDF": "magenta",
 }
 # Pages with fewer alphanumeric chars than this are treated as having no usable text layer.
@@ -217,6 +253,11 @@ def line_count(text: str) -> int:
     return text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
+def write_encoding(encoding: str) -> str:
+    """ElementTree/JSON prefer plain utf-8 over utf-8-sig for the declared encoding."""
+    return "utf-8" if encoding.lower().replace("_", "-") == "utf-8-sig" else encoding
+
+
 def count_text_redactions(src: Path, encoding: str) -> tuple[int, int]:
     """Return (line_count, redaction_count) without writing."""
     text = src.read_text(encoding=encoding)
@@ -230,6 +271,225 @@ def redact_text(src: Path, dest: Path, encoding: str) -> tuple[int, int]:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(scrubbed, encoding=encoding)
     return line_count(text), redactions
+
+
+def scrub_scalar(value: Any) -> tuple[Any, int]:
+    """Scrub strings; convert sensitive integers to placeholder strings."""
+    if isinstance(value, str):
+        return scrub(value)
+    if isinstance(value, bool) or value is None:
+        return value, 0
+    if isinstance(value, int):
+        scrubbed, n = scrub(str(value))
+        return (scrubbed, n) if n else (value, 0)
+    if isinstance(value, float) and value.is_integer():
+        return scrub_scalar(int(value))
+    return value, 0
+
+
+def scrub_json_value(value: Any) -> tuple[Any, int]:
+    """Recursively scrub JSON-compatible values. Returns (value, redaction_count)."""
+    if isinstance(value, dict):
+        total = 0
+        out: dict[Any, Any] = {}
+        for key, item in value.items():
+            new_key, key_n = scrub(key) if isinstance(key, str) else (key, 0)
+            new_item, item_n = scrub_json_value(item)
+            out[new_key] = new_item
+            total += key_n + item_n
+        return out, total
+    if isinstance(value, list):
+        total = 0
+        out_list: list[Any] = []
+        for item in value:
+            new_item, item_n = scrub_json_value(item)
+            out_list.append(new_item)
+            total += item_n
+        return out_list, total
+    return scrub_scalar(value)
+
+
+def count_json_redactions(src: Path, encoding: str) -> tuple[int, int]:
+    """Return (top_level_item_count, redaction_count) without writing."""
+    data = json.loads(src.read_text(encoding=encoding))
+    _, redactions = scrub_json_value(data)
+    if isinstance(data, list):
+        return len(data), redactions
+    if isinstance(data, dict):
+        return len(data), redactions
+    return 1, redactions
+
+
+def redact_json(src: Path, dest: Path, encoding: str) -> tuple[int, int]:
+    """Write a redacted JSON file. Returns (top_level_item_count, redaction_count)."""
+    data = json.loads(src.read_text(encoding=encoding))
+    scrubbed, redactions = scrub_json_value(data)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        json.dumps(scrubbed, ensure_ascii=False, indent=2) + "\n",
+        encoding=write_encoding(encoding),
+    )
+    if isinstance(data, list):
+        return len(data), redactions
+    if isinstance(data, dict):
+        return len(data), redactions
+    return 1, redactions
+
+
+def scrub_xml_element(elem: ET.Element) -> int:
+    """Scrub text/tails/attributes on an element tree in-place."""
+    total = 0
+    if elem.text:
+        elem.text, n = scrub(elem.text)
+        total += n
+    if elem.tail:
+        elem.tail, n = scrub(elem.tail)
+        total += n
+    for key, val in list(elem.attrib.items()):
+        scrubbed, n = scrub(val)
+        elem.attrib[key] = scrubbed
+        total += n
+    for child in elem:
+        total += scrub_xml_element(child)
+    return total
+
+
+def _xml_detail(root: ET.Element) -> str:
+    return f"{sum(1 for _ in root.iter())} nodes"
+
+
+def count_xml_redactions(src: Path, encoding: str) -> tuple[str, int]:
+    """Return (detail, redaction_count) without writing."""
+    root = ET.parse(src).getroot()
+    return _xml_detail(root), scrub_xml_element(root)
+
+
+def redact_xml(src: Path, dest: Path, encoding: str) -> tuple[str, int]:
+    """Write a redacted XML file. Returns (detail, redaction_count)."""
+    tree = ET.parse(src)
+    root = tree.getroot()
+    redactions = scrub_xml_element(root)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tree.write(dest, encoding=write_encoding(encoding), xml_declaration=True)
+    return _xml_detail(root), redactions
+
+
+def _require_bs4():
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError as exc:
+        raise SystemExit(
+            "BeautifulSoup is required for HTML redaction. "
+            "Install with: pip install beautifulsoup4"
+        ) from exc
+    return BeautifulSoup
+
+
+def scrub_html_soup(soup: Any) -> int:
+    """Scrub text nodes and string attributes in a BeautifulSoup tree."""
+    total = 0
+    for node in list(soup.find_all(string=True)):
+        text = str(node)
+        scrubbed, n = scrub(text)
+        if n:
+            node.replace_with(scrubbed)
+            total += n
+    for tag in soup.find_all(True):
+        for key, val in list(tag.attrs.items()):
+            if isinstance(val, str):
+                scrubbed, n = scrub(val)
+                if n:
+                    tag.attrs[key] = scrubbed
+                    total += n
+            elif isinstance(val, list):
+                new_list: list[str] = []
+                changed = False
+                for item in val:
+                    if isinstance(item, str):
+                        scrubbed, n = scrub(item)
+                        new_list.append(scrubbed)
+                        if n:
+                            total += n
+                            changed = True
+                    else:
+                        new_list.append(item)
+                if changed:
+                    tag.attrs[key] = new_list
+    return total
+
+
+def count_html_redactions(src: Path, encoding: str) -> tuple[str, int]:
+    """Return (detail, redaction_count) without writing."""
+    BeautifulSoup = _require_bs4()
+    text = src.read_text(encoding=encoding)
+    soup = BeautifulSoup(text, "html.parser")
+    redactions = scrub_html_soup(soup)
+    return f"{line_count(text)} lines", redactions
+
+
+def redact_html(src: Path, dest: Path, encoding: str) -> tuple[str, int]:
+    """Write a redacted HTML file. Returns (detail, redaction_count)."""
+    BeautifulSoup = _require_bs4()
+    text = src.read_text(encoding=encoding)
+    soup = BeautifulSoup(text, "html.parser")
+    redactions = scrub_html_soup(soup)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(str(soup), encoding=encoding)
+    return f"{line_count(text)} lines", redactions
+
+
+def _require_openpyxl():
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise SystemExit(
+            "openpyxl is required for XLSX redaction. Install with: pip install openpyxl"
+        ) from exc
+    return load_workbook
+
+
+def scrub_xlsx_workbook(wb: Any) -> tuple[int, int, int]:
+    """
+    Scrub all cell values in an openpyxl workbook in-place.
+
+    Returns (sheet_count, cell_count, redaction_count).
+    """
+    cells = 0
+    redactions = 0
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.value is None:
+                    continue
+                cells += 1
+                scrubbed, n = scrub_scalar(cell.value)
+                if n:
+                    cell.value = scrubbed
+                    redactions += n
+    return len(wb.worksheets), cells, redactions
+
+
+def count_xlsx_redactions(src: Path) -> tuple[int, int, int]:
+    """Return (sheet_count, cell_count, redaction_count) without writing."""
+    load_workbook = _require_openpyxl()
+    wb = load_workbook(src)
+    try:
+        return scrub_xlsx_workbook(wb)
+    finally:
+        wb.close()
+
+
+def redact_xlsx(src: Path, dest: Path) -> tuple[int, int, int]:
+    """Write a redacted XLSX file. Returns (sheet_count, cell_count, redaction_count)."""
+    load_workbook = _require_openpyxl()
+    wb = load_workbook(src)
+    try:
+        sheets, cells, redactions = scrub_xlsx_workbook(wb)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(dest)
+        return sheets, cells, redactions
+    finally:
+        wb.close()
 
 
 class UnredactablePdfError(Exception):
@@ -430,6 +690,33 @@ def process_source(
         else:
             lines, redactions = count_text_redactions(src, encoding)
         return FileWork(detail=f"{lines} lines", redactions=redactions)
+    if suffix in JSON_SUFFIXES:
+        if write:
+            items, redactions = redact_json(src, dest, encoding)
+        else:
+            items, redactions = count_json_redactions(src, encoding)
+        return FileWork(detail=f"{items} items", redactions=redactions)
+    if suffix in XML_SUFFIXES:
+        if write:
+            detail, redactions = redact_xml(src, dest, encoding)
+        else:
+            detail, redactions = count_xml_redactions(src, encoding)
+        return FileWork(detail=detail, redactions=redactions)
+    if suffix in HTML_SUFFIXES:
+        if write:
+            detail, redactions = redact_html(src, dest, encoding)
+        else:
+            detail, redactions = count_html_redactions(src, encoding)
+        return FileWork(detail=detail, redactions=redactions)
+    if suffix in XLSX_SUFFIXES:
+        if write:
+            sheets, cells, redactions = redact_xlsx(src, dest)
+        else:
+            sheets, cells, redactions = count_xlsx_redactions(src)
+        return FileWork(
+            detail=f"{sheets} sheets / {cells} cells",
+            redactions=redactions,
+        )
     raise ValueError(f"Unsupported file type: {suffix}")
 
 
@@ -440,7 +727,10 @@ def main(
         typer.Option(
             "--input",
             "-i",
-            help="Supported file or directory (CSV, TSV, TXT, OFX/QFX/QIF, PDF).",
+            help=(
+                "Supported file or directory "
+                "(CSV/TSV/TXT/JSON/XML/HTML/XLSX/PDF, OFX/QIF)."
+            ),
             show_default=False,
         ),
     ] = None,
@@ -458,7 +748,7 @@ def main(
         typer.Option(
             "--encoding",
             "-e",
-            help="Text encoding for CSV/TSV/TXT and other text formats.",
+            help="Text encoding for text-based formats (not PDF/XLSX).",
         ),
     ] = "utf-8-sig",
     dry_run: Annotated[
