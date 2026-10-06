@@ -2,18 +2,21 @@
 """
 redact-finance.py
 
-Redact sensitive information from Scandinavian financial CSV exports.
+Redact sensitive information from Scandinavian financial CSV/PDF exports.
 
-- Keeps only a whitelist of common columns (date, description, amount, in, out, etc).
-- Redacts Norwegian personal numbers, account numbers, payment references, and any 9+ digit number.
-- Accepts a single CSV file or a directory of CSVs.
+- CSV: keeps a whitelist of common columns; scrubs sensitive values in-place.
+- PDF: uses PyMuPDF redaction annotations so matched text is removed from the
+  content stream (not merely covered by black boxes).
+- Redacts Norwegian personal numbers, account numbers, payment references, and
+  any 9+ digit number.
 
-Requires: pip install rich
+Requires:
+    pip install rich pymupdf
 
 Usage:
     python redact-finance.py
     python redact-finance.py -i ./exports -o ./redacted
-    python redact-finance.py -i statement.csv --dry-run
+    python redact-finance.py -i statement.pdf --dry-run
 """
 
 from __future__ import annotations
@@ -31,6 +34,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 console = Console()
+
+SUPPORTED_SUFFIXES = {".csv", ".pdf"}
 
 KEEP = {
     "dato",
@@ -58,6 +63,15 @@ def scrub(value: str) -> str:
     return value
 
 
+def iter_sensitive_matches(text: str) -> list[tuple[str, str]]:
+    """Return (matched_text, replacement) pairs found in text."""
+    found: list[tuple[str, str]] = []
+    for pattern, replacement in PATTERNS:
+        for match in pattern.finditer(text):
+            found.append((match.group(0), replacement))
+    return found
+
+
 def default_output_dir(input_path: Path) -> Path:
     """Place a 'redacted' folder next to the input file or directory."""
     return input_path.parent / "redacted"
@@ -65,14 +79,14 @@ def default_output_dir(input_path: Path) -> Path:
 
 def resolve_input_path(raw: str | None) -> Path:
     while True:
-        value = raw or Prompt.ask("[bold]Input[/bold] CSV file or directory")
+        value = raw or Prompt.ask("[bold]Input[/bold] CSV/PDF file or directory")
         path = Path(value).expanduser().resolve()
-        if path.is_file() and path.suffix.lower() == ".csv":
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
             return path
         if path.is_dir():
             return path
         console.print(
-            f"[red]Not a CSV file or directory:[/red] {path}",
+            f"[red]Not a CSV/PDF file or directory:[/red] {path}",
         )
         raw = None
 
@@ -86,10 +100,15 @@ def resolve_output_dir(raw: str | None, input_path: Path) -> Path:
     return Path(value).expanduser().resolve()
 
 
-def collect_csv_files(input_path: Path) -> list[Path]:
+def collect_files(input_path: Path) -> list[Path]:
     if input_path.is_file():
         return [input_path]
-    return sorted(p for p in input_path.glob("*.csv") if p.is_file())
+    files = [
+        p
+        for p in input_path.iterdir()
+        if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+    ]
+    return sorted(files, key=lambda p: (p.suffix.lower(), p.name.lower()))
 
 
 def redact_csv(src: Path, dest: Path, encoding: str) -> tuple[int, int]:
@@ -115,15 +134,83 @@ def redact_csv(src: Path, dest: Path, encoding: str) -> tuple[int, int]:
     return len(rows), len(cols)
 
 
+def _require_pymupdf():
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as exc:
+        raise SystemExit(
+            "PyMuPDF is required for PDF redaction. Install with: pip install pymupdf"
+        ) from exc
+    return fitz
+
+
+def count_pdf_matches(src: Path) -> tuple[int, int]:
+    """Return (page_count, match_count) without writing."""
+    fitz = _require_pymupdf()
+    doc = fitz.open(src)
+    try:
+        matches = 0
+        for page in doc:
+            matches += len(iter_sensitive_matches(page.get_text()))
+        return doc.page_count, matches
+    finally:
+        doc.close()
+
+
+def redact_pdf(src: Path, dest: Path) -> tuple[int, int]:
+    """
+    Physically remove matched text via PyMuPDF redaction annotations.
+
+    Returns (page_count, redaction_count).
+    """
+    fitz = _require_pymupdf()
+    # Tighter glyph boxes reduce accidental removal of neighboring lines.
+    fitz.TOOLS.set_small_glyph_heights(True)
+
+    doc = fitz.open(src)
+    redaction_count = 0
+    try:
+        for page in doc:
+            hits = iter_sensitive_matches(page.get_text())
+            # Deduplicate identical strings on the page; search_for finds all instances.
+            seen: set[str] = set()
+            for matched_text, replacement in hits:
+                if matched_text in seen:
+                    continue
+                seen.add(matched_text)
+                for rect in page.search_for(matched_text):
+                    page.add_redact_annot(
+                        rect,
+                        text=replacement,
+                        fill=(0, 0, 0),
+                        text_color=(1, 1, 1),
+                        align=fitz.TEXT_ALIGN_CENTER,
+                        cross_out=False,
+                    )
+                    redaction_count += 1
+            # Remove overlapping text from the content stream (not just cover it).
+            page.apply_redactions(
+                images=fitz.PDF_REDACT_IMAGE_NONE,
+                graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+            )
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # garbage/deflate purge removed content so it is not extractable later.
+        doc.save(dest, garbage=4, deflate=True, clean=True)
+        return doc.page_count, redaction_count
+    finally:
+        doc.close()
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog=Path(__file__).name,
-        description="Redact sensitive fields from Scandinavian financial CSV exports.",
+        description="Redact sensitive fields from Scandinavian financial CSV/PDF exports.",
     )
     parser.add_argument(
         "-i",
         "--input",
-        help="CSV file or directory containing CSV files",
+        help="CSV/PDF file or directory containing such files",
     )
     parser.add_argument(
         "-o",
@@ -150,17 +237,20 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = resolve_input_path(args.input)
     output_dir = resolve_output_dir(args.output, input_path)
-    files = collect_csv_files(input_path)
+    files = collect_files(input_path)
 
     if not files:
-        console.print(f"[yellow]No CSV files found in[/yellow] {input_path}")
+        console.print(f"[yellow]No CSV/PDF files found in[/yellow] {input_path}")
         return 1
 
+    csv_n = sum(1 for f in files if f.suffix.lower() == ".csv")
+    pdf_n = sum(1 for f in files if f.suffix.lower() == ".pdf")
     console.print(
         Panel.fit(
             f"[bold]Input[/bold]  {input_path}\n"
             f"[bold]Output[/bold] {output_dir}\n"
-            f"[bold]Files[/bold]  {len(files)} CSV"
+            f"[bold]Files[/bold]  {len(files)} "
+            f"([cyan]{csv_n} CSV[/cyan], [magenta]{pdf_n} PDF[/magenta])"
             + ("  [dim](dry-run)[/dim]" if args.dry_run else ""),
             title="redact-finance",
             border_style="cyan",
@@ -168,10 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     results = Table(show_header=True, header_style="bold")
+    results.add_column("Type")
     results.add_column("Source")
     results.add_column("Destination")
-    results.add_column("Rows", justify="right")
-    results.add_column("Cols", justify="right")
+    results.add_column("Detail", justify="right")
     results.add_column("Status")
 
     with Progress(
@@ -185,29 +275,46 @@ def main(argv: list[str] | None = None) -> int:
         task = progress.add_task("Redacting", total=len(files))
         for src in files:
             dest = output_dir / src.name
+            kind = src.suffix.lower().lstrip(".").upper()
             try:
                 if args.dry_run:
+                    if src.suffix.lower() == ".pdf":
+                        pages, matches = count_pdf_matches(src)
+                        detail = f"{pages}p / {matches} hits"
+                    else:
+                        detail = "—"
                     results.add_row(
-                        str(src.name),
+                        kind,
+                        src.name,
                         str(dest),
-                        "—",
-                        "—",
+                        detail,
                         "[cyan]would write[/cyan]",
                     )
-                else:
+                elif src.suffix.lower() == ".csv":
                     rows, cols = redact_csv(src, dest, args.encoding)
                     results.add_row(
-                        str(src.name),
+                        kind,
+                        src.name,
                         str(dest),
-                        str(rows),
-                        str(cols),
+                        f"{rows} rows / {cols} cols",
                         "[green]ok[/green]",
                     )
+                else:
+                    pages, redactions = redact_pdf(src, dest)
+                    results.add_row(
+                        kind,
+                        src.name,
+                        str(dest),
+                        f"{pages}p / {redactions} redacted",
+                        "[green]ok[/green]",
+                    )
+            except SystemExit:
+                raise
             except Exception as exc:  # noqa: BLE001 - surface per-file errors
                 results.add_row(
-                    str(src.name),
+                    kind,
+                    src.name,
                     str(dest),
-                    "—",
                     "—",
                     f"[red]error: {exc}[/red]",
                 )
