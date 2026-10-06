@@ -607,4 +607,8 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    try:
+        app()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted — exiting.[/yellow]")
+        raise SystemExit(130) from None
