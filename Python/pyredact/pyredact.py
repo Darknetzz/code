@@ -40,7 +40,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -1017,7 +1017,7 @@ def process_source(
 @app.command()
 def main(
     input: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--input",
             "-i",
@@ -1030,7 +1030,7 @@ def main(
         ),
     ] = None,
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output",
             "-o",
@@ -1066,7 +1066,7 @@ def main(
         ),
     ] = False,
     recursive: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--recursive/--no-recursive",
             "-r",
@@ -1078,7 +1078,7 @@ def main(
         ),
     ] = None,
     template: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--template",
             "-t",
@@ -1092,7 +1092,7 @@ def main(
         ),
     ] = None,
     pattern: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--pattern",
             "-p",
