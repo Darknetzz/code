@@ -10,7 +10,9 @@ const ExistsCtx = struct {
 
 fn pathExists(ctx: *anyopaque, full_path: []const u8) bool {
     const self: *const ExistsCtx = @ptrCast(@alignCast(ctx));
-    const st = Io.Dir.statFile(.cwd(), self.io, full_path, .{ .follow_symlinks = true }) catch return false;
+    // Avoid follow_symlinks: Windows App Execution Aliases (APPEXECLINK)
+    // make Zig dump unexpectedNtstatus(IO_REPARSE_TAG_NOT_HANDLED).
+    const st = Io.Dir.statFile(.cwd(), self.io, full_path, .{ .follow_symlinks = false }) catch return false;
     return st.kind != .directory;
 }
 
