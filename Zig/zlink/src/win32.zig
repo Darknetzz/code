@@ -11,6 +11,11 @@ extern "kernel32" fn GetFileAttributesW(lpFileName: windows.LPCWSTR) callconv(.w
 extern "kernel32" fn GetDriveTypeW(lpRootPathName: ?windows.LPCWSTR) callconv(.winapi) windows.UINT;
 extern "kernel32" fn CreateDirectoryW(lpPathName: windows.LPCWSTR, lpSecurityAttributes: ?*anyopaque) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn RemoveDirectoryW(lpPathName: windows.LPCWSTR) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn CreateHardLinkW(
+    lpFileName: windows.LPCWSTR,
+    lpExistingFileName: windows.LPCWSTR,
+    lpSecurityAttributes: ?*anyopaque,
+) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn CreateFileW(
     lpFileName: windows.LPCWSTR,
     dwDesiredAccess: windows.DWORD,
@@ -99,6 +104,14 @@ fn toNtPath(allocator: std.mem.Allocator, abs: []const u8) ![]u8 {
         return std.fmt.allocPrint(allocator, "\\??\\UNC\\{s}", .{rest});
     }
     return std.fmt.allocPrint(allocator, "\\??\\{s}", .{abs});
+}
+
+pub fn createHardLink(allocator: std.mem.Allocator, link_path: []const u8, target_abs: []const u8) !void {
+    const link_w = try std.unicode.wtf8ToWtf16LeAllocZ(allocator, link_path);
+    defer allocator.free(link_w);
+    const target_w = try std.unicode.wtf8ToWtf16LeAllocZ(allocator, target_abs);
+    defer allocator.free(target_w);
+    if (CreateHardLinkW(link_w.ptr, target_w.ptr, null) == .FALSE) return error.CreateHardLinkFailed;
 }
 
 pub fn createJunction(allocator: std.mem.Allocator, link_path: []const u8, target_abs: []const u8) !void {

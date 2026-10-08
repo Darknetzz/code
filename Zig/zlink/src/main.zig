@@ -250,6 +250,11 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     const link_raw = opts.link orelse std.fs.path.basename(opts.target);
     const link_path = try absPath(app, link_raw);
     const target_abs = try zlink.resolveUserTarget(app.arena, cwd, opts.target);
+    if (std.os.windows.eqlIgnoreCaseWtf8(link_path, target_abs)) {
+        try printErr(app, "Error: Link path and target path cannot be the same.", .{});
+        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
+        return 1;
+    }
     const remote = win32.isRemotePath(app.arena, link_path) or win32.isRemotePath(app.arena, target_abs);
 
     const target_attrs = try win32.attributes(app.arena, target_abs);
@@ -327,12 +332,6 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
                 return 1;
             };
         }
-    }
-
-    if (std.os.windows.eqlIgnoreCaseWtf8(link_path, target_abs)) {
-        try printErr(app, "Error: Link path and target path cannot be the same.", .{});
-        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
-        return 1;
     }
 
     var flag = zlink.LinkFlag.file_symlink;
@@ -470,8 +469,8 @@ fn createWindowsLink(app: *App, link_path: []const u8, stored_target: []const u8
     const io = app.io;
     switch (flag) {
         .hard => {
-            try Io.Dir.hardLink(.cwd(), stored_target, .cwd(), link_path, io, .{});
-            return std.fmt.allocPrint(app.arena, "hardLink({s}, {s})", .{ stored_target, link_path });
+            try win32.createHardLink(app.arena, link_path, stored_target);
+            return std.fmt.allocPrint(app.arena, "CreateHardLink({s}, {s})", .{ stored_target, link_path });
         },
         .junction => {
             try win32.createJunction(app.arena, link_path, stored_target);
