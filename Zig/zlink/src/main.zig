@@ -5,40 +5,17 @@ const zlink = @import("zlink");
 const zcommon = @import("zcommon");
 const win32 = @import("win32.zig");
 
-pub const usage =
-    \\zlink — Windows symlink / junction / hardlink CLI (no cmd mklink)
-    \\
-    \\Usage:
-    \\  zlink TARGET [LINK] [OPTIONS]
-    \\  zlink info PATH
-    \\  zlink remove PATH [-y]
-    \\  zlink version
-    \\
-    \\Create options:
-    \\  -d, --dir                 Directory symbolic link (/D)
-    \\  -j, --junction            Directory junction (/J)
-    \\  -H, --hard                Hard link (/H, files only)
-    \\  -y, --yes                 Skip confirmation
-    \\  -r, --replace             Replace existing LINK path
-    \\  -R, --relative            Store a relative symlink target (like ln -sr)
-    \\      --no-validate-target  Skip target existence/type checks
-    \\
-    \\If TARGET is a directory and no type flag is given, zlink defaults to a
-    \\junction on local NTFS with an absolute target. Relative targets and
-    \\network paths default to a directory symlink.
-    \\
-;
-
 const App = struct {
     io: Io,
     arena: std.mem.Allocator,
     stdout: *Io.Writer,
     stderr: *Io.Writer,
     stdin: *Io.Reader,
+    color: zcommon.Color,
 };
 
 pub fn main(init: std.process.Init) !void {
-    zcommon.enableUtf8();
+    const color = zcommon.setupTerminal(init.io, init.environ_map);
     if (builtin.os.tag != .windows) {
         std.debug.print("Error: zlink only supports Windows.\n", .{});
         return error.WindowsOnly;
@@ -60,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
         .stdout = &stdout_file.interface,
         .stderr = &stderr_file.interface,
         .stdin = &stdin_file.interface,
+        .color = color,
     };
 
     const code = try dispatch(&app, args[1..]);
@@ -68,16 +46,59 @@ pub fn main(init: std.process.Init) !void {
     if (code != 0) std.process.exit(code);
 }
 
+fn writeHelp(w: *Io.Writer, c: zcommon.Color) !void {
+    try w.print("{s}zlink{s} — Windows symlink / junction / hardlink CLI (no cmd mklink)\n\n", .{ c.s(.bold), c.s(.reset) });
+    try w.print("{s}Usage:{s}\n", .{ c.s(.bold), c.s(.reset) });
+    try w.writeAll(
+        \\  zlink TARGET [LINK] [OPTIONS]
+        \\  zlink info PATH
+        \\  zlink remove PATH [-y]
+        \\  zlink version
+        \\
+    );
+    try w.print("{s}Create options:{s}\n", .{ c.s(.bold), c.s(.reset) });
+    try w.print("  {s}-d, --dir{s}                 Directory symbolic link (/D)\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("  {s}-j, --junction{s}            Directory junction (/J)\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("  {s}-H, --hard{s}                Hard link (/H, files only)\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("  {s}-y, --yes{s}                 Skip confirmation\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("  {s}-r, --replace{s}             Replace existing LINK path\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("  {s}-R, --relative{s}            Store a relative symlink target (like ln -sr)\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.print("      {s}--no-validate-target{s}  Skip target existence/type checks\n\n", .{ c.s(.cyan), c.s(.reset) });
+    try w.writeAll(
+        \\If TARGET is a directory and no type flag is given, zlink defaults to a
+        \\junction on local NTFS with an absolute target. Relative targets and
+        \\network paths default to a directory symlink.
+        \\
+    );
+}
+
+fn printLinkArrow(w: *Io.Writer, c: zcommon.Color, link_path: []const u8, target: []const u8) !void {
+    try w.print("{s}{s}{s} {s}->{s} {s}{s}{s}\n", .{
+        c.s(.cyan),
+        link_path,
+        c.s(.reset),
+        c.s(.dim),
+        c.s(.reset),
+        c.s(.cyan),
+        target,
+        c.s(.reset),
+    });
+}
+
+fn printTypeLine(w: *Io.Writer, c: zcommon.Color, type_name: []const u8) !void {
+    try w.print("{s}Type:{s}   {s}{s}{s}\n", .{ c.s(.bold), c.s(.reset), c.s(.magenta), type_name, c.s(.reset) });
+}
+
 fn dispatch(app: *App, raw_args: []const []const u8) !u8 {
     const argv = try zlink.normalizeCliArgv(app.arena, raw_args);
     if (argv.len == 0 or std.mem.eql(u8, argv[0], "--help") or std.mem.eql(u8, argv[0], "-h")) {
-        try app.stdout.writeAll(usage);
+        try writeHelp(app.stdout, app.color);
         return 0;
     }
 
     const cmd = argv[0];
     if (std.mem.eql(u8, cmd, "version")) {
-        try app.stdout.print("zlink {s}\n", .{zlink.version});
+        try app.stdout.print("{s}zlink{s} {s}\n", .{ app.color.s(.bold), app.color.s(.reset), zlink.version });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "info")) {
@@ -109,7 +130,7 @@ fn dispatch(app: *App, raw_args: []const []const u8) !u8 {
     if (std.mem.eql(u8, cmd, "create-link")) {
         const opts = zlink.parseCreateArgs(argv[1..]) catch |err| switch (err) {
             error.MissingTarget => {
-                try app.stdout.writeAll(usage);
+                try writeHelp(app.stdout, app.color);
                 return 0;
             },
             error.UnknownFlag => {
@@ -122,7 +143,7 @@ fn dispatch(app: *App, raw_args: []const []const u8) !u8 {
             },
         };
         if (opts.help) {
-            try app.stdout.writeAll(usage);
+            try writeHelp(app.stdout, app.color);
             return 0;
         }
         return createCmd(app, opts);
@@ -154,18 +175,24 @@ fn infoCmd(app: *App, raw: []const u8) !u8 {
     if (attrs.reparse()) {
         var buf: [Io.Dir.max_path_bytes]u8 = undefined;
         const n = Io.Dir.readLinkAbsolute(app.io, link_path, &buf) catch {
-            try app.stdout.print("{s} -> (unavailable)\n", .{link_path});
+            try printLinkArrow(app.stdout, app.color, link_path, "(unavailable)");
             return 0;
         };
         const target = buf[0..n];
-        try app.stdout.print("{s} -> {s}\n", .{ link_path, target });
+        try printLinkArrow(app.stdout, app.color, link_path, target);
         if (zlink.targetLooksNonportable(target)) {
             try printWarn(app, "Note: stored target is absolute (drive letter, UNC, or NT prefix); Linux will not follow this path.", .{});
         } else {
-            try app.stdout.writeAll("Stored target is relative (portable across Windows and Linux).\n");
+            try app.stdout.print("{s}Stored target is relative (portable across Windows and Linux).{s}\n", .{ app.color.s(.dim), app.color.s(.reset) });
         }
     } else {
-        try app.stdout.print("Path: {s} (not a link)\n", .{link_path});
+        try app.stdout.print("{s}Path:{s} {s}{s}{s} (not a link)\n", .{
+            app.color.s(.bold),
+            app.color.s(.reset),
+            app.color.s(.cyan),
+            link_path,
+            app.color.s(.reset),
+        });
     }
     return 0;
 }
@@ -228,7 +255,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     const target_attrs = try win32.attributes(app.arena, target_abs);
     if (!opts.no_validate_target and target_attrs.missing()) {
         try printErr(app, "Error: Target path does not exist.", .{});
-        try app.stderr.print("{s} -> {s}\n", .{ link_path, target_abs });
+        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
         return 1;
     }
 
@@ -304,7 +331,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
 
     if (std.os.windows.eqlIgnoreCaseWtf8(link_path, target_abs)) {
         try printErr(app, "Error: Link path and target path cannot be the same.", .{});
-        try app.stderr.print("{s} -> {s}\n", .{ link_path, target_abs });
+        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
         return 1;
     }
 
@@ -380,23 +407,29 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     }
 
     if (!opts.yes) {
-        try app.stderr.print("{s} -> {s}\n", .{ link_path, stored_target });
+        try printLinkArrow(app.stderr, app.color, link_path, stored_target);
         if (!std.mem.eql(u8, stored_target, target_abs)) {
-            try app.stderr.print("Resolves to: {s}\n", .{target_abs});
+            try app.stderr.print("{s}Resolves to:{s} {s}{s}{s}\n", .{
+                app.color.s(.bold),
+                app.color.s(.reset),
+                app.color.s(.cyan),
+                target_abs,
+                app.color.s(.reset),
+            });
         }
-        try app.stderr.print("Type:   {s}\n", .{zlink.formatLinkType(flag.mklink())});
+        try printTypeLine(app.stderr, app.color, zlink.formatLinkType(flag.mklink()));
         if (!try confirm(app, "Proceed?", .{}, true)) {
             try printWarn(app, "Cancelled.", .{});
             return 0;
         }
     }
 
-    try app.stderr.writeAll("Executing:\n");
+    try app.stderr.print("{s}Executing:{s}\n", .{ app.color.s(.bold), app.color.s(.reset) });
     const detail = createWindowsLink(app, link_path, stored_target, flag) catch |err| {
         const winerr = win32.lastError();
         try printErr(app, "FAILED TO CREATE LINK", .{});
         try printErr(app, "{s}", .{@errorName(err)});
-        try app.stderr.writeAll("\nPossible causes:\n");
+        try app.stderr.print("\n{s}Possible causes:{s}\n", .{ app.color.s(.bold), app.color.s(.reset) });
         try app.stderr.writeAll("  - The link path already exists. Remove it and retry.\n");
         try app.stderr.writeAll("  - Insufficient privileges. For symlinks, run as Administrator or enable Developer Mode.\n");
         if (winerr == win32.ERROR_PRIVILEGE_NOT_HELD) {
@@ -418,10 +451,10 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
         }
         return 1;
     };
-    try app.stderr.print("  {s}\n", .{detail});
+    try app.stderr.print("  {s}{s}{s}\n", .{ app.color.s(.dim), detail, app.color.s(.reset) });
     try printOk(app, "Success!", .{});
-    try app.stdout.print("{s} -> {s}\n", .{ link_path, stored_target });
-    try app.stdout.print("Type:   {s}\n", .{zlink.formatLinkType(flag.mklink())});
+    try printLinkArrow(app.stdout, app.color, link_path, stored_target);
+    try printTypeLine(app.stdout, app.color, zlink.formatLinkType(flag.mklink()));
     return 0;
 }
 
@@ -480,13 +513,19 @@ fn confirm(app: *App, comptime fmt: []const u8, args: anytype, default_yes: bool
 }
 
 fn printErr(app: *App, comptime fmt: []const u8, args: anytype) !void {
-    try app.stderr.print(fmt ++ "\n", args);
+    try app.stderr.print("{s}", .{app.color.s(.red)});
+    try app.stderr.print(fmt, args);
+    try app.stderr.print("{s}\n", .{app.color.s(.reset)});
 }
 
 fn printWarn(app: *App, comptime fmt: []const u8, args: anytype) !void {
-    try app.stderr.print(fmt ++ "\n", args);
+    try app.stderr.print("{s}", .{app.color.s(.yellow)});
+    try app.stderr.print(fmt, args);
+    try app.stderr.print("{s}\n", .{app.color.s(.reset)});
 }
 
 fn printOk(app: *App, comptime fmt: []const u8, args: anytype) !void {
-    try app.stderr.print(fmt ++ "\n", args);
+    try app.stderr.print("{s}", .{app.color.s(.green)});
+    try app.stderr.print(fmt, args);
+    try app.stderr.print("{s}\n", .{app.color.s(.reset)});
 }
