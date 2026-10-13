@@ -30,10 +30,11 @@ eval "$(ssh-agent -s)"
 printf '%s\n' "${SETUPFILES_SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
-ssh-keyscan -H gitlab.roste.org >> ~/.ssh/known_hosts 2>/dev/null
-chmod 644 ~/.ssh/known_hosts
+# Prefer accept-new over a brittle keyscan (keyscan failures used to abort under set -e).
+export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
 rm -rf "${WORK}"
+echo "Cloning ${SETUPFILES_REPO} (${SETUPFILES_BRANCH})..."
 git clone --depth 1 --branch "${SETUPFILES_BRANCH}" "${SETUPFILES_REPO}" "${WORK}"
 
 dest="${WORK}/${DEST_REL}"
