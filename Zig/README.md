@@ -4,7 +4,6 @@ Scripts and projects in Zig.
 
 | Subdirectory | Description |
 |-------------|-------------|
-| [hello](hello/) | Minimal Zig CLI that prints a greeting. See [hello/README.md](hello/README.md) for details. |
 | [zcommon](zcommon/) | Shared helpers for the Zig CLIs (Windows console UTF-8 and ANSI color). See [zcommon/README.md](zcommon/README.md) for details. |
 | [zgen](zgen/) | Generate random strings of length N from presets or a custom charset. See [zgen/README.md](zgen/README.md) for details. |
 | [zlink](zlink/) | Windows CLI for file/dir symlinks, junctions, and hard links. See [zlink/README.md](zlink/README.md) for details. |
@@ -23,3 +22,12 @@ These are queued after `zlink`. Each should stay a small Windows-friendly CLI wi
 | zhex | planned | Hex dump of files or stdin (`offset`, `length`, ASCII gutter) |
 | zpe | planned | Inspect Windows PE headers (machine, sections, imports) |
 | zwatch | planned | Wait until a path appears or changes, then exit or run a command |
+
+## GitLab CI → setupfiles
+
+On changes under `Zig/` (or a manual web pipeline), GitLab CI on `gitlab.roste.org:kriss/code`:
+
+1. Builds Linux amd64 **ReleaseSafe** binaries for `zgen` and `zwhich`
+2. Commits them to `setupfiles` `main` at `Linux/opt/setupfiles/bin/`
+
+Requires CI variable `SETUPFILES_SSH_PRIVATE_KEY` (deploy key with write access to `kriss/setupfiles`). Scripts: [`!scripts/ci-install-zig.sh`](../!scripts/ci-install-zig.sh), [`!scripts/publish-zig-bins-to-setupfiles.sh`](../!scripts/publish-zig-bins-to-setupfiles.sh).

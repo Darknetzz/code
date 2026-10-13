@@ -8,6 +8,9 @@ target/
 zig-cache/
 .zig-cache/
 zig-out/
+.zig-ci/
+ci-bins/
+.setupfiles-publish/
 lib
 logs
 chromium
