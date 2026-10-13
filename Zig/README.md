@@ -6,6 +6,7 @@ Scripts and projects in Zig.
 |-------------|-------------|
 | [hello](hello/) | Minimal Zig CLI that prints a greeting. See [hello/README.md](hello/README.md) for details. |
 | [zcommon](zcommon/) | Shared helpers for the Zig CLIs (Windows console UTF-8 and ANSI color). See [zcommon/README.md](zcommon/README.md) for details. |
+| [zgen](zgen/) | Generate random strings of length N from presets or a custom charset. See [zgen/README.md](zgen/README.md) for details. |
 | [zlink](zlink/) | Windows CLI for file/dir symlinks, junctions, and hard links. See [zlink/README.md](zlink/README.md) for details. |
 | [zwhich](zwhich/) | PATH lookup that lists every match and marks which entry wins. See [zwhich/README.md](zwhich/README.md) for details. |
 
@@ -18,6 +19,7 @@ These are queued after `zlink`. Each should stay a small Windows-friendly CLI wi
 |---------|--------|------|
 | [zlink](zlink/) | started | Native Win32 symlink / junction / hardlink CLI (port of `Python/pylink`) |
 | [zwhich](zwhich/) | started | PATH lookup that shows every match and which entry wins |
+| [zgen](zgen/) | started | Random string generator with charset presets (CSPRNG by default) |
 | zhex | planned | Hex dump of files or stdin (`offset`, `length`, ASCII gutter) |
 | zpe | planned | Inspect Windows PE headers (machine, sections, imports) |
 | zwatch | planned | Wait until a path appears or changes, then exit or run a command |
