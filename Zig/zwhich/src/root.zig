@@ -223,17 +223,25 @@ const FakeFs = struct {
 
 test "findMatches orders PATHEXT then later PATH dirs" {
     const a = std.testing.allocator;
+    // Host separators via path.join so Linux CI and Windows agree.
+    const first = try path.join(a, &.{ "testdirs", "first" });
+    defer a.free(first);
+    const second = try path.join(a, &.{ "testdirs", "second" });
+    defer a.free(second);
+    const first_exe = try path.join(a, &.{ first, "git.exe" });
+    defer a.free(first_exe);
+    const first_cmd = try path.join(a, &.{ first, "git.cmd" });
+    defer a.free(first_cmd);
+    const second_exe = try path.join(a, &.{ second, "git.exe" });
+    defer a.free(second_exe);
+
     var fs: FakeFs = .{
-        .files = &.{
-            "C:\\second\\git.exe",
-            "C:\\first\\git.cmd",
-            "C:\\first\\git.exe",
-        },
+        .files = &.{ second_exe, first_cmd, first_exe },
     };
     const matches = try findMatches(
         a,
         "git",
-        &.{ "C:\\first", "C:\\second" },
+        &.{ first, second },
         &.{ ".EXE", ".CMD" },
         true,
         FakeFs.exists,
@@ -244,9 +252,9 @@ test "findMatches orders PATHEXT then later PATH dirs" {
         a.free(matches);
     }
     try std.testing.expectEqual(@as(usize, 3), matches.len);
-    try std.testing.expectEqualStrings("C:\\first\\git.exe", matches[0]);
-    try std.testing.expectEqualStrings("C:\\first\\git.cmd", matches[1]);
-    try std.testing.expectEqualStrings("C:\\second\\git.exe", matches[2]);
+    try std.testing.expectEqualStrings(first_exe, matches[0]);
+    try std.testing.expectEqualStrings(first_cmd, matches[1]);
+    try std.testing.expectEqualStrings(second_exe, matches[2]);
 }
 
 test "parseArgs" {
