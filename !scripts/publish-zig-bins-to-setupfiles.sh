@@ -2,10 +2,9 @@
 # Copy Linux Zig CLI binaries into setupfiles and push to main when they change.
 #
 # Uses SSH. Docker runners cannot reach gitlab.roste.org:22, so defaults are:
-#   SETUPFILES_SSH_HOST=gitlab.roste.org
-#   SETUPFILES_SSH_PORT=2222
-# Alternatives that also work from the runner: SETUPFILES_SSH_HOST=gitlab01
-# (port 22).
+#   SETUPFILES_SSH_HOST=gitlab01
+#   SETUPFILES_SSH_PORT=22
+# Alternative: SETUPFILES_SSH_HOST=gitlab.roste.org SETUPFILES_SSH_PORT=2222
 #
 # Required CI variable: SETUPFILES_SSH_PRIVATE_KEY — deploy key with write
 # access to kriss/setupfiles.
@@ -14,8 +13,8 @@ set -euo pipefail
 TOOLS=(zgen zwhich)
 BIN_SRC="${BIN_SRC:-}"
 SETUPFILES_PROJECT_PATH="${SETUPFILES_PROJECT_PATH:-kriss/setupfiles}"
-SETUPFILES_SSH_HOST="${SETUPFILES_SSH_HOST:-gitlab.roste.org}"
-SETUPFILES_SSH_PORT="${SETUPFILES_SSH_PORT:-2222}"
+SETUPFILES_SSH_HOST="${SETUPFILES_SSH_HOST:-gitlab01}"
+SETUPFILES_SSH_PORT="${SETUPFILES_SSH_PORT:-22}"
 SETUPFILES_BRANCH="${SETUPFILES_BRANCH:-main}"
 DEST_REL="Linux/opt/setupfiles/bin"
 WORK="${CI_PROJECT_DIR:-$(pwd)}/.setupfiles-publish"
