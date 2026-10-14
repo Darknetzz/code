@@ -3,16 +3,15 @@
 #
 # Auth / transport (first match wins):
 #   1) SSH — SETUPFILES_SSH_PRIVATE_KEY (deploy key, write access)
-#      Defaults: SETUPFILES_SSH_HOST=gitlab.roste.org SETUPFILES_SSH_PORT=2222
-#      (gitlab.roste.org:22 times out from Docker; gitlab01:22 is host sshd, not GitLab)
+#      Defaults: SETUPFILES_SSH_HOST=10.0.2.60 SETUPFILES_SSH_PORT=22
 #   2) HTTPS — SETUPFILES_GITLAB_TOKEN (token with write_repository)
 set -euo pipefail
 
 TOOLS=(zgen zwhich)
 BIN_SRC="${BIN_SRC:-}"
 SETUPFILES_PROJECT_PATH="${SETUPFILES_PROJECT_PATH:-kriss/setupfiles}"
-SETUPFILES_SSH_HOST="${SETUPFILES_SSH_HOST:-gitlab.roste.org}"
-SETUPFILES_SSH_PORT="${SETUPFILES_SSH_PORT:-2222}"
+SETUPFILES_SSH_HOST="${SETUPFILES_SSH_HOST:-10.0.2.60}"
+SETUPFILES_SSH_PORT="${SETUPFILES_SSH_PORT:-22}"
 SETUPFILES_HTTP_HOST="${SETUPFILES_HTTP_HOST:-gitlab.roste.org}"
 SETUPFILES_BRANCH="${SETUPFILES_BRANCH:-main}"
 DEST_REL="Linux/opt/setupfiles/bin"

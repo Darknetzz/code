@@ -30,4 +30,4 @@ On changes under `Zig/` (or a manual web pipeline), GitLab CI on `gitlab.roste.o
 1. Builds Linux amd64 **ReleaseSafe** binaries for `zgen` and `zwhich`
 2. Commits them to `setupfiles` `main` at `Linux/opt/setupfiles/bin/`
 
-Publish uses SSH to `gitlab.roste.org:2222` (`SETUPFILES_SSH_PRIVATE_KEY` deploy key), with optional HTTPS fallback (`SETUPFILES_GITLAB_TOKEN`). Do not use `gitlab01:22` — that is host SSH, not GitLab. Scripts: [`!scripts/ci-install-zig.sh`](../!scripts/ci-install-zig.sh), [`!scripts/publish-zig-bins-to-setupfiles.sh`](../!scripts/publish-zig-bins-to-setupfiles.sh).
+Publish uses SSH to `git@10.0.2.60` (`SETUPFILES_SSH_PRIVATE_KEY` deploy key), with optional HTTPS fallback (`SETUPFILES_GITLAB_TOKEN` → `gitlab.roste.org`). Scripts: [`!scripts/ci-install-zig.sh`](../!scripts/ci-install-zig.sh), [`!scripts/publish-zig-bins-to-setupfiles.sh`](../!scripts/publish-zig-bins-to-setupfiles.sh).
