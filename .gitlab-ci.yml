@@ -1,14 +1,15 @@
 # Build Linux Zig CLIs and publish them into setupfiles (main).
 #
-# Required CI/CD variable on kriss/code (protected):
+# Required CI/CD variables on kriss/code (protected):
 #   SETUPFILES_SSH_PRIVATE_KEY — deploy key with write access to kriss/setupfiles
+#   SETUPFILES_GITLAB_TOKEN    — optional HTTPS fallback (api token w/ write_repository)
 #
-# SSH defaults to gitlab01:22 (gitlab.roste.org:22 times out from Docker runners).
-# Override with SETUPFILES_SSH_HOST=gitlab.roste.org SETUPFILES_SSH_PORT=2222 if preferred.
+# SSH defaults to gitlab.roste.org:2222 (GitLab sshd).
+# Note: gitlab01:22 is the host OpenSSH, not GitLab — do not use it for git+.
 #
 # Optional overrides:
-#   SETUPFILES_SSH_HOST      (default gitlab01)
-#   SETUPFILES_SSH_PORT      (default 22)
+#   SETUPFILES_SSH_HOST      (default gitlab.roste.org)
+#   SETUPFILES_SSH_PORT      (default 2222)
 #   SETUPFILES_PROJECT_PATH  (default kriss/setupfiles)
 #   SETUPFILES_BRANCH        (default main)
 #   ZIG_VERSION              (default 0.17.0)
@@ -19,8 +20,8 @@ stages:
 
 variables:
   ZIG_VERSION: "0.17.0"
-  SETUPFILES_SSH_HOST: "gitlab01"
-  SETUPFILES_SSH_PORT: "22"
+  SETUPFILES_SSH_HOST: "gitlab.roste.org"
+  SETUPFILES_SSH_PORT: "2222"
   SETUPFILES_PROJECT_PATH: "kriss/setupfiles"
   SETUPFILES_BRANCH: "main"
   FF_TIMESTAMPS: "true"
