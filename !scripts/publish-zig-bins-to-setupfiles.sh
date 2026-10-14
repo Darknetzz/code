@@ -37,9 +37,15 @@ for tool in "${TOOLS[@]}"; do
 done
 
 eval "$(ssh-agent -s)"
-printf '%s\n' "${SETUPFILES_SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
+# File-based ssh-add is more reliable than stdin with CI multiline vars.
+KEYFILE="$(mktemp)"
+printf '%s\n' "${SETUPFILES_SSH_PRIVATE_KEY}" | tr -d '\r' >"${KEYFILE}"
+chmod 600 "${KEYFILE}"
+export SSH_ASKPASS_REQUIRE=never
+ssh-add "${KEYFILE}"
+rm -f "${KEYFILE}"
 
 export GIT_SSH_COMMAND="ssh -p ${SETUPFILES_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 CLONE_URL="git@${SETUPFILES_SSH_HOST}:${SETUPFILES_PROJECT_PATH}.git"
