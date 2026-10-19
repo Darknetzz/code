@@ -8,6 +8,7 @@ Scripts and projects in Rust.
 | [darkshell](darkshell/) | **Darkshell** is an experimental, **Bash-inspired** shell implemented in Rust... See [darkshell/README.md](darkshell/README.md) for details. |
 | [helloworld](helloworld/) | — |
 | [ip](ip/) | — |
+| [mediacut](mediacut/) | Cross-platform CLI that cuts video/audio files with system ffmpeg: extract on... See [mediacut/README.md](mediacut/README.md) for details. |
 | [n64romconvert-1.0.2](n64romconvert-1.0.2/) | It's a tool containing 2 binaries to help you check and convert between Ninte... See [n64romconvert-1.0.2/README.md](n64romconvert-1.0.2/README.md) for details. |
 | [pathman](pathman/) | Cross-platform GUI for viewing and editing **user** and **system (machine)**... See [pathman/README.md](pathman/README.md) for details. |
 | [prereq-doctor](prereq-doctor/) | CLI tool that checks whether common development and Windows admin prerequisit... See [prereq-doctor/README.md](prereq-doctor/README.md) for details. |

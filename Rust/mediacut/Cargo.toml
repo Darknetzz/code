@@ -1,0 +1,14 @@
+[package]
+name = "mediacut"
+version = "0.1.0"
+edition = "2021"
+description = "CLI that cuts video/audio files via ffmpeg (extract or remove time ranges)"
+license = "MIT"
+
+[[bin]]
+name = "mediacut"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
