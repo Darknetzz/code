@@ -2,7 +2,7 @@
 name = "vid2audio"
 version = "0.1.0"
 edition = "2021"
-description = "CLI that extracts audio from video files via ffmpeg (default Opus)"
+description = "CLI that extracts audio from video files via ffmpeg (default MP3)"
 license = "MIT"
 
 [[bin]]

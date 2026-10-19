@@ -1,6 +1,6 @@
 # vid2audio
 
-Cross-platform CLI that extracts audio from one or more video files using system ffmpeg. Defaults to Opus; override with `--format`.
+Cross-platform CLI that extracts audio from one or more video files using system ffmpeg. Defaults to MP3; override with `--format`.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ Binary: `target/release/vid2audio` (or `vid2audio.exe` on Windows).
 ## Usage
 
 ```powershell
-# Single file -> clip.opus next to the video
+# Single file -> clip.mp3 next to the video
 vid2audio clip.mp4
 
 # Multiple files, MP3, custom output directory
@@ -37,7 +37,7 @@ vid2audio clip.mp4 --force
 | Flag | Description |
 |------|-------------|
 | `INPUT...` | One or more video paths |
-| `--format` | `opus` (default), `mp3`, `aac` (`.m4a`), `flac` |
+| `--format` | `mp3` (default), `opus`, `aac` (`.m4a`), `flac` |
 | `-o`, `--output-dir` | Output directory (default: same as each input) |
 | `--bitrate` | Bitrate in kbps (defaults: opus 128, mp3/aac 192; ignored for flac) |
 | `--ffmpeg` | Path to ffmpeg binary |

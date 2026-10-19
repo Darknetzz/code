@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(
     name = "vid2audio",
-    about = "Convert video files to audio (default: Opus)",
+    about = "Convert video files to audio (default: MP3)",
     disable_help_subcommand = true
 )]
 pub struct Cli {
@@ -14,7 +14,7 @@ pub struct Cli {
     pub inputs: Vec<PathBuf>,
 
     /// Output audio format
-    #[arg(long, value_enum, default_value_t = AudioFormat::Opus)]
+    #[arg(long, value_enum, default_value_t = AudioFormat::Mp3)]
     pub format: AudioFormat,
 
     /// Directory for output files (default: same directory as each input)
