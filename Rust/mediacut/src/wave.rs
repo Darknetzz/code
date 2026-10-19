@@ -50,6 +50,30 @@ impl TimeWindow {
             args.push(OsString::from(format!("{:.3}", end.as_secs() - start.as_secs())));
         }
     }
+
+    /// Absolute `[start, end]` seconds for the shown window.
+    /// Uses `media_duration` when the window does not define an end.
+    pub fn absolute_range(self, media_duration: Option<f64>) -> Result<(f64, f64)> {
+        let start = self.start.map(Time::as_secs).unwrap_or(0.0);
+        let end = if let Some(d) = self.duration {
+            start + d.as_secs()
+        } else if let Some(e) = self.end {
+            e.as_secs()
+        } else {
+            media_duration.context(
+                "cannot determine media duration for timeline; install ffprobe or pass --duration / --end",
+            )?
+        };
+        if end <= start {
+            bail!("timeline range is empty ({start} .. {end})");
+        }
+        Ok((start, end))
+    }
+
+    /// True when end can be known without probing the file.
+    pub fn span_known(self) -> bool {
+        self.duration.is_some() || self.end.is_some()
+    }
 }
 
 /// Per-column peak range in [-1, 1].
@@ -91,6 +115,79 @@ pub fn bucket_peaks(samples: &[f32], width: usize) -> Vec<PeakColumn> {
     cols
 }
 
+/// Compact axis label (`M:SS` or `H:MM:SS`).
+pub fn format_axis_label(secs: f64) -> String {
+    let total = secs.max(0.0).round() as u64;
+    let hours = total / 3600;
+    let minutes = (total % 3600) / 60;
+    let seconds = total % 60;
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
+/// Tick + label rows for a time axis of `width` columns covering `[t0, t1]`.
+pub fn render_timeline(width: usize, t0: f64, t1: f64) -> String {
+    let width = width.max(8);
+    let mut ticks: Vec<char> = vec!['─'; width];
+    let fracs = [0.0_f64, 0.25, 0.5, 0.75, 1.0];
+    for frac in fracs {
+        let i = (((width - 1) as f64) * frac).round() as usize;
+        ticks[i.min(width - 1)] = '┼';
+    }
+    ticks[0] = '├';
+    ticks[width - 1] = '┤';
+
+    let span = (t1 - t0).max(1e-9);
+    let labels: Vec<(usize, String)> = fracs
+        .iter()
+        .map(|&frac| {
+            let t = t0 + span * frac;
+            let text = format_axis_label(t);
+            let ideal = (((width - 1) as f64) * frac).round() as usize;
+            let pos = if frac == 0.0 {
+                0
+            } else if (frac - 1.0).abs() < f64::EPSILON {
+                width.saturating_sub(text.chars().count())
+            } else {
+                ideal.saturating_sub(text.chars().count() / 2)
+                    .min(width.saturating_sub(text.chars().count()))
+            };
+            (pos, text)
+        })
+        .collect();
+
+    // Prefer start / mid / end labels when width is tight (skip 1/4 and 3/4).
+    let labels = if width < 40 {
+        labels
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| matches!(i, 0 | 2 | 4))
+            .map(|(_, v)| v)
+            .collect::<Vec<_>>()
+    } else {
+        labels
+    };
+
+    let mut label_line = vec![' '; width];
+    for (pos, text) in labels {
+        for (i, ch) in text.chars().enumerate() {
+            let idx = pos + i;
+            if idx < width {
+                label_line[idx] = ch;
+            }
+        }
+    }
+
+    format!(
+        "{}\n{}",
+        ticks.into_iter().collect::<String>(),
+        label_line.into_iter().collect::<String>()
+    )
+}
+
 /// Render peaks as a centered block waveform (`height` rows).
 pub fn render_terminal(peaks: &[PeakColumn], height: usize) -> String {
     let height = height.max(2);
@@ -103,9 +200,7 @@ pub fn render_terminal(peaks: &[PeakColumn], height: usize) -> String {
         let amp_lo = 1.0 - (2.0 * (row + 1) as f32) / height as f32;
 
         for col in peaks {
-            let filled = col.max >= amp_lo && col.min <= amp_hi
-                && !(col.max < amp_lo || col.min > amp_hi)
-                && ranges_overlap(col.min, col.max, amp_lo, amp_hi);
+            let filled = ranges_overlap(col.min, col.max, amp_lo, amp_hi);
             line.push(if filled { '█' } else { ' ' });
         }
         rows.push(line);
@@ -174,8 +269,19 @@ pub fn decode_pcm_f32le(ffmpeg: &Path, input: &Path, window: TimeWindow) -> Resu
 
 const PNG_BG: &str = "0x1a1a1a";
 const PNG_FG: &str = "0x00d4aa";
+const PNG_AXIS: &str = "0x888888";
+const PNG_LABEL: &str = "0xcccccc";
+/// Extra pixels under the wave for ticks + labels when timeline is on.
+pub const PNG_TIMELINE_H: u32 = 36;
+
+fn escape_drawtext(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('\'', "\\'")
+}
 
 /// Build ffmpeg argv for a static waveform PNG via `showwavespic`.
+/// When `timeline` is `Some((t0, t1))`, a labelled axis is drawn under the wave.
 pub fn build_png_args(
     input: &Path,
     output: &Path,
@@ -183,12 +289,39 @@ pub fn build_png_args(
     height: u32,
     window: TimeWindow,
     force: bool,
+    timeline: Option<(f64, f64)>,
 ) -> Vec<OsString> {
-    let filter = format!(
-        "color=c={PNG_BG}:s={width}x{height}[bg];\
-         [0:a]aformat=channel_layouts=mono,showwavespic=s={width}x{height}:colors={PNG_FG}:scale=sqrt[fg];\
-         [bg][fg]overlay=format=auto,format=rgb24"
-    );
+    let wave_h = height.max(1);
+    let total_h = if timeline.is_some() {
+        wave_h + PNG_TIMELINE_H
+    } else {
+        wave_h
+    };
+
+    let filter = if let Some((t0, t1)) = timeline {
+        let mid = t0 + (t1 - t0) / 2.0;
+        let l0 = escape_drawtext(&format_axis_label(t0));
+        let l1 = escape_drawtext(&format_axis_label(mid));
+        let l2 = escape_drawtext(&format_axis_label(t1));
+        let y_line = wave_h;
+        let y_text = wave_h + 8;
+        format!(
+            "color=c={PNG_BG}:s={width}x{total_h}[bg];\
+             [0:a]aformat=channel_layouts=mono,showwavespic=s={width}x{wave_h}:colors={PNG_FG}:scale=sqrt[fg];\
+             [bg][fg]overlay=0:0:format=auto[base];\
+             [base]drawbox=x=0:y={y_line}:w=iw:h=1:color={PNG_AXIS}:t=fill,\
+             drawtext=text='{l0}':x=4:y={y_text}:fontsize=14:fontcolor={PNG_LABEL},\
+             drawtext=text='{l1}':x=(w-text_w)/2:y={y_text}:fontsize=14:fontcolor={PNG_LABEL},\
+             drawtext=text='{l2}':x=w-text_w-4:y={y_text}:fontsize=14:fontcolor={PNG_LABEL},\
+             format=rgb24"
+        )
+    } else {
+        format!(
+            "color=c={PNG_BG}:s={width}x{total_h}[bg];\
+             [0:a]aformat=channel_layouts=mono,showwavespic=s={width}x{wave_h}:colors={PNG_FG}:scale=sqrt[fg];\
+             [bg][fg]overlay=0:0:format=auto,format=rgb24"
+        )
+    };
 
     let mut args: Vec<OsString> = vec![
         OsString::from("-hide_banner"),
@@ -208,10 +341,19 @@ pub fn build_png_args(
     args
 }
 
-/// Write terminal waveform to `out`.
-pub fn print_terminal(peaks: &[PeakColumn], height: usize, out: &mut dyn Write) -> Result<()> {
+/// Write terminal waveform (and optional timeline) to `out`.
+pub fn print_terminal(
+    peaks: &[PeakColumn],
+    height: usize,
+    timeline: Option<(f64, f64)>,
+    out: &mut dyn Write,
+) -> Result<()> {
     let text = render_terminal(peaks, height);
     writeln!(out, "{text}").context("failed to write terminal waveform")?;
+    if let Some((t0, t1)) = timeline {
+        let axis = render_timeline(peaks.len().max(1), t0, t1);
+        writeln!(out, "{axis}").context("failed to write terminal timeline")?;
+    }
     Ok(())
 }
 
@@ -269,6 +411,7 @@ mod tests {
             240,
             window,
             true,
+            None,
         );
         let joined: Vec<String> = args
             .iter()
@@ -277,6 +420,46 @@ mod tests {
         assert!(joined.iter().any(|a| a.contains("showwavespic")));
         assert!(joined.contains(&"-y".to_string()));
         assert!(joined.contains(&"out.png".to_string()));
+    }
+
+    #[test]
+    fn png_args_timeline_has_drawtext() {
+        let args = build_png_args(
+            Path::new("in.mp3"),
+            Path::new("out.png"),
+            800,
+            200,
+            TimeWindow::default(),
+            false,
+            Some((0.0, 60.0)),
+        );
+        let filter = args
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .find(|a| a.contains("drawtext"))
+            .expect("drawtext filter");
+        assert!(filter.contains("drawtext"));
+        assert!(filter.contains("0\\:00") || filter.contains("0:00"));
+    }
+
+    #[test]
+    fn timeline_labels() {
+        let axis = render_timeline(80, 0.0, 60.0);
+        assert!(axis.contains('┼') || axis.contains('├'));
+        assert!(axis.contains("0:00"));
+        assert!(axis.contains("1:00"));
+    }
+
+    #[test]
+    fn absolute_range_from_duration_flag() {
+        let w = TimeWindow {
+            start: Some(Time(10.0)),
+            duration: Some(Time(5.0)),
+            end: None,
+        };
+        let (a, b) = w.absolute_range(None).unwrap();
+        assert_eq!(a, 10.0);
+        assert_eq!(b, 15.0);
     }
 
     #[test]

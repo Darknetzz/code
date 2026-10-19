@@ -1,7 +1,9 @@
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use mediacut::color;
-use mediacut::ffmpeg::{format_command_line, resolve_ffmpeg, run_ffmpeg};
+use mediacut::ffmpeg::{
+    format_command_line, probe_duration, resolve_ffmpeg, resolve_ffprobe, run_ffmpeg,
+};
 use mediacut::time::{parse_time, Time};
 use mediacut::wave::{
     bucket_peaks, build_pcm_args, build_png_args, decode_pcm_f32le, print_terminal, TimeWindow,
@@ -51,9 +53,17 @@ struct Cli {
     #[arg(long, value_name = "TIME")]
     duration: Option<String>,
 
+    /// Hide the time axis under the waveform
+    #[arg(long = "no-timeline")]
+    no_timeline: bool,
+
     /// Path to ffmpeg binary (overrides FFMPEG_PATH env and PATH)
     #[arg(long, value_name = "PATH")]
     ffmpeg: Option<PathBuf>,
+
+    /// Path to ffprobe binary (overrides FFPROBE_PATH env and PATH)
+    #[arg(long, value_name = "PATH")]
+    ffprobe: Option<PathBuf>,
 
     /// Overwrite existing PNG
     #[arg(long)]
@@ -97,6 +107,19 @@ fn run() -> Result<()> {
 
     let ffmpeg = resolve_ffmpeg(cli.ffmpeg.as_deref())?;
 
+    let timeline = if cli.no_timeline {
+        None
+    } else if window.span_known() {
+        Some(window.absolute_range(None)?)
+    } else if cli.dry_run {
+        // Placeholder range so --dry-run still shows timeline filters
+        Some((0.0, 60.0))
+    } else {
+        let ffprobe = resolve_ffprobe(cli.ffprobe.as_deref())?;
+        let media_dur = probe_duration(&ffprobe, input)?;
+        Some(window.absolute_range(Some(media_dur))?)
+    };
+
     let term_w = cli.width.unwrap_or(80) as usize;
     let term_h = cli.height.unwrap_or(12) as usize;
     let png_w = cli.width.unwrap_or(1280);
@@ -110,7 +133,7 @@ fn run() -> Result<()> {
             let samples = decode_pcm_f32le(&ffmpeg, input, window)?;
             let peaks = bucket_peaks(&samples, term_w);
             let mut stdout = io::stdout().lock();
-            print_terminal(&peaks, term_h, &mut stdout)?;
+            print_terminal(&peaks, term_h, timeline, &mut stdout)?;
             stdout.flush().ok();
         }
     }
@@ -129,12 +152,16 @@ fn run() -> Result<()> {
             }
         }
 
-        let args = build_png_args(input, out, png_w, png_h, window, cli.force);
+        let args = build_png_args(input, out, png_w, png_h, window, cli.force, timeline);
         if cli.dry_run {
             println!("{}", format_command_line(&ffmpeg, &args));
         } else {
             run_ffmpeg(&ffmpeg, &args)?;
-            color::success(&format!("success: {} -> {}", input.display(), out.display()));
+            color::success(&format!(
+                "success: {} -> {}",
+                input.display(),
+                out.display()
+            ));
         }
     }
 

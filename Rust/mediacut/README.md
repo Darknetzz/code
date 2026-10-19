@@ -107,8 +107,10 @@ mediawave track.mp3 -o wave.png --dry-run
 | `--width N` | Columns (terminal, default 80) or pixels (PNG, default 1280) |
 | `--height N` | Rows (terminal, default 12) or pixels (PNG, default 240) |
 | `--start` / `--end` / `--duration` | Optional time window |
+| `--no-timeline` | Hide the time axis under the waveform |
 | `--ffmpeg` | Path to ffmpeg binary |
+| `--ffprobe` | Path to ffprobe (needed for timeline when no window end) |
 | `--force` | Overwrite existing PNG |
 | `--dry-run` | Print ffmpeg commands without running |
 
-Defaults: no `-o` → terminal only; `-o` set → PNG only unless `--terminal`. PNG uses a dark background and cyan mono trace (`scale=sqrt`).
+Defaults: no `-o` → terminal only; `-o` set → PNG only unless `--terminal`. A time axis is shown under the wave (opt out with `--no-timeline`). PNG uses a dark background and cyan mono trace (`scale=sqrt`).
