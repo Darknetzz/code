@@ -1,4 +1,5 @@
 mod cli;
+mod color;
 mod ffmpeg;
 
 use anyhow::{bail, Context, Result};
@@ -16,7 +17,7 @@ fn main() -> ExitCode {
         Ok(0) => ExitCode::SUCCESS,
         Ok(_) => ExitCode::from(1),
         Err(err) => {
-            eprintln!("error: {err:#}");
+            color::error(&format!("error: {err:#}"));
             ExitCode::from(1)
         }
     }
@@ -38,7 +39,7 @@ fn run() -> Result<i32> {
 
     for input in &cli.inputs {
         if let Err(err) = convert_one(&cli, &ffmpeg, &spec, input) {
-            eprintln!("error: {}: {err:#}", input.display());
+            color::error(&format!("error: {}: {err:#}", input.display()));
             failures += 1;
         }
     }
@@ -75,5 +76,10 @@ fn convert_one(
 
     println!("{} -> {}", input.display(), output.display());
     run_ffmpeg(ffmpeg, &args)?;
+    color::success(&format!(
+        "success: {} -> {}",
+        input.display(),
+        output.display()
+    ));
     Ok(())
 }
