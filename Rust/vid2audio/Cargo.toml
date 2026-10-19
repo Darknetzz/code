@@ -1,0 +1,14 @@
+[package]
+name = "vid2audio"
+version = "0.1.0"
+edition = "2021"
+description = "CLI that extracts audio from video files via ffmpeg (default Opus)"
+license = "MIT"
+
+[[bin]]
+name = "vid2audio"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
