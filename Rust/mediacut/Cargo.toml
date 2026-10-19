@@ -2,12 +2,20 @@
 name = "mediacut"
 version = "0.1.0"
 edition = "2021"
-description = "CLI that cuts video/audio files via ffmpeg (extract or remove time ranges)"
+description = "CLI that cuts video/audio files via ffmpeg (extract or remove time ranges); mediawave shows waveforms"
 license = "MIT"
+
+[lib]
+name = "mediacut"
+path = "src/lib.rs"
 
 [[bin]]
 name = "mediacut"
-path = "src/main.rs"
+path = "src/bin/mediacut.rs"
+
+[[bin]]
+name = "mediawave"
+path = "src/bin/mediawave.rs"
 
 [dependencies]
 anyhow = "1.0.104"

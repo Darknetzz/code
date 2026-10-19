@@ -1,22 +1,17 @@
-mod cli;
-mod color;
-mod ffmpeg;
-mod plan;
-mod time;
-
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use mediacut::cli::Cli;
+use mediacut::color;
+use mediacut::ffmpeg::{
+    build_concat_args, build_extract_args, format_command_line, probe_duration, resolve_ffmpeg,
+    resolve_ffprobe, run_ffmpeg, write_concat_list,
+};
+use mediacut::plan::{build_plan, output_paths, CutPlan, Mode};
+use mediacut::time::Interval;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-
-use crate::cli::Cli;
-use crate::ffmpeg::{
-    build_concat_args, build_extract_args, format_command_line, probe_duration, resolve_ffmpeg,
-    resolve_ffprobe, run_ffmpeg, write_concat_list,
-};
-use crate::plan::{build_plan, output_paths, CutPlan, Mode};
 
 fn main() -> ExitCode {
     match run() {
@@ -60,7 +55,6 @@ fn run() -> Result<()> {
     }
 
     if cut_plan.join && cut_plan.intervals.len() == 1 {
-        // Single interval → one extract
         extract_one(
             &ffmpeg,
             input,
@@ -81,7 +75,6 @@ fn run() -> Result<()> {
     }
 
     if !cut_plan.join {
-        // Multi-file extract
         for (interval, out) in cut_plan.intervals.iter().zip(outputs.iter()) {
             extract_one(
                 &ffmpeg,
@@ -105,7 +98,6 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    // Join multiple intervals (extract --join or --remove)
     join_intervals(&cli, &ffmpeg, input, &cut_plan, &outputs[0])?;
     if !cli.dry_run {
         color::success(&format!(
@@ -121,7 +113,7 @@ fn extract_one(
     ffmpeg: &Path,
     input: &Path,
     output: &Path,
-    interval: time::Interval,
+    interval: Interval,
     reencode: bool,
     force: bool,
     dry_run: bool,
@@ -169,7 +161,7 @@ fn join_intervals(
             &part,
             *interval,
             cli.reencode,
-            true, // always overwrite temps
+            true,
             cli.dry_run,
         )?;
         parts.push(part);
@@ -189,7 +181,6 @@ fn join_intervals(
     println!("concat {} parts -> {}", parts.len(), final_out.display());
     let result = run_ffmpeg(ffmpeg, &concat_args);
 
-    // Best-effort cleanup
     let _ = fs::remove_dir_all(&temp_dir);
 
     result.with_context(|| {
@@ -220,13 +211,12 @@ fn ensure_parent_dirs(outputs: &[PathBuf], dry_run: bool) -> Result<()> {
 }
 
 fn temp_work_dir() -> Result<PathBuf> {
-    let base = env::temp_dir().join(format!(
+    Ok(env::temp_dir().join(format!(
         "mediacut-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0)
-    ));
-    Ok(base)
+    )))
 }

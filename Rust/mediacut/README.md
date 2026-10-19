@@ -14,7 +14,7 @@ cd Rust/mediacut
 cargo build --release
 ```
 
-Binary: `target/release/mediacut` (or `mediacut.exe` on Windows).
+Binaries: `target/release/mediacut` and `target/release/mediawave` (`.exe` on Windows).
 
 ## Usage
 
@@ -69,3 +69,46 @@ Environment: `FFMPEG_PATH` / `FFPROBE_PATH` override PATH when the matching flag
 - `--remove` and `--segment` / `--start` cannot be mixed.
 - `--join` only applies to extract mode; `--remove` always joins keepers into one file.
 - Shell/PowerShell expands wildcards; pass the input path explicitly if needed.
+
+---
+
+# mediawave
+
+Companion binary (same crate) that shows a waveform for audio or video (first audio stream): terminal blocks by default, optional PNG via ffmpeg `showwavespic`.
+
+## Usage
+
+```powershell
+# Terminal peaks (default)
+mediawave track.mp3
+mediawave clip.mp4 --width 100 --height 16
+
+# PNG image
+mediawave track.mp3 -o wave.png
+mediawave track.mp3 -o wave.png --width 1280 --height 240
+
+# Both terminal and PNG
+mediawave track.mp3 -o wave.png --terminal
+
+# Time window
+mediawave track.mp3 --start 1:00 --duration 30 -o clip-wave.png
+
+# Preview ffmpeg commands
+mediawave track.mp3 -o wave.png --dry-run
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `INPUT` | Audio or video path |
+| `-o`, `--output PATH` | Write PNG (default: terminal only) |
+| `--terminal` | Also print terminal waveform when writing PNG |
+| `--width N` | Columns (terminal, default 80) or pixels (PNG, default 1280) |
+| `--height N` | Rows (terminal, default 12) or pixels (PNG, default 240) |
+| `--start` / `--end` / `--duration` | Optional time window |
+| `--ffmpeg` | Path to ffmpeg binary |
+| `--force` | Overwrite existing PNG |
+| `--dry-run` | Print ffmpeg commands without running |
+
+Defaults: no `-o` → terminal only; `-o` set → PNG only unless `--terminal`. PNG uses a dark background and cyan mono trace (`scale=sqrt`).
