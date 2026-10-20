@@ -96,7 +96,7 @@ func run(args []string) int {
 	// Pure help/version with no URLs → document both modes (our help).
 	if onlyHelpOrVersion(remaining) {
 		if hasFlag(remaining, "--version") || hasFlag(remaining, "-V") {
-			fmt.Printf("dl %s (yt-dlp wrapper + image download)\n", version)
+			printVersion(ytDlp)
 			return 0
 		}
 		printUsage()
@@ -222,6 +222,16 @@ func run(args []string) int {
 		}
 	}
 	return exitCode
+}
+
+func printVersion(ytDlp string) {
+	fmt.Printf("dl %s (yt-dlp wrapper + image download)\n", version)
+	out, err := exec.Command(ytDlp, "--version").Output()
+	if err != nil {
+		fmt.Printf("yt-dlp: not found (%s)\n", ytDlp)
+		return
+	}
+	fmt.Printf("yt-dlp %s\n", strings.TrimSpace(string(out)))
 }
 
 func onlyHelpOrVersion(args []string) bool {
