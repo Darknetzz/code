@@ -1,0 +1,15 @@
+[package]
+name = "imgb64"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for encoding/decoding images to data URIs or raw base64"
+license = "MIT"
+
+[[bin]]
+name = "imgb64"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.23.1"
+clap = { version = "4.6.7", features = ["derive"] }

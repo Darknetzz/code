@@ -7,6 +7,7 @@ Scripts and projects in Rust.
 | [collatz](collatz/) | CLI for the Collatz conjecture (3n+1) on arbitrary-size positive integers. See [collatz/README.md](collatz/README.md) for details. |
 | [darkshell](darkshell/) | **Darkshell** is an experimental, **Bash-inspired** shell implemented in Rust... See [darkshell/README.md](darkshell/README.md) for details. |
 | [helloworld](helloworld/) | — |
+| [imgb64](imgb64/) | CLI for encoding images to data URIs (or raw base64) and decoding either form... See [imgb64/README.md](imgb64/README.md) for details. |
 | [ip](ip/) | — |
 | [mediacut](mediacut/) | Cross-platform CLI that cuts video/audio files with system ffmpeg: extract on... See [mediacut/README.md](mediacut/README.md) for details. |
 | [n64romconvert-1.0.2](n64romconvert-1.0.2/) | It's a tool containing 2 binaries to help you check and convert between Ninte... See [n64romconvert-1.0.2/README.md](n64romconvert-1.0.2/README.md) for details. |
