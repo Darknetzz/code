@@ -5,6 +5,7 @@ Small CLI utilities and network tools, each in its own module.
 | Subdirectory | Description |
 |-------------|-------------|
 | [b64](b64/) | Base64 encode/decode from stdin or files. Supports standard, URL-safe, and ra... See [b64/README.md](b64/README.md) for details. |
+| [dl](dl/) | Download direct image URLs over HTTP, or forward everything else to [yt-dlp](... See [dl/README.md](dl/README.md) for details. |
 | [gitt](gitt/) | Recursive Git helper CLI built as a standalone binary. See [gitt/README.md](gitt/README.md) for details. |
 | [gofile](gofile/) | CLI to inspect and manage files — stat, hash, MIME type, size, list, cat, hea... See [gofile/README.md](gofile/README.md) for details. |
 | [gohw](gohw/) | A command-line tool that displays hardware information about your computer wi... See [gohw/README.md](gohw/README.md) for details. |
