@@ -39,8 +39,19 @@ pub fn formatLinkType(flag: []const u8) []const u8 {
     return flag;
 }
 
+/// Copy `p` with `/` → `\` for Windows-native display. Does not change stored symlink targets.
+pub fn displayPathWindows(allocator: std.mem.Allocator, p: []const u8) ![]u8 {
+    const out = try allocator.dupe(u8, p);
+    std.mem.replaceScalar(u8, out, '/', '\\');
+    return out;
+}
+
 pub fn formatLinkDisplay(allocator: std.mem.Allocator, link_path: []const u8, target_path: []const u8) ![]u8 {
-    return std.fmt.allocPrint(allocator, "{s} -> {s}", .{ link_path, target_path });
+    const link = try displayPathWindows(allocator, link_path);
+    defer allocator.free(link);
+    const target = try displayPathWindows(allocator, target_path);
+    defer allocator.free(target);
+    return std.fmt.allocPrint(allocator, "{s} -> {s}", .{ link, target });
 }
 
 pub fn isDriveRoot(p: []const u8) bool {
@@ -288,10 +299,26 @@ test "prefer_directory_symlink" {
     try std.testing.expect(preferDirectorySymlink(false, true));
 }
 
+test "display_path_windows" {
+    const a = std.testing.allocator;
+    const rel = try displayPathWindows(a, "ntfy/ntfy.exe");
+    defer a.free(rel);
+    try std.testing.expectEqualStrings("ntfy\\ntfy.exe", rel);
+    const abs = try displayPathWindows(a, "D:\\Bin\\ntfy.exe");
+    defer a.free(abs);
+    try std.testing.expectEqualStrings("D:\\Bin\\ntfy.exe", abs);
+}
+
 test "format_link_display" {
     const line = try formatLinkDisplay(std.testing.allocator, "D:\\link", "C:\\target");
     defer std.testing.allocator.free(line);
     try std.testing.expectEqualStrings("D:\\link -> C:\\target", line);
+}
+
+test "format_link_display_normalizes_slashes" {
+    const line = try formatLinkDisplay(std.testing.allocator, "D:/Bin/ntfy.exe", "ntfy/ntfy.exe");
+    defer std.testing.allocator.free(line);
+    try std.testing.expectEqualStrings("D:\\Bin\\ntfy.exe -> ntfy\\ntfy.exe", line);
 }
 
 test "format_link_type" {

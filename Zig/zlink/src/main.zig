@@ -72,15 +72,17 @@ fn writeHelp(w: *Io.Writer, c: zcommon.Color) !void {
     );
 }
 
-fn printLinkArrow(w: *Io.Writer, c: zcommon.Color, link_path: []const u8, target: []const u8) !void {
+fn printLinkArrow(allocator: std.mem.Allocator, w: *Io.Writer, c: zcommon.Color, link_path: []const u8, target: []const u8) !void {
+    const link = try zlink.displayPathWindows(allocator, link_path);
+    const tgt = try zlink.displayPathWindows(allocator, target);
     try w.print("{s}{s}{s} {s}->{s} {s}{s}{s}\n", .{
         c.s(.cyan),
-        link_path,
+        link,
         c.s(.reset),
         c.s(.dim),
         c.s(.reset),
         c.s(.cyan),
-        target,
+        tgt,
         c.s(.reset),
     });
 }
@@ -175,11 +177,11 @@ fn infoCmd(app: *App, raw: []const u8) !u8 {
     if (attrs.reparse()) {
         var buf: [Io.Dir.max_path_bytes]u8 = undefined;
         const n = Io.Dir.readLinkAbsolute(app.io, link_path, &buf) catch {
-            try printLinkArrow(app.stdout, app.color, link_path, "(unavailable)");
+            try printLinkArrow(app.arena, app.stdout, app.color, link_path, "(unavailable)");
             return 0;
         };
         const target = buf[0..n];
-        try printLinkArrow(app.stdout, app.color, link_path, target);
+        try printLinkArrow(app.arena, app.stdout, app.color, link_path, target);
         if (zlink.targetLooksNonportable(target)) {
             try printWarn(app, "Note: stored target is absolute (drive letter, UNC, or NT prefix); Linux will not follow this path.", .{});
         } else {
@@ -252,7 +254,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     const target_abs = try zlink.resolveUserTarget(app.arena, cwd, opts.target);
     if (std.os.windows.eqlIgnoreCaseWtf8(link_path, target_abs)) {
         try printErr(app, "Error: Link path and target path cannot be the same.", .{});
-        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
+        try printLinkArrow(app.arena, app.stderr, app.color, link_path, target_abs);
         return 1;
     }
     const remote = win32.isRemotePath(app.arena, link_path) or win32.isRemotePath(app.arena, target_abs);
@@ -260,7 +262,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     const target_attrs = try win32.attributes(app.arena, target_abs);
     if (!opts.no_validate_target and target_attrs.missing()) {
         try printErr(app, "Error: Target path does not exist.", .{});
-        try printLinkArrow(app.stderr, app.color, link_path, target_abs);
+        try printLinkArrow(app.arena, app.stderr, app.color, link_path, target_abs);
         return 1;
     }
 
@@ -406,7 +408,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     }
 
     if (!opts.yes) {
-        try printLinkArrow(app.stderr, app.color, link_path, stored_target);
+        try printLinkArrow(app.arena, app.stderr, app.color, link_path, stored_target);
         if (!std.mem.eql(u8, stored_target, target_abs)) {
             try app.stderr.print("{s}Resolves to:{s} {s}{s}{s}\n", .{
                 app.color.s(.bold),
@@ -452,7 +454,7 @@ fn createCmd(app: *App, opts: zlink.CreateOptions) !u8 {
     };
     try app.stderr.print("  {s}{s}{s}\n", .{ app.color.s(.dim), detail, app.color.s(.reset) });
     try printOk(app, "Success!", .{});
-    try printLinkArrow(app.stdout, app.color, link_path, stored_target);
+    try printLinkArrow(app.arena, app.stdout, app.color, link_path, stored_target);
     try printTypeLine(app.stdout, app.color, zlink.formatLinkType(flag.mklink()));
     return 0;
 }
@@ -467,22 +469,24 @@ fn zlinkDriveLocal(_: []const u8) u32 {
 
 fn createWindowsLink(app: *App, link_path: []const u8, stored_target: []const u8, flag: zlink.LinkFlag) ![]u8 {
     const io = app.io;
+    const link_disp = try zlink.displayPathWindows(app.arena, link_path);
+    const target_disp = try zlink.displayPathWindows(app.arena, stored_target);
     switch (flag) {
         .hard => {
             try win32.createHardLink(app.arena, link_path, stored_target);
-            return std.fmt.allocPrint(app.arena, "CreateHardLink({s}, {s})", .{ stored_target, link_path });
+            return std.fmt.allocPrint(app.arena, "CreateHardLink({s}, {s})", .{ target_disp, link_disp });
         },
         .junction => {
             try win32.createJunction(app.arena, link_path, stored_target);
-            return std.fmt.allocPrint(app.arena, "CreateJunction({s}, {s})", .{ stored_target, link_path });
+            return std.fmt.allocPrint(app.arena, "CreateJunction({s}, {s})", .{ target_disp, link_disp });
         },
         .dir_symlink => {
             try Io.Dir.symLink(.cwd(), io, stored_target, link_path, .{ .is_directory = true });
-            return std.fmt.allocPrint(app.arena, "symLink({s}, {s}, directory)", .{ stored_target, link_path });
+            return std.fmt.allocPrint(app.arena, "symLink({s}, {s}, directory)", .{ target_disp, link_disp });
         },
         .file_symlink => {
             try Io.Dir.symLink(.cwd(), io, stored_target, link_path, .{ .is_directory = false });
-            return std.fmt.allocPrint(app.arena, "symLink({s}, {s})", .{ stored_target, link_path });
+            return std.fmt.allocPrint(app.arena, "symLink({s}, {s})", .{ target_disp, link_disp });
         },
     }
 }
